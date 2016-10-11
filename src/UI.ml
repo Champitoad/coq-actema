@@ -1,4 +1,3 @@
-open Id
 open Lwt
 open Goal
 open Goals
@@ -11,8 +10,8 @@ type user_action =
   | Transform of Id.t
 
 let string_of_user_action = function
-  | Use id -> "Use " ^ Id.string_of_id id
-  | Transform id -> "Transform " ^ Id.string_of_id id
+  | Use id -> "Use item " ^ Id.string_of_id id
+  | Transform id -> "Transform item " ^ Id.string_of_id id
 
 let (actions : user_action Lwt_stream.t), push_user_action =
   Lwt_stream.create ()
@@ -86,8 +85,8 @@ let rec separated e = function
 
 let wedge () = T.(div ~a:[a_class ["formula"]] [pcdata "∧"])
 
-let activate l element =
-  ignore (CutyBackEnd.new_node element (fun event ->
+let activate _l element =
+  ignore (CutyBackEnd.new_node element (fun _event ->
     () (* Firebug.console##log_2 (event, Js.string (string_of_location l)) *)
   ));
   element
@@ -101,14 +100,14 @@ let element_of_formula color f = T.(
 
 let element_of_formula_box color t =
   let box = T.(div ~a:[a_class ["formula_box"]] [element_of_formula color t]) in
-  ignore (CutyBackEnd.new_node box (fun (kind, positions) ->
+  ignore (CutyBackEnd.new_node box (fun (_kind, _positions) ->
   (*    List.iter (fun (x, y) -> Firebug.console##log_2 (x, y)) positions *)
   (* Firebug.console##log (positions) *)
     ()
   ));
   box
 
-let push_user_event nodeid (kind, positions) =
+let push_user_event nodeid (kind, _positions) =
   return CutyBackEnd.(match kind with
     | Tap -> push_user_action (Some (Use nodeid))
     | DoubleTap -> push_user_action (Some (Transform nodeid))
@@ -118,6 +117,10 @@ let push_user_event nodeid (kind, positions) =
       let x = float_of_int x and y = float_of_int y in
       update_world (Physics.change_box_attraction (world ()) nodeid x y)
     | PanEnd -> ()
+    | Press -> ()
+    | Rotate -> ()
+    | Pinch -> ()
+    | Nothing -> ()
   )
 
 let push_formula color { identifier = id; term } =
@@ -144,7 +147,7 @@ let push_goal g =
   Lwt_list.iter_s push_hypothesis g.hypothesis
   >> push_conclusion g.conclusion
 
-let pop_goal g =
+let pop_goal () =
   pop_world ();
   return ()
 
@@ -152,7 +155,7 @@ let rec interpret = function
   | OnCurrent (ClearHypothesis id) -> clear_hypothesis id
   | OnCurrent (PushHypothesis f) -> push_hypothesis f
   | PushGoal g -> push_goal g
-  | PopGoal g -> pop_goal g
+  | PopGoal _ -> pop_goal ()
   | Identity -> return ()
   | Compose dgoals -> Lwt_list.iter_s interpret dgoals
 
