@@ -1,0 +1,4 @@
+true: warn_Z, warn_Y, warn_+28, warn_-23, warn_+33
+true: package(tyxml), package(js_of_ocaml)
+true: package(js_of_ocaml.syntax), package(js_of_ocaml.tyxml)
+true: package(lwt.syntax), syntax(lwt.syntax), syntax(camlp4o)

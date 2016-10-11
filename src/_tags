@@ -1,2 +1,0 @@
-true : package(tyxml), package(js_of_ocaml), package(js_of_ocaml.syntax)
-true: package(lwt.syntax), syntax(lwt.syntax), syntax(camlp4o), package(js_of_ocaml.tyxml)
