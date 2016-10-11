@@ -38,10 +38,10 @@ end
 
 let touch_event_positions (event : tevent Js.t) =
   let r = ref [] in
-  for i = 0 to event##pointers##length - 1 do
-    let item = event##pointers##item (i) in
+  for i = 0 to event##.pointers##.length - 1 do
+    let item = event##.pointers##item (i) in
     Js.Optdef.iter item (fun item ->
-      r := (item##clientX, item##clientY) :: !r
+      r := (item##.clientX, item##.clientY) :: !r
     )
   done;
   !r

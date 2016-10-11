@@ -33,7 +33,7 @@ let switch_world_visibility flag =
   if !stack <> [] then
     let state = if flag then "visible" else "hidden" in
     Hashtbl.iter (fun _ node ->
-      node##style##visibility <- Js.string state
+      node##.style##.visibility := Js.string state
     ) (nodes ())
 
 let push_world () =
@@ -52,8 +52,8 @@ let qed () =
 let move_box box =
   let floor x = int_of_float (floor x) in
   let node = Hashtbl.find (nodes ()) box.id in
-  node##style##top <- Js.string (string_of_int (floor box.y) ^ "px");
-  node##style##left <- Js.string (string_of_int (floor box.x) ^ "px")
+  node##.style##.top := Js.string (string_of_int (floor box.y) ^ "px");
+  node##.style##.left := Js.string (string_of_int (floor box.x) ^ "px")
 
 let refresh () =
   if !stack <> [] then (
@@ -63,12 +63,12 @@ let refresh () =
   )
 
 let init () =
-  ignore (Dom_html.window##setInterval (Js.wrap_callback refresh, 100.))
+  ignore (Dom_html.window##setInterval (Js.wrap_callback refresh) 100.)
 
 let get_element_dimension (e : Dom_html.element Js.t) =
-  let b = e##getBoundingClientRect () in
-  let width = Js.Optdef.get (b##width) (fun () -> float_of_int e##offsetWidth) in
-  let height = Js.Optdef.get (b##height) (fun () -> float_of_int e##offsetHeight) in
+  let b = e##getBoundingClientRect in
+  let width = Js.Optdef.get b##.width (fun () -> float_of_int e##.offsetWidth) in
+  let height = Js.Optdef.get b##.height (fun () -> float_of_int e##.offsetHeight) in
   (width, height)
 
 let create_node_in_world id node =
@@ -137,7 +137,7 @@ let push_conclusion =
 
 let clear_hypothesis id =
   let node = Hashtbl.find (nodes ()) id in
-  node##style##visibility <- Js.string "hidden";
+  node##.style##.visibility := Js.string "hidden";
   Hashtbl.remove (nodes ()) id;
   update_world (Physics.remove_box (world ()) id);
   Lwt.return ()

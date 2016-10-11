@@ -13,7 +13,7 @@ let start_with goal =
       let enter_loop_event proof_state =
 	let proof_state = ref proof_state in
 	UI.next_user_action (fun action ->
-	  try_lwt
+	  try%lwt
 	    let current_goal = ProofEngine.current_goal !proof_state in
 	    let tactic = ProofEngineUI.tactic_of_user_action current_goal action  in
 	    let dgoals = ProofEngine.apply !proof_state tactic in
@@ -32,7 +32,7 @@ let start_with goal =
 
 (** Install the interaction reactor into the DOM. *)
 let main =
-  Dom_html.window##onload <- Dom_html.handler (fun _ ->
+  Dom_html.window##.onload := Dom_html.handler (fun _ ->
     Random.self_init ();
     UI.init ();
     start_with Formula.(Goal.(make_goal [
