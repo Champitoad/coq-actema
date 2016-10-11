@@ -14,7 +14,7 @@ let all_locations t =
   let top t = Location (t, Top) in
   let rec aux t =
     match t with
-      | Atom s ->
+      | Atom _ ->
 	[top t]
       | Conj ts ->
 	top t :: aux' [] ts

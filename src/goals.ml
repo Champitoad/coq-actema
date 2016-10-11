@@ -1,6 +1,4 @@
 open Goal
-open Formula
-open Id
 
 type dgoals =
   | OnCurrent of dgoal
