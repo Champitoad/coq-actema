@@ -52,9 +52,10 @@ let qed () =
   return ()
 
 let move_box box =
+  let floor x = int_of_float (floor x) in
   let node = Hashtbl.find (nodes ()) box.id in
-  node##style##top <- Js.string (string_of_float (floor box.y) ^ "px");
-  node##style##left <- Js.string (string_of_float (floor box.x) ^ "px")
+  node##style##top <- Js.string (string_of_int (floor box.y) ^ "px");
+  node##style##left <- Js.string (string_of_int (floor box.x) ^ "px")
 
 let refresh () =
   if !stack <> [] then (
