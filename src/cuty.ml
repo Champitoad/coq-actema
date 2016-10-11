@@ -14,8 +14,6 @@ let start_with goal =
 	let proof_state = ref proof_state in
 	UI.next_user_action (fun action ->
 	  try_lwt
-	    Firebug.console##log_2 (Js.string "Processing user action.",
-				    Js.string (UI.string_of_user_action action));
 	    let current_goal = ProofEngine.current_goal !proof_state in
 	    let tactic = ProofEngineUI.tactic_of_user_action current_goal action  in
 	    let dgoals = ProofEngine.apply !proof_state tactic in

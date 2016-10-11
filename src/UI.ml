@@ -47,7 +47,6 @@ let pop_world () =
   switch_world_visibility true
 
 let qed () =
-  Firebug.console##log (Js.string "QED");
   ignore (CutyBackEnd.new_node (T.(div ~a:[a_class ["qed"]] [pcdata "QED"])) ignore);
   return ()
 
@@ -104,7 +103,8 @@ let element_of_formula_box color t =
   let box = T.(div ~a:[a_class ["formula_box"]] [element_of_formula color t]) in
   ignore (CutyBackEnd.new_node box (fun (kind, positions) ->
   (*    List.iter (fun (x, y) -> Firebug.console##log_2 (x, y)) positions *)
-    Firebug.console##log (positions)
+  (* Firebug.console##log (positions) *)
+    ()
   ));
   box
 
@@ -112,13 +112,12 @@ let push_user_event nodeid (kind, positions) =
   return CutyBackEnd.(match kind with
     | Tap -> push_user_action (Some (Use nodeid))
     | DoubleTap -> push_user_action (Some (Transform nodeid))
-    | Pan -> Firebug.console##log (Js.string "Pan!")
-    | PanStart -> Firebug.console##log (Js.string "Pan start!")
+    | Pan -> ()
+    | PanStart -> ()
     | PanMove (x, y) ->
       let x = float_of_int x and y = float_of_int y in
-      update_world (Physics.change_box_attraction (world ()) nodeid x y);
-      Firebug.console##log_3 (Js.string "Pan move!", x, y)
-    | PanEnd -> Firebug.console##log (Js.string "Pan end!")
+      update_world (Physics.change_box_attraction (world ()) nodeid x y)
+    | PanEnd -> ()
   )
 
 let push_formula color { identifier = id; term } =
@@ -141,13 +140,11 @@ let clear_hypothesis id =
   Lwt.return ()
 
 let push_goal g =
-  Firebug.console##log (Js.string "push_goal");
   push_world ();
   Lwt_list.iter_s push_hypothesis g.hypothesis
   >> push_conclusion g.conclusion
 
 let pop_goal g =
-  Firebug.console##log (Js.string "pop_goal");
   pop_world ();
   return ()
 
