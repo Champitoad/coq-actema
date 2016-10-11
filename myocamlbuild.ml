@@ -2,10 +2,6 @@
 open Ocamlbuild_plugin
 
 let mydispatch = function
-   | After_options ->
-       Options.ocamlc   := S[!Options.ocamlc  ; A"-rectypes"];
-       Options.ocamlopt := S[!Options.ocamlopt; A"-rectypes"];
-
    | After_rules ->
        (* Numerical warnings *)
        begin
