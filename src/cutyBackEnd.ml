@@ -16,10 +16,10 @@ type kind =
   | Nothing
 
 let kind_of_event event =
-  match Js.to_string (event##_type) with
+  match Js.to_string (event##._type) with
     | "pan" -> Pan
     | "doubletap" -> DoubleTap
-    | "panmove" -> PanMove (event##center##x, event##center##y)
+    | "panmove" -> PanMove (event##.center##.x, event##.center##.y)
     | "panstart" -> PanStart
     | "panend" -> PanEnd
     | "tap" -> Tap
@@ -47,12 +47,12 @@ let touch_event_positions (event : tevent Js.t) =
   !r
 
 let mouse_event_positions event =
-  [(event##clientX, event##clientY)]
+  [(event##.clientX, event##.clientY)]
 
 let positions event =
-  if event##pointerType = Js.string "touch" then
+  if event##.pointerType = Js.string "touch" then
     touch_event_positions (Obj.magic event)
-  else if event##pointerType = Js.string "mouse" then
+  else if event##.pointerType = Js.string "mouse" then
     mouse_event_positions event
   else
     []
