@@ -1,3 +1,4 @@
 _build/
-html/3rdparty/
+html/3rdparty/*/
+html/node_modules/
 html/cuty.js
