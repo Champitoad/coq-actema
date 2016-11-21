@@ -1,3 +1,8 @@
+module M = Fo
+module L = Location
+module P = Parser
+module X = Lexer
+
 (** This module drives the web application. *)
 
 (** [start_with goal] launches a worker that will interpret user

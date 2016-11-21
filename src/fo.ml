@@ -1,7 +1,5 @@
 (* -------------------------------------------------------------------- *)
-module List = BatList
-module Map = BatMap
-module Option = BatOption
+open Utils
 
 (* -------------------------------------------------------------------- *)
 type name = string

@@ -23,7 +23,12 @@ let mydispatch = function
              flag ["ocaml"; "compile"; Printf.sprintf "werr_-%d" i] & (wflag true  `Disable i);
              flag ["ocaml"; "compile"; Printf.sprintf "werr_@%d" i] & (wflag true  `Mark    i)
            done
-       end
+       end;
+
+       (* menhir & --explain/--trace/--table *)
+       flag ["ocaml"; "parser"; "menhir"; "menhir_explain"] & A"--explain";
+       flag ["ocaml"; "parser"; "menhir"; "menhir_trace"  ] & A"--trace";
+       flag ["ocaml"; "parser"; "menhir"; "menhir_table"  ] & A"--table";
 
    | _ -> ()
 
