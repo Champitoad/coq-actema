@@ -6,6 +6,7 @@ true: warn_Z, warn_Y, warn_+28, warn_-23, warn_+33, warn_-58
 # --------------------------------------------------------------------
 <libs>: include
 <libs/engine/*.{ml,mli}>: package(batteries), package(menhirLib)
+<libs/engine/*.{ml,mli}>: package(tyxml), package(tyxml.ppx)
 <libs/engine/*.{ml,mli}>: package(js_of_ocaml), package(js_of_ocaml.ppx)
 
 # --------------------------------------------------------------------

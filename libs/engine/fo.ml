@@ -1,5 +1,7 @@
 (* -------------------------------------------------------------------- *)
 open Utils
+open Location
+open Syntax
 
 (* -------------------------------------------------------------------- *)
 type name = string
@@ -210,7 +212,9 @@ end
 (* -------------------------------------------------------------------- *)
 module Form : sig
   val parity  : logcon -> int
+  val check   : pform -> form
   val recheck : env -> form -> unit
+  val mathml  : form -> Tyxml.Xml.elt
 end = struct
   let parity (lg : logcon) =
     match lg with
@@ -232,4 +236,29 @@ end = struct
     | FBind (_bnd, (name, ty), body) ->
         let env = Locals.push env name ty in
         recheck env body
+
+  let check (form : pform) =
+    match unloc form with
+    | PFCst true  -> FTrue
+    | PFCst false -> FFalse
+
+    | _ -> assert false
+
+  let mathml =
+    let open Tyxml in
+
+    let _mo c = Xml.node "mo" [c] in
+    let  mi c = Xml.node "mi" [c] in
+
+    let rec aux (form : form) =
+      match form with
+      | FTrue ->
+          mi (Xml.entity "&#x22A5;")
+      | FFalse ->
+          mi (Xml.entity "&#x22A4;")
+      | _ ->
+          mi (Xml.entity "?")
+
+    in fun (form : form) ->
+      Xml.node "mathml" [aux form]
 end
