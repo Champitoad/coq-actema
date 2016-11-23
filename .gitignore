@@ -2,3 +2,4 @@ _build/
 html/3rdparty/*/
 html/node_modules/
 html/cuty.js
+html/cuty.map
