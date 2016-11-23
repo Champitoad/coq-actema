@@ -44,6 +44,40 @@ end = struct
 end
 
 (* -------------------------------------------------------------------- *)
+module Disposable : sig
+  type 'a t
+
+  exception Disposed
+
+  val create  : ?cb:('a -> unit) -> 'a -> 'a t
+  val get     : 'a t -> 'a
+  val dispose : 'a t -> unit
+end = struct
+  type 'a t = ((('a -> unit) option * 'a) option) ref
+
+  exception Disposed
+
+  let get (p : 'a t) =
+    match !p with
+    | None -> raise Disposed
+    | Some (_, x) -> x
+
+  let dispose (p : 'a t) =
+    let do_dispose p =
+      match p with
+      | Some (Some cb, x) -> cb x
+      | _ -> ()
+    in
+
+    let oldp = !p in
+      p := None; do_dispose oldp
+
+  let create ?(cb : ('a -> unit) option) (x : 'a) =
+    let r = ref (Some (cb, x)) in
+    Gc.finalise (fun r -> dispose r) r; r
+end
+
+(* -------------------------------------------------------------------- *)
 let curry   f (x, y) = f x y
 let uncurry f x y = f (x, y)
 

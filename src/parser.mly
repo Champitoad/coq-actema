@@ -21,13 +21,18 @@
 %left LNEG
 
 %type <Syntax.pform> xform
+%type <Syntax.pexpr> xexpr
 
-%start xform
+%start xform xexpr
 %%
 
 (* -------------------------------------------------------------------- *)
 xform:
 | f=form EOF { f }
+
+(* -------------------------------------------------------------------- *)
+xexpr:
+| e=expr EOF { e }
 
 (* -------------------------------------------------------------------- *)
 %inline lident: x=loc(LIDENT) { x }
