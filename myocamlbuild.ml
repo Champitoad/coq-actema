@@ -30,6 +30,9 @@ let mydispatch = function
        flag ["ocaml"; "parser"; "menhir"; "menhir_trace"  ] & A"--trace";
        flag ["ocaml"; "parser"; "menhir"; "menhir_table"  ] & A"--table";
 
+       (* libs <-> src *)
+       Pathname.define_context "src" ["libs"]
+
    | _ -> ()
 
 (* -------------------------------------------------------------------- *)

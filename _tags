@@ -1,6 +1,13 @@
+# --------------------------------------------------------------------
 true: debug
 true: use_menhir, menhir_explain, menhir_table
 true: warn_Z, warn_Y, warn_+28, warn_-23, warn_+33, warn_-58
-true: package(tyxml), package(js_of_ocaml), package(js_of_ocaml.tyxml)
-true: package(lwt.ppx), package(js_of_ocaml.ppx)
-true: package(batteries), package(menhirLib)
+
+# --------------------------------------------------------------------
+<libs> : include
+<libs/engine/*.{ml,mli}> : package(batteries), package(menhirLib)
+
+# --------------------------------------------------------------------
+<src/*>: package(tyxml), package(js_of_ocaml), package(js_of_ocaml.tyxml)
+<src/*>: package(lwt.ppx), package(js_of_ocaml.ppx)
+<src/*>: package(batteries), package(menhirLib)

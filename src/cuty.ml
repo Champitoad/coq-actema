@@ -1,9 +1,9 @@
-module M = Fo
-module L = Location
-module P = Parser
-module X = Lexer
-module G = Proof
-module Y = Io
+module M = Engine.Fo
+module L = Engine.Location
+module P = Engine.Parser
+module X = Engine.Lexer
+module G = Engine.Proof
+module Y = Engine.Io
 
 (** This module drives the web application. *)
 
