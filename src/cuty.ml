@@ -2,6 +2,7 @@ module M = Fo
 module L = Location
 module P = Parser
 module X = Lexer
+module G = Proof
 
 (** This module drives the web application. *)
 

@@ -62,6 +62,9 @@ expr:
 
 (* -------------------------------------------------------------------- *)
 form_r:
+| f=parens(form_r)
+    { f }
+
 | x=uident args=parens(plist1(expr, COMMA))?
     { PFPred (x, Option.default [] args) }
 

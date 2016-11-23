@@ -19,6 +19,7 @@ let tand  = fun x y -> TAnd (x, y)
 (* -------------------------------------------------------------------- *)
 type expr =
   | EVar of int
+  | EGbl of name
   | EUnit
   | EOr  of [`Left | `Right] * ty * expr
   | EAnd of expr * expr
@@ -36,6 +37,7 @@ and logbnd = [ `Forall | `Exists ]
 type env = {
   env_ops : (name, openv) Map.t;  
   env_pds : (name, pdenv) Map.t;
+  env_vrs : (name, lcenv) Map.t;
   env_lcs : lcenv list;
 }
 
@@ -56,7 +58,7 @@ and lcenv = {
 }
 
 (* -------------------------------------------------------------------- *)
-exception DuplicatedEntry of [`Op | `Pred] * name
+exception DuplicatedEntry of [`Op | `Pred | `Var] * name
 
 (* -------------------------------------------------------------------- *)
 module Op : sig
@@ -102,6 +104,30 @@ end = struct
 
   let get (env : env) ~exn (name : name) =
     Option.get_exn (oget env name) exn 
+end
+
+(* -------------------------------------------------------------------- *)
+module Vars : sig
+  val push  : env -> name -> ty -> env
+  val oget  : env -> name -> (name * ty) option
+  val get   : env -> exn:exn -> name -> name * ty
+  val getty : env -> exn:exn -> name -> ty
+end = struct
+  let push (env : env) (name : name) (ty : ty) =
+    let var = { le_name = name; le_ty = ty; } in
+    match Map.add_carry name var env.env_vrs with
+    | _, Some _ -> raise (DuplicatedEntry (`Var, name))
+    | env_vrs, _ -> { env with env_vrs }
+
+  let oget (env : env) (name : name) =
+    Map.Exceptionless.find name env.env_vrs />
+      (fun lc -> (lc.le_name, lc.le_ty))
+
+  let get (env : env) ~exn (name : name) =
+    Option.get_exn (oget env name) exn 
+
+  let getty (env : env) ~exn (name : name) =
+    snd (get env ~exn name)
 end
 
 (* -------------------------------------------------------------------- *)
@@ -155,6 +181,8 @@ end = struct
       match e with
       | EVar i ->
           Locals.getty env ~exn:RecheckFailure ~idx:i
+      | EGbl name ->
+          Vars.getty env ~exn:RecheckFailure name
       | EUnit ->
           tunit
       | EOp (op, args) ->
