@@ -16,12 +16,10 @@ body {
 
 #playground {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
+  top: 60px;
+  bottom: 30px;
+  left: 0px;
+  right: 0px;
 }
 
 div.formula_box {
