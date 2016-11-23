@@ -1,9 +1,4 @@
-module M = Engine.Fo
-module L = Engine.Location
-module P = Engine.Parser
-module X = Engine.Lexer
-module G = Engine.Proof
-module Y = Engine.Io
+let () = Engine.Jsapi.export "engine"
 
 (** This module drives the web application. *)
 
