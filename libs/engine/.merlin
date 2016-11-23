@@ -1,0 +1,7 @@
+S .
+B ../../_build/libs/engine
+
+PKG batteries
+PKG menhirLib
+
+FLG -w Y -w Z -w -23 -w +28 -w +33 -w -58

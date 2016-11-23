@@ -1,5 +1,8 @@
+S libs
+S libs/engine
 S src
 
+B _build/libs
 B _build/src
 
 PKG tyxml
@@ -10,4 +13,4 @@ PKG js_of_ocaml.ppx
 PKG batteries
 PKG menhirLib
 
-FLG -w Y -w Z -w -23 -w +28 -w +33
+FLG -w Y -w Z -w -23 -w +28 -w +33 -w 58
