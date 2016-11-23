@@ -25,6 +25,7 @@ and pexpr = pexpr_r loced
 (* -------------------------------------------------------------------- *)
 type pform_r =
   | PFPred   of psymbol * pexpr list
+  | PFCst    of bool
   | PFAnd    of pform * pform
   | PFOr     of pform * pform
   | PFNot    of pform

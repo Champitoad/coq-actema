@@ -26,6 +26,8 @@ type expr =
   | EOp  of name * expr list
 
 type form =
+  | FTrue
+  | FFalse
   | FPred of name * expr list
   | FConn of logcon * form list
   | FBind of logbnd * (name * ty) * form
@@ -216,6 +218,7 @@ end = struct
 
   let rec recheck (env : env) (form : form) : unit =
     match form with
+    | FTrue | FFalse -> ()
     | FPred (pred, args) ->
         let pred = Pred.get env ~exn:RecheckFailure pred in
         let args = List.map (Expr.recheck env) args in

@@ -16,6 +16,8 @@
   let _keywords = [
     "forall", FORALL;
     "exists", EXISTS;
+    "true"  , TRUE  ;
+    "false" , FALSE ;
   ]
 
   (* ------------------------------------------------------------------ *)

@@ -9,6 +9,8 @@
 
 %token EXISTS
 %token FORALL
+%token TRUE
+%token FALSE
 %token EOF
 
 %token COMMA LPAREN RPAREN LT GT
@@ -69,6 +71,12 @@ expr:
 form_r:
 | f=parens(form_r)
     { f }
+
+| TRUE
+   { PFCst true }
+
+| FALSE
+   { PFCst false }
 
 | x=uident args=parens(plist1(expr, COMMA))?
     { PFPred (x, Option.default [] args) }
