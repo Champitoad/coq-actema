@@ -253,12 +253,12 @@ end = struct
     let rec aux (form : form) =
       match form with
       | FTrue ->
-          mi (Xml.entity "&#x22A5;")
+          mi (Xml.entity "#x22A5")
       | FFalse ->
-          mi (Xml.entity "&#x22A4;")
+          mi (Xml.entity "#x22A4")
       | _ ->
           mi (Xml.entity "?")
 
     in fun (form : form) ->
-      Xml.node "mathml" [aux form]
+      Xml.node "math" [aux form]
 end

@@ -15,9 +15,26 @@
   <script type="text/javascript" src="3rdparty/bootstrap/dist/js/bootstrap.js"></script>
   <script type="text/javascript" src="3rdparty/hammerjs/hammer.js"></script>
   <script type="text/javascript" src="3rdparty/notifyjs/dist/notify.js"></script>
+  <script type="text/javascript" src="3rdparty/MathJax/unpacked/MathJax.js?config=TeX-MML-AM_CHTML"></script>
 
   <script type="text/javascript" src="backend.js"></script>
   <script type="text/javascript" src="cuty.js"></script>
+
+  <script type="text/javascript">
+    $(function() {
+      $("#parse").click(function() {
+        var input  = $("#input").val();
+        var mathml = engine.parse(input);
+        var script = $("<script>")[0];
+
+        script.type = "math/mml";
+        MathJax.HTML.setScript(script, mathml);
+
+        $("#playground").append(script);
+        MathJax.Hub.Queue(["Typeset", MathJax.Hub, script]);
+      });
+    });
+  </script>
 </head>
 
 <body>
@@ -28,11 +45,11 @@
           <a class="navbar-brand" href="#">LJ-MOOC</a>
         </div>
         <div id="navbar" class="navbar-collapse collapse">
-          <form class="navbar-form navbar-right">
+          <form class="navbar-form navbar-right" action="javascript:false">
             <div class="form-group">
-              <input type="text" placeholder="A -> B -> A && B" class="form-control">
+              <input type="text" placeholder="A -> B -> A && B" class="form-control" id="input">
             </div>
-            <button type="submit" class="btn btn-success">Start</button>
+            <button type="submit" class="btn btn-success" id="parse">Start</button>
           </form>
         </div>
       </div>

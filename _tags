@@ -3,6 +3,8 @@ true: debug
 true: use_menhir, menhir_explain, menhir_table
 true: warn_Z, warn_Y, warn_+28, warn_-23, warn_+33, warn_-58
 
+"html": -traverse
+
 # --------------------------------------------------------------------
 <libs>: include
 <libs/engine/*.{ml,mli}>: package(batteries), package(menhirLib)
