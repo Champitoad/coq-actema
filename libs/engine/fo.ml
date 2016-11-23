@@ -34,7 +34,7 @@ type form =
   | FConn of logcon * form list
   | FBind of logbnd * (name * ty) * form
 
-and logcon = [ `And | `Or | `Not ]
+and logcon = [ `And | `Or | `Imp | `Not ]
 and logbnd = [ `Forall | `Exists ]
 
 (* -------------------------------------------------------------------- *)
@@ -218,7 +218,7 @@ module Form : sig
 end = struct
   let parity (lg : logcon) =
     match lg with
-    | `And -> 2 | `Or  -> 2 | `Not -> 1
+    | `And -> 2 | `Or -> 2 | `Imp -> 2 | `Not -> 1
 
   let rec recheck (env : env) (form : form) : unit =
     match form with
@@ -237,28 +237,74 @@ end = struct
         let env = Locals.push env name ty in
         recheck env body
 
-  let check (form : pform) =
+  let rec check (form : pform) =
+    let pred name fs = FConn (name, List.map check fs) in
+
     match unloc form with
     | PFCst true  -> FTrue
     | PFCst false -> FFalse
+
+    | PFAnd (f1, f2) -> pred `And [f1; f2]
+    | PFOr  (f1, f2) -> pred `Or  [f1; f2]
+    | PFImp (f1, f2) -> pred `Imp [f1; f2]
+    | PFNot f1       -> pred `Not [f1]
+
+    | PFPred (name, []) -> FPred (unloc name, [])
 
     | _ -> assert false
 
   let mathml =
     let open Tyxml in
 
-    let _mo c = Xml.node "mo" [c] in
-    let  mi c = Xml.node "mi" [c] in
+    let mi ?(sherif = false) c =
+      let st = Xml.string_attrib "mathvariant" "sans-serif" in
+      let a  = if sherif then [st] else [] in
+      Xml.node ~a "mi" [c] in
+
+    let pr c =
+      let sc   = Xml.string_attrib "stretchy" "false" in
+      let mo c = Xml.node ~a:[sc] "mo" [Xml.pcdata c] in
+      [mo "("] @ c @ [mo ")"] in
+
+    let spaced c =
+      let a = Xml.string_attrib "width" "thickmathspace" in
+      let x = Xml.node ~a:[a] "mspace" [] in
+      [x] @ c @ [x] in
 
     let rec aux (form : form) =
       match form with
       | FTrue ->
-          mi (Xml.entity "#x22A5")
+          [mi (Xml.entity "#x22A5")]
       | FFalse ->
-          mi (Xml.entity "#x22A4")
+          [mi (Xml.entity "#x22A4")]
+
+      | FConn (lg, fs) -> begin
+          let fs = List.map aux fs in
+
+          match lg, fs with
+          | `And, [f1; f2] ->
+              (pr f1) @ [mi (Xml.entity "#x2227")] @ (pr f2)
+          | `Or , [f1; f2] ->
+              (pr f1) @ [mi (Xml.entity "#x2228")] @ (pr f2)
+          | `Imp, [f1; f2] ->
+              (pr f1) @ (spaced [mi (Xml.entity "#x27F9")]) @ (pr f2)
+          | `Not, [f] ->
+              [mi (Xml.entity "#x00AC")] @ (pr f)
+          | _ -> assert false
+        end
+
+      | FPred (name, []) ->
+          [mi ~sherif:true (Xml.pcdata name)]
+
       | _ ->
-          mi (Xml.entity "?")
+          assert false
 
     in fun (form : form) ->
-      Xml.node "math" [aux form]
+       let xmlns   = "http://www.w3.org/1998/Math/MathML" in
+       let xmlns   = Xml.string_attrib "xmlns" xmlns in
+       let display = Xml.string_attrib "display" "block" in
+       let output  = Xml.node "mstyle" (aux form) in
+       let output  = Xml.node ~a:[xmlns; display] "math" [output] in
+
+       output
 end

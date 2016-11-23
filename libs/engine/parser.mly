@@ -11,6 +11,7 @@
 %token FORALL
 %token TRUE
 %token FALSE
+%token LARROW
 %token EOF
 
 %token COMMA LPAREN RPAREN LT GT
@@ -86,6 +87,9 @@ form_r:
 
 | f1=form LOR f2=form
     { PFOr (f1, f2) }
+
+| f1=form LARROW f2=form
+    { PFImp (f1, f2) }
 
 | LNEG f=form
     { PFNot f }

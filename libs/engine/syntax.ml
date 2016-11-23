@@ -28,6 +28,7 @@ type pform_r =
   | PFCst    of bool
   | PFAnd    of pform * pform
   | PFOr     of pform * pform
+  | PFImp    of pform * pform
   | PFNot    of pform
   | PFForall of (psymbol * pty option) * pform
   | PFExists of (psymbol * pty option) * pform

@@ -52,6 +52,7 @@ rule main = parse
   | "&&" { LAND   }
   | "||" { LOR    }
   | "~~" { LNEG   }
+  | "->" { LARROW }
   | "<"  { LT     }
   | ">"  { GT     }
 
