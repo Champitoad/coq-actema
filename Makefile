@@ -6,7 +6,8 @@ JSPKG := \
 	notifyjs\#^0.4 \
 	hammerjs\#^2.0.0 \
 	jquery\#^2.0.0 \
-	bootstrap\#^3.0.0
+	bootstrap\#^3.0.0 \
+	MathJax\#^2.7
 
 # --------------------------------------------------------------------
 UNAMES := $(shell uname -s)
