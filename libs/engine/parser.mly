@@ -19,9 +19,10 @@
 
 %nonassoc COMMA LT GT
 
-%left LOR
-%left LAND
-%left LNEG
+%right LARROW
+%left  LOR
+%left  LAND
+%left  LNEG
 
 %type <Syntax.pform> xform
 %type <Syntax.pexpr> xexpr
