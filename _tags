@@ -1,7 +1,7 @@
 # --------------------------------------------------------------------
 true: debug
 true: use_menhir, menhir_explain, menhir_table
-true: warn_Z, warn_Y, warn_+28, warn_-23, warn_+33, warn_-58
+true: warn_Z, warn_Y, warn_+28, warn_-23, warn_+33, warn_-40, warn_-58
 true: annot, bin_annot
 
 "html": -traverse

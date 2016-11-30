@@ -13,4 +13,4 @@ PKG js_of_ocaml.ppx
 PKG batteries
 PKG menhirLib
 
-FLG -w Y -w Z -w -23 -w +28 -w +33 -w 58
+FLG -w Y -w Z -w -23 -w +28 -w +33 -w -40 -w 58
