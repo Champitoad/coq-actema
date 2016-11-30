@@ -118,3 +118,43 @@ end = struct
     let sub  = List.map (fun x -> { goal with g_goal = x }) sub in
     xprogress pr id pn sub
 end
+
+(* -------------------------------------------------------------------- *)
+exception TacticNotApplicable
+
+module CoreLogic : sig
+  type targ   = Proof.proof * Handle.t
+  type tactic = targ -> Proof.proof
+
+  val split  : tactic
+  val left   : tactic
+  val right  : tactic
+end = struct
+  type targ   = Proof.proof * Handle.t
+  type tactic = targ -> Proof.proof
+
+  type pnode += TSplit
+
+  let split ((pr, id) : targ) =
+    match (Proof.byid pr id).g_goal with
+    | FConn (`And, [f1; f2]) ->
+        Proof.progress pr id TSplit [f1; f2]
+    | _ -> raise TacticNotApplicable
+
+  type pnode += TLeft
+
+  let left ((pr, id) : targ) =
+    match (Proof.byid pr id).g_goal with
+    | FConn (`And, [f; _]) ->
+        Proof.progress pr id TLeft [f]
+    | _ -> raise TacticNotApplicable
+
+  type pnode += TRight
+
+  let right ((pr, id) : targ) =
+    match (Proof.byid pr id).g_goal with
+    | FConn (`And, [_; f]) ->
+        Proof.progress pr id TRight [f]
+    | _ -> raise TacticNotApplicable
+
+end
