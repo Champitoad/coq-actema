@@ -21,14 +21,21 @@ end
 type pnode = ..
 
 exception InvalidGoalId    of Handle.t
+exception InvalidHyphId    of Handle.t
 exception SubgoalNotOpened of Handle.t
 
 module Proof : sig
   type proof
 
+  type hyps = (Handle.t, Handle.t option * form) Map.t
+
+  module Hyps : sig
+    val byid : hyps -> Handle.t -> Handle.t option * form
+  end
+
   type pregoal = {
     g_env  : env;
-    g_hyps : (Handle.t, form) Map.t;
+    g_hyps : hyps;
     g_goal : form;
   }
 
@@ -42,12 +49,18 @@ module Proof : sig
   val progress :
     proof -> Handle.t -> pnode -> form list -> proof
 
+  val sprogress :
+    proof -> Handle.t -> pnode ->
+      ((Handle.t * form list) list * form) list -> proof
+
   val xprogress :
     proof -> Handle.t -> pnode -> pregoals -> proof
 end = struct
+  type hyps = (Handle.t, Handle.t option * form) Map.t
+
   type pregoal = {
     g_env  : env;
-    g_hyps : (Handle.t, form) Map.t;
+    g_hyps : hyps;
     g_goal : form;
   }
 
@@ -68,6 +81,13 @@ end = struct
     d_dst : Handle.t list;
     d_ndn : pnode;
   }
+
+  module Hyps = struct
+    let byid (hyps : hyps) (id : Handle.t) =
+      Option.get_exn
+        (Map.Exceptionless.find id hyps)
+        (InvalidHyphId id)
+  end
 
   let init (env : env) (goal : form) =
     Form.recheck env goal;
@@ -113,6 +133,23 @@ end = struct
         p_frwd = Map.add id dep pr.p_frwd;
         p_bkwd = List.fold_right (Map.add^~ dep) sids pr.p_bkwd; }
 
+  let sprogress (pr : proof) (id : Handle.t) (pn : pnode) sub =
+    let goal = byid pr id in
+
+    let for1 (newlc, concl) =
+      let subfor1 hyps (hid, newlc) =
+        let _h   = snd (Hyps.byid hyps hid) in
+        let hyps = Map.remove hid hyps in
+        let hyps = List.fold_left (fun hyps newh ->
+            Map.add (Handle.fresh ()) (Some hid, newh) hyps)
+          hyps newlc
+        in hyps in
+
+      let hyps = List.fold_left subfor1 goal.g_hyps newlc in
+      { goal with g_hyps = hyps; g_goal = concl; }
+
+    in xprogress pr id pn (List.map for1 sub)      
+
   let progress (pr : proof) (id : Handle.t) (pn : pnode) (sub : form list) =
     let goal = byid pr id in
     let sub  = List.map (fun x -> { goal with g_goal = x }) sub in
@@ -129,6 +166,7 @@ module CoreLogic : sig
   val split  : tactic
   val left   : tactic
   val right  : tactic
+  val case   : Handle.t -> tactic
 end = struct
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
@@ -157,4 +195,21 @@ end = struct
         Proof.progress pr id TRight [f]
     | _ -> raise TacticNotApplicable
 
+  type pnode += TCase of Handle.t
+
+  let case (h : Handle.t) ((pr, id) : targ) =
+    let gl = Proof.byid pr id in
+    let hy = snd (Proof.Hyps.byid gl.g_hyps h) in
+
+    match hy with
+    | FConn (`And, [f1; f2]) ->
+        Proof.sprogress pr id (TCase id)
+          [[h, [f1; f2]], gl.g_goal]
+
+    | FConn (`Or, [f1; f2]) ->
+        Proof.sprogress pr id (TCase id)
+          [[h, [f1]], gl.g_goal;
+           [h, [f2]], gl.g_goal]
+
+    | _ -> raise TacticNotApplicable
 end
