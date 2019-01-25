@@ -8,9 +8,11 @@ true: annot, bin_annot
 
 # --------------------------------------------------------------------
 <libs>: include
+
 <libs/engine/*.{ml,mli}>: package(batteries), package(menhirLib)
 <libs/engine/*.{ml,mli}>: package(tyxml), package(tyxml-ppx)
 <libs/engine/*.{ml,mli}>: package(js_of_ocaml), package(js_of_ocaml.ppx)
+<libs/engine/*.{ml,mli}>: for-pack(Engine)
 
 # --------------------------------------------------------------------
 <src/*>: package(tyxml), package(js_of_ocaml), package(js_of_ocaml.tyxml)
