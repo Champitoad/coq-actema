@@ -15,6 +15,4 @@ true: annot, bin_annot
 <libs/engine/*.{ml,mli}>: for-pack(Engine)
 
 # --------------------------------------------------------------------
-<src/*>: package(tyxml), package(js_of_ocaml), package(js_of_ocaml.tyxml)
-<src/*>: package(lwt_ppx), package(js_of_ocaml.ppx)
-<src/*>: package(batteries), package(menhirLib)
+<src/*>: package(tyxml), package(batteries), package(menhirLib)
