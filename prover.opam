@@ -7,8 +7,11 @@ build: [
   ["dune" "build" "-p" name "@doc"] {with-doc}
 ]
 maintainer: ["pierre-yves@strub.nu"]
-authors: ["Pierre-Yves Strub"]
+authors: ["Pierre-Yves Strub <pierre-yves@strub.nu>"]
+bug-reports: "https://gitlab.com/prover-ui/prover/issues"
+homepage: "https://gitlab.com/prover-ui/prover"
 license: "CeCILL-B"
+dev-repo: "git+https://gitlab.com/prover-ui/prover.git"
 synopsis: "A simple prover"
 depends: [
   "dune" {>= "1.10"}
@@ -16,5 +19,6 @@ depends: [
   "tyxml" {>= "4.0"}
   "tyxml-ppx" {>= "4.0"}
   "js_of_ocaml" {>= "2.8"}
+  "js_of_ocaml-ppx" {>= "2.8"}
   "menhir" {>= "20181113"}
 ]
