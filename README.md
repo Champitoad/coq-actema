@@ -23,6 +23,6 @@ The project comes with a Makefile. Simply type
 
 to build the project. This should create a file
 
-	_build/default/src/main.exe
+	_build/default/src/form2mathml.exe
 
-that you can run by executing `bin/prover`.
+that you can run by executing `bin/form2mathml`.

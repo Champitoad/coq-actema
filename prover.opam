@@ -20,5 +20,6 @@ depends: [
   "tyxml-ppx" {>= "4.0"}
   "js_of_ocaml" {>= "2.8"}
   "js_of_ocaml-ppx" {>= "2.8"}
+  "js_of_ocaml-compiler" {>= "2.8"}
   "menhir" {>= "20181113"}
 ]

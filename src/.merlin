@@ -13,7 +13,7 @@ B /Users/strub/.opam/prover/lib/tyxml/functor
 B /Users/strub/.opam/prover/lib/uchar
 B /Users/strub/.opam/prover/lib/uutf
 B ../_build/default/libs/engine/.engine.objs/byte
-B ../_build/default/src/.main.eobjs/byte
+B ../_build/default/src/.form2mathml.eobjs/byte
 S /Users/strub/.opam/prover/lib/batteries
 S /Users/strub/.opam/prover/lib/bytes
 S /Users/strub/.opam/prover/lib/js_of_ocaml
