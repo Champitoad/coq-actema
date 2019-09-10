@@ -1,0 +1,12 @@
+(ocamllex lexer)
+
+(menhir
+  (modules parser)
+  (flags --explain --inspection --table --dump))
+
+(library
+  (name engine)
+  (public_name prover.engine)
+  (libraries batteries menhirLib tyxml js_of_ocaml)
+  (preprocess (pps tyxml-ppx js_of_ocaml.ppx))
+  (synopsis "Mini-prover (engine library)"))

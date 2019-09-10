@@ -1,8 +1,0 @@
-engine/Utils
-engine/Location
-engine/Syntax
-engine/Lexer
-engine/Parser
-engine/Io
-engine/Fo
-engine/Proof

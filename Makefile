@@ -1,27 +1,22 @@
 # --------------------------------------------------------------------
-OCAMLBUILD := ocamlbuild -use-ocamlfind -classic-display
-OCAMLBUILD += -plugin-tag "package(js_of_ocaml.ocamlbuild)"
+.PHONY: default build install uninstall clean mkproper
+
+DUNEOPTS := --display=short
 
 # --------------------------------------------------------------------
-.PHONY: all build top clean __force__
+default: build
 
-all: build
+build:
+	dune build $(DUNEOPTS)
 
-build: main.native
-	@true
+install:
+	dune install $(DUNEOPTS)
 
-top:
-	$(OCAMLBUILD) src/ljmooc.top
+uninstall:
+	dune uninstall $(DUNEOPTS)
 
 clean:
-	rm -rf _build ljmooc.top main.native
+	dune clean $(DUNEOPTS)
 
-# --------------------------------------------------------------------
-%.native: __force__
-	rm -f $@ && $(OCAMLBUILD) src/$@
-
-%.byte: __force__
-	rm -f $@ && $(OCAMLBUILD) src/$@
-
-libs/%.cmx: __force__
-	$(OCAMLBUILD) $@
+mrproper: clean
+	git clean -dfXq

@@ -12,11 +12,14 @@ type t = {
 
 (* -------------------------------------------------------------------- *)
 val _dummy    : t
+val isdummy   : t -> bool
 val make      : position -> position -> t
 val of_lexbuf : lexbuf -> t
 
 val merge    : t -> t -> t
 val mergeall : t list -> t
+
+val tostring : t -> string
 
 (* -------------------------------------------------------------------- *)
 type 'a loced = { plloc : t; pldesc : 'a; }
