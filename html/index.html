@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+  <head>
+  <meta name="viewport" content="user-scalable=no, width=device-width, initial-scale=1, maximum-scale=1">
+
+  <title>Mini Prover</title>
+
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
+        integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
+        crossorigin="anonymous">
+
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css"
+        integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp"
+        crossorigin="anonymous">
+
+  <link rel="stylesheet" type="text/css" href="style.css" />
+
+  <script src="https://code.jquery.com/jquery-3.4.1.js"
+          integrity="sha256-WpOohJOqMqqyKL9FccASB9O0KwACQJpFTUBLTYOVvVU="
+          crossorigin="anonymous"></script>
+
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"
+          integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+          crossorigin="anonymous"></script>
+
+  <script src="jsprover.js"></script>
+
+  <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+      extensions: [
+        "mml2jax.js"
+      ],
+
+      CommonHTML: {
+        scale: 200
+      },
+
+      showMathMenu: false,
+
+      "fast-preview": { disabled: true },
+      tex2jax: { preview: "none" },
+      mml2jax: { preview: "none" },
+      tex2jax: { preview: "none" },
+    });
+  </script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.6/MathJax.js?config=TeX-MML-AM_CHTML"
+          integrity="sha256-nlrDrBTHxJJlDDX22AS33xYI1OJHnGMDhiYMSe2U0e0="
+          crossorigin="anonymous"></script>
+
+  <script type="text/javascript">
+    $(function() {
+      $("#parse").click(function() {
+        var input  = $("#formulaInput").val();
+        var mathml = null;
+        var script = $("<script>")[0];
+
+        $('#formulaInput').focus().select();
+
+        try {
+          mathml = engine.parse(input);
+        } catch(error) {
+          // Have to use proper exceptions in the OCaml API
+          if (!(Array.isArray(error)))
+            throw error;
+          $("#playground").empty().append(
+            $("<div class='alert alert-danger' role='alert'>").text(error)
+          );
+          return ;
+        }
+
+        console.log(mathml);
+
+        script.type = "math/mml";
+        MathJax.HTML.setScript(script, mathml);
+
+        $("#playground").empty().append(script);
+        MathJax.Hub.Queue(["Typeset", MathJax.Hub, script]);
+      });
+
+      $("form:not(.filter) :input:visible:enabled:first").focus();
+    });
+  </script>
+</head>
+
+<body>
+  <div class="jumbotron text-center">
+    <h1>Mini Prover</h1>
+  </div>
+
+  <div class="container">
+    <div class="row">
+      <form class="form-inline" action="javascript:false">
+        <div class="form-group">
+          <label for="formulaInput">Formula</label>
+          <input type="text" class="form-control" id="formulaInput" placeholder="A -> B">
+        </div>
+        <button type="submit" class="btn btn-default" id="parse">Parse</button>
+      </form>
+    </div>
+
+    <div id="playground"></div>
+  </div>
+</body>
+</html>

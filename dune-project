@@ -1,4 +1,4 @@
-(lang dune 1.10)
+(lang dune 1.11)
 (using menhir 2.0)
 (name prover)
 
@@ -15,8 +15,8 @@
  (name prover)
  (synopsis "A simple prover")
  (depends
-  (dune                 (>= 1.10))
-  (batteries            (>= 2.5))
+  (dune                 (>= 1.11))
+  (ocamlfind            (>= 1.8))
   (tyxml                (>= 4.0))
   (tyxml-ppx            (>= 4.0))
   (js_of_ocaml          (>= 2.8))

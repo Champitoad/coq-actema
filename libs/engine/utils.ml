@@ -40,7 +40,7 @@ module Uid : sig
   val fresh : unit -> uid
 end = struct
   let fresh () : uid =
-    Oo.id (object end)
+    0
 end
 
 (* -------------------------------------------------------------------- *)

@@ -1,4 +1,6 @@
 _build/
+html/jspover.js
 *.install
 *.exe
 *.bc
+html/jsprover.js

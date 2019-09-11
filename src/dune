@@ -2,4 +2,15 @@
   (names form2mathml jsprover)
   (public_names form2mathml -)
   (libraries prover.engine)
+  (js_of_ocaml (flags +nat.js --disable genprim --pretty --no-inline))
   (package prover))
+
+(rule
+  (target jsprover.js.bc)
+  (deps (file jsprover.bc))
+  (action (run ocamlfind ocamlc -g -o jsprover.js.bc -package menhirLib,batteries,tyxml,js_of_ocaml -linkpkg ../libs/engine/engine.cma .form2mathml.eobjs/byte/jsprover.cmo)))
+
+(rule
+  (target jsprover.js)
+  (deps (file jsprover.js.bc))
+  (action (run js_of_ocaml --sourcemap --source-map-inline --pretty -o %{target} +nat.js %{deps})))

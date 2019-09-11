@@ -8,6 +8,7 @@ default: build
 
 build:
 	dune build $(DUNEOPTS)
+	cp _build/default/src/jsprover.js html/
 
 install:
 	dune install $(DUNEOPTS)
