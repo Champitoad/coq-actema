@@ -275,6 +275,7 @@ end = struct
       match form with
       | FTrue ->
           [mi (Xml.entity "#x22A5")]
+
       | FFalse ->
           [mi (Xml.entity "#x22A4")]
 

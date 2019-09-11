@@ -16,6 +16,7 @@
  (synopsis "A simple prover")
  (depends
   (dune                 (>= 1.11))
+  (batteries            (>= 2.8))
   (ocamlfind            (>= 1.8))
   (tyxml                (>= 4.0))
   (tyxml-ppx            (>= 4.0))
