@@ -6,6 +6,7 @@ open Fo
 module Handle : sig
   type t = private int
 
+  val ofint : int -> t
   val fresh : unit -> t
   val eq    : t -> t -> bool
 end = struct
@@ -13,6 +14,9 @@ end = struct
 
   let fresh () : t =
     Utils.Uid.fresh ()
+
+  let ofint (i : int) : t =
+    i
 
   let eq = ((=) : t -> t -> bool)
 end
@@ -51,7 +55,7 @@ module Proof : sig
 
   val sprogress :
     proof -> Handle.t -> pnode ->
-      ((Handle.t * form list) list * form) list -> proof
+      ((Handle.t option * form list) list * form) list -> proof
 
   val xprogress :
     proof -> Handle.t -> pnode -> pregoals -> proof
@@ -138,10 +142,13 @@ end = struct
 
     let for1 (newlc, concl) =
       let subfor1 hyps (hid, newlc) =
-        let _h   = snd (Hyps.byid hyps hid) in
-        let hyps = Map.remove hid hyps in
+        let hyps =
+          Option.fold (fun hyps hid ->
+            let _h = snd (Hyps.byid hyps hid) in
+            Map.remove hid hyps)
+          hyps hid in
         let hyps = List.fold_left (fun hyps newh ->
-            Map.add (Handle.fresh ()) (Some hid, newh) hyps)
+            Map.add (Handle.fresh ()) (None, newh) hyps)
           hyps newlc
         in hyps in
 
@@ -163,53 +170,96 @@ module CoreLogic : sig
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
 
-  val split  : tactic
-  val left   : tactic
-  val right  : tactic
-  val case   : Handle.t -> tactic
+  val intro     : ?variant:int -> tactic
+  val elim      : Handle.t -> tactic
+  val ivariants : targ -> string list
 end = struct
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
 
-  type pnode += TSplit
+  type pnode += TIntro
 
-  let split ((pr, id) : targ) =
-    match (Proof.byid pr id).g_goal with
-    | FConn (`And, [f1; f2]) ->
-        Proof.progress pr id TSplit [f1; f2]
+  let intro ?(variant = 0) ((pr, id) : targ) =
+    match variant, (Proof.byid pr id).g_goal with
+    | 0, FConn (`And, [f1; f2]) ->
+        Proof.progress pr id TIntro [f1; f2]
+
+    | 0, FConn (`Imp, [f1; f2]) ->
+        Proof.sprogress pr id TIntro
+          [[None, [f1]], f2]
+
+    | 0, FConn (`Equiv, [f1; f2]) ->
+        Proof.progress pr id TIntro
+          [Form.f_imp f1 f2; Form.f_imp f2 f1]
+
+    | 0, FConn (`Or, [f; _]) ->
+        Proof.progress pr id TIntro [f]
+
+    | 1, FConn (`Or, [f; _]) ->
+        Proof.progress pr id TIntro [f]
+
+    | 0, FConn (`Not, [f]) ->
+        Proof.sprogress pr id TIntro
+          [[None, [f]], FFalse]
+
+    | 0, FTrue ->
+        Proof.progress pr id TIntro []
+
     | _ -> raise TacticNotApplicable
 
-  type pnode += TLeft
+  type pnode += TElim of Handle.t
 
-  let left ((pr, id) : targ) =
-    match (Proof.byid pr id).g_goal with
-    | FConn (`And, [f; _]) ->
-        Proof.progress pr id TLeft [f]
-    | _ -> raise TacticNotApplicable
-
-  type pnode += TRight
-
-  let right ((pr, id) : targ) =
-    match (Proof.byid pr id).g_goal with
-    | FConn (`And, [_; f]) ->
-        Proof.progress pr id TRight [f]
-    | _ -> raise TacticNotApplicable
-
-  type pnode += TCase of Handle.t
-
-  let case (h : Handle.t) ((pr, id) : targ) =
+  let elim (h : Handle.t) ((pr, id) : targ) =
     let gl = Proof.byid pr id in
     let hy = snd (Proof.Hyps.byid gl.g_hyps h) in
 
+    let pre, hy =
+      let rec doit acc = function
+        | FConn (`Imp, [f1; f2]) -> doit (f1 :: acc) f2
+        | f -> (List.rev acc, f)
+      in doit [] hy in
+
+    let subs = List.map (fun f -> [Some h, []], f) pre in
+
+    if Form.equal hy gl.g_goal then
+      Proof.sprogress pr id (TElim id) subs
+    else
+
     match hy with
     | FConn (`And, [f1; f2]) ->
-        Proof.sprogress pr id (TCase id)
-          [[h, [f1; f2]], gl.g_goal]
+        Proof.sprogress pr id (TElim id)
+          (subs @ [[Some h, [f1; f2]], gl.g_goal])
 
     | FConn (`Or, [f1; f2]) ->
-        Proof.sprogress pr id (TCase id)
-          [[h, [f1]], gl.g_goal;
-           [h, [f2]], gl.g_goal]
+        Proof.sprogress pr id (TElim id)
+          (subs @ [[Some h, [f1]], gl.g_goal;
+                   [Some h, [f2]], gl.g_goal])
+
+    | FConn (`Equiv, [f1; f2]) ->
+        Proof.sprogress pr id (TElim id)
+          (subs @ [[Some h, [Form.f_imp f1 f2; Form.f_imp f2 f1]], gl.g_goal])
+
+    | FConn (`Not, [f]) ->
+        Proof.sprogress pr id (TElim id)
+          (subs @ [[Some h, []], f])
+
+    | FFalse ->
+        Proof.sprogress pr id (TElim id) subs
+
+    | FTrue ->
+        Proof.sprogress pr id (TElim id)
+          (subs @ [[Some h, []], gl.g_goal])
 
     | _ -> raise TacticNotApplicable
+
+  let ivariants ((pr, id) : targ) =
+    match (Proof.byid pr id).g_goal with
+    | FConn (`And  , _) -> ["And-intro"]
+    | FConn (`Or   , _) -> ["Or-intro-L"; "Or-intro-R"]
+    | FConn (`Imp  , _) -> ["Imp-intro"]
+    | FConn (`Equiv, _) -> ["Equiv-intro"]
+    | FConn (`Not  , _) -> ["Not-intro"]
+
+    | _ -> []
 end
+

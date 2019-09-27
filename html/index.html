@@ -49,16 +49,76 @@
           crossorigin="anonymous"></script>
 
   <script type="text/javascript">
+    var goal = null;
+
+    function string_of_goal(goal) {
+      var aout = "";
+      var subgoals = goal.subgoals();
+
+      aout += "Goals count: " + subgoals.length + "\n";
+
+      for (var i = 0; i < subgoals.length; ++i) {
+        if (i == 0) {
+          var sg   = subgoals[i];
+          var hyps = sg.context();
+
+
+          aout += "\n";
+          aout += "Variables: " + subgoals[i].vars().join(", ") + "\n";
+          aout += "\n";
+
+          for (var j = 0; j < hyps.length; ++j) {
+            aout += "H[" + j.toString().padStart(4, '0')
+                      + "]: " + hyps[j].form.tostring() + "\n";
+          }
+
+          aout += "=".repeat(68) + "\n";
+          aout += sg.conclusion().tostring();
+          aout += "\n\n";
+        } else {
+          aout += "Goal " + (i+1) + ": " + subgoals[i].conclusion().tostring() + "\n";
+        }
+      }
+
+      return aout;
+    }
+
     $(function() {
       $("#parse").click(function() {
-        var input  = $("#formulaInput").val();
-        var mathml = null;
-        var script = $("<script>")[0];
+        var input = $("#formulaInput").val().trim();
 
-        $('#formulaInput').focus().select();
+        $("#playground").empty();
+        $("#formulaInput").focus().select();
+
+        var action = undefined;
 
         try {
-          mathml = engine.parse(input);
+          if (input == "reset") {
+            goal = null;
+          } else if (input == "intro") {
+            if (goal != null && !goal.closed()) {
+               goal = goal.subgoals()[0].intro(0);
+               $("#log").append("intro\n")
+            }
+          } else if ((m = /^intro\s+(\d+)$/.exec(input))) {
+            if (goal != null && !goal.closed()) {
+               idx  = parseInt(m[1]);
+               goal = goal.subgoals()[0].intro(idx);
+               $("#log").append("intro " + idx + "\n")
+            }
+          } else if ((m = /^elim\s+(\d+)$/.exec(input))) {
+            if (goal != null && !goal.closed()) {
+               idx    = parseInt(m[1])
+               target = goal.subgoals()[0].context()[idx];
+               if (target !== undefined) {
+                 goal = goal.subgoals()[0].elim(target);
+                 $("#log").append("elim " + idx + "\n")
+               }
+            }
+          } else {
+            goal = engine.parse(input);
+            $("#log").empty();
+          }
         } catch(error) {
           // Have to use proper exceptions in the OCaml API
           if (!(Array.isArray(error)))
@@ -66,16 +126,13 @@
           $("#playground").empty().append(
             $("<div class='alert alert-danger' role='alert'>").text(error)
           );
-          return ;
         }
 
-        console.log(mathml);
-
-        script.type = "math/mml";
-        MathJax.HTML.setScript(script, mathml);
-
-        $("#playground").empty().append(script);
-        MathJax.Hub.Queue(["Typeset", MathJax.Hub, script]);
+        if (goal != null) {
+          $("#playground").append($("<pre><code>").text(string_of_goal(goal)));
+        } else {
+          $("#log").empty();
+        }
       });
 
       $("form:not(.filter) :input:visible:enabled:first").focus();
@@ -92,14 +149,40 @@
     <div class="row">
       <form class="form-inline" action="javascript:false">
         <div class="form-group">
-          <label for="formulaInput">Formula</label>
-          <input type="text" class="form-control" id="formulaInput" placeholder="A -> B">
+          <label for="formulaInput">Goal / Action</label>
+          <input type="text" class="form-control" id="formulaInput" size="40"
+                 value="A, B |- (~~A || ~~B) -> ~~(A && B)">
         </div>
-        <button type="submit" class="btn btn-default" id="parse">Parse</button>
+        <button type="submit" class="btn btn-default" id="parse">Start</button>
       </form>
     </div>
 
+    <h4>Goals</h4>
+
     <div id="playground"></div>
+
+    <h4>Actions log</h4>
+
+    <pre class="log"><code><div id="log"></div></code></pre>
+
+    <div class="alert alert-info">
+      <strong>
+        Default goal can be solved with the following script
+      </strong>
+
+<pre><code>
+intro
+intro
+elim 0
+elim 1
+elim 0
+elim 0
+elim 1
+elim 0
+elim 1
+</code></pre>
+    </div>
+
   </div>
 </body>
 </html>

@@ -1,33 +1,30 @@
 %{
-  open Utils
   open Location
   open Syntax
 %}
 
-%token <Syntax.symbol> LIDENT
 %token <Syntax.symbol> UIDENT
 
-%token EXISTS
-%token FORALL
+%token LPAREN RPAREN
 %token TRUE
 %token FALSE
 %token LARROW
+%token LRARROW
 %token EOF
+%token PROOF
 
-%token COMMA LPAREN RPAREN LT GT
-%token LAND LOR LNEG
+%token COMMA LAND LOR LNEG
 
-%nonassoc COMMA LT GT
-
-%right LARROW
+%right LARROW LRARROW
 %left  LOR
 %left  LAND
 %left  LNEG
 
 %type <Syntax.pform> xform
-%type <Syntax.pexpr> xexpr
+%type <Syntax.pgoal> xgoal
 
-%start xform xexpr
+%start xform
+%start xgoal
 %%
 
 (* -------------------------------------------------------------------- *)
@@ -35,39 +32,11 @@ xform:
 | f=form EOF { f }
 
 (* -------------------------------------------------------------------- *)
-xexpr:
-| e=expr EOF { e }
+xgoal:
+| p=goal EOF { p }
 
 (* -------------------------------------------------------------------- *)
-%inline lident: x=loc(LIDENT) { x }
 %inline uident: x=loc(UIDENT) { x }
-
-(* -------------------------------------------------------------------- *)
-binding:
-| x=lident { (x, None) }
-
-(* -------------------------------------------------------------------- *)
-expr_r:
-| e=parens(expr_r)
-    { e }
-
-| parens(empty)
-    { PEUnit }
-
-| x=lident args=parens(plist1(expr, COMMA))?
-    { PEOp (x, Option.default [] args) }
-
-| e=parens(e1=expr COMMA e2=expr { (e1, e2) })
-    { let e1, e2 = e in PEPair (e1, e2) }
-
-| LT e=expr
-    { PEInj (`Left, e) }
-
-| e=expr GT
-    { PEInj (`Right, e) }
-
-expr:
-| e=loc(expr_r) { e }
 
 (* -------------------------------------------------------------------- *)
 form_r:
@@ -80,8 +49,8 @@ form_r:
 | FALSE
    { PFCst false }
 
-| x=uident args=parens(plist1(expr, COMMA))?
-    { PFPred (x, Option.default [] args) }
+| x=uident
+    { PFVar x }
 
 | f1=form LAND f2=form
     { PFAnd (f1, f2) }
@@ -92,20 +61,19 @@ form_r:
 | f1=form LARROW f2=form
     { PFImp (f1, f2) }
 
+| f1=form LRARROW f2=form
+    { PFEquiv (f1, f2) }
+
 | LNEG f=form
     { PFNot f }
-
-| FORALL x=binding COMMA f=form
-    { PFForall (x, f) }
-
-| EXISTS x=binding COMMA f=form
-    { PFForall (x, f) }
 
 form:
 | f=loc(form_r) { f }
 
 (* -------------------------------------------------------------------- *)
-%inline empty: | (* empty *) { () }
+goal:
+| ps=plist0(uident, COMMA) PROOF f=form
+    { (ps, f) }
 
 (* -------------------------------------------------------------------- *)
 %inline loc(X):

@@ -1,6 +1,22 @@
 (* -------------------------------------------------------------------- *)
+module Enum   = BatEnum
 module Map    = BatMap
-module Option = BatOption
+module Set    = BatSet
+module UChar  = BatUChar
+module UTF8   = BatUTF8
+
+(* -------------------------------------------------------------------- *)
+module Option : sig
+  include module type of BatOption
+
+  val fold : ('a -> 'b -> 'a) -> 'a -> 'b option -> 'a
+end = struct
+  include BatOption
+
+  let fold f acc = function
+    | None   -> acc
+    | Some v -> f acc v
+end
 
 (* -------------------------------------------------------------------- *)
 module List : sig
@@ -39,8 +55,9 @@ type uid = int
 module Uid : sig
   val fresh : unit -> uid
 end = struct
-  let fresh () : uid =
-    0
+  let fresh : unit -> uid =     (* not mt-safe *)
+    let count = ref (-1) in
+    fun () -> incr count; !count
 end
 
 (* -------------------------------------------------------------------- *)
@@ -76,6 +93,10 @@ end = struct
     let r = ref (Some (cb, x)) in
     Gc.finalise (fun r -> dispose r) r; r
 end
+
+(* -------------------------------------------------------------------- *)
+let fst_map f (x, y) = (f x, y)
+let snd_map f (x, y) = (x, f y)
 
 (* -------------------------------------------------------------------- *)
 let curry   f (x, y) = f x y

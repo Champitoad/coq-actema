@@ -9,4 +9,4 @@ val finalize     : reader -> unit
 
 (* -------------------------------------------------------------------- *)
 val parse_form : reader -> Syntax.pform
-val parse_expr : reader -> Syntax.pexpr
+val parse_goal : reader -> Syntax.pgoal

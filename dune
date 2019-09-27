@@ -1,3 +1,6 @@
 (alias
   (name default)
   (deps (alias_rec install) (file src/jsprover.js)))
+
+(env
+  (dev (flags (:standard -warn-error -A))))

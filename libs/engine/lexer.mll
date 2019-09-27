@@ -14,8 +14,6 @@
 
   (* ------------------------------------------------------------------ *)
   let _keywords = [
-    "forall", FORALL;
-    "exists", EXISTS;
     "true"  , TRUE  ;
     "false" , FALSE ;
   ]
@@ -36,25 +34,23 @@ let digit   = ['0'-'9']
 let uint    = digit+
 
 let ichar  = (letter | digit | '_' | '\'')
-let lident = (lower ichar*) | ('_' ichar+)
 let uident = upper ichar*
 
 (* -------------------------------------------------------------------- *)
 rule main = parse
   | newline      { Lexing.new_line lexbuf; main lexbuf }
   | blank+       { main lexbuf }
-  | lident as id { try Hashtbl.find keywords id with Not_found -> LIDENT id }
   | uident as id { try Hashtbl.find keywords id with Not_found -> UIDENT id }
 
-  | "("  { LPAREN }
-  | ")"  { RPAREN }
-  | ","  { COMMA  }
-  | "&&" { LAND   }
-  | "||" { LOR    }
-  | "~~" { LNEG   }
-  | "->" { LARROW }
-  | "<"  { LT     }
-  | ">"  { GT     }
+  | "("   { LPAREN  }
+  | ")"   { RPAREN  }
+  | "&&"  { LAND    }
+  | "||"  { LOR     }
+  | "~~"  { LNEG    }
+  | "->"  { LARROW  }
+  | "<->" { LRARROW }
+  | "|-"  { PROOF   }
+  | ","   { COMMA   }
 
   | eof { EOF }
 
