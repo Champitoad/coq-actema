@@ -66,7 +66,7 @@ module Form : sig
   val parity   : logcon -> int
   val check    : env -> pform -> form
   val recheck  : env -> form -> unit
-  val mathml   : form -> Tyxml.Xml.elt
+  val mathml   : ?tag:string -> form -> Tyxml.Xml.elt
   val tostring : form -> string
 
   val equal : form -> form -> bool
@@ -188,12 +188,17 @@ end = struct
       | FVar name ->
           [mi ~sherif:true (Xml.pcdata name)]
 
-    in fun (form : form) ->
+    in fun ?(tag : string option) (form : form) ->
        let xmlns   = "http://www.w3.org/1998/Math/MathML" in
        let xmlns   = Xml.string_attrib "xmlns" xmlns in
        let display = Xml.string_attrib "display" "block" in
+       let tag     =
+         match tag with
+         | None     -> []
+         | Some tag -> [Xml.string_attrib "style" tag]
+       in
        let output  = Xml.node "mstyle" (for_form form) in
-       let output  = Xml.node ~a:[xmlns; display] "math" [output] in
+       let output  = Xml.node ~a:([xmlns; display] @ tag) "math" [output] in
 
        output
 

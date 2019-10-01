@@ -6,6 +6,9 @@ open Proof
 module Js = Js_of_ocaml.Js
 
 (* -------------------------------------------------------------------- *)
+type source = [`Conclusion | `Hypothesis]
+
+(* -------------------------------------------------------------------- *)
 let rec js_proof_engine (proof : Proof.proof) = object%js (self)
   val proof  = proof
   val handle = Handle.fresh ()
@@ -51,7 +54,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
   (* Return the subgoal conclusion as a [js_form] *)
   method conclusion =
     let goal  = Proof.byid parent##.proof self##.handle in
-    js_form goal.g_goal
+    js_form `Conclusion goal.g_goal
 
   (* [this#intro [variant : int]] applies the relevant introduction
    * rule to the conclusion of the subgoal [this]. The parameter
@@ -96,7 +99,7 @@ and js_hyps parent ((handle, hyp) : Handle.t * Fo.form) = object%js (self)
   val handle = handle
 
   (* the hypothesis as a [js_form] *)
-  val form = js_form hyp
+  val form = js_form `Hypothesis hyp
 
   (* The enclosing proof engine *)
   val proof = parent##.parent
@@ -104,11 +107,18 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
-and js_form (form : Fo.form) :> < > Js.t = object%js
+and js_form (source : source) (form : Fo.form) :> < > Js.t = object%js
   (* Return the [mathml] of the formula *)  
   method mathml =
-    Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) (Fo.Form.mathml form))
-
+    let tag =
+      match source with
+      | `Hypothesis -> "hypothesis"
+      | `Conclusion -> "conclusion"
+    in
+      Js.string
+        (Format.asprintf "%a" (Tyxml.Xml.pp ())
+        (Fo.Form.mathml ~tag:tag form))
+  
   (* Return an UTF8 string representation of the formula *)
   method tostring =
     Js.string (Fo.Form.tostring form)
