@@ -50,6 +50,11 @@ module Proof : sig
   val opened : proof -> Handle.t list
   val byid   : proof -> Handle.t -> pregoal
 
+  type meta = < > Js_of_ocaml.Js.t
+
+  val set_meta : proof -> Handle.t -> meta option -> unit
+  val get_meta : proof -> Handle.t -> meta option
+
   val progress :
     proof -> Handle.t -> pnode -> form list -> proof
 
@@ -60,6 +65,8 @@ module Proof : sig
   val xprogress :
     proof -> Handle.t -> pnode -> pregoals -> proof
 end = struct
+  module Js = Js_of_ocaml.Js
+
   type hyps = (Handle.t, Handle.t option * form) Map.t
 
   type pregoal = {
@@ -76,6 +83,7 @@ end = struct
     p_crts : Handle.t list;
     p_frwd : (Handle.t, gdep) Map.t;
     p_bkwd : (Handle.t, gdep) Map.t;
+    p_meta : (Handle.t, < > Js.t) Map.t ref;
   }
 
   and goal = pregoal
@@ -107,7 +115,8 @@ end = struct
       p_maps = Map.singleton uid root;
       p_crts = [uid];
       p_frwd = Map.empty;
-      p_bkwd = Map.empty; }
+      p_bkwd = Map.empty;
+      p_meta = ref Map.empty; }
 
   let closed (proof : proof) =
     List.is_empty proof.p_crts
@@ -120,6 +129,19 @@ end = struct
       (Map.Exceptionless.find id proof.p_maps)
       (InvalidGoalId id)
 
+  type meta = < > Js_of_ocaml.Js.t
+
+  let set_meta (proof : proof) (id : Handle.t) (meta : meta option) : unit =
+    match meta with
+    | None ->
+        proof.p_meta := Map.remove id !(proof.p_meta)
+        
+    | Some meta ->
+        proof.p_meta := Map.add id meta !(proof.p_meta)
+
+  let get_meta (proof : proof) (id : Handle.t) : meta option =
+    Map.Exceptionless.find id !(proof.p_meta)
+
   let xprogress (pr : proof) (id : Handle.t) (pn : pnode) (sub : pregoals) =
     let _goal = byid pr id in
     let nsub  = List.length sub in
@@ -131,11 +153,23 @@ end = struct
 
     let dep = { d_src = id; d_dst = sids; d_ndn = pn; } in
 
+    let meta =
+      match Map.Exceptionless.find id !(pr.p_meta) with
+      | None ->
+          !(pr.p_meta)
+
+      | Some meta ->
+          List.fold_left
+            (fun map id -> Map.add id meta map)
+            !(pr.p_meta) sids
+    in
+
     { pr with
         p_maps = List.fold_right2 Map.add sids sub pr.p_maps;
         p_crts = gr @ sids @ go;
         p_frwd = Map.add id dep pr.p_frwd;
-        p_bkwd = List.fold_right (Map.add^~ dep) sids pr.p_bkwd; }
+        p_bkwd = List.fold_right (Map.add^~ dep) sids pr.p_bkwd;
+        p_meta = ref meta; }
 
   let sprogress (pr : proof) (id : Handle.t) (pn : pnode) sub =
     let goal = byid pr id in

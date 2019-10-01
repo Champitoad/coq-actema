@@ -7,7 +7,8 @@ module Js = Js_of_ocaml.Js
 
 (* -------------------------------------------------------------------- *)
 let rec js_proof_engine (proof : Proof.proof) = object%js (self)
-  val proof = proof
+  val proof  = proof
+  val handle = Handle.fresh ()
 
   (* Return a [js_subgoal] array of all the opened subgoals *)
   method subgoals =
@@ -18,6 +19,12 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
   (* Return true when there are no opened subgoals left *)
   method closed =
     Js.bool (Proof.closed proof)
+
+  method getmeta =
+    Js.Opt.option (Proof.get_meta proof self##.handle)
+
+  method setmeta meta =
+    Proof.set_meta proof self##.handle (Js.Opt.to_option meta)
 end
 
 (* -------------------------------------------------------------------- *)
@@ -71,11 +78,17 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
     let aout = CoreLogic.ivariants (parent##.proof, handle) in
     let aout = Array.of_list (List.map Js.string aout) in
     Js.array aout
+
+  method getmeta =
+    Js.Opt.option (Proof.get_meta parent##.proof self##.handle)
+
+  method setmeta meta =
+    Proof.set_meta parent##.proof self##.handle (Js.Opt.to_option meta)
 end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for a context hypothesis                                  *)
-and js_hyps parent ((handle, hyp) : Handle.t * Fo.form) = object%js
+and js_hyps parent ((handle, hyp) : Handle.t * Fo.form) = object%js (self)
   (* back-link to the [js_subgoal] this hypothesis belongs to *)
   val parent = parent
 
@@ -84,12 +97,14 @@ and js_hyps parent ((handle, hyp) : Handle.t * Fo.form) = object%js
 
   (* the hypothesis as a [js_form] *)
   val form = js_form hyp
+
+  (* The enclosing proof engine *)
+  val proof = parent##.parent
 end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
-and js_form (form : Fo.form) = object%js
-
+and js_form (form : Fo.form) :> < > Js.t = object%js
   (* Return the [mathml] of the formula *)  
   method mathml =
     Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) (Fo.Form.mathml form))
