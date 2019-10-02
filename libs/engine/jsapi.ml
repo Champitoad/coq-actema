@@ -103,6 +103,12 @@ and js_hyps parent ((handle, hyp) : Handle.t * Fo.form) = object%js (self)
 
   (* The enclosing proof engine *)
   val proof = parent##.parent
+
+  method getmeta =
+    Js.Opt.option (Proof.get_meta self##.proof##.proof self##.handle)
+
+  method setmeta meta =
+    Proof.set_meta self##.proof##.proof self##.handle (Js.Opt.to_option meta)
 end
 
 (* -------------------------------------------------------------------- *)
