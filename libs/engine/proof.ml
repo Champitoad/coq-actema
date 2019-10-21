@@ -63,7 +63,7 @@ module Proof : sig
     proof -> Handle.t -> pnode -> form list -> proof
 
   val sprogress :
-    proof -> Handle.t -> pnode ->
+    proof -> ?clear:bool -> Handle.t -> pnode ->
       ((Handle.t option * form list) list * form) list -> proof
 
   val xprogress :
@@ -175,7 +175,7 @@ end = struct
         p_bkwd = List.fold_right (Map.add^~ dep) sids pr.p_bkwd;
         p_meta = ref meta; }
 
-  let sprogress (pr : proof) (id : Handle.t) (pn : pnode) sub =
+  let sprogress (pr : proof) ?(clear = false) (id : Handle.t) (pn : pnode) sub =
     let goal = byid pr id in
 
     let for1 (newlc, concl) =
@@ -183,7 +183,7 @@ end = struct
         let hyps =
           Option.fold (fun hyps hid ->
             let _h = snd (Hyps.byid hyps hid) in
-            Map.remove hid hyps)
+            if clear then Map.remove hid hyps else hyps)
           hyps hid in
         let hyps = List.fold_left (fun hyps newh ->
             Map.add (Handle.fresh ()) (None, newh) hyps)
@@ -210,7 +210,7 @@ module CoreLogic : sig
   type path   = string
 
   val intro     : ?variant:int -> tactic
-  val elim      : Handle.t -> tactic
+  val elim      : ?clear:bool -> Handle.t -> tactic
   val ivariants : targ -> string list
 
   type action = Handle.t * [
@@ -259,7 +259,7 @@ end = struct
 
   type pnode += TElim of Handle.t
 
-  let elim (h : Handle.t) ((pr, id) : targ) =
+  let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     let gl = Proof.byid pr id in
     let hy = snd (Proof.Hyps.byid gl.g_hyps h) in
 
@@ -277,27 +277,27 @@ end = struct
 
     match hy with
     | FConn (`And, [f1; f2]) ->
-        Proof.sprogress pr id (TElim id)
+        Proof.sprogress pr ?clear id (TElim id)
           (subs @ [[Some h, [f1; f2]], gl.g_goal])
 
     | FConn (`Or, [f1; f2]) ->
-        Proof.sprogress pr id (TElim id)
+        Proof.sprogress pr ?clear id (TElim id)
           (subs @ [[Some h, [f1]], gl.g_goal;
                    [Some h, [f2]], gl.g_goal])
 
     | FConn (`Equiv, [f1; f2]) ->
-        Proof.sprogress pr id (TElim id)
+        Proof.sprogress pr ?clear id (TElim id)
           (subs @ [[Some h, [Form.f_imp f1 f2; Form.f_imp f2 f1]], gl.g_goal])
 
     | FConn (`Not, [f]) ->
-        Proof.sprogress pr id (TElim id)
+        Proof.sprogress pr ?clear id (TElim id)
           (subs @ [[Some h, []], f])
 
     | FFalse ->
-        Proof.sprogress pr id (TElim id) subs
+        Proof.sprogress pr ?clear id (TElim id) subs
 
     | FTrue ->
-        Proof.sprogress pr id (TElim id)
+        Proof.sprogress pr ?clear id (TElim id)
           (subs @ [[Some h, []], gl.g_goal])
 
     | _ -> raise TacticNotApplicable
