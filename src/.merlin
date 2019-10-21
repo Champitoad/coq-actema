@@ -2,11 +2,13 @@ EXCLUDE_QUERY_DIR
 B /Users/strub/.opam/prover/lib/batteries
 B /Users/strub/.opam/prover/lib/bytes
 B /Users/strub/.opam/prover/lib/js_of_ocaml
+B /Users/strub/.opam/prover/lib/lwt
 B /Users/strub/.opam/prover/lib/menhirLib
 B /Users/strub/.opam/prover/lib/num
 B /Users/strub/.opam/prover/lib/ocaml
 B /Users/strub/.opam/prover/lib/ocaml/threads
 B /Users/strub/.opam/prover/lib/re
+B /Users/strub/.opam/prover/lib/result
 B /Users/strub/.opam/prover/lib/seq
 B /Users/strub/.opam/prover/lib/tyxml
 B /Users/strub/.opam/prover/lib/tyxml/functor
@@ -17,11 +19,13 @@ B ../_build/default/src/.form2mathml.eobjs/byte
 S /Users/strub/.opam/prover/lib/batteries
 S /Users/strub/.opam/prover/lib/bytes
 S /Users/strub/.opam/prover/lib/js_of_ocaml
+S /Users/strub/.opam/prover/lib/lwt
 S /Users/strub/.opam/prover/lib/menhirLib
 S /Users/strub/.opam/prover/lib/num
 S /Users/strub/.opam/prover/lib/ocaml
 S /Users/strub/.opam/prover/lib/ocaml/threads
 S /Users/strub/.opam/prover/lib/re
+S /Users/strub/.opam/prover/lib/result
 S /Users/strub/.opam/prover/lib/seq
 S /Users/strub/.opam/prover/lib/tyxml
 S /Users/strub/.opam/prover/lib/tyxml/functor

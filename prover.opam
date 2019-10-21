@@ -12,9 +12,12 @@ depends: [
   "ocamlfind" {>= "1.8"}
   "tyxml" {>= "4.0"}
   "tyxml-ppx" {>= "4.0"}
-  "js_of_ocaml" {>= "2.8"}
-  "js_of_ocaml-ppx" {>= "2.8"}
-  "js_of_ocaml-compiler" {>= "2.8"}
+  "js_of_ocaml" {>= "3.4"}
+  "js_of_ocaml-ppx" {>= "3.4"}
+  "js_of_ocaml-lwt" {>= "3.4"}
+  "js_of_ocaml-compiler" {>= "3.4"}
+  "lwt" {>= "4.4"}
+  "lwt_ppx" {>= "1.2"}
   "menhir" {>= "20181113"}
 ]
 build: [

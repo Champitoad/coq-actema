@@ -8,7 +8,7 @@
 (rule
   (target jsprover.js.bc)
   (deps (file jsprover.bc))
-  (action (run ocamlfind ocamlc -g -o jsprover.js.bc -package menhirLib,batteries,tyxml,js_of_ocaml -linkpkg ../libs/engine/engine.cma .form2mathml.eobjs/byte/jsprover.cmo)))
+  (action (run ocamlfind ocamlc -g -o jsprover.js.bc -package menhirLib,batteries,tyxml,lwt,js_of_ocaml -linkpkg ../libs/engine/engine.cma .form2mathml.eobjs/byte/jsprover.cmo)))
 
 (rule
   (target jsprover.js)

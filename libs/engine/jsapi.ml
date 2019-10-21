@@ -23,12 +23,16 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
   method closed =
     Js.bool (Proof.closed proof)
 
+  (* Get the meta-data attached to this proof engine *)
   method getmeta =
     Js.Opt.option (Proof.get_meta proof self##.handle)
 
+  (* Attach meta-data to the proof engine *)
   method setmeta meta =
     Proof.set_meta proof self##.handle (Js.Opt.to_option meta)
 
+  (* Get all the proof actions that can be applied to the
+   * goal target by [path]. *)
   method actions path =
     let path    = Js.to_string path in
     let actions = CoreLogic.actions self##.proof path in
@@ -37,6 +41,11 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
       Array.of_list
         (List.map (fun (p, a) -> (Js.string p, a)) actions))
 
+  (* Same as [actions], but in async mode *)
+  method pactions path =
+    let%lwt _ = Lwt.return () in Lwt.return (self##actions path)
+
+  (* Apply the action [action] (as returned by [actions]) *)
   method apply action =
     js_proof_engine (CoreLogic.apply self##.proof action)
 end
