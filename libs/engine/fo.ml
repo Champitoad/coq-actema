@@ -155,10 +155,10 @@ end = struct
     let rec for_form (form : form) =
       match form with
       | FTrue ->
-          [mi (Xml.entity "#x22A5")]
+          [mi (Xml.entity "#x22A4")]
 
       | FFalse ->
-          [mi (Xml.entity "#x22A4")]
+          [mi (Xml.entity "#x22A5")]
 
       | FConn (lg, fs) -> begin
           let fs = List.map (fun x -> (prio_of_form x, for_form x)) fs in
@@ -214,10 +214,10 @@ end = struct
     let rec for_form (form : form) =
       match form with
       | FTrue ->
-          UTF8.of_char (UChar.chr 0x22A5)
+          UTF8.of_char (UChar.chr 0x22A4)
 
       | FFalse ->
-          UTF8.of_char (UChar.chr 0x22A4)
+          UTF8.of_char (UChar.chr 0x22A5)
 
       | FConn (lg, fs) -> begin
           let fs = List.map (fun x -> (prio_of_form x, for_form x)) fs in
@@ -268,10 +268,10 @@ end = struct
       let data =
         match form with
         | FTrue ->
-            [Xml.entity (UTF8.of_char (UChar.chr 0x22A5))]
+            [Xml.entity (UTF8.of_char (UChar.chr 0x22A4))]
   
         | FFalse ->
-            [Xml.entity (UTF8.of_char (UChar.chr 0x22A4))]
+            [Xml.entity (UTF8.of_char (UChar.chr 0x22A5))]
   
         | FConn (lg, fs) -> begin
             let fs = List.mapi (fun i x -> (prio_of_form x, for_form (px p i) x)) fs in
