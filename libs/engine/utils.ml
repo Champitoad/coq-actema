@@ -4,6 +4,10 @@ module Map    = BatMap
 module Set    = BatSet
 module UChar  = BatUChar
 module UTF8   = BatUTF8
+module BIO    = BatIO
+module Lexing = BatLexing
+
+include BatPervasives
 
 (* -------------------------------------------------------------------- *)
 module Option : sig

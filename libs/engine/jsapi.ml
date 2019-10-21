@@ -6,7 +6,7 @@ open Proof
 module Js = Js_of_ocaml.Js
 
 (* -------------------------------------------------------------------- *)
-type source = [`Conclusion | `Hypothesis]
+type source = Handle.t * [`C | `H of int]
 
 (* -------------------------------------------------------------------- *)
 let rec js_proof_engine (proof : Proof.proof) = object%js (self)
@@ -49,12 +49,12 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
   method context =
     let goal = Proof.byid parent##.proof self##.handle in
     let hyps = List.map (snd_map snd) (Map.bindings goal.g_hyps) in
-    Js.array (Array.of_list (List.map (js_hyps self) hyps))
+    Js.array (Array.of_list (List.mapi (fun i x -> js_hyps self (i, x)) hyps))
 
   (* Return the subgoal conclusion as a [js_form] *)
   method conclusion =
     let goal  = Proof.byid parent##.proof self##.handle in
-    js_form `Conclusion goal.g_goal
+    js_form (self##.parent##.handle, `C) goal.g_goal
 
   (* [this#intro [variant : int]] applies the relevant introduction
    * rule to the conclusion of the subgoal [this]. The parameter
@@ -91,15 +91,18 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for a context hypothesis                                  *)
-and js_hyps parent ((handle, hyp) : Handle.t * Fo.form) = object%js (self)
+and js_hyps parent (i, (handle, hyp) : int * (Handle.t * Fo.form)) = object%js (self)
   (* back-link to the [js_subgoal] this hypothesis belongs to *)
   val parent = parent
 
   (* the handle (UID) of the hypothesis *)
   val handle = handle
 
+  (* the handle position in its context *)
+  val position = i
+
   (* the hypothesis as a [js_form] *)
-  val form = js_form `Hypothesis hyp
+  val form = js_form (parent##.parent##.handle, `H i) hyp
 
   (* The enclosing proof engine *)
   val proof = parent##.parent
@@ -117,14 +120,25 @@ and js_form (source : source) (form : Fo.form) :> < > Js.t = object%js
   (* Return the [mathml] of the formula *)  
   method mathml =
     let tag =
-      match source with
-      | `Hypothesis -> "hypothesis"
-      | `Conclusion -> "conclusion"
+      match snd source with
+      | `H _ -> "hypothesis"
+      | `C   -> "conclusion"
     in
       Js.string
         (Format.asprintf "%a" (Tyxml.Xml.pp ())
         (Fo.Form.mathml ~tag:tag form))
-  
+
+  (* Return the [html] of the formula *)  
+  method html =
+    let prefix =
+      match source with
+      | h, `H i -> Format.sprintf "%d/%d" (Handle.toint h) (i+1)
+      | h, `C   -> Format.sprintf "%d/0" (Handle.toint h)
+    in
+      Js.string
+        (Format.asprintf "%a" (Tyxml.Xml.pp ())
+        (Fo.Form.tohtml ~prefix form))
+
   (* Return an UTF8 string representation of the formula *)
   method tostring =
     Js.string (Fo.Form.tostring form)

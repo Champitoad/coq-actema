@@ -9,6 +9,7 @@ module Handle : sig
   val ofint : int -> t
   val fresh : unit -> t
   val eq    : t -> t -> bool
+  val toint : t -> int
 end = struct
   type t = int
 
@@ -17,6 +18,9 @@ end = struct
 
   let ofint (i : int) : t =
     i
+
+  let toint (t : t) : int =
+    t
 
   let eq = ((=) : t -> t -> bool)
 end
