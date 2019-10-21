@@ -46,7 +46,7 @@ rule main = parse
   | ")"   { RPAREN  }
   | "&&"  { LAND    }
   | "||"  { LOR     }
-  | "~~"  { LNEG    }
+  | "~"   { LNEG    }
   | "->"  { LARROW  }
   | "<->" { LRARROW }
   | "|-"  { PROOF   }
