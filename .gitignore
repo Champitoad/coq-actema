@@ -4,3 +4,4 @@ html/jspover.js
 *.exe
 *.bc
 html/jsprover.js
+*.merlin
