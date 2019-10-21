@@ -207,13 +207,25 @@ exception TacticNotApplicable
 module CoreLogic : sig
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
+  type path   = string
 
   val intro     : ?variant:int -> tactic
   val elim      : Handle.t -> tactic
   val ivariants : targ -> string list
+
+  type action = Handle.t * [
+    | `Elim  of Handle.t
+    | `Intro of int
+  ]
+
+  exception InvalidPath of path
+
+  val actions : Proof.proof -> path -> (string * action) list
+  val apply   : Proof.proof -> action -> Proof.proof
 end = struct
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
+  type path   = string
 
   type pnode += TIntro
 
@@ -299,5 +311,57 @@ end = struct
     | FConn (`Not  , _) -> ["Not-intro"]
 
     | _ -> []
-end
 
+  type action = Handle.t * [
+    | `Elim  of Handle.t
+    | `Intro of int
+  ]
+
+  exception InvalidPath of path
+
+  let ofpath (proof : Proof.proof) (p : path) =
+    let hd, i, fs =
+      try
+        Scanf.sscanf p "%u/%u:%s" (fun x1 x2 x3 -> (x1, x2, x3))
+      with Scanf.Scan_failure _ -> raise (InvalidPath p) in
+
+    let fs =
+      try
+        List.map int_of_string (String.split_on_char ':' fs)
+      with Failure _ -> raise (InvalidPath p) in
+
+    let goal =
+      try  Proof.byid proof (Handle.ofint hd)
+      with InvalidGoalId _ -> raise (InvalidPath p) in
+
+    let target =
+      match i with
+      | _ when i <= 0 ->
+          `C goal.Proof.g_goal
+      | _ ->
+          try
+            let rp = Handle.ofint i in
+            `H (rp, Proof.Hyps.byid goal.Proof.g_hyps (Handle.ofint i))
+          with InvalidHyphId _ -> raise (InvalidPath p)
+
+    in (goal, Handle.ofint hd, target, fs)
+
+  let actions (proof : Proof.proof) (p : path) =
+    let _goal, hd, target, _fs = ofpath proof p in
+
+    match target with
+    | `C _ -> 
+        List.mapi
+          (fun i x -> (x, (hd, `Intro i)))
+          (ivariants (proof, hd))
+
+    | `H (rp, _) ->
+        ["intro", (hd, `Elim rp)]
+
+  let apply (proof : Proof.proof) ((hd, a) : action) =
+    match a with
+    | `Intro variant ->
+        intro ~variant (proof, hd)
+    | `Elim subhd  ->
+        elim subhd (proof, hd)
+end

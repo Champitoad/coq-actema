@@ -28,6 +28,17 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
 
   method setmeta meta =
     Proof.set_meta proof self##.handle (Js.Opt.to_option meta)
+
+  method actions path =
+    let path    = Js.to_string path in
+    let actions = CoreLogic.actions self##.proof path in
+
+    Js.array (
+      Array.of_list
+        (List.map (fun (p, a) -> (Js.string p, a)) actions))
+
+  method apply action =
+    js_proof_engine (CoreLogic.apply self##.proof action)
 end
 
 (* -------------------------------------------------------------------- *)
