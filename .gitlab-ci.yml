@@ -10,6 +10,7 @@ services:
 .tests:
   script:
   - opam config list
+  - opam update
   - opam pin add -n .
   - opam install depext
   - opam depext prover
