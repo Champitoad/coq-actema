@@ -24,6 +24,6 @@
   (js_of_ocaml-ppx      (>= 3.4))
   (js_of_ocaml-lwt      (>= 3.4))
   (js_of_ocaml-compiler (>= 3.4))
-  (lwt                  (>= 4.4))
+  (lwt                  (>= 4.3))
   (lwt_ppx              (>= 1.2))
   (menhir               (>= 20181113))))
