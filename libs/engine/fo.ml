@@ -255,60 +255,66 @@ end = struct
     let open Tyxml in
 
     let pr doit c =
-      if doit then [Xml.entity "("] @ c @ [Xml.entity ")"] else c in
+      if doit then [Xml.pcdata "("] @ c @ [Xml.pcdata ")"] else c in
 
     let spaced ?(left = true) ?(right = true) c =
-      let c = if left  then [Xml.entity " "] @ c else c in
-      let c = if right then c @ [Xml.entity " "] else c in
+      let c = if left  then [Xml.pcdata " "] @ c else c in
+      let c = if right then c @ [Xml.pcdata " "] else c in
       c in
 
-    let px p i = Format.sprintf "%s/%d" p i in
-
-    let rec for_form (p : string) (form : form) =
+    let rec for_form (p : int list) (form : form) =
       let data =
         match form with
         | FTrue ->
-            [Xml.entity (UTF8.of_char (UChar.chr 0x22A4))]
+            [Xml.entity "#x22A4"]
   
         | FFalse ->
-            [Xml.entity (UTF8.of_char (UChar.chr 0x22A5))]
+            [Xml.entity "#x22A5"]
   
         | FConn (lg, fs) -> begin
-            let fs = List.mapi (fun i x -> (prio_of_form x, for_form (px p i) x)) fs in
+            let fs =
+              List.mapi
+                (fun i x -> (prio_of_form x, for_form (i :: p) x))
+                fs in
   
           match lg, fs with
           | `And, [(p1, f1); (p2, f2)] ->
                 (pr (p1 < prio_And) f1)
-              @ (spaced [Xml.entity (UTF8.of_char (UChar.chr 0x2227))])
+              @ (spaced [Xml.entity "#x2227"])
               @ (pr (p2 <= prio_And) f2)
           | `Or , [(p1, f1); (p2, f2)] ->
                 (pr (p1 < prio_Or) f1)
-              @ (spaced [Xml.entity (UTF8.of_char (UChar.chr 0x2228))])
+              @ (spaced [Xml.entity "#x2228"])
               @ (pr (p2 <= prio_Or) f2)
           | `Imp, [(p1, f1); (p2, f2)] ->
                 (pr (p1 <= prio_Imp) f1)
-              @ (spaced [Xml.entity (UTF8.of_char (UChar.chr 0x27F9))])
+              @ (spaced [Xml.entity "#x27F9"])
               @ (pr (p2 < prio_Imp) f2)
           | `Equiv, [(p1, f1); (p2, f2)] ->
                 (pr (p1 <= prio_Equiv) f1)
-              @ (spaced [Xml.entity (UTF8.of_char (UChar.chr 0x27FA))])
+              @ (spaced [Xml.entity "#x27FA"])
               @ (pr (p2 <= prio_Equiv) f2)
           | `Not, [(p, f)] ->
-                (spaced ~left:false [Xml.entity (UTF8.of_char (UChar.chr 0x00AC))])
+                (spaced ~left:false [Xml.entity "#x00AC"])
               @ (pr (p < prio_Not) f)
           | (`And | `Or | `Imp | `Not | `Equiv), _ ->
               assert false
         end
 
         | FVar name ->
-            [Xml.entity (UTF8.of_latin1 name)]
+            [Xml.pcdata (UTF8.of_latin1 name)]
 
-      in [Xml.node ~a:[Xml.string_attrib "id" p] "span" data] in
+      in
+
+      let p = String.concat "/" (List.rev_map string_of_int p) in
+      let p = Option.fold
+                (fun p prefix -> Format.sprintf "%s:%s" prefix p)
+                p prefix in
+
+      [Xml.node ~a:[Xml.string_attrib "id" p] "span" data] in
 
     fun (form : form) ->
-
-      let prefix = Option.map (fun x -> x ^ ":") prefix |> Option.default "" in
-      Xml.node "span" (for_form prefix form)
+      Xml.node "span" (for_form [] form)
 
 end
 

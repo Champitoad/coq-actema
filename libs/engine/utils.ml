@@ -6,6 +6,7 @@ module UChar  = BatUChar
 module UTF8   = BatUTF8
 module BIO    = BatIO
 module Lexing = BatLexing
+module String = BatString
 
 include BatPervasives
 

@@ -220,7 +220,7 @@ module CoreLogic : sig
 
   exception InvalidPath of path
 
-  val actions : Proof.proof -> path -> (string * action) list
+  val actions : Proof.proof -> path -> (string * path list * action) list
   val apply   : Proof.proof -> action -> Proof.proof
 end = struct
   type targ   = Proof.proof * Handle.t
@@ -318,45 +318,87 @@ end = struct
   ]
 
   exception InvalidPath of path
+  exception InvalidFormPath
+
+  let rec subform (f : form) (p : int list) =
+    match p with [] -> f | i :: subp ->
+
+    match f with
+    | FConn (_, fs) ->
+        let subf =
+          try  List.nth fs i
+          with Failure _ -> raise InvalidFormPath
+        in subform subf subp
+
+    | _ ->
+        raise InvalidFormPath
 
   let ofpath (proof : Proof.proof) (p : path) =
     let hd, i, fs =
       try
-        Scanf.sscanf p "%u/%u:%s" (fun x1 x2 x3 -> (x1, x2, x3))
+        Scanf.sscanf p "%d/%d:%s" (fun x1 x2 x3 -> (x1, x2, x3))
       with Scanf.Scan_failure _ -> raise (InvalidPath p) in
 
+    if hd < 0 || i < 0 then
+      raise (InvalidPath p);
+
     let fs =
+      let fs = if fs = "" then [] else String.split_on_char '/' fs in
+
       try
-        List.map int_of_string (String.split_on_char ':' fs)
+        List.map int_of_string fs
       with Failure _ -> raise (InvalidPath p) in
+
+      if List.exists (fun x -> x < 0) fs then
+        raise (InvalidPath p);
 
     let goal =
       try  Proof.byid proof (Handle.ofint hd)
       with InvalidGoalId _ -> raise (InvalidPath p) in
 
-    let target =
-      match i with
-      | _ when i <= 0 ->
-          `C goal.Proof.g_goal
-      | _ ->
-          try
-            let rp = Handle.ofint i in
-            `H (rp, Proof.Hyps.byid goal.Proof.g_hyps (Handle.ofint i))
-          with InvalidHyphId _ -> raise (InvalidPath p)
+    let target, subf =
+      try
+        match i with
+        | _ when i <= 0 ->
+            (`C goal.Proof.g_goal, subform goal.Proof.g_goal fs)
+  
+        | _ -> begin
+            try
+              let rp = Handle.ofint i in
+              let (_, hf) as hyd =
+                Proof.Hyps.byid goal.Proof.g_hyps (Handle.ofint i) in
+              (`H (rp, hyd), subform hf fs)
+            with InvalidHyphId _ -> raise (InvalidPath p)
+          end
 
-    in (goal, Handle.ofint hd, target, fs)
+      with InvalidFormPath -> raise (InvalidPath p)
 
-  let actions (proof : Proof.proof) (p : path) =
-    let _goal, hd, target, _fs = ofpath proof p in
+    in (goal, Handle.ofint hd, target, (fs, subf))
+
+  let actions (proof : Proof.proof) (p : path)
+      : (string * path list * action) list
+  =
+    let _goal, hd, target, (_fs, _subf) = ofpath proof p in
 
     match target with
-    | `C _ -> 
+    | `C _ -> begin
+        let iv = ivariants (proof, hd) in
+        let bv = List.length iv <= 1 in
+
         List.mapi
-          (fun i x -> (x, (hd, `Intro i)))
-          (ivariants (proof, hd))
+          (fun i x ->
+            let hg =
+              if   bv
+              then Format.sprintf "%d/0:" (Handle.toint hd)
+              else Format.sprintf "%d/0:%d" (Handle.toint hd) i in
+
+            (x, [hg], (hd, `Intro i)))
+          iv
+      end
 
     | `H (rp, _) ->
-        ["intro", (hd, `Elim rp)]
+        let hg = Format.sprintf "%d/%d" (Handle.toint hd) (Handle.toint rp) in
+        ["Elim", [hg], (hd, `Elim rp)]
 
   let apply (proof : Proof.proof) ((hd, a) : action) =
     match a with

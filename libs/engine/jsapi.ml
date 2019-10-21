@@ -6,7 +6,7 @@ open Proof
 module Js = Js_of_ocaml.Js
 
 (* -------------------------------------------------------------------- *)
-type source = Handle.t * [`C | `H of int]
+type source = Handle.t * [`C | `H of Handle.t]
 
 (* -------------------------------------------------------------------- *)
 let rec js_proof_engine (proof : Proof.proof) = object%js (self)
@@ -32,16 +32,28 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
     Proof.set_meta proof self##.handle (Js.Opt.to_option meta)
 
   (* Get all the proof actions that can be applied to the
-   * goal target by [path]. *)
+   * goal target by [path] as an array of actions. An action
+   * is an object with the following properties:
+   *
+   * - description : the description of the action
+   * - highlight   : a JS array of IDs to highlight
+   * - action      : the related action (see [apply])
+   *)
   method actions path =
     let path    = Js.to_string path in
     let actions = CoreLogic.actions self##.proof path in
 
     Js.array (
       Array.of_list
-        (List.map (fun (p, a) -> (Js.string p, a)) actions))
+        (List.map (fun (p, ps, a) -> 
+             let ps = Js.array (Array.of_list (List.map Js.string ps)) in
 
-  (* Same as [actions], but in async mode *)
+             Js.Unsafe.obj [|
+               "description", Js.Unsafe.inject (Js.string p) ;
+               "highlight"  , Js.Unsafe.inject ps            ;
+               "action"     , Js.Unsafe.inject a             |]) actions))
+
+  (* Same as [actions], but in async mode. TO BE TESTED *)
   method pactions path =
     let%lwt _ = Lwt.return () in Lwt.return (self##actions path)
 
@@ -53,7 +65,7 @@ end
 (* -------------------------------------------------------------------- *)
 (* JS wrapper for subgoals                                              *)
 and js_subgoal parent (handle : Handle.t) = object%js (self)
-  (* back-ling to the [js_proof_engine] this subgoal belongs to *)
+  (* back-link to the [js_proof_engine] this subgoal belongs to *)
   val parent = parent
 
   (* the handle (UID) of the subgoal *)
@@ -74,7 +86,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
   (* Return the subgoal conclusion as a [js_form] *)
   method conclusion =
     let goal  = Proof.byid parent##.proof self##.handle in
-    js_form (self##.parent##.handle, `C) goal.g_goal
+    js_form (self##.handle, `C) goal.g_goal
 
   (* [this#intro [variant : int]] applies the relevant introduction
    * rule to the conclusion of the subgoal [this]. The parameter
@@ -122,7 +134,7 @@ and js_hyps parent (i, (handle, hyp) : int * (Handle.t * Fo.form)) = object%js (
   val position = i
 
   (* the hypothesis as a [js_form] *)
-  val form = js_form (parent##.parent##.handle, `H i) hyp
+  val form = js_form (parent##.handle, `H handle) hyp
 
   (* The enclosing proof engine *)
   val proof = parent##.parent
@@ -152,7 +164,7 @@ and js_form (source : source) (form : Fo.form) :> < > Js.t = object%js
   method html =
     let prefix =
       match source with
-      | h, `H i -> Format.sprintf "%d/%d" (Handle.toint h) (i+1)
+      | h, `H i -> Format.sprintf "%d/%d" (Handle.toint h) (Handle.toint i)
       | h, `C   -> Format.sprintf "%d/0" (Handle.toint h)
     in
       Js.string
