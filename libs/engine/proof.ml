@@ -245,7 +245,7 @@ end = struct
     | 0, FConn (`Or, [f; _]) ->
         Proof.progress pr id TIntro [f]
 
-    | 1, FConn (`Or, [f; _]) ->
+    | 1, FConn (`Or, [_; f]) ->
         Proof.progress pr id TIntro [f]
 
     | 0, FConn (`Not, [f]) ->
