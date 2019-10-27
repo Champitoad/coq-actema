@@ -212,15 +212,24 @@ module CoreLogic : sig
   val intro     : ?variant:int -> tactic
   val elim      : ?clear:bool -> Handle.t -> tactic
   val ivariants : targ -> string list
+  val forward   : (Handle.t * Handle.t) -> tactic
+
+  type asource = [
+    | `Click of path
+    | `DnD   of adnd
+  ]
+
+  and adnd = { source : path; destination : path; }
 
   type action = Handle.t * [
-    | `Elim  of Handle.t
-    | `Intro of int
+    | `Elim    of Handle.t
+    | `Intro   of int
+    | `Forward of Handle.t * Handle.t
   ]
 
   exception InvalidPath of path
 
-  val actions : Proof.proof -> path -> (string * path list * action) list
+  val actions : Proof.proof -> asource -> (string * path list * action) list
   val apply   : Proof.proof -> action -> Proof.proof
 end = struct
   type targ   = Proof.proof * Handle.t
@@ -312,9 +321,24 @@ end = struct
 
     | _ -> []
 
+  type pnode += TForward of Handle.t * Handle.t
+
+  let forward (hsrc, hdst) ((pr, id) : targ) =
+    let gl  = Proof.byid pr id in
+    let src = snd (Proof.Hyps.byid gl.g_hyps hsrc) in
+    let dst = snd (Proof.Hyps.byid gl.g_hyps hdst) in
+
+    match dst with
+    | FConn (`Imp, [f; f']) when Form.equal f src ->
+        Proof.sprogress pr ~clear:true id (TForward (hsrc, hdst))
+          ([[Some hdst, [f']], gl.g_goal])
+
+    | _ -> raise TacticNotApplicable
+
   type action = Handle.t * [
-    | `Elim  of Handle.t
-    | `Intro of int
+    | `Elim    of Handle.t
+    | `Intro   of int
+    | `Forward of Handle.t * Handle.t
   ]
 
   exception InvalidPath of path
@@ -337,7 +361,10 @@ end = struct
     let hd, i, fs =
       try
         Scanf.sscanf p "%d/%d:%s" (fun x1 x2 x3 -> (x1, x2, x3))
-      with Scanf.Scan_failure _ -> raise (InvalidPath p) in
+      with
+      | Scanf.Scan_failure _
+      | End_of_file ->
+          raise (InvalidPath p) in
 
     if hd < 0 || i < 0 then
       raise (InvalidPath p);
@@ -375,35 +402,76 @@ end = struct
 
     in (goal, Handle.ofint hd, target, (fs, subf))
 
-  let actions (proof : Proof.proof) (p : path)
+  type asource = [
+    | `Click of path
+    | `DnD   of adnd
+  ]
+
+  and adnd = { source : path; destination : path; }
+
+  let actions (proof : Proof.proof) (p : asource)
       : (string * path list * action) list
   =
-    let _goal, hd, target, (_fs, _subf) = ofpath proof p in
-
-    match target with
-    | `C _ -> begin
-        let iv = ivariants (proof, hd) in
-        let bv = List.length iv <= 1 in
-
-        List.mapi
-          (fun i x ->
-            let hg =
-              if   bv
-              then Format.sprintf "%d/0:" (Handle.toint hd)
-              else Format.sprintf "%d/0:%d" (Handle.toint hd) i in
-
-            (x, [hg], (hd, `Intro i)))
-          iv
+    match p with
+    | `Click p -> begin
+      let _goal, hd, target, (_fs, _subf) = ofpath proof p in
+  
+      match target with
+      | `C _ -> begin
+          let iv = ivariants (proof, hd) in
+          let bv = List.length iv <= 1 in
+  
+          List.mapi
+            (fun i x ->
+              let hg =
+                if   bv
+                then Format.sprintf "%d/0:" (Handle.toint hd)
+                else Format.sprintf "%d/0:%d" (Handle.toint hd) i in
+  
+              (x, [hg], (hd, `Intro i)))
+            iv
+        end
+  
+      | `H (rp, _) ->
+          let hg = Format.sprintf "%d/%d:"
+                     (Handle.toint hd) (Handle.toint rp) in
+          ["Elim", [hg], (hd, `Elim rp)]
       end
 
-    | `H (rp, _) ->
-        let hg = Format.sprintf "%d/%d" (Handle.toint hd) (Handle.toint rp) in
-        ["Elim", [hg], (hd, `Elim rp)]
+    | `DnD { source = src; destination = dst; } -> begin
+      let module E = struct exception Nothing end in
+
+      try
+        let _, hd1, tg1, _ = ofpath proof src in
+        let _, hd2, tg2, _ = ofpath proof dst in
+
+        if not (Handle.eq hd1 hd2) then
+          raise E.Nothing;
+
+        let (tg1, f1), (tg2, f2) =
+          match tg1, tg2 with
+          | `H (tg1, (_, f1)), `H (tg2, (_, f2)) ->
+              ((tg1, f1), (tg2, f2))
+          | _ -> raise E.Nothing in
+
+        match f2 with
+        | FConn (`Imp, [f; _]) when Form.equal f1 f ->
+            let hg = Format.sprintf "%d/%d:0"
+                       (Handle.toint hd1) (Handle.toint tg2) in
+            ["Forward", [hg], (hd1, `Forward (tg1, tg2))]
+            
+        | _ ->
+            raise E.Nothing
+
+      with E.Nothing -> []
+    end
 
   let apply (proof : Proof.proof) ((hd, a) : action) =
     match a with
     | `Intro variant ->
         intro ~variant (proof, hd)
-    | `Elim subhd  ->
+    | `Elim subhd ->
         elim subhd (proof, hd)
+    | `Forward (src, dst) ->
+        forward (src, dst) (proof, hd)
 end

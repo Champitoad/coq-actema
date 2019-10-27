@@ -3,10 +3,25 @@ open Utils
 open Proof
 
 (* -------------------------------------------------------------------- *)
-module Js = Js_of_ocaml.Js
+type source = Handle.t * [`C | `H of Handle.t]
 
 (* -------------------------------------------------------------------- *)
-type source = Handle.t * [`C | `H of Handle.t]
+exception InvalidASource
+
+(* -------------------------------------------------------------------- *)
+module Js : sig
+  include module type of Js_of_ocaml.Js
+
+  val as_string : exn -> 'a t -> string
+end = struct
+  include Js_of_ocaml.Js
+
+  let as_string exn (v : 'a t) =
+    let v = Unsafe.coerce v in 
+    match to_string (typeof v) with
+    | "string" -> to_string v
+    | _ -> raise exn
+end
 
 (* -------------------------------------------------------------------- *)
 let rec js_proof_engine (proof : Proof.proof) = object%js (self)
@@ -32,16 +47,53 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
     Proof.set_meta proof self##.handle (Js.Opt.to_option meta)
 
   (* Get all the proof actions that can be applied to the
-   * goal target by [path] as an array of actions. An action
-   * is an object with the following properties:
+   * goal targetted by [asource] as an array of actions.
    *
-   * - description : the description of the action
-   * - highlight   : a JS array of IDs to highlight
-   * - action      : the related action (see [apply])
+   * The source is described as a record with the following
+   * properties:
+   *
+   *  - kind (string): the type of the source.
+   *    Can be "click" or "dnd".
+   *
+   *  - path (string) [only for the kind "click"]
+   *    ID of the "clicked" formula / sub-formula
+   *
+   *  - source (string) [only for the kind "dnd"]
+   *    ID of the formula that is being dropped
+   *
+   *  - source (string) [only for the kind "dnd"]
+   *    ID of th formula that received the dropped element
+   *
+   * An output action is an object with the following properties:
+   *
+   *  - description : the description of the action
+   *  - highlight   : a JS array of IDs to highlight
+   *  - action      : the related action (see [apply])
    *)
-  method actions path =
-    let path    = Js.to_string path in
-    let actions = CoreLogic.actions self##.proof path in
+  method actions asource =
+    let actions =
+      let asource =
+        match Js.to_string (Js.typeof asource) with
+        | "string" ->
+          `Click (Js.to_string asource)
+        | "object" -> begin
+          let asource = Js.Unsafe.coerce asource in
+          match Js.as_string InvalidASource asource##.kind with
+            | "click" ->
+                `Click (Js.to_string asource##.path)
+            | "dnd"   ->
+                let source =
+                  Js.as_string InvalidASource
+                    asource##.source in
+                let destination =
+                  Js.as_string InvalidASource
+                    asource##.destination in
+                `DnD CoreLogic.{ source; destination; }
+            | _ -> raise InvalidASource
+          end
+        | _ -> raise InvalidASource
+      in CoreLogic.actions self##.proof asource
+    in
 
     Js.array (
       Array.of_list
