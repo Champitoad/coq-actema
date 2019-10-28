@@ -219,7 +219,7 @@ module CoreLogic : sig
     | `DnD   of adnd
   ]
 
-  and adnd = { source : path; destination : path; }
+  and adnd = { source : path; destination : path option; }
 
   type action = Handle.t * [
     | `Elim    of Handle.t
@@ -407,7 +407,7 @@ end = struct
     | `DnD   of adnd
   ]
 
-  and adnd = { source : path; destination : path; }
+  and adnd = { source : path; destination : path option; }
 
   let actions (proof : Proof.proof) (p : asource)
       : (string * path list * action) list
@@ -438,32 +438,45 @@ end = struct
           ["Elim", [hg], (hd, `Elim rp)]
       end
 
-    | `DnD { source = src; destination = dst; } -> begin
+    | `DnD { source = src; destination = dsts; } -> begin
       let module E = struct exception Nothing end in
 
-      try
-        let _, hd1, tg1, _ = ofpath proof src in
-        let _, hd2, tg2, _ = ofpath proof dst in
+      let pr, hd1, tg1, _ = ofpath proof src in
 
-        if not (Handle.eq hd1 hd2) then
-          raise E.Nothing;
+      let for_destination (dst : path) =
+        try
+          let _, hd2, tg2, _ = ofpath proof dst in
+  
+          if not (Handle.eq hd1 hd2) then
+            raise E.Nothing;
+  
+          let (tg1, f1), (tg2, f2) =
+            match tg1, tg2 with
+            | `H (tg1, (_, f1)), `H (tg2, (_, f2)) ->
+                ((tg1, f1), (tg2, f2))
+            | _ -> raise E.Nothing in
+  
+          match f2 with
+          | FConn (`Imp, [f; _]) when Form.equal f1 f ->
+              let hg = Format.sprintf "%d/%d:0"
+                         (Handle.toint hd1) (Handle.toint tg2) in
+              ["Forward", [hg], (hd1, `Forward (tg1, tg2))]
+              
+          | _ ->
+              raise E.Nothing
+  
+        with E.Nothing -> [] in
 
-        let (tg1, f1), (tg2, f2) =
-          match tg1, tg2 with
-          | `H (tg1, (_, f1)), `H (tg2, (_, f2)) ->
-              ((tg1, f1), (tg2, f2))
-          | _ -> raise E.Nothing in
+      match dsts with
+      | None ->
+          let dsts = List.of_enum (Map.keys pr.Proof.g_hyps) in
+          let dsts = List.map (fun id ->
+                         Printf.sprintf "%d/%d:" (Handle.toint hd1) (Handle.toint id))
+                       dsts in
+          List.flatten (List.map for_destination dsts)
 
-        match f2 with
-        | FConn (`Imp, [f; _]) when Form.equal f1 f ->
-            let hg = Format.sprintf "%d/%d:0"
-                       (Handle.toint hd1) (Handle.toint tg2) in
-            ["Forward", [hg], (hd1, `Forward (tg1, tg2))]
-            
-        | _ ->
-            raise E.Nothing
-
-      with E.Nothing -> []
+      | Some dst ->
+          for_destination dst
     end
 
   let apply (proof : Proof.proof) ((hd, a) : action) =
