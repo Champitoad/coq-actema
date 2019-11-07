@@ -49,7 +49,7 @@ type form =
   | FVar  of name
   | FConn of logcon * form list
 
-and logcon = [ `And | `Or | `Imp | `Equiv | `Not ]
+and logcon  = [ `And | `Or | `Imp | `Equiv | `Not ]
 
 (* -------------------------------------------------------------------- *)
 exception RecheckFailure

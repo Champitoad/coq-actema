@@ -238,6 +238,12 @@ end = struct
 
   type pnode += TIntro
 
+  let prune_premisses =
+    let rec doit acc = function
+      | FConn (`Imp, [f1; f2]) -> doit (f1 :: acc) f2
+      | f -> (List.rev acc, f)
+    in fun f -> doit [] f
+
   let intro ?(variant = 0) ((pr, id) : targ) =
     match variant, (Proof.byid pr id).g_goal with
     | 0, FConn (`And, [f1; f2]) ->
@@ -272,12 +278,7 @@ end = struct
     let gl = Proof.byid pr id in
     let hy = snd (Proof.Hyps.byid gl.g_hyps h) in
 
-    let pre, hy =
-      let rec doit acc = function
-        | FConn (`Imp, [f1; f2]) -> doit (f1 :: acc) f2
-        | f -> (List.rev acc, f)
-      in doit [] hy in
-
+    let pre, hy = prune_premisses hy in
     let subs = List.map (fun f -> [Some h, []], f) pre in
 
     if Form.equal hy gl.g_goal then
@@ -450,29 +451,39 @@ end = struct
           if not (Handle.eq hd1 hd2) then
             raise E.Nothing;
   
-          let (tg1, f1), (tg2, f2) =
-            match tg1, tg2 with
-            | `H (tg1, (_, f1)), `H (tg2, (_, f2)) ->
-                ((tg1, f1), (tg2, f2))
-            | _ -> raise E.Nothing in
-  
-          match f2 with
-          | FConn (`Imp, [f; _]) when Form.equal f1 f ->
+          match tg1, tg2 with
+          | `H (tg1, (_, f1)), `H (tg2, (_, FConn (`Imp, [f; _])))
+              when Form.equal f1 f
+            ->
               let hg = Format.sprintf "%d/%d:0"
                          (Handle.toint hd1) (Handle.toint tg2) in
               ["Forward", [hg], (hd1, `Forward (tg1, tg2))]
-              
-          | _ ->
-              raise E.Nothing
+
+          | `H (tg1, (_, f1)), `C f2 ->
+              let pr, subf1 = prune_premisses f1 in
+
+              if not (Form.equal subf1 f2) then
+                raise E.Nothing;
+
+              let hg1 = Format.sprintf "%d/0:" (Handle.toint hd1) in
+              let hg2 = Format.sprintf "%d/%d:%s"
+                          (Handle.toint hd1) (Handle.toint tg1)
+                          (String.concat "/" (List.make (List.length pr) "0")) in
+
+              ["Elim", [hg1; hg2], (hd1, `Elim tg1)]
+
+          | _ -> raise E.Nothing
   
         with E.Nothing -> [] in
 
       match dsts with
       | None ->
           let dsts = List.of_enum (Map.keys pr.Proof.g_hyps) in
-          let dsts = List.map (fun id ->
-                         Printf.sprintf "%d/%d:" (Handle.toint hd1) (Handle.toint id))
-                       dsts in
+          let dsts =
+            List.map (fun id ->
+                Printf.sprintf "%d/%d:" (Handle.toint hd1) (Handle.toint id))
+              dsts in
+          let dsts = Printf.sprintf "%d/0:" (Handle.toint hd1) :: dsts in
           List.flatten (List.map for_destination dsts)
 
       | Some dst ->
