@@ -51,6 +51,8 @@ rule main = parse
   | "<->" { LRARROW }
   | "|-"  { PROOF   }
   | ","   { COMMA   }
+  | "true"    { TRUE   }
+  | "false"   { FALSE   }
 
   | eof { EOF }
 
