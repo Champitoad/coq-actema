@@ -493,7 +493,7 @@ end = struct
               let hg1 = mk_ipath (Handle.toint hd1) in
               let hg2 = mk_ipath (Handle.toint hd1)
                           ~ctxt:(Handle.toint tg1)
-                          ~sub:(List.make (List.length pr) 0) in
+                          ~sub:(List.make (List.length pr) 1) in
 
               ["Elim", [hg1; hg2], (hd1, `Elim tg1)]
 
