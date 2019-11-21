@@ -136,7 +136,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
   (* Return all the local hypotheses (context) as a [js_hyps array] *)
   method context =
     let goal = Proof.byid parent##.proof self##.handle in
-    let hyps = List.map (snd_map snd) (Map.bindings goal.g_hyps) in
+    let hyps = Map.bindings goal.g_hyps in
     Js.array (Array.of_list (List.mapi (fun i x -> js_hyps self (i, x)) hyps))
 
   (* Return the subgoal conclusion as a [js_form] *)
@@ -179,7 +179,8 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for a context hypothesis                                  *)
-and js_hyps parent (i, (handle, hyp) : int * (Handle.t * Fo.form)) = object%js (self)
+and js_hyps parent (i, (handle, hyp) : int * (Handle.t * Proof.hyp)) =
+object%js (self)
   (* back-link to the [js_subgoal] this hypothesis belongs to *)
   val parent = parent
 
@@ -189,8 +190,11 @@ and js_hyps parent (i, (handle, hyp) : int * (Handle.t * Fo.form)) = object%js (
   (* the handle position in its context *)
   val position = i
 
+  (* if the hypothesis is fresh / new *)
+  val fresh = Js.bool (hyp.h_gen <= 1)
+
   (* the hypothesis as a [js_form] *)
-  val form = js_form (parent##.handle, `H handle) hyp
+  val form = js_form (parent##.handle, `H handle) hyp.h_form
 
   (* The enclosing proof engine *)
   val proof = parent##.parent
