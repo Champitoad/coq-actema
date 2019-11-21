@@ -220,7 +220,7 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
-and js_form (source : source) (form : Fo.form) :> < > Js.t = object%js
+and js_form (source : source) (form : Fo.form) :> < > Js.t = object%js (self)
   (* Return the [mathml] of the formula *)  
   method mathml =
     let tag =
@@ -234,14 +234,20 @@ and js_form (source : source) (form : Fo.form) :> < > Js.t = object%js
 
   (* Return the [html] of the formula *)  
   method html =
+    self##htmltag true
+
+  (* Return the [html] of the formula *)  
+  method htmltag (id : bool) =
     let prefix =
-      match source with
-      | h, `H i -> Format.sprintf "%d/%d" (Handle.toint h) (Handle.toint i)
-      | h, `C   -> Format.sprintf "%d/0" (Handle.toint h)
+      if not id then None else Some (Some (
+        match source with
+        | h, `H i -> Format.sprintf "%d/%d" (Handle.toint h) (Handle.toint i)
+        | h, `C   -> Format.sprintf "%d/0" (Handle.toint h)
+      ))
     in
       Js.string
         (Format.asprintf "%a" (Tyxml.Xml.pp ())
-        (Fo.Form.tohtml ~prefix form))
+        (Fo.Form.tohtml ?id:prefix form))
 
   (* Return an UTF8 string representation of the formula *)
   method tostring =

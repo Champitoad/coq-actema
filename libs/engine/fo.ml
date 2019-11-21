@@ -68,7 +68,7 @@ module Form : sig
   val recheck  : env -> form -> unit
   val mathml   : ?tag:string -> form -> Tyxml.Xml.elt
   val tostring : form -> string
-  val tohtml   : ?prefix:string -> form -> Tyxml.Xml.elt
+  val tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
 
   val equal : form -> form -> bool
 end = struct
@@ -251,7 +251,7 @@ end = struct
 
     in fun (form : form) -> for_form form
 
-  let tohtml ?prefix =
+  let tohtml ?(id : string option option) =
     let open Tyxml in
 
     let pr doit c =
@@ -306,12 +306,15 @@ end = struct
 
       in
 
-      let p = String.concat "/" (List.rev_map string_of_int p) in
-      let p = Option.fold
-                (fun p prefix -> Format.sprintf "%s:%s" prefix p)
-                p prefix in
+      let thisid =
+        id |> Option.map (fun prefix ->
+          let p = String.concat "/" (List.rev_map string_of_int p) in
+          Option.fold
+            (fun p prefix -> Format.sprintf "%s:%s" prefix p)
+            p prefix) in
+      let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
 
-      [Xml.node ~a:[Xml.string_attrib "id" p] "span" data] in
+      [Xml.node ~a:(List.of_option thisid) "span" data] in
 
     fun (form : form) ->
       Xml.node "span" (for_form [] form)
