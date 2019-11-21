@@ -491,11 +491,13 @@ end = struct
                 raise E.Nothing;
 
               let hg1 = mk_ipath (Handle.toint hd1) in
-              let hg2 = mk_ipath (Handle.toint hd1)
+              let hg2 =
+                if List.is_empty pr then None else
+                  Some (mk_ipath (Handle.toint hd1)
                           ~ctxt:(Handle.toint tg1)
-                          ~sub:(List.make (List.length pr) 1) in
+                          ~sub:(List.make (List.length pr) 1)) in
 
-              ["Elim", [hg1; hg2], (hd1, `Elim tg1)]
+              ["Elim", hg1 :: (List.of_option hg2), (hd1, `Elim tg1)]
 
           | _ -> raise E.Nothing
   
