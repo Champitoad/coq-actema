@@ -485,7 +485,7 @@ end = struct
   
           List.mapi
             (fun i x ->
-              let sub = if bv then None else Some (Handle.toint hd) in
+              let sub = if bv then None else Some i in
               let sub = List.of_option sub in
               let hg  = mk_ipath (Handle.toint hd) ~sub:sub in
               (x, [hg], (hd, `Intro i)))
