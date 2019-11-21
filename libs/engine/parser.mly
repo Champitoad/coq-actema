@@ -3,7 +3,7 @@
   open Syntax
 %}
 
-%token <Syntax.symbol> UIDENT
+%token <Syntax.symbol> IDENT
 
 %token LPAREN RPAREN
 %token TRUE
@@ -36,7 +36,7 @@ xgoal:
 | p=goal EOF { p }
 
 (* -------------------------------------------------------------------- *)
-%inline uident: x=loc(UIDENT) { x }
+%inline ident: x=loc(IDENT) { x }
 
 (* -------------------------------------------------------------------- *)
 form_r:
@@ -49,7 +49,7 @@ form_r:
 | FALSE
    { PFCst false }
 
-| x=uident
+| x=ident
     { PFVar x }
 
 | f1=form LAND f2=form
@@ -72,7 +72,7 @@ form:
 
 (* -------------------------------------------------------------------- *)
 goal:
-| ps=plist0(uident, COMMA) PROOF f=form
+| ps=plist0(ident, COMMA) PROOF f=form
     { (ps, f) }
 
 (* -------------------------------------------------------------------- *)

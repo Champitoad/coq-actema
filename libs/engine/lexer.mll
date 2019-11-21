@@ -33,14 +33,14 @@ let letter  = upper | lower
 let digit   = ['0'-'9']
 let uint    = digit+
 
-let ichar  = (letter | digit | '_' | '\'')
-let uident = upper ichar*
+let ichar = (letter | digit | '_' | '\'')
+let ident = letter ichar*
 
 (* -------------------------------------------------------------------- *)
 rule main = parse
-  | newline      { Lexing.new_line lexbuf; main lexbuf }
-  | blank+       { main lexbuf }
-  | uident as id { try Hashtbl.find keywords id with Not_found -> UIDENT id }
+  | newline     { Lexing.new_line lexbuf; main lexbuf }
+  | blank+      { main lexbuf }
+  | ident as id { try Hashtbl.find keywords id with Not_found -> IDENT id }
 
   | "("   { LPAREN  }
   | ")"   { RPAREN  }
