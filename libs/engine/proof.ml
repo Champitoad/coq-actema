@@ -255,6 +255,11 @@ module CoreLogic : sig
 
   and adnd = { source : gpath; destination : gpath option; }
 
+  type osource = [
+    | `Click of ipath
+    | `DnD   of ipath * ipath
+  ]
+
   val path_of_ipath : ipath -> path
 
   type action = Handle.t * [
@@ -265,7 +270,8 @@ module CoreLogic : sig
 
   exception InvalidPath
 
-  val actions : Proof.proof -> asource -> (string * ipath list * action) list
+  val actions : Proof.proof -> asource ->
+                  (string * ipath list * osource * action) list
   val apply   : Proof.proof -> action -> Proof.proof
 end = struct
   type targ   = Proof.proof * Handle.t
@@ -399,6 +405,9 @@ end = struct
   let mk_ipath ?(ctxt : int = 0) ?(sub : int list = []) (root : int) =
     { root; ctxt; sub; }
 
+  let ipath_strip (p : ipath) =
+    { p with sub = [] }
+
   let path_of_ipath (p : ipath) =
     let pp_sub =
       Format.pp_print_list
@@ -471,8 +480,13 @@ end = struct
 
   and adnd = { source : gpath; destination : gpath option; }
 
+  type osource = [
+    | `Click of ipath
+    | `DnD   of ipath * ipath
+  ]
+
   let actions (proof : Proof.proof) (p : asource)
-      : (string * ipath list * action) list
+      : (string * ipath list * osource * action) list
   =
     match p with
     | `Click p -> begin
@@ -488,13 +502,13 @@ end = struct
               let sub = if bv then None else Some i in
               let sub = List.of_option sub in
               let hg  = mk_ipath (Handle.toint hd) ~sub:sub in
-              (x, [hg], (hd, `Intro i)))
+              (x, [hg], `Click hg, (hd, `Intro i)))
             iv
         end
   
       | `H (rp, _) ->
           let hg = mk_ipath (Handle.toint hd) ~ctxt:(Handle.toint rp) in
-          ["Elim", [hg], (hd, `Elim rp)]
+          ["Elim", [hg], `Click hg, (hd, `Elim rp)]
       end
 
     | `DnD { source = src; destination = dsts; } -> begin
@@ -514,23 +528,22 @@ end = struct
             `H (tg2, { h_form = FConn (`Imp, [f; _]); _})
               when not (Handle.eq tg1 tg2) && Form.equal f1 f
             ->
-              let hg = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2) in
-              ["Forward", [hg], (hd1, `Forward (tg1, tg2))]
+              let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
+              let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2) in
+              let aui = `DnD (ipath_strip src, ipath_strip dst) in
+              ["Forward", [dst], aui, (hd1, `Forward (tg1, tg2))]
 
           | `H (tg1, { h_form = f1; _ }), `C f2 ->
-              let pr, subf1 = prune_premisses f1 in
+              let _, subf1 = prune_premisses f1 in
 
               if not (Form.equal subf1 f2) then
                 raise E.Nothing;
 
-              let hg1 = mk_ipath (Handle.toint hd1) in
-              let hg2 =
-                if List.is_empty pr then None else
-                  Some (mk_ipath (Handle.toint hd1)
-                          ~ctxt:(Handle.toint tg1)
-                          ~sub:(List.make (List.length pr) 1)) in
+              let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
+              let dst = mk_ipath (Handle.toint hd1) in
+              let aui = `DnD (ipath_strip src, ipath_strip dst) in
 
-              ["Elim", hg1 :: (List.of_option hg2), (hd1, `Elim tg1)]
+              ["Elim", [dst], aui, (hd1, `Elim tg1)]
 
           | _ -> raise E.Nothing
   

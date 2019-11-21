@@ -106,12 +106,13 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
    *  - source (string) [only for the kind "dnd"]
    *    ID of the formula that is being dropped
    *
-   *  - source (string) [only for the kind "dnd"]
+   *  - destination (string) [only for the kind "dnd"]
    *    ID of th formula that received the dropped element
    *
    * An output action is an object with the following properties:
    *
    *  - description : the description of the action
+   *  - ui          : the UI action
    *  - highlight   : a JS array of IDs to highlight
    *  - action      : the related action (see [apply])
    *)
@@ -146,14 +147,31 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
 
     Js.array (
       Array.of_list
-        (List.map (fun (p, ps, a) -> 
-             let ps = List.map CoreLogic.path_of_ipath ps in
-             let ps = Js.array (Array.of_list (List.map Js.string ps)) in
+        (List.map (fun (p, ps, aui, a) -> 
+           let ps = List.map CoreLogic.path_of_ipath ps in
+           let ps = Js.array (Array.of_list (List.map Js.string ps)) in
 
-             Js.Unsafe.obj [|
-               "description", Js.Unsafe.inject (Js.string p) ;
-               "highlight"  , Js.Unsafe.inject ps            ;
-               "action"     , Js.Unsafe.inject a             |]) actions))
+           let aui =
+             let p2p = CoreLogic.path_of_ipath in
+
+             match aui with
+             | `Click p -> Js.Unsafe.obj [|
+                 "kind"  , Js.Unsafe.inject (Js.string "click");
+                 "target", Js.Unsafe.inject (Js.string (p2p p));
+               |]
+
+             | `DnD (src, dst) -> Js.Unsafe.obj [|
+                 "kind"       , Js.Unsafe.inject (Js.string "dnd");
+                 "source"     , Js.Unsafe.inject (Js.string (p2p src));
+                 "destination", Js.Unsafe.inject (Js.string (p2p dst));
+               |]
+           in               
+
+           Js.Unsafe.obj [|
+             "description", Js.Unsafe.inject (Js.string p) ;
+             "highlight"  , Js.Unsafe.inject ps            ;
+             "ui"         , aui                            ;
+             "action"     , Js.Unsafe.inject a             |]) actions))
 
   (* Same as [actions], but in async mode. TO BE TESTED *)
   method pactions path =
