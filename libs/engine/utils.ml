@@ -33,6 +33,10 @@ module List : sig
   val pivot     : ('a -> bool) -> 'a list -> 'a pivot
   val pivoti    : (int -> 'a -> bool) -> 'a list -> 'a pivot
   val pivot_at  : int -> 'a list -> 'a pivot
+
+  exception TopoFailure
+
+  val topo : ('a -> int) -> ('a -> int list) -> 'a list -> 'a list
 end = struct
   include BatList
 
@@ -56,6 +60,34 @@ end = struct
 
   let pivot_at (i : int) (s : 'a list) =
     pivoti (fun j _ -> i = j) s
+
+  exception TopoFailure
+
+  let topo (type a) (key : a -> int) (deps : a -> int list) =
+    let rec aux acc later todo progress =
+      match todo, later with
+      | [], [] ->
+          List.rev acc
+
+      | [], _ ->
+          if not progress then raise TopoFailure;
+          aux acc [] later false
+
+      | x::xs, _ ->
+        let ok =
+          List.for_all
+            (fun dep -> exists (fun y -> key y = dep) acc)
+            (deps x) in
+
+        if   ok
+        then aux (x::acc) later xs true
+        else aux acc (x::later) xs progress
+    in
+
+    fun (xs : a list) ->
+      let starts, todo =
+        List.partition (fun x -> is_empty (deps x)) xs
+      in aux starts [] todo false
 end
 
 (* -------------------------------------------------------------------- *)

@@ -137,6 +137,15 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
   method context =
     let goal = Proof.byid parent##.proof self##.handle in
     let hyps = Map.bindings goal.g_hyps in
+    let hyps =
+      let key  = fun ((i, _) : Handle.t * Proof.hyp) -> Handle.toint i in
+      let deps = fun ((_, x) : Handle.t * Proof.hyp) ->
+        List.of_option (Option.map Handle.toint x.h_src) in
+
+      try  List.rev (List.topo key deps hyps)
+      with List.TopoFailure -> hyps
+    in
+
     Js.array (Array.of_list (List.mapi (fun i x -> js_hyps self (i, x)) hyps))
 
   (* Return the subgoal conclusion as a [js_form] *)
@@ -186,6 +195,9 @@ object%js (self)
 
   (* the handle (UID) of the hypothesis *)
   val handle = handle
+
+  (* the handle (UID) of the parent hypothesis *)
+  val phandle = Js.Opt.option hyp.h_src
 
   (* the handle position in its context *)
   val position = i

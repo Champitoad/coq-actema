@@ -215,8 +215,10 @@ end = struct
             let _h = (Hyps.byid hyps hid).h_form in
             if clear then Map.remove hid hyps else hyps)
           hyps hid in
+        let hsrc = if clear then None else hid in
+
         let hyps = List.fold_left (fun hyps newh ->
-            Map.add (Handle.fresh ()) (mk_hyp newh) hyps)
+            Map.add (Handle.fresh ()) (mk_hyp ?src:hsrc newh) hyps)
           hyps newlc
         in hyps in
 
