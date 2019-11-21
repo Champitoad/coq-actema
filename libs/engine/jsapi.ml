@@ -75,23 +75,22 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
       let asource =
         match Js.to_string (Js.typeof asource) with
         | "string" ->
-          [`Click (Js.to_string asource)]
+          [`Click (`S (Js.to_string asource))]
         | "object" -> begin
           let asource = Js.Unsafe.coerce asource in
           match Js.as_string InvalidASource asource##.kind with
             | "click" ->
-                [`Click (Js.to_string asource##.path)]
+                [`Click (`S (Js.to_string asource##.path))]
             | "dnd" ->
                 let source =
-                  Js.as_string InvalidASource
-                    asource##.source in
+                  `S (Js.as_string InvalidASource asource##.source) in
                 let destination =
                   Option.map
-                    (Js.as_string InvalidASource)
+                    (fun x -> `S (Js.as_string InvalidASource x))
                     (Js.Opt.to_option asource##.destination) in
                 [`DnD CoreLogic.{ source; destination; }]
             | "any" ->
-                let path = Js.to_string asource##.path in
+                let path = `S (Js.to_string asource##.path) in
                 [`Click path; `DnD CoreLogic.{ source = path; destination = None; }]
             | _ -> raise InvalidASource
           end
@@ -102,6 +101,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
     Js.array (
       Array.of_list
         (List.map (fun (p, ps, a) -> 
+             let ps = List.map CoreLogic.path_of_ipath ps in
              let ps = Js.array (Array.of_list (List.map Js.string ps)) in
 
              Js.Unsafe.obj [|

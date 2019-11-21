@@ -29,13 +29,17 @@ module List : sig
 
   type 'a pivot = 'a list * 'a * 'a list
 
-  val pivot    : ('a -> bool) -> 'a list -> 'a pivot
-  val pivoti   : (int -> 'a -> bool) -> 'a list -> 'a pivot
-  val pivot_at : int -> 'a list -> 'a pivot
+  val of_option : 'a option -> 'a list
+  val pivot     : ('a -> bool) -> 'a list -> 'a pivot
+  val pivoti    : (int -> 'a -> bool) -> 'a list -> 'a pivot
+  val pivot_at  : int -> 'a list -> 'a pivot
 end = struct
   include BatList
 
   type 'a pivot = 'a list * 'a * 'a list
+
+  let of_option (x : 'a option) : 'a list =
+    match x with None -> [] | Some x -> [x]
 
   let pivoti (f : int -> 'a -> bool) =
     let rec aux i pre s =

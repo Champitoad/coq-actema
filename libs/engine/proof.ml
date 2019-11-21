@@ -208,6 +208,8 @@ module CoreLogic : sig
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
   type path   = string
+  type ipath  = { root : int; ctxt : int; sub : int list; }
+  type gpath  = [`S of path | `P of ipath]
 
   val intro     : ?variant:int -> tactic
   val elim      : ?clear:bool -> Handle.t -> tactic
@@ -215,11 +217,13 @@ module CoreLogic : sig
   val forward   : (Handle.t * Handle.t) -> tactic
 
   type asource = [
-    | `Click of path
+    | `Click of gpath
     | `DnD   of adnd
   ]
 
-  and adnd = { source : path; destination : path option; }
+  and adnd = { source : gpath; destination : gpath option; }
+
+  val path_of_ipath : ipath -> path
 
   type action = Handle.t * [
     | `Elim    of Handle.t
@@ -227,14 +231,16 @@ module CoreLogic : sig
     | `Forward of Handle.t * Handle.t
   ]
 
-  exception InvalidPath of path
+  exception InvalidPath
 
-  val actions : Proof.proof -> asource -> (string * path list * action) list
+  val actions : Proof.proof -> asource -> (string * ipath list * action) list
   val apply   : Proof.proof -> action -> Proof.proof
 end = struct
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
   type path   = string
+  type ipath  = { root : int; ctxt : int; sub : int list; }
+  type gpath  = [`S of path | `P of ipath]
 
   type pnode += TIntro
 
@@ -342,7 +348,7 @@ end = struct
     | `Forward of Handle.t * Handle.t
   ]
 
-  exception InvalidPath of path
+  exception InvalidPath
   exception InvalidFormPath
 
   let rec subform (f : form) (p : int list) =
@@ -358,64 +364,87 @@ end = struct
     | _ ->
         raise InvalidFormPath
 
-  let ofpath (proof : Proof.proof) (p : path) =
-    let hd, i, fs =
+  let mk_ipath ?(ctxt : int = 0) ?(sub : int list = []) (root : int) =
+    { root; ctxt; sub; }
+
+  let path_of_ipath (p : ipath) =
+    let pp_sub =
+      Format.pp_print_list
+        ~pp_sep:(fun fmt () -> Format.fprintf fmt "/")
+        Format.pp_print_int
+    in
+    Format.asprintf "%d/%d:%a" p.root p.ctxt pp_sub p.sub
+
+  let ipath_of_path (p : path) =
+    let root, ctxt, sub =
       try
         Scanf.sscanf p "%d/%d:%s" (fun x1 x2 x3 -> (x1, x2, x3))
       with
       | Scanf.Scan_failure _
       | End_of_file ->
-          raise (InvalidPath p) in
+          raise InvalidPath in
 
-    if hd < 0 || i < 0 then
-      raise (InvalidPath p);
+    if root < 0 || ctxt < 0 then
+      raise InvalidPath;
 
-    let fs =
-      let fs = if fs = "" then [] else String.split_on_char '/' fs in
+    let sub =
+      let sub = if sub = "" then [] else String.split_on_char '/' sub in
 
-      try
-        List.map int_of_string fs
-      with Failure _ -> raise (InvalidPath p) in
+      try  List.map int_of_string sub
+      with Failure _ -> raise InvalidPath
 
-      if List.exists (fun x -> x < 0) fs then
-        raise (InvalidPath p);
+    in
+
+    if List.exists (fun x -> x < 0) sub then
+      raise InvalidPath;
+
+    { root; ctxt; sub; }
+
+  let of_ipath (proof : Proof.proof) (p : ipath) =
+    let { root; ctxt; sub; } = p in
 
     let goal =
-      try  Proof.byid proof (Handle.ofint hd)
-      with InvalidGoalId _ -> raise (InvalidPath p) in
+      try  Proof.byid proof (Handle.ofint root)
+      with InvalidGoalId _ -> raise InvalidPath in
 
     let target, subf =
       try
-        match i with
-        | _ when i <= 0 ->
-            (`C goal.Proof.g_goal, subform goal.Proof.g_goal fs)
+        match ctxt with
+        | ctxt when ctxt <= 0 ->
+            (`C goal.Proof.g_goal, subform goal.Proof.g_goal sub)
   
         | _ -> begin
             try
-              let rp = Handle.ofint i in
+              let rp = Handle.ofint ctxt in
               let (_, hf) as hyd =
-                Proof.Hyps.byid goal.Proof.g_hyps (Handle.ofint i) in
-              (`H (rp, hyd), subform hf fs)
-            with InvalidHyphId _ -> raise (InvalidPath p)
+                Proof.Hyps.byid goal.Proof.g_hyps rp in
+              (`H (rp, hyd), subform hf sub)
+            with InvalidHyphId _ -> raise InvalidPath
           end
 
-      with InvalidFormPath -> raise (InvalidPath p)
+      with InvalidFormPath -> raise InvalidPath
 
-    in (goal, Handle.ofint hd, target, (fs, subf))
+    in (goal, Handle.ofint root, target, (sub, subf))
+
+  let ipath_of_gpath (p : gpath) =
+    match p with `S p -> ipath_of_path p | `P p -> p
+
+  let of_gpath (proof : Proof.proof) (p : gpath) =
+    of_ipath proof (ipath_of_gpath p)
 
   type asource = [
-    | `Click of path
+    | `Click of gpath
     | `DnD   of adnd
   ]
 
-  and adnd = { source : path; destination : path option; }
+  and adnd = { source : gpath; destination : gpath option; }
 
   let actions (proof : Proof.proof) (p : asource)
-      : (string * path list * action) list
+      : (string * ipath list * action) list
   =
     match p with
     | `Click p -> begin
-      let _goal, hd, target, (_fs, _subf) = ofpath proof p in
+      let _goal, hd, target, (_fs, _subf) = of_gpath proof p in
   
       match target with
       | `C _ -> begin
@@ -424,29 +453,26 @@ end = struct
   
           List.mapi
             (fun i x ->
-              let hg =
-                if   bv
-                then Format.sprintf "%d/0:" (Handle.toint hd)
-                else Format.sprintf "%d/0:%d" (Handle.toint hd) i in
-  
+              let sub = if bv then None else Some (Handle.toint hd) in
+              let sub = List.of_option sub in
+              let hg  = mk_ipath (Handle.toint hd) ~sub:sub in
               (x, [hg], (hd, `Intro i)))
             iv
         end
   
       | `H (rp, _) ->
-          let hg = Format.sprintf "%d/%d:"
-                     (Handle.toint hd) (Handle.toint rp) in
+          let hg = mk_ipath (Handle.toint hd) ~ctxt:(Handle.toint rp) in
           ["Elim", [hg], (hd, `Elim rp)]
       end
 
     | `DnD { source = src; destination = dsts; } -> begin
       let module E = struct exception Nothing end in
 
-      let pr, hd1, tg1, _ = ofpath proof src in
+      let pr, hd1, tg1, _ = of_gpath proof src in
 
-      let for_destination (dst : path) =
+      let for_destination (dst : gpath) =
         try
-          let _, hd2, tg2, _ = ofpath proof dst in
+          let _, hd2, tg2, _ = of_gpath proof dst in
   
           if not (Handle.eq hd1 hd2) then
             raise E.Nothing;
@@ -455,8 +481,7 @@ end = struct
           | `H (tg1, (_, f1)), `H (tg2, (_, FConn (`Imp, [f; _])))
               when Form.equal f1 f
             ->
-              let hg = Format.sprintf "%d/%d:0"
-                         (Handle.toint hd1) (Handle.toint tg2) in
+              let hg = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2) in
               ["Forward", [hg], (hd1, `Forward (tg1, tg2))]
 
           | `H (tg1, (_, f1)), `C f2 ->
@@ -465,10 +490,10 @@ end = struct
               if not (Form.equal subf1 f2) then
                 raise E.Nothing;
 
-              let hg1 = Format.sprintf "%d/0:" (Handle.toint hd1) in
-              let hg2 = Format.sprintf "%d/%d:%s"
-                          (Handle.toint hd1) (Handle.toint tg1)
-                          (String.concat "/" (List.make (List.length pr) "0")) in
+              let hg1 = mk_ipath (Handle.toint hd1) in
+              let hg2 = mk_ipath (Handle.toint hd1)
+                          ~ctxt:(Handle.toint tg1)
+                          ~sub:(List.make (List.length pr) 0) in
 
               ["Elim", [hg1; hg2], (hd1, `Elim tg1)]
 
@@ -480,10 +505,11 @@ end = struct
       | None ->
           let dsts = List.of_enum (Map.keys pr.Proof.g_hyps) in
           let dsts =
-            List.map (fun id ->
-                Printf.sprintf "%d/%d:" (Handle.toint hd1) (Handle.toint id))
+            List.map
+              (fun id -> mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint id))
               dsts in
-          let dsts = Printf.sprintf "%d/0:" (Handle.toint hd1) :: dsts in
+          let dsts = mk_ipath (Handle.toint hd1) :: dsts in
+          let dsts = List.map (fun p -> `P p) dsts in
           List.flatten (List.map for_destination dsts)
 
       | Some dst ->
