@@ -6,11 +6,8 @@
   module L = Location
 
   (* ------------------------------------------------------------------ *)
-  exception LexicalError of L.t option * string
-
-  (* ------------------------------------------------------------------ *)
   let lex_error lexbuf msg =
-    raise (LexicalError (Some (L.of_lexbuf lexbuf), msg))
+    raise (Syntax.ParseError (Some (L.of_lexbuf lexbuf), Some msg))
 
   (* ------------------------------------------------------------------ *)
   let _keywords = [

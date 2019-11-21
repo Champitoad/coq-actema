@@ -1,6 +1,8 @@
 (* -------------------------------------------------------------------- *)
 open Location
 
+exception ParseError of Location.t option * string option
+
 (* -------------------------------------------------------------------- *)
 type symbol  = string
 type psymbol = symbol loced

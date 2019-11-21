@@ -29,10 +29,16 @@
 
 (* -------------------------------------------------------------------- *)
 xform:
+| error
+   { raise (ParseError (Some (Location.make $startpos $endpos), None)) }
+
 | f=form EOF { f }
 
 (* -------------------------------------------------------------------- *)
 xgoal:
+| error
+   { raise (ParseError (Some (Location.make $startpos $endpos), None)) }
+
 | p=goal EOF { p }
 
 (* -------------------------------------------------------------------- *)

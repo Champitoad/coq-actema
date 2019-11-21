@@ -9,6 +9,30 @@ type source = Handle.t * [`C | `H of Handle.t]
 exception InvalidASource
 
 (* -------------------------------------------------------------------- *)
+module Exn : sig
+  val register  : (exn -> string option) -> unit
+  val translate : exn -> string option
+end = struct
+  type tx_t = exn -> string option
+
+  let translators = ref ([] : tx_t list)
+
+  let register (tx : tx_t) : unit =
+    translators := !translators @ [tx]
+
+  let translate (e : exn) =
+    let module E = struct exception Found of string end in
+
+    try
+      List.iter
+        (fun tx -> tx e |> Option.may (fun msg -> raise (E.Found msg)))
+        !translators;
+      None
+
+    with E.Found msg -> Some msg
+end
+
+(* -------------------------------------------------------------------- *)
 module Js : sig
   include module type of Js_of_ocaml.Js
 
@@ -22,6 +46,27 @@ end = struct
     | "string" -> to_string v
     | _ -> raise exn
 end
+
+(* -------------------------------------------------------------------- *)
+let () = Exn.register (fun exn ->
+    match exn with
+    | Syntax.ParseError _ ->
+        Some "invalid formula (parse error)"
+    | Fo.DuplicatedEntry _ | Fo.TypingError | Fo.RecheckFailure ->
+        Some "invalid formula"
+    | _ ->
+        None
+  )
+
+(* -------------------------------------------------------------------- *)
+let (!!) f = fun x ->
+  try f x with e ->
+    let msg =
+      Option.default_delayed
+        (fun () ->
+          Format.sprintf "internal error: %s" (Printexc.to_string e))
+        (Exn.translate e)
+    in Js.raise_js_error (new%js Js.error_constr (Js.string msg))
 
 (* -------------------------------------------------------------------- *)
 let rec js_proof_engine (proof : Proof.proof) = object%js (self)
@@ -95,7 +140,8 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
             | _ -> raise InvalidASource
           end
         | _ -> raise InvalidASource
-      in List.flatten (List.map (CoreLogic.actions self##.proof) asource)
+      in List.flatten
+           (List.map (!!(CoreLogic.actions self##.proof)) asource)
     in
 
     Js.array (
@@ -115,7 +161,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
 
   (* Apply the action [action] (as returned by [actions]) *)
   method apply action =
-    js_proof_engine (CoreLogic.apply self##.proof action)
+    js_proof_engine (!! (uc CoreLogic.apply) (self##.proof, action))
 end
 
 (* -------------------------------------------------------------------- *)
@@ -160,14 +206,15 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
    * See [#ivariants] *)
 
   method intro variant =
-    js_proof_engine (CoreLogic.intro ~variant (parent##.proof, handle))
+    js_proof_engine (!!(CoreLogic.intro ~variant) (parent##.proof, handle))
 
   (* [this#elim (target : js_hyps)]] applies the relevant elimination
    * rule to the hypothesis [target] of the subgoal [this].
    *
    * Raise an exception if [target] does not belong to [this] *)
   method elim target =
-    js_proof_engine (CoreLogic.elim target##.handle (parent##.proof, handle))
+    let data = (target##.handle, (parent##.proof, handle)) in
+    js_proof_engine (!!(uc CoreLogic.elim) data)
 
   (* [this#ivariants] Return the available introduction rules that can
    * be applied to the conclusion of [this] as a string array. The strings
@@ -175,7 +222,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
    * returned array is meaningful and can be used as argument to [#intro]
    * to select the desired introduction rule. *)
   method ivariants =
-    let aout = CoreLogic.ivariants (parent##.proof, handle) in
+    let aout = !!CoreLogic.ivariants (parent##.proof, handle) in
     let aout = Array.of_list (List.map Js.string aout) in
     Js.array aout
 
@@ -262,7 +309,8 @@ let export (name : string) : unit =
      *
      * Raise an exception if [input] is invalid *)
     method parse x =
-      let goal = Io.parse_goal (Io.from_string (Js.to_string x)) in
-      let env, goal = Fo.Goal.check goal in
-      js_proof_engine (Proof.init env goal)
+      let env, goal = !!(fun () ->
+        let goal = Io.parse_goal (Io.from_string (Js.to_string x)) in
+        Fo.Goal.check goal
+      ) () in js_proof_engine (Proof.init env goal)
   end)
