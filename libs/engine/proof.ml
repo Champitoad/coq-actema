@@ -512,7 +512,7 @@ end = struct
           match tg1, tg2 with
           | `H (tg1, { h_form = f1; _ }),
             `H (tg2, { h_form = FConn (`Imp, [f; _]); _})
-              when Form.equal f1 f
+              when not (Handle.eq tg1 tg2) && Form.equal f1 f
             ->
               let hg = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2) in
               ["Forward", [hg], (hd1, `Forward (tg1, tg2))]
