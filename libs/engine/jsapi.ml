@@ -194,7 +194,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
   (* Return all the propositional variables as a [string array] *)
   method vars =
     let goal = Proof.byid parent##.proof self##.handle in
-    let vars = Set.to_list (Fo.Prps.all goal.g_env) in
+    let vars = List.fst (Map.bindings (Fo.Prps.all goal.g_env)) in
     Js.array (Array.of_list (List.map Js.string vars))
 
   (* Return all the local hypotheses (context) as a [js_hyps array] *)

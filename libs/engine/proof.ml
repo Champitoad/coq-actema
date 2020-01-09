@@ -325,7 +325,7 @@ end = struct
     let pre, hy = prune_premisses hy in
     let subs = List.map (fun f -> [Some h, []], f) pre in
 
-    if Form.equal hy gl.g_goal then
+    if Form.f_equal hy gl.g_goal then
       Proof.sprogress pr id (TElim id) subs
     else
 
@@ -374,7 +374,7 @@ end = struct
     let dst = (Proof.Hyps.byid gl.g_hyps hdst).h_form in
 
     match dst with
-    | FConn (`Imp, [f; f']) when Form.equal f src ->
+    | FConn (`Imp, [f; f']) when Form.f_equal f src ->
         Proof.sprogress pr ~clear:true id (TForward (hsrc, hdst))
           ([[Some hdst, [f']], gl.g_goal])
 
@@ -526,7 +526,7 @@ end = struct
           match tg1, tg2 with
           | `H (tg1, { h_form = f1; _ }),
             `H (tg2, { h_form = FConn (`Imp, [f; _]); _})
-              when not (Handle.eq tg1 tg2) && Form.equal f1 f
+              when not (Handle.eq tg1 tg2) && Form.f_equal f1 f
             ->
               let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
               let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2) in
@@ -536,7 +536,7 @@ end = struct
           | `H (tg1, { h_form = f1; _ }), `C f2 ->
               let _, subf1 = prune_premisses f1 in
 
-              if not (Form.equal subf1 f2) then
+              if not (Form.f_equal subf1 f2) then
                 raise E.Nothing;
 
               let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in

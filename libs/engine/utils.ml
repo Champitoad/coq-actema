@@ -30,6 +30,9 @@ let uc f (x, y) = f x y
 module List : sig
   include module type of BatList
 
+  val fst : ('a * 'b) list -> 'a list
+  val snd : ('a * 'b) list -> 'b list
+
   type 'a pivot = 'a list * 'a * 'a list
 
   val of_option : 'a option -> 'a list
@@ -42,6 +45,9 @@ module List : sig
   val topo : ('a -> int) -> ('a -> int list) -> 'a list -> 'a list
 end = struct
   include BatList
+
+  let fst xs = List.map fst xs
+  let snd xs = List.map snd xs
 
   type 'a pivot = 'a list * 'a * 'a list
 
