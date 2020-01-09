@@ -266,12 +266,19 @@ module CoreLogic : sig
     | `Elim    of Handle.t
     | `Intro   of int
     | `Forward of Handle.t * Handle.t
+    | `DisjDrop of Handle.t
+    | `ConjDrop of Handle.t
   ]
 
   exception InvalidPath
 
   val actions : Proof.proof -> asource ->
                   (string * ipath list * osource * action) list
+ (* string : doc
+    ipath list : surbrillance
+    osource 
+ *)
+
   val apply   : Proof.proof -> action -> Proof.proof
 end = struct
   type targ   = Proof.proof * Handle.t
@@ -288,6 +295,39 @@ end = struct
       | f -> (List.rev acc, f)
     in fun f -> doit [] f
 
+  let rec remove_form f = function
+      | [] -> raise TacticNotApplicable
+      | g::l when Form.equal g f -> l
+      | g::l -> g::(remove_form f l)
+
+  let rec unprune f = function
+    | [] -> f
+    | g::l -> FConn (`Imp, [g; (unprune f l)])
+
+  let rec flatten_disj  = function
+    | FConn (`Or, [f1; f2]) -> (flatten_disj f1)@[f2]
+    | f -> [f]
+
+  let rec flatten_conj  = function
+    | FConn (`And, [f1; f2]) -> (flatten_conj f1)@[f2]
+    | f -> [f]
+
+  let rebuild_conj l =
+    let rec aux f = function
+      | [] -> f
+      | g::l -> aux (FConn (`And, [f; g]) ) l
+    in match l with
+      | f::l -> aux f l
+      | _ ->  raise TacticNotApplicable
+      
+
+  let form_find f =
+    let rec aux n = function
+    | [] -> None
+    | g::_ when Form.equal f g -> Some n
+    | _::l -> aux (n+1) l
+    in aux 0
+	 
   let intro ?(variant = 0) ((pr, id) : targ) =
     match variant, (Proof.byid pr id).g_goal with
     | 0, FConn (`And, [f1; f2]) ->
@@ -317,6 +357,21 @@ end = struct
     | _ -> raise TacticNotApplicable
 
   type pnode += TElim of Handle.t
+
+  let disjDrop (h : Handle.t) ((pr, id) : targ) =
+    let gl = Proof.byid pr id in
+    let hy = (Proof.Hyps.byid gl.g_hyps h).h_form in
+    let gll = flatten_disj gl.g_goal in
+    Proof.sprogress pr id (TElim id) []
+
+  let conjDrop (h : Handle.t) ((pr, id) : targ) =
+    let gl = Proof.byid pr id in
+    let hy = (Proof.Hyps.byid gl.g_hyps h).h_form in
+    let gll = flatten_conj gl.g_goal in
+    let  ng = rebuild_conj (remove_form hy gll) in
+
+    Proof.sprogress pr id (TElim id) [[None, []], ng]
+
 
   let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     let gl = Proof.byid pr id in
@@ -356,6 +411,7 @@ end = struct
 
     | _ -> raise TacticNotApplicable
 
+	(* obsolete *)
   let ivariants ((pr, id) : targ) =
     match (Proof.byid pr id).g_goal with
     | FConn (`And  , _) -> ["And-intro"]
@@ -374,9 +430,12 @@ end = struct
     let dst = (Proof.Hyps.byid gl.g_hyps hdst).h_form in
 
     match dst with
-    | FConn (`Imp, [f; f']) when Form.equal f src ->
+      | FConn (`Imp, [_; _]) as f0 ->
+	  let (hf, cf) = prune_premisses f0 in
+	  let nhf = remove_form src hf in
+	  let nf = unprune cf nhf in
         Proof.sprogress pr ~clear:true id (TForward (hsrc, hdst))
-          ([[Some hdst, [f']], gl.g_goal])
+          ([[Some hdst, [nf]], gl.g_goal])
 
     | _ -> raise TacticNotApplicable
 
@@ -384,6 +443,8 @@ end = struct
     | `Elim    of Handle.t
     | `Intro   of int
     | `Forward of Handle.t * Handle.t
+    | `DisjDrop of Handle.t
+    | `ConjDrop of Handle.t
   ]
 
   exception InvalidPath
@@ -485,6 +546,23 @@ end = struct
     | `DnD   of ipath * ipath
   ]
 
+
+  let rebuild_path i =
+    let rec aux l = function
+      | 0 -> 0::l
+      | i -> aux (1::l) (i-1)
+    in List.rev (aux [] i)
+
+  let rebuild_pathd l i =
+    if i+1 = l then [1] else
+      
+    let rec aux = function
+      | 0 -> []
+      | i -> 0::(aux (i-1))
+    in
+    if i = 0 then (aux (l-1)) else
+      (aux (l - i - 1))@[1]
+
   let actions (proof : Proof.proof) (p : asource)
       : (string * ipath list * osource * action) list
   =
@@ -525,26 +603,49 @@ end = struct
   
           match tg1, tg2 with
           | `H (tg1, { h_form = f1; _ }),
-            `H (tg2, { h_form = FConn (`Imp, [f; _]); _})
-              when not (Handle.eq tg1 tg2) && Form.equal f1 f
-            ->
+            `H (tg2, { h_form = (FConn (`Imp, [_; _])) as f; _})
+              when not (Handle.eq tg1 tg2) 
+		->
+	    
+		let (hl,_) = prune_premisses f in
+		(match form_find f1 hl with
+                   | None -> raise E.Nothing
+                   | Some i ->
+		       let path = rebuild_path i in
               let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-              let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2) in
+              let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(path)  in
               let aui = `DnD (ipath_strip src, ipath_strip dst) in
               ["Forward", [dst], aui, (hd1, `Forward (tg1, tg2))]
-
-          | `H (tg1, { h_form = f1; _ }), `C f2 ->
+		)
+         | `H (tg1, { h_form = f1; _ }), `C f2 ->
               let _, subf1 = prune_premisses f1 in
+	      if Form.equal subf1 f2 then
+		    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
+		    let dst = mk_ipath (Handle.toint hd1) in
+		    let aui = `DnD (ipath_strip src, ipath_strip dst) in
 
-              if not (Form.equal subf1 f2) then
-                raise E.Nothing;
+		    ["Elim", [dst], aui, (hd1, `Elim tg1)]
+	      else 
+		(let dld = flatten_disj f2 in
+		 let dlc = flatten_conj f2 in
+	       match form_find f1 dld, form_find f1 dlc  with
+		| Some i,_  ->
+		    let path = rebuild_pathd (List.length dld) i in
+		    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
+		    let dst = mk_ipath (Handle.toint hd1) ~sub:(path) in
+		    let aui = `DnD (ipath_strip src, ipath_strip dst) in
 
-              let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-              let dst = mk_ipath (Handle.toint hd1) in
-              let aui = `DnD (ipath_strip src, ipath_strip dst) in
+		    ["DisjDrop",  [dst], aui, (hd1, `DisjDrop tg1 )]
+		| _, Some i ->
+		    let path = rebuild_pathd (List.length dlc) i in
+		    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
+		    let dst = mk_ipath (Handle.toint hd1) ~sub:(path) in
+		    let aui = `DnD (ipath_strip src, ipath_strip dst) in
 
-              ["Elim", [dst], aui, (hd1, `Elim tg1)]
+		    ["ConjDrop",  [dst], aui, (hd1, `ConjDrop tg1 )]
 
+		| None, None -> raise E.Nothing
+)	   
           | _ -> raise E.Nothing
   
         with E.Nothing -> [] in
@@ -570,6 +671,10 @@ end = struct
         intro ~variant (proof, hd)
     | `Elim subhd ->
         elim subhd (proof, hd)
+    | `DisjDrop subhd ->
+	disjDrop subhd (proof, hd)
+    | `ConjDrop subhd ->
+	conjDrop subhd (proof, hd)	  
     | `Forward (src, dst) ->
         forward (src, dst) (proof, hd)
 end
