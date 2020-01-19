@@ -40,6 +40,8 @@ module List : sig
   exception TopoFailure
 
   val topo : ('a -> int) -> ('a -> int list) -> 'a list -> 'a list
+
+  val findex : ('a -> bool) -> 'a list -> int option
 end = struct
   include BatList
 
@@ -91,6 +93,9 @@ end = struct
       let starts, todo =
         List.partition (fun x -> is_empty (deps x)) xs
       in aux starts [] todo false
+
+  let findex (check : 'a -> bool) (xs : 'a list) =
+    Option.map fst (Exceptionless.findi (fun _ x -> check x) xs)
 end
 
 (* -------------------------------------------------------------------- *)

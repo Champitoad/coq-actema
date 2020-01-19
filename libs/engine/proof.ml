@@ -301,34 +301,6 @@ end = struct
       | g::l when Form.equal g f -> l
       | g::l -> g::(remove_form f l)
 
-  let rec unprune f = function
-    | [] -> f
-    | g::l -> FConn (`Imp, [g; (unprune f l)])
-
-  let rec flatten_disj  = function
-    | FConn (`Or, [f1; f2]) -> (flatten_disj f1)@[f2]
-    | f -> [f]
-
-  let rec flatten_conj  = function
-    | FConn (`And, [f1; f2]) -> (flatten_conj f1)@[f2]
-    | f -> [f]
-
-  let rebuild_conj l =
-    let rec aux f = function
-      | [] -> f
-      | g::l -> aux (FConn (`And, [f; g]) ) l
-    in match l with
-      | f::l -> aux f l
-      | _ ->  raise TacticNotApplicable
-      
-
-  let form_find f =
-    let rec aux n = function
-    | [] -> None
-    | g::_ when Form.equal f g -> Some n
-    | _::l -> aux (n+1) l
-    in aux 0
-   
   let intro ?(variant = 0) ((pr, id) : targ) =
     match variant, (Proof.byid pr id).g_goal with
     | 0, FConn (`And, [f1; f2]) ->
@@ -357,22 +329,25 @@ end = struct
 
     | _ -> raise TacticNotApplicable
 
+  type pnode += OrDrop of Handle.t
+
+  let or_drop (h : Handle.t) ((pr, id) : targ) =
+    let gl   = Proof.byid pr id in
+    let _hy  = (Proof.Hyps.byid gl.g_hyps h).h_form in
+    let _gll = Form.flatten_disjunctions gl.g_goal in
+    Proof.sprogress pr id (OrDrop id) []
+
+  type pnode += AndDrop of Handle.t
+
+  let and_drop (h : Handle.t) ((pr, id) : targ) =
+    let gl  = Proof.byid pr id in
+    let hy  = (Proof.Hyps.byid gl.g_hyps h).h_form in
+    let gll = Form.flatten_disjunctions gl.g_goal in
+    let ng  = Form.f_ands (remove_form hy gll) in
+
+    Proof.sprogress pr id (AndDrop id) [[None, []], ng]
+
   type pnode += TElim of Handle.t
-
-  let disjDrop (h : Handle.t) ((pr, id) : targ) =
-    let gl = Proof.byid pr id in
-    let hy = (Proof.Hyps.byid gl.g_hyps h).h_form in
-    let gll = flatten_disj gl.g_goal in
-    Proof.sprogress pr id (TElim id) []
-
-  let conjDrop (h : Handle.t) ((pr, id) : targ) =
-    let gl = Proof.byid pr id in
-    let hy = (Proof.Hyps.byid gl.g_hyps h).h_form in
-    let gll = flatten_conj gl.g_goal in
-    let  ng = rebuild_conj (remove_form hy gll) in
-
-    Proof.sprogress pr id (TElim id) [[None, []], ng]
-
 
   let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     let gl = Proof.byid pr id in
@@ -431,11 +406,11 @@ end = struct
 
     match dst with
       | FConn (`Imp, [_; _]) as f0 ->
-    let (hf, cf) = prune_premisses f0 in
-    let nhf = remove_form src hf in
-    let nf = unprune cf nhf in
-        Proof.sprogress pr ~clear:true id (TForward (hsrc, hdst))
-          ([[Some hdst, [nf]], gl.g_goal])
+          let (hf, cf) = prune_premisses f0 in
+          let nhf = remove_form src hf in
+          let nf = Form.f_imps nhf cf in
+            Proof.sprogress pr ~clear:true id (TForward (hsrc, hdst))
+              ([[Some hdst, [nf]], gl.g_goal])
 
     | _ -> raise TacticNotApplicable
 
@@ -450,7 +425,6 @@ end = struct
     
     Proof.sprogress proof hd (TCut (form, hd))
       (subs @ [[None, [form]], goal.g_goal])
-
 
   type action = Handle.t * [
     | `Elim    of Handle.t
@@ -621,7 +595,7 @@ end = struct
       
               let (hl, _) = prune_premisses f in
 
-              begin match form_find f1 hl with
+              begin match List.findex (Form.equal f1) hl with
               | None -> raise E.Nothing
               | Some i ->
                   let path = rebuild_path i in
@@ -640,10 +614,10 @@ end = struct
 
                 ["Elim", [dst], aui, (hd1, `Elim tg1)]
               else 
-                let dld = flatten_disj f2 in
-                let dlc = flatten_conj f2 in
+                let dld = Form.flatten_disjunctions f2 in
+                let dlc = Form.flatten_conjunctions f2 in
 
-                begin match form_find f1 dld, form_find f1 dlc  with
+                begin match List.findex (Form.equal f1) dld, List.findex (Form.equal f1) dlc  with
                 | Some i, _  ->
                     let path = rebuild_pathd (List.length dld) i in
                     let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
@@ -688,9 +662,9 @@ end = struct
     | `Elim subhd ->
         elim subhd (proof, hd)
     | `DisjDrop subhd ->
-        disjDrop subhd (proof, hd)
+        or_drop subhd (proof, hd)
     | `ConjDrop subhd ->
-        conjDrop subhd (proof, hd)    
+        and_drop subhd (proof, hd)    
     | `Forward (src, dst) ->
         forward (src, dst) (proof, hd)
 end

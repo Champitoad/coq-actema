@@ -57,11 +57,17 @@ exception TypingError
 
 (* -------------------------------------------------------------------- *)
 module Form : sig
+  val f_false : form
+  val f_true  : form
   val f_and   : form -> form -> form
   val f_or    : form -> form -> form
   val f_imp   : form -> form -> form
   val f_equiv : form -> form -> form
   val f_not   : form -> form
+
+  val f_ands : form list -> form
+  val f_ors  : form list -> form
+  val f_imps : form list -> form -> form
 
   val parity   : logcon -> int
   val check    : env -> pform -> form
@@ -71,6 +77,9 @@ module Form : sig
   val tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
 
   val equal : form -> form -> bool
+
+  val flatten_disjunctions : form -> form list
+  val flatten_conjunctions : form -> form list
 end = struct
   let f_and   = fun f1 f2 -> FConn (`And  , [f1; f2])
   let f_or    = fun f1 f2 -> FConn (`Or   , [f1; f2])
@@ -79,6 +88,38 @@ end = struct
   let f_not   = fun f     -> FConn (`Not  , [f])
 
   let equal = ((=) : form -> form -> bool)
+
+  let f_false : form = FFalse
+  let f_true  : form = FTrue
+
+  let f_ands (fs : form list) : form =
+    match fs with
+    | []      -> f_true
+    | [f]     -> f
+    | f :: fs -> List.fold_left f_and f fs
+
+  let f_ors (fs : form list) : form =
+    match fs with
+    | []      -> f_false
+    | [f]     -> f
+    | f :: fs -> List.fold_left f_or f fs
+
+  let f_imps (fs : form list) (f : form) =
+    List.fold_right f_imp fs f
+
+  let flatten_disjunctions =
+    let rec doit acc f =
+      match f with
+      | FConn (`Or, [f1; f2]) -> doit (f2 :: acc) f1
+      | _ -> f :: acc
+    in fun f -> doit [] f
+
+  let flatten_conjunctions =
+    let rec doit acc f =
+      match f with
+      | FConn (`And, [f1; f2]) -> doit (f2 :: acc) f1
+      | _ -> f :: acc
+    in fun f -> doit [] f
 
   let parity (lg : logcon) =
     match lg with
