@@ -12,7 +12,10 @@
   (* ------------------------------------------------------------------ *)
   let _keywords = [
     "true"  , TRUE  ;
+    "exists", EXISTS;
     "false" , FALSE ;
+    "forall", FORALL;
+    "rec"   , REC   ;
   ]
 
   (* ------------------------------------------------------------------ *)
@@ -48,6 +51,10 @@ rule main = parse
   | "<->" { LRARROW }
   | "|-"  { PROOF   }
   | ","   { COMMA   }
+  | "."   { DOT     }
+  | ":"   { COLON   }
+  | "+"   { PLUS    }
+  | "*"   { STAR    }
 
   | eof { EOF }
 

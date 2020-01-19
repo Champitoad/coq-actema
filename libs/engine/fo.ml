@@ -223,6 +223,8 @@ end = struct
           raise TypingError;
         FPred (unloc name, [])
 
+    | PFForall _ | PFExists _ -> assert false
+
   let rec prio_of_form = function
     | FTrue         -> max_int
     | FFalse        -> max_int
