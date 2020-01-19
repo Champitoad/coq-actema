@@ -328,7 +328,7 @@ end = struct
     | g::_ when Form.equal f g -> Some n
     | _::l -> aux (n+1) l
     in aux 0
-	 
+   
   let intro ?(variant = 0) ((pr, id) : targ) =
     match variant, (Proof.byid pr id).g_goal with
     | 0, FConn (`And, [f1; f2]) ->
@@ -412,7 +412,6 @@ end = struct
 
     | _ -> raise TacticNotApplicable
 
-	(* obsolete *)
   let ivariants ((pr, id) : targ) =
     match (Proof.byid pr id).g_goal with
     | FConn (`And  , _) -> ["And-intro"]
@@ -432,9 +431,9 @@ end = struct
 
     match dst with
       | FConn (`Imp, [_; _]) as f0 ->
-	  let (hf, cf) = prune_premisses f0 in
-	  let nhf = remove_form src hf in
-	  let nf = unprune cf nhf in
+    let (hf, cf) = prune_premisses f0 in
+    let nhf = remove_form src hf in
+    let nf = unprune cf nhf in
         Proof.sprogress pr ~clear:true id (TForward (hsrc, hdst))
           ([[Some hdst, [nf]], gl.g_goal])
 
@@ -618,48 +617,52 @@ end = struct
           | `H (tg1, { h_form = f1; _ }),
             `H (tg2, { h_form = (FConn (`Imp, [_; _])) as f; _})
               when not (Handle.eq tg1 tg2) 
-		->
-	    
-		let (hl,_) = prune_premisses f in
-		(match form_find f1 hl with
-                   | None -> raise E.Nothing
-                   | Some i ->
-		       let path = rebuild_path i in
-              let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-              let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(path)  in
-              let aui = `DnD (ipath_strip src, ipath_strip dst) in
-              ["Forward", [dst], aui, (hd1, `Forward (tg1, tg2))]
-		)
+            ->
+      
+              let (hl, _) = prune_premisses f in
+
+              begin match form_find f1 hl with
+              | None -> raise E.Nothing
+              | Some i ->
+                  let path = rebuild_path i in
+                  let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
+                  let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(path)  in
+                  let aui = `DnD (ipath_strip src, ipath_strip dst) in
+                  ["Forward", [dst], aui, (hd1, `Forward (tg1, tg2))] end
+
          | `H (tg1, { h_form = f1; _ }), `C f2 ->
               let _, subf1 = prune_premisses f1 in
-	      if Form.equal subf1 f2 then
-		    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-		    let dst = mk_ipath (Handle.toint hd1) in
-		    let aui = `DnD (ipath_strip src, ipath_strip dst) in
 
-		    ["Elim", [dst], aui, (hd1, `Elim tg1)]
-	      else 
-		(let dld = flatten_disj f2 in
-		 let dlc = flatten_conj f2 in
-	       match form_find f1 dld, form_find f1 dlc  with
-		| Some i,_  ->
-		    let path = rebuild_pathd (List.length dld) i in
-		    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-		    let dst = mk_ipath (Handle.toint hd1) ~sub:(path) in
-		    let aui = `DnD (ipath_strip src, ipath_strip dst) in
+              if Form.equal subf1 f2 then
+                let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
+                let dst = mk_ipath (Handle.toint hd1) in
+                let aui = `DnD (ipath_strip src, ipath_strip dst) in
 
-		    ["DisjDrop",  [dst], aui, (hd1, `DisjDrop tg1 )]
-		| _, Some i ->
-		    let path = rebuild_pathd (List.length dlc) i in
-		    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-		    let dst = mk_ipath (Handle.toint hd1) ~sub:(path) in
-		    let aui = `DnD (ipath_strip src, ipath_strip dst) in
+                ["Elim", [dst], aui, (hd1, `Elim tg1)]
+              else 
+                let dld = flatten_disj f2 in
+                let dlc = flatten_conj f2 in
 
-		    ["ConjDrop",  [dst], aui, (hd1, `ConjDrop tg1 )]
+                begin match form_find f1 dld, form_find f1 dlc  with
+                | Some i, _  ->
+                    let path = rebuild_pathd (List.length dld) i in
+                    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
+                    let dst = mk_ipath (Handle.toint hd1) ~sub:(path) in
+                    let aui = `DnD (ipath_strip src, ipath_strip dst) in
 
-		| None, None -> raise E.Nothing
-)	   
-          | _ -> raise E.Nothing
+                    ["DisjDrop",  [dst], aui, (hd1, `DisjDrop tg1 )]
+
+                | _, Some i ->
+                    let path = rebuild_pathd (List.length dlc) i in
+                    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
+                    let dst = mk_ipath (Handle.toint hd1) ~sub:(path) in
+                    let aui = `DnD (ipath_strip src, ipath_strip dst) in
+
+                    ["ConjDrop",  [dst], aui, (hd1, `ConjDrop tg1 )]
+
+                | None, None -> raise E.Nothing end
+
+         | _ -> raise E.Nothing
   
         with E.Nothing -> [] in
 
@@ -685,9 +688,9 @@ end = struct
     | `Elim subhd ->
         elim subhd (proof, hd)
     | `DisjDrop subhd ->
-	disjDrop subhd (proof, hd)
+        disjDrop subhd (proof, hd)
     | `ConjDrop subhd ->
-	conjDrop subhd (proof, hd)	  
+        conjDrop subhd (proof, hd)    
     | `Forward (src, dst) ->
         forward (src, dst) (proof, hd)
 end
