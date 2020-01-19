@@ -180,6 +180,15 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
   (* Apply the action [action] (as returned by [actions]) *)
   method apply action =
     js_proof_engine (!! (uc CoreLogic.apply) (self##.proof, action))
+
+  (* Cut rule *)
+  method cut form handle =
+    let doit () =
+      let goal = Proof.byid self##.proof (Handle.ofint handle) in
+      let form = Io.parse_form (Io.from_string (Js.to_string form)) in
+      let form = Fo.Form.check goal.g_env form in
+      CoreLogic.cut form (self##.proof, Handle.ofint handle)
+    in js_proof_engine (!!doit ())
 end
 
 (* -------------------------------------------------------------------- *)

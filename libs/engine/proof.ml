@@ -243,6 +243,7 @@ module CoreLogic : sig
   type ipath  = { root : int; ctxt : int; sub : int list; }
   type gpath  = [`S of path | `P of ipath]
 
+  val cut       : Fo.form -> tactic
   val intro     : ?variant:int -> tactic
   val elim      : ?clear:bool -> Handle.t -> tactic
   val ivariants : targ -> string list
@@ -439,6 +440,19 @@ end = struct
 
     | _ -> raise TacticNotApplicable
 
+  type pnode += TCut of Fo.form * Handle.t
+
+  let cut (form : form) ((proof, hd) : targ) =
+    let goal = Proof.byid proof hd in
+
+    Fo.Form.recheck goal.g_env form;
+
+    let subs = [[], form] in
+    
+    Proof.sprogress proof hd (TCut (form, hd))
+      (subs @ [[None, [form]], goal.g_goal])
+
+
   type action = Handle.t * [
     | `Elim    of Handle.t
     | `Intro   of int
@@ -545,7 +559,6 @@ end = struct
     | `Click of ipath
     | `DnD   of ipath * ipath
   ]
-
 
   let rebuild_path i =
     let rec aux l = function
