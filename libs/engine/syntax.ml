@@ -10,6 +10,7 @@ type psymbol = symbol loced
 (* -------------------------------------------------------------------- *)
 type ptype_r =
   | PTUnit
+  | PTVar  of psymbol
   | PTSum  of ptype * ptype
   | PTProd of ptype * ptype
   | PTRec  of psymbol * ptype

@@ -79,6 +79,9 @@ type_r:
 | parens(empty)
     { PTUnit }
 
+| x=ident
+    { PTVar x }
+
 | t1=type_ PLUS t2=type_
     { PTSum (t1, t2) }
 

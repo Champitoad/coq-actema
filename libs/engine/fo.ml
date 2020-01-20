@@ -168,17 +168,18 @@ module VName : sig
     val push  : bds -> name -> name -> bds
   end
 end = struct
-  type bds = unit
+  type bds = (name * name) list
 
-  let equal =
-    assert false
+  let equal (_bds : bds) ((_x, _i) : vname) ((_y, _j) : vname) =
+    (* FIXME *)
+    false
 
   module Map = struct
-    let empty =
-      assert false
+    let empty : bds =
+      []
 
-    let push =
-      assert false
+    let push (bds : bds) (x : name) (y : name) =
+      (x, y) :: bds
   end
 end
 
@@ -334,6 +335,11 @@ end = struct
 
     | PTRec (x, t) ->
         TRec (unloc x, tcheck (TVars.push env (unloc x)) t)
+
+    | PTVar x ->
+        if not (TVars.exists env (unloc x, 0)) then
+          raise TypingError;
+        TVar (unloc x, 0)
 
   let rec echeck (env : env) (e : pexpr) =
     match unloc e with
