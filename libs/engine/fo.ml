@@ -618,9 +618,9 @@ end = struct
           let args = List.map for_expr args in
           let aout =
               [[Xml.pcdata (UTF8.of_latin1 name)]]
-            @ [[Xml.pcdata "("]]
-            @ (List.join [Xml.pcdata ", "] args)
-            @ [[Xml.pcdata ")"]]
+            @ [  [Xml.pcdata "("]
+               @ (List.flatten (List.join [Xml.pcdata ", "] args))
+               @ [Xml.pcdata ")"] ]
 
           in List.flatten (List.join [Xml.pcdata " "] aout)
 
@@ -670,9 +670,9 @@ end = struct
             let args = List.map for_expr args in
             let aout =
                 [[Xml.pcdata (UTF8.of_latin1 name)]]
-              @ [[Xml.pcdata "("]]
-              @ (List.join [Xml.pcdata ", "] args)
-              @ [[Xml.pcdata ")"]]
+              @ [  [Xml.pcdata "("]
+                 @ (List.flatten (List.join [Xml.pcdata ", "] args))
+                 @ [Xml.pcdata ")"] ]
 
             in List.flatten (List.join [Xml.pcdata " "] aout)
 

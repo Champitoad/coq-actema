@@ -61,7 +61,7 @@ end = struct
       match xs with
       | [] -> List.rev acc
       | x :: xs -> doit (x :: sep :: acc) xs
-    in fun xs -> doit [] xs
+    in function ([] | [_]) as xs -> xs | x :: xs -> doit [x] xs
 
   type 'a pivot = 'a list * 'a * 'a list
 
