@@ -33,6 +33,8 @@ module List : sig
   val fst : ('a * 'b) list -> 'a list
   val snd : ('a * 'b) list -> 'b list
 
+  val join : 'a -> 'a list -> 'a list
+
   type 'a pivot = 'a list * 'a * 'a list
 
   val of_option : 'a option -> 'a list
@@ -48,6 +50,13 @@ end = struct
 
   let fst xs = List.map fst xs
   let snd xs = List.map snd xs
+
+  let join (sep : 'a) =
+    let rec doit acc xs =
+      match xs with
+      | [] -> List.rev acc
+      | x :: xs -> doit (x :: sep :: acc) xs
+    in fun xs -> doit [] xs
 
   type 'a pivot = 'a list * 'a * 'a list
 

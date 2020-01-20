@@ -395,7 +395,14 @@ end = struct
     | FFalse        -> max_int
     | FPred  _      -> max_int
     | FConn (op, _) -> prio_of_op op
-    | _             -> assert false (* FIXME *)
+    | FBind _       -> min_int
+
+  and prio_of_type = function
+    | TUnit   -> max_int
+    | TVar  _ -> max_int
+    | TProd _ -> prio_And
+    | TOr   _ -> prio_Or
+    | TRec  _ -> min_int
 
   and prio_of_op = function
     | `Not   -> prio_Not
@@ -418,7 +425,47 @@ end = struct
       Format.sprintf "%s%s%s"
         (if left then " " else "") c (if right then " " else "") in
 
-    let rec for_form (form : form) =
+    let rec for_type (ty : type_) =
+      match ty with
+      | TUnit ->
+          "()"
+
+      | TVar (x, 0) ->
+          UTF8.of_latin1 x
+
+      | TVar (x, i) ->
+          Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i
+
+      | TProd (t1, t2) ->
+          let p1, t1 = prio_of_type t1, for_type t1 in
+          let p2, t2 = prio_of_type t2, for_type t2 in
+            (pr (p1 < prio_And) t1)
+          ^ (spaced (UTF8.of_char (UChar.of_char '*')))
+          ^ (pr (p2 <= prio_And) t2)
+
+      | TOr (t1, t2) ->
+          let p1, t1 = prio_of_type t1, for_type t1 in
+          let p2, t2 = prio_of_type t2, for_type t2 in
+            (pr (p1 < prio_Or) t1)
+          ^ (spaced (UTF8.of_char (UChar.of_char '+')))
+          ^ (pr (p2 <= prio_Or) t2)
+
+      | TRec (x, t) ->
+          Format.sprintf "rec %s . %s" (UTF8.of_latin1 x) (for_type t)
+
+    and for_expr (expr : expr) =
+      match expr with
+      | EVar (x, 0) ->
+          UTF8.of_latin1 x
+
+      | EVar (x, i) ->
+          Format.sprintf "%s{%d}" (UTF8.of_latin1 x) i
+
+      | EFun (f, args) ->
+          let args = String.concat ", " (List.map for_expr args) in
+          (UTF8.of_latin1 f) ^ (pr true args)
+
+    and for_form (form : form) =
       match form with
       | FTrue ->
           UTF8.of_char (UChar.chr 0x22A4)
@@ -456,9 +503,15 @@ end = struct
       | FPred (name, []) ->
           UTF8.of_latin1 name
 
+      | FPred (name, args) ->
+          let args = List.map for_expr args in
+          let args = String.join ", " args in
+          UTF8.of_latin1 name ^ (pr true args)
 
-      | _ ->
-          assert false          (* FIXME *)
+      | FBind (bd, x, ty, f) ->
+          let bd = match bd with `Forall -> "forall" | `Exist -> "exist" in
+          Format.sprintf "%s %s : %s . %s"
+            (UTF8.of_latin1 bd) (UTF8.of_latin1 x) (for_type ty) (for_form f)
 
     in fun (form : form) -> for_form form
 
@@ -473,7 +526,58 @@ end = struct
       let c = if right then c @ [Xml.pcdata " "] else c in
       c in
 
-    let rec for_form (p : int list) (form : form) =
+    let rec for_type (ty : type_) =
+      match ty with
+      | TUnit ->
+          [Xml.pcdata "()"]
+
+      | TVar (x, 0) ->
+          [Xml.pcdata (UTF8.of_latin1 x)]
+
+      | TVar (x, i) ->
+          [Xml.pcdata (Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i)]
+
+      | TProd (t1, t2) ->
+          let p1, t1 = prio_of_type t1, for_type t1 in
+          let p2, t2 = prio_of_type t2, for_type t2 in
+            (pr (p1 < prio_And) t1)
+          @ (spaced [Xml.pcdata (UTF8.of_char (UChar.of_char '*'))])
+          @ (pr (p2 <= prio_And) t2)
+
+      | TOr (t1, t2) ->
+          let p1, t1 = prio_of_type t1, for_type t1 in
+          let p2, t2 = prio_of_type t2, for_type t2 in
+            (pr (p1 < prio_And) t1)
+          @ (spaced [Xml.pcdata (UTF8.of_char (UChar.of_char '+'))])
+          @ (pr (p2 <= prio_And) t2)
+
+      | TRec (x, t) ->
+          let aout =
+              [[Xml.pcdata "rec"]]
+            @ [[Xml.pcdata (UTF8.of_latin1 x)]]
+            @ [[Xml.pcdata "."]]
+            @ [for_type t]
+          in List.flatten (List.join [Xml.pcdata " "] aout)
+
+    and for_expr (expr : expr) =
+      match expr with
+      | EVar (x, 0) ->
+          [Xml.pcdata (UTF8.of_latin1 x)]
+
+      | EVar (x, i) ->
+          [Xml.pcdata (Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i)]
+
+      | EFun (name, args) ->
+          let args = List.map for_expr args in
+          let aout =
+              [[Xml.pcdata (UTF8.of_latin1 name)]]
+            @ [[Xml.pcdata "("]]
+            @ (List.join [Xml.pcdata ", "] args)
+            @ [[Xml.pcdata ")"]]
+
+          in List.flatten (List.join [Xml.pcdata " "] aout)
+
+    and for_form (p : int list) (form : form) =
       let data =
         match form with
         | FTrue ->
@@ -515,8 +619,28 @@ end = struct
         | FPred (name, []) ->
             [Xml.pcdata (UTF8.of_latin1 name)]
 
-        | _ ->
-            assert false        (* FIXME *)
+        | FPred (name, args) ->
+            let args = List.map for_expr args in
+            let aout =
+                [[Xml.pcdata (UTF8.of_latin1 name)]]
+              @ [[Xml.pcdata "("]]
+              @ (List.join [Xml.pcdata ", "] args)
+              @ [[Xml.pcdata ")"]]
+
+            in List.flatten (List.join [Xml.pcdata " "] aout)
+
+        | FBind (bd, x, ty, f) ->
+            let bd = match bd with `Forall -> "forall" | `Exist -> "exist" in
+
+            let aout =
+                [[Xml.pcdata (UTF8.of_latin1 bd)]]
+              @ [[Xml.pcdata (UTF8.of_latin1 x)]]
+              @ [[Xml.pcdata ":"]]
+              @ [for_type ty]
+              @ [[Xml.pcdata "."]]
+              @ [for_form (0 :: p) f]
+ 
+            in List.flatten (List.join [Xml.pcdata " "] aout)
 
       in
 
