@@ -17,7 +17,7 @@
 %token PROOF
 
 %token LAND LOR LNEG PLUS STAR
-%token COLON COMMA DOT
+%token AMP DCOLON COLON COMMA DOT
 
 %nonassoc BINDING_prec
 %right    LARROW LRARROW
@@ -147,8 +147,31 @@ form:
 | f=loc(form_r) { f }
 
 (* -------------------------------------------------------------------- *)
+%inline arity:
+| tys=plist0(type_, AMP)
+    { tys }
+
+signature:
+| ar=arity LARROW ty=type_
+    { (ar, ty) }
+
+(* -------------------------------------------------------------------- *)
+entry:
+| x=ident
+    { PProp (x, []) }
+
+| x=ident DCOLON xty=arity
+    { PProp (x, xty) }
+
+| x=ident COLON xty=type_
+    { PVar (x, xty) }
+
+| x=ident COLON xty=signature
+    { PFun (x, xty) }
+
+(* -------------------------------------------------------------------- *)
 goal:
-| ps=plist0(ident, COMMA) PROOF f=form
+| ps=plist0(entry, COMMA) PROOF f=form
     { (ps, f) }
 
 (* -------------------------------------------------------------------- *)

@@ -42,8 +42,7 @@ type env = {
 
 (* -------------------------------------------------------------------- *)
 module Env : sig
-  val empty    : env
-  val of_pvars : (name, arity) Map.t -> env
+  val empty      : env
 end = struct
   let empty : env = {
     env_prp  = Map.empty;
@@ -51,9 +50,6 @@ end = struct
     env_var  = Map.empty;
     env_tvar = Map.empty;
   }
-
-  let of_pvars (pvars : (name, arity) Map.t) : env =
-    { empty with env_prp = pvars; }
 end
 
 (* -------------------------------------------------------------------- *)
@@ -144,6 +140,18 @@ end = struct
     env.env_tvar
 end
 
+(* -------------------------------------------------------------------- *)
+type entry =
+  | EPVar of (name * arity)
+  | ETFun of (name * sig_)
+  | ETVar of (name * type_)
+
+let env_of_entries (entries : entry list) =
+  List.fold_left (fun env entry ->
+    match entry with
+    | EPVar nmty -> Prps.push env nmty
+    | ETFun nmty -> Funs.push env nmty
+    | ETVar nmty -> Vars.push env nmty) Env.empty entries
 
 (* -------------------------------------------------------------------- *)
 exception RecheckFailure
@@ -183,6 +191,10 @@ module Form : sig
   val f_not   : form -> form
 
   val parity   : logcon -> int
+  val tcheck   : env -> ptype -> type_
+  val trecheck : env -> type_ -> unit
+  val echeck   : env -> pexpr -> expr * type_
+  val erecheck : env -> type_ -> expr -> unit
   val check    : env -> pform -> form
   val recheck  : env -> form -> unit
   val mathml   : ?tag:string -> form -> Tyxml.Xml.elt
@@ -601,7 +613,14 @@ module Goal : sig
 end = struct
   let check ((ps, f) : pgoal) =
     let env =
-      let pvars = List.map (fun x -> (unloc x, [])) ps in
-      Env.of_pvars (Map.of_enum (List.enum pvars)) in
+      let for_type ty = Form.tcheck Env.empty ty in
+      let for_entry = function
+        | PProp (name, ar) ->
+            EPVar (unloc name, List.map for_type ar)
+        | PFun (name, (ar, ty)) ->
+            ETFun (unloc name, (List.map for_type ar, for_type ty))
+        | PVar (name, ty) ->
+            ETVar (unloc name, for_type ty)
+      in env_of_entries (List.map for_entry ps) in
     (env, Form.check env f)
 end

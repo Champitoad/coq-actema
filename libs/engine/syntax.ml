@@ -41,4 +41,13 @@ type pform_r =
 and pform = pform_r loced
 
 (* -------------------------------------------------------------------- *)
-type pgoal = psymbol list * pform
+type parity     = ptype list
+type psignature = parity * ptype
+
+type pvar =
+  | PProp of psymbol * parity
+  | PFun  of psymbol * psignature
+  | PVar  of psymbol * ptype
+
+type pgoal = pvar list * pform
+

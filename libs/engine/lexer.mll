@@ -53,6 +53,8 @@ rule main = parse
   | ","   { COMMA   }
   | "."   { DOT     }
   | ":"   { COLON   }
+  | "::"  { DCOLON  }
+  | "&"   { AMP     }
   | "+"   { PLUS    }
   | "*"   { STAR    }
 
