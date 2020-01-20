@@ -298,7 +298,7 @@ end = struct
 
   let rec remove_form f = function
       | [] -> raise TacticNotApplicable
-      | g::l when Form.equal g f -> l
+      | g::l when Form.f_equal g f -> l
       | g::l -> g::(remove_form f l)
 
   let intro ?(variant = 0) ((pr, id) : targ) =
@@ -356,7 +356,7 @@ end = struct
     let pre, hy = prune_premisses hy in
     let subs = List.map (fun f -> [Some h, []], f) pre in
 
-    if Form.equal hy gl.g_goal then
+    if Form.f_equal hy gl.g_goal then
       Proof.sprogress pr id (TElim id) subs
     else
 
@@ -405,12 +405,12 @@ end = struct
     let dst = (Proof.Hyps.byid gl.g_hyps hdst).h_form in
 
     match dst with
-      | FConn (`Imp, [_; _]) as f0 ->
-          let (hf, cf) = prune_premisses f0 in
-          let nhf = remove_form src hf in
-          let nf = Form.f_imps nhf cf in
-            Proof.sprogress pr ~clear:true id (TForward (hsrc, hdst))
-              ([[Some hdst, [nf]], gl.g_goal])
+    | FConn (`Imp, [_; _]) as f0 ->
+        let (hf, cf) = prune_premisses f0 in
+        let nhf = remove_form src hf in
+        let nf  = Form.f_imps nhf cf in
+        Proof.sprogress pr ~clear:true id (TForward (hsrc, hdst))
+          ([[Some hdst, [nf]], gl.g_goal])
 
     | _ -> raise TacticNotApplicable
 
@@ -595,7 +595,7 @@ end = struct
       
               let (hl, _) = prune_premisses f in
 
-              begin match List.findex (Form.equal f1) hl with
+              begin match List.findex (Form.f_equal f1) hl with
               | None -> raise E.Nothing
               | Some i ->
                   let path = rebuild_path i in
@@ -607,7 +607,7 @@ end = struct
          | `H (tg1, { h_form = f1; _ }), `C f2 ->
               let _, subf1 = prune_premisses f1 in
 
-              if Form.equal subf1 f2 then
+              if Form.f_equal subf1 f2 then
                 let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
                 let dst = mk_ipath (Handle.toint hd1) in
                 let aui = `DnD (ipath_strip src, ipath_strip dst) in
@@ -617,7 +617,8 @@ end = struct
                 let dld = Form.flatten_disjunctions f2 in
                 let dlc = Form.flatten_conjunctions f2 in
 
-                begin match List.findex (Form.equal f1) dld, List.findex (Form.equal f1) dlc  with
+                begin match List.findex (Form.f_equal f1) dld,
+                            List.findex (Form.f_equal f1) dlc  with
                 | Some i, _  ->
                     let path = rebuild_pathd (List.length dld) i in
                     let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in

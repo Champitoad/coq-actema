@@ -30,6 +30,12 @@ let uc f (x, y) = f x y
 module List : sig
   include module type of BatList
 
+  val fst : ('a * 'b) list -> 'a list
+  val snd : ('a * 'b) list -> 'b list
+
+  val findex : ('a -> bool) -> 'a list -> int option
+  val join   : 'a -> 'a list -> 'a list
+
   type 'a pivot = 'a list * 'a * 'a list
 
   val of_option : 'a option -> 'a list
@@ -40,10 +46,22 @@ module List : sig
   exception TopoFailure
 
   val topo : ('a -> int) -> ('a -> int list) -> 'a list -> 'a list
-
-  val findex : ('a -> bool) -> 'a list -> int option
 end = struct
   include BatList
+
+  let fst xs = List.map fst xs
+  let snd xs = List.map snd xs
+
+  let findex (type a) (check : a -> bool) (xs : a list) : int option =
+    match Exceptionless.findi (fun _ x -> check x) xs with
+    | None -> None | Some (i, _) -> Some i
+
+  let join (sep : 'a) =
+    let rec doit acc xs =
+      match xs with
+      | [] -> List.rev acc
+      | x :: xs -> doit (x :: sep :: acc) xs
+    in fun xs -> doit [] xs
 
   type 'a pivot = 'a list * 'a * 'a list
 
@@ -93,9 +111,6 @@ end = struct
       let starts, todo =
         List.partition (fun x -> is_empty (deps x)) xs
       in aux starts [] todo false
-
-  let findex (check : 'a -> bool) (xs : 'a list) =
-    Option.map fst (Exceptionless.findi (fun _ x -> check x) xs)
 end
 
 (* -------------------------------------------------------------------- *)

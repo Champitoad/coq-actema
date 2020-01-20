@@ -16,6 +16,14 @@ let lexbuf_from_channel = fun name channel ->
     lexbuf
 
 (* -------------------------------------------------------------------- *)
+let parserfun_type =
+  MenhirLib.Convert.Simplified.traditional2revised P.xtype
+
+(* -------------------------------------------------------------------- *)
+let parserfun_expr =
+    MenhirLib.Convert.Simplified.traditional2revised P.xexpr
+
+(* -------------------------------------------------------------------- *)
 let parserfun_form =
     MenhirLib.Convert.Simplified.traditional2revised P.xform
 
@@ -59,6 +67,14 @@ let finalize (reader : reader) =
 let lexer (lexbuf : L.lexbuf) =
   let token = Lexer.main lexbuf in
   (token, L.lexeme_start_p lexbuf, L.lexeme_end_p lexbuf)
+
+(* -------------------------------------------------------------------- *)
+let parse_type (reader : reader) =
+  parserfun_type (fun () -> lexer (lexbuf reader))
+
+(* -------------------------------------------------------------------- *)
+let parse_expr (reader : reader) =
+  parserfun_expr (fun () -> lexer (lexbuf reader))
 
 (* -------------------------------------------------------------------- *)
 let parse_form (reader : reader) =

@@ -7,25 +7,49 @@
 
 %token LPAREN RPAREN
 %token TRUE
+%token EXISTS
 %token FALSE
+%token FORALL
+%token REC
 %token LARROW
 %token LRARROW
 %token EOF
 %token PROOF
 
-%token COMMA LAND LOR LNEG
+%token LAND LOR LNEG PLUS STAR
+%token AMP DCOLON COLON COMMA DOT
 
-%right LARROW LRARROW
-%left  LOR
-%left  LAND
-%left  LNEG
+%nonassoc BINDING_prec
+%right    LARROW LRARROW
+%nonassoc REC_prec
+%left     LOR  PLUS
+%left     LAND STAR
+%left     LNEG
 
+%type <Syntax.ptype> xtype
+%type <Syntax.pexpr> xexpr
 %type <Syntax.pform> xform
 %type <Syntax.pgoal> xgoal
 
+%start xtype
+%start xexpr
 %start xform
 %start xgoal
 %%
+
+(* -------------------------------------------------------------------- *)
+xtype:
+| error
+    { raise (ParseError (Some (Location.make $startpos $endpos), None)) }
+
+| t=type_ EOF { t }
+
+(* -------------------------------------------------------------------- *)
+xexpr:
+| error
+    { raise (ParseError (Some (Location.make $startpos $endpos), None)) }
+
+| e=expr EOF { e }
 
 (* -------------------------------------------------------------------- *)
 xform:
@@ -44,6 +68,46 @@ xgoal:
 (* -------------------------------------------------------------------- *)
 %inline ident: x=loc(IDENT) { x }
 
+tyident:
+| x=ident COLON ty=type_ { (x, ty) }
+
+(* -------------------------------------------------------------------- *)
+type_r:
+| t=parens(type_r)
+    { t }
+
+| parens(empty)
+    { PTUnit }
+
+| x=ident
+    { PTVar x }
+
+| t1=type_ PLUS t2=type_
+    { PTSum (t1, t2) }
+
+| t1=type_ STAR t2=type_
+    { PTProd (t1, t2) }
+
+| REC x=ident DOT t=type_ %prec REC_prec
+    { PTRec (x, t) }
+
+type_:
+| t=loc(type_r) { t }
+
+(* -------------------------------------------------------------------- *)
+expr_r:
+| e=parens(expr_r)
+    { e }
+
+| x=ident
+    { PEVar x }
+
+| f=ident args=parens(plist0(expr, COMMA))
+    { PEApp (f, args) }
+
+expr:
+| e=loc(expr_r) { e }
+
 (* -------------------------------------------------------------------- *)
 form_r:
 | f=parens(form_r)
@@ -56,7 +120,10 @@ form_r:
    { PFCst false }
 
 | x=ident
-    { PFVar x }
+    { PFApp (x, []) }
+
+| x=ident args=parens(plist1(expr, COMMA))
+    { PFApp (x, args) }
 
 | f1=form LAND f2=form
     { PFAnd (f1, f2) }
@@ -73,12 +140,41 @@ form_r:
 | LNEG f=form
     { PFNot f }
 
+| FORALL xty=tyident DOT f=form %prec BINDING_prec
+    { PFForall (xty, f) }
+
+| EXISTS xty=tyident DOT f=form %prec BINDING_prec
+    { PFExists (xty, f) }
+
 form:
 | f=loc(form_r) { f }
 
 (* -------------------------------------------------------------------- *)
+%inline arity:
+| tys=plist0(type_, AMP)
+    { tys }
+
+signature:
+| ar=arity LARROW ty=type_
+    { (ar, ty) }
+
+(* -------------------------------------------------------------------- *)
+entry:
+| x=ident
+    { PProp (x, []) }
+
+| x=ident DCOLON xty=arity
+    { PProp (x, xty) }
+
+| x=ident COLON xty=type_
+    { PVar (x, xty) }
+
+| x=ident COLON xty=signature
+    { PFun (x, xty) }
+
+(* -------------------------------------------------------------------- *)
 goal:
-| ps=plist0(ident, COMMA) PROOF f=form
+| ps=plist0(entry, COMMA) PROOF f=form
     { (ps, f) }
 
 (* -------------------------------------------------------------------- *)
@@ -88,6 +184,10 @@ goal:
       plloc  = Location.make $startpos $endpos;
     }
   }
+
+(* -------------------------------------------------------------------- *)
+%inline empty:
+| (* empty *) { () }
 
 (* -------------------------------------------------------------------- *)
 %inline parens(X):
