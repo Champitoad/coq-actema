@@ -197,7 +197,6 @@ module Form : sig
   val erecheck : env -> type_ -> expr -> unit
   val check    : env -> pform -> form
   val recheck  : env -> form -> unit
-  val mathml   : ?tag:string -> form -> Tyxml.Xml.elt
   val tostring : form -> string
   val tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
 
@@ -411,78 +410,6 @@ end = struct
   and prio_Imp   = 2
   and prio_Equiv = 1
 
-  let mathml =
-    let open Tyxml in
-
-    let mi ?(sherif = false) c =
-      let st = Xml.string_attrib "mathvariant" "sans-serif" in
-      let a  = if sherif then [st] else [] in
-      Xml.node ~a "mi" [c] in
-
-    let pr doit c =
-      let sc   = Xml.string_attrib "stretchy" "false" in
-      let mo c = Xml.node ~a:[sc] "mo" [Xml.pcdata c] in
-      if doit then [mo "("] @ c @ [mo ")"] else c in
-
-    let spaced c =
-      let a = Xml.string_attrib "width" "thickmathspace" in
-      let x = Xml.node ~a:[a] "mspace" [] in
-      [x] @ c @ [x] in
-
-    let rec for_form (form : form) =
-      match form with
-      | FTrue ->
-          [mi (Xml.entity "#x22A4")]
-
-      | FFalse ->
-          [mi (Xml.entity "#x22A5")]
-
-      | FConn (lg, fs) -> begin
-          let fs = List.map (fun x -> (prio_of_form x, for_form x)) fs in
-
-          match lg, fs with
-          | `And, [(p1, f1); (p2, f2)] ->
-                (pr (p1 < prio_And) f1)
-              @ [mi (Xml.entity "#x2227")]
-              @ (pr (p2 <= prio_And) f2)
-          | `Or , [(p1, f1); (p2, f2)] ->
-                (pr (p1 < prio_Or) f1)
-              @ [mi (Xml.entity "#x2228")]
-              @ (pr (p2 <= prio_Or) f2)
-          | `Imp, [(p1, f1); (p2, f2)] ->
-                (pr (p1 <= prio_Imp) f1)
-              @ (spaced [mi (Xml.entity "#x27F9")])
-              @ (pr (p2 < prio_Imp) f2)
-          | `Equiv, [(p1, f1); (p2, f2)] ->
-                (pr (p1 <= prio_Equiv) f1)
-              @ (spaced [mi (Xml.entity "#x27FA")])
-              @ (pr (p2 <= prio_Equiv) f2)
-          | `Not, [(p, f)] ->
-              [mi (Xml.entity "#x00AC")] @ (pr (p < prio_Not) f)
-          | (`And | `Or | `Imp | `Not | `Equiv), _ ->
-              assert false
-        end
-
-      | FPred (name, []) ->
-          [mi ~sherif:true (Xml.pcdata name)]
-
-      | _ ->
-          assert false          (* FIXME *)
-
-    in fun ?(tag : string option) (form : form) ->
-       let xmlns   = "http://www.w3.org/1998/Math/MathML" in
-       let xmlns   = Xml.string_attrib "xmlns" xmlns in
-       let display = Xml.string_attrib "display" "block" in
-       let tag     =
-         match tag with
-         | None     -> []
-         | Some tag -> [Xml.string_attrib "style" tag]
-       in
-       let output  = Xml.node "mstyle" (for_form form) in
-       let output  = Xml.node ~a:([xmlns; display] @ tag) "math" [output] in
-
-       output
-
   let tostring =
     let pr doit c =
       if doit then Format.sprintf "(%s)" c else c in
@@ -528,6 +455,7 @@ end = struct
 
       | FPred (name, []) ->
           UTF8.of_latin1 name
+
 
       | _ ->
           assert false          (* FIXME *)

@@ -286,17 +286,6 @@ end
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
 and js_form (source : source) (form : Fo.form) :> < > Js.t = object%js (self)
-  (* Return the [mathml] of the formula *)  
-  method mathml =
-    let tag =
-      match snd source with
-      | `H _ -> "hypothesis"
-      | `C   -> "conclusion"
-    in
-      Js.string
-        (Format.asprintf "%a" (Tyxml.Xml.pp ())
-        (Fo.Form.mathml ~tag:tag form))
-
   (* Return the [html] of the formula *)  
   method html =
     self##htmltag true
