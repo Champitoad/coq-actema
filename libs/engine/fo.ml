@@ -315,6 +315,35 @@ end = struct
     | FBind (_, x, xty, f) ->
         trecheck env xty; recheck (Vars.push env (x, xty)) f
 
+  let rec tcheck (env : env) (ty : ptype) =
+    match unloc ty with
+    | PTUnit          -> TUnit
+    | PTSum  (t1, t2) -> TOr   (tcheck env t1, tcheck env t2)
+    | PTProd (t1, t2) -> TProd (tcheck env t1, tcheck env t2)
+
+    | PTRec (x, t) ->
+        TRec (unloc x, tcheck (TVars.push env (unloc x)) t)
+
+  let rec echeck (env : env) (e : pexpr) =
+    match unloc e with
+    | PEVar x -> begin
+        match Vars.get env (unloc x, 0) with
+        | None     -> raise TypingError
+        | Some xty -> EVar (unloc x, 0), xty
+      end
+
+    | PEApp (f, args) -> begin
+        match Funs.get env (unloc f) with
+        | None -> raise TypingError
+        | Some (fargs, fres) ->
+            if List.length fargs <> List.length args then
+              raise TypingError;
+            let args = List.map (echeck env) args in
+            if not (List.for_all2 t_equal fargs (List.snd args)) then
+              raise TypingError;
+            EFun (unloc f, List.fst args), fres
+      end
+
   let rec check (env : env) (form : pform) =
     let pred name fs = FConn (name, List.map (check env) fs) in
 
@@ -328,12 +357,27 @@ end = struct
     | PFEquiv (f1, f2) -> pred `Equiv [f1; f2]
     | PFNot   f1       -> pred `Not   [f1]
 
-    | PFApp (name, _) ->
-        if not (Prps.exists env (unloc name)) then
-          raise TypingError;
-        FPred (unloc name, [])
+    | PFApp (name, args) -> begin
+        match Prps.get env (unloc name) with
+        | None    -> raise TypingError
+        | Some ar ->
+            if List.length args <> List.length ar then
+              raise TypingError;
+            let args = List.map (echeck env) args in
+            if not (List.for_all2 t_equal ar (List.snd args)) then
+              raise TypingError;
+            FPred (unloc name, List.fst args)
+      end
 
-    | PFForall _ | PFExists _ -> assert false
+    | PFForall ((x, xty), f) ->
+        let xty = tcheck env xty in
+        let f   = check (Vars.push env (unloc x, xty)) f in
+        FBind (`Forall, unloc x, xty, f)
+
+    | PFExists ((x, xty), f) ->
+        let xty = tcheck env xty in
+        let f   = check (Vars.push env (unloc x, xty)) f in
+        FBind (`Exist, unloc x, xty, f)
 
   let rec prio_of_form = function
     | FTrue         -> max_int
