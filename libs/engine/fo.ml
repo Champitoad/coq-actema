@@ -8,12 +8,12 @@ type name  = string
 type vname = name * int
 
 (* -------------------------------------------------------------------- *)
-type typ =
+type type_ =
   | TVar  of vname
   | TUnit
-  | TProd of typ * typ
-  | TOr   of typ * typ
-  | TRec  of name * typ
+  | TProd of type_ * type_
+  | TOr   of type_ * type_
+  | TRec  of name * type_
 
 type expr  =
   | EVar of vname
@@ -24,49 +24,126 @@ type form =
   | FFalse
   | FPred of name * expr list
   | FConn of logcon * form list
-  | FBind of bkind * name * typ * form
+  | FBind of bkind * name * type_ * form
 
 and logcon = [ `And | `Or | `Imp | `Equiv | `Not ]
 and bkind  = [ `Forall | `Exist ]
 
-type tysig = typ list
+type arity = type_ list
+ and sig_  = arity * type_
 
 (* -------------------------------------------------------------------- *)
 type env = {
-  env_prp : (name, tysig) Map.t;
+  env_prp  : (name, arity     ) Map.t;
+  env_fun  : (name, sig_      ) Map.t;
+  env_var  : (name, type_ list) Map.t;
+  env_tvar : (name, int       ) Map.t;
 }
 
 (* -------------------------------------------------------------------- *)
 module Env : sig
   val empty    : env
-  val of_pvars : (name, tysig) Map.t -> env
+  val of_pvars : (name, arity) Map.t -> env
 end = struct
-  let empty : env = { env_prp = Map.empty; }
+  let empty : env = {
+    env_prp  = Map.empty;
+    env_fun  = Map.empty;
+    env_var  = Map.empty;
+    env_tvar = Map.empty;
+  }
 
-  let of_pvars (pvars : (name, tysig) Map.t) : env =
-    { env_prp = pvars; }
+  let of_pvars (pvars : (name, arity) Map.t) : env =
+    { empty with env_prp = pvars; }
 end
 
 (* -------------------------------------------------------------------- *)
-exception DuplicatedEntry of [`Prp] * name
+exception DuplicatedEntry of [`Prp | `Fun] * name
 
 (* -------------------------------------------------------------------- *)
 module Prps : sig
-  val push   : env -> name * tysig -> env
+  val push   : env -> name * arity -> env
   val exists : env -> name -> bool
-  val all    : env -> (name, tysig) Map.t
+  val get    : env -> name -> arity option
+  val all    : env -> (name, arity) Map.t
 end = struct
-  let push (env : env) ((name, sg) : name * tysig) =
+  let push (env : env) ((name, sg) : name * arity) =
     if Map.mem name env.env_prp then
       raise (DuplicatedEntry (`Prp, name));
-    { env_prp = Map.add name sg env.env_prp }
+    { env with env_prp = Map.add name sg env.env_prp }
+
+  let get (env : env) (name : name) =
+    Map.Exceptionless.find name env.env_prp
 
   let exists (env : env) (name : name) =
-    Map.mem name env.env_prp
+    Option.is_some (get env name)
 
   let all (env : env) =
     env.env_prp
 end
+
+(* -------------------------------------------------------------------- *)
+module Funs : sig
+  val push   : env -> name * sig_ -> env
+  val exists : env -> name -> bool
+  val get    : env -> name -> sig_ option
+  val all    : env -> (name, sig_) Map.t
+end = struct
+  let push (env : env) ((name, sg) : name * sig_) =
+    if Map.mem name env.env_prp then
+      raise (DuplicatedEntry (`Fun, name));
+    { env with env_fun = Map.add name sg env.env_fun }
+
+  let get (env : env) (name : name) =
+    Map.Exceptionless.find name env.env_fun
+
+  let exists (env : env) (name : name) =
+    Option.is_some (get env name)
+
+  let all (env : env) =
+    env.env_fun
+end
+
+(* -------------------------------------------------------------------- *)
+module Vars : sig
+  val push   : env -> name * type_ -> env
+  val exists : env -> vname -> bool
+  val get    : env -> vname -> type_ option
+  val all    : env -> (name, type_ list) Map.t
+end = struct
+  let push (env : env) ((name, ty) : name * type_) =
+    { env with env_var = Map.modify_opt name (fun bds ->
+          Some (ty :: Option.default [] bds)
+        ) env.env_var; }
+
+  let get (env : env) ((name, idx) : vname) =
+    let bds = Map.find_default [] name env.env_var in
+    List.nth_opt bds idx
+
+  let exists (env : env) (vname : vname) =
+    Option.is_some (get env vname)
+
+  let all (env : env) =
+    env.env_var
+end
+
+(* -------------------------------------------------------------------- *)
+module TVars : sig
+  val push   : env -> name -> env
+  val exists : env -> vname -> bool
+  val all    : env -> (name, int) Map.t
+end = struct
+  let push (env : env) (name : name) =
+    { env with env_tvar =
+        Map.modify_opt name
+          (fun i -> Some (Option.default 0 i + 1)) env.env_tvar; }
+
+  let exists (env : env) ((name, idx) : vname) =
+    Map.find_default 0 name env.env_tvar > idx
+
+  let all (env : env) =
+    env.env_tvar
+end
+
 
 (* -------------------------------------------------------------------- *)
 exception RecheckFailure
@@ -112,9 +189,9 @@ module Form : sig
   val tostring : form -> string
   val tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
 
-  val t_equal : ?bds:VName.bds -> typ  -> typ  -> bool
-  val e_equal : ?bds:VName.bds -> expr -> expr -> bool
-  val f_equal : ?bds:VName.bds -> form -> form -> bool
+  val t_equal : ?bds:VName.bds -> type_ -> type_ -> bool
+  val e_equal : ?bds:VName.bds -> expr  -> expr  -> bool
+  val f_equal : ?bds:VName.bds -> form  -> form  -> bool
 end = struct
   let f_and   = fun f1 f2 -> FConn (`And  , [f1; f2])
   let f_or    = fun f1 f2 -> FConn (`Or   , [f1; f2])
@@ -123,7 +200,6 @@ end = struct
   let f_not   = fun f     -> FConn (`Not  , [f])
 
   let t_equal =
-    (* FIXME: use generated walkers *)
     let rec aux bds ty1 ty2 =
       match ty1, ty2 with
       | TVar a1, TVar a2 ->
@@ -189,21 +265,55 @@ end = struct
     match lg with
     | `And -> 2 | `Or -> 2 | `Imp -> 2 | `Equiv -> 2 | `Not -> 1
 
+  (* FIXME *)
+  let rec trecheck (env : env) (ty : type_) : unit =
+    match ty with
+    | TVar x ->
+        if not (TVars.exists env x) then
+          raise RecheckFailure
+
+    | TUnit ->
+        ()
+
+    | TProd (ty1, ty2)
+    | TOr   (ty1, ty2) ->
+        List.iter (trecheck env) [ty1; ty2]
+
+    | TRec (x, ty) ->
+        trecheck (TVars.push env x) ty
+
+  let rec erecheck (env : env) (ty : type_) (expr : expr) : unit =
+    match expr with
+    | EVar x ->
+        let xty = Option.get_exn (Vars.get env x) RecheckFailure in
+        if not (t_equal ty xty) then raise RecheckFailure
+
+    | EFun (f, args) ->
+        let sig_, res = Option.get_exn (Funs.get env f) RecheckFailure in
+        if not (t_equal ty res) then
+          raise RecheckFailure;
+        if List.length sig_ <> List.length args then
+          raise RecheckFailure;
+        List.iter2 (erecheck env) sig_ args
+
   let rec recheck (env : env) (form : form) : unit =
     match form with
     | FTrue | FFalse -> ()
 
-    | FPred (name, []) ->
-        if not (Prps.exists env name) then
-          raise RecheckFailure
+    | FPred (name, args) -> begin
+        let sig_ = Option.get_exn (Prps.get env name) RecheckFailure in
+        if List.length sig_ <> List.length args then
+          raise RecheckFailure;
+        List.iter2 (erecheck env) sig_ args
+      end
 
     | FConn (lg, forms) ->
-        List.iter (recheck env) forms;
         if List.length forms <> parity lg then
-          raise RecheckFailure
+          raise RecheckFailure;
+        List.iter (recheck env) forms
 
-    | _ ->
-        raise RecheckFailure    (* FIXME *)
+    | FBind (_, x, xty, f) ->
+        trecheck env xty; recheck (Vars.push env (x, xty)) f
 
   let rec check (env : env) (form : pform) =
     let pred name fs = FConn (name, List.map (check env) fs) in
@@ -218,7 +328,7 @@ end = struct
     | PFEquiv (f1, f2) -> pred `Equiv [f1; f2]
     | PFNot   f1       -> pred `Not   [f1]
 
-    | PFVar name ->
+    | PFApp (name, _) ->
         if not (Prps.exists env (unloc name)) then
           raise TypingError;
         FPred (unloc name, [])

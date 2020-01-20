@@ -19,6 +19,7 @@
 %token LAND LOR LNEG PLUS STAR
 %token COLON COMMA DOT
 
+%nonassoc BINDING_prec
 %right    LARROW LRARROW
 %nonassoc REC_prec
 %left     LOR  PLUS
@@ -116,7 +117,10 @@ form_r:
    { PFCst false }
 
 | x=ident
-    { PFVar x }
+    { PFApp (x, []) }
+
+| x=ident args=parens(plist1(expr, COMMA))
+    { PFApp (x, args) }
 
 | f1=form LAND f2=form
     { PFAnd (f1, f2) }
@@ -133,10 +137,10 @@ form_r:
 | LNEG f=form
     { PFNot f }
 
-| FORALL xty=tyident DOT f=form
+| FORALL xty=tyident DOT f=form %prec BINDING_prec
     { PFForall (xty, f) }
 
-| EXISTS xty=tyident DOT f=form
+| EXISTS xty=tyident DOT f=form %prec BINDING_prec
     { PFExists (xty, f) }
 
 form:
