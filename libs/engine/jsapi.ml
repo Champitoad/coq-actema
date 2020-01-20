@@ -180,15 +180,6 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
   (* Apply the action [action] (as returned by [actions]) *)
   method apply action =
     js_proof_engine (!! (uc CoreLogic.apply) (self##.proof, action))
-
-  (* Cut rule *)
-  method cut form handle =
-    let doit () =
-      let goal = Proof.byid self##.proof (Handle.ofint handle) in
-      let form = Io.parse_form (Io.from_string (Js.to_string form)) in
-      let form = Fo.Form.check goal.g_env form in
-      CoreLogic.cut form (self##.proof, Handle.ofint handle)
-    in js_proof_engine (!!doit ())
 end
 
 (* -------------------------------------------------------------------- *)
@@ -252,6 +243,16 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
     let aout = !!CoreLogic.ivariants (parent##.proof, handle) in
     let aout = Array.of_list (List.map Js.string aout) in
     Js.array aout
+
+  (* [this#cut (form : string)] parses [form] in the goal [context] and
+   * cut it. *)
+  method cut form =
+    let doit () =
+      let goal = Proof.byid parent##.proof self##.handle in
+      let form = Io.parse_form (Io.from_string (Js.to_string form)) in
+      let form = Fo.Form.check goal.g_env form in
+      CoreLogic.cut form (parent##.proof, self##.handle)
+    in js_proof_engine (!!doit ())
 
   method getmeta =
     Js.Opt.option (Proof.get_meta parent##.proof self##.handle)
