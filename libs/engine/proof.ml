@@ -296,6 +296,13 @@ end = struct
       | f -> (List.rev acc, f)
     in fun f -> doit [] f
 
+  let prune_premisses_fa =
+    let rec doit i acc = function
+      | FConn (`Imp, [f1; f2]) -> doit i ( (f1, i) :: acc) f2
+      | FBind (`Forall,  x, ty, f) -> doit (i+1) (acc) f 
+      | f -> (List.rev acc, f, i)
+    in fun f -> doit 0 [] f
+
   let rec remove_form f = function
       | [] -> raise TacticNotApplicable
       | g::l when Form.f_equal g f -> l
@@ -309,6 +316,7 @@ end = struct
     | 0, FConn (`Imp, [f1; f2]) ->
         Proof.sprogress pr id TIntro
           [[None, [f1]], f2]
+
 
     | 0, FConn (`Equiv, [f1; f2]) ->
         Proof.progress pr id TIntro
@@ -326,6 +334,9 @@ end = struct
 
     | 0, FTrue ->
         Proof.progress pr id TIntro []
+
+    | 0, FBind (`Forall, x, xty, f) ->
+	Proof.progress pr id TIntro [f]
 
     | _ -> raise TacticNotApplicable
 
@@ -349,19 +360,43 @@ end = struct
 
   type pnode += TElim of Handle.t
 
+  let rec n_first i = 
+    if i = 0 then [] else (i - 1)::(n_first (i - 1))
+
+  let rec
+    tln n l =
+    if n <= 0 then l else tln (n - 1) (List.tl l)
+      
+  let rec stos = function
+    | [] -> ""
+    | (i,e)::l -> let EVar(n, _) = e in  (string_of_int i)^n^(stos l)
+
+
   let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     let gl = Proof.byid pr id in
     let hy = (Proof.Hyps.byid gl.g_hyps h).h_form in
 
-    let pre, hy = prune_premisses hy in
-    let subs = List.map (fun f -> [Some h, []], f) pre in
-
-    if Form.f_equal hy gl.g_goal then
-      Proof.sprogress pr id (TElim id) subs
+    if Form.f_equal hy gl.g_goal
+    then  Proof.progress pr id (TElim id) [] 
     else
+      let pre, hy, i = prune_premisses_fa hy in
+      let subs = List.map (fun (f, _) -> [Some h, []], f) pre in
+      
+      match Form.f_matchl i [] (n_first i) [(hy, gl.g_goal)] with
+	| Some (s, []) ->  
 
-    match hy with
-    | FConn (`And, [f1; f2]) ->
+	    let sso = List.sort (fun (x,_)(y,_) -> if x < y then -1 else 1) s in
+	    let ar = List.length sso in
+	    let subs = List.map
+			 (fun (f, i) ->
+			    let subst_i = tln (ar - i - 1) sso in
+			    [Some h, []], (Form.iter_subst subst_i f))
+			 pre in
+	    Proof.sprogress pr id (TElim id) subs
+	| Some (_,_) -> failwith "incomplete match"
+	| _ ->
+	 ( match hy with
+	    | FConn (`And, [f1; f2]) ->
         Proof.sprogress pr ?clear id (TElim id)
           (subs @ [[Some h, [f1; f2]], gl.g_goal])
 
@@ -385,7 +420,7 @@ end = struct
         Proof.sprogress pr ?clear id (TElim id)
           (subs @ [[Some h, []], gl.g_goal])
 
-    | _ -> raise TacticNotApplicable
+    | _ -> raise TacticNotApplicable)
 
   let ivariants ((pr, id) : targ) =
     match (Proof.byid pr id).g_goal with
@@ -394,6 +429,7 @@ end = struct
     | FConn (`Imp  , _) -> ["Imp-intro"]
     | FConn (`Equiv, _) -> ["Equiv-intro"]
     | FConn (`Not  , _) -> ["Not-intro"]
+    | FBind (`Forall, _, _, _) -> ["FA-intro"] 
 
     | _ -> []
 
