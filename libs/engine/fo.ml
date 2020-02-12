@@ -279,7 +279,7 @@ end = struct
 	if j >= i then EVar(y, j+1) else EVar(y, j)
       | (EVar (_,_)) as e -> e
       | EFun (f1, l) -> EFun(f1, List.map (e_lift x i) l)
-
+ 
   let rec f_lift x i = function
     | FConn(c, l) -> FConn(c, List.map (f_lift x i) l)
     | FPred(p, l) -> FPred(p, List.map (e_lift x i) l)
@@ -287,7 +287,7 @@ end = struct
 	if y<>x
 	then FBind(b, y, ty, f_lift x i f)
 	else FBind(b, y, ty, f_lift x (i+1) f)
-	 
+    | FTrue | FFalse as f -> f	 
 	  
   let rec e_subst t x i e =
     match t with
@@ -402,11 +402,12 @@ end = struct
     | (FBind (b1, x1, ty1, f1), FBind(b2, x2, ty2, f2))::l
 	when b1 = b2 && ty1 = ty2 ->
 	(* the following seems correct even when x1=x2 *)
-	match f_matchl ((x1, Srigid)::s) [(f1,f_subst (f_lift x1 0 f2) x2 0 (EVar(x1,0)))] with
-	  | Some (_::s') -> f_matchl s' l
-	  | None -> None
-	  | _ -> failwith "f_matchl bind"
-
+	(match f_matchl ((x1, Srigid)::s) [(f1,f_subst (f_lift x1 0 f2) x2 0 (EVar(x1,0)))] with
+	   | Some (_::s') -> f_matchl s' l
+	   | None -> None
+	   | _ -> failwith "f_matchl bind"
+	)
+    | _::_ -> None
 	
 	
 (* first version of unification : *)
