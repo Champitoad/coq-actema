@@ -26,6 +26,7 @@ end = struct
 end
 
 (* -------------------------------------------------------------------- *)
+
 type pnode = ..
 
 exception InvalidGoalId    of Handle.t
@@ -297,11 +298,11 @@ end = struct
     in fun f -> doit [] f
 
   let prune_premisses_fa =
-    let rec doit i acc = function
-      | FConn (`Imp, [f1; f2]) -> doit i ( (f1, i) :: acc) f2
-      | FBind (`Forall,  x, ty, f) -> doit (i+1) (acc) f 
-      | f -> (List.rev acc, f, i)
-    in fun f -> doit 0 [] f
+    let rec doit i acc s = function
+      | FConn (`Imp, [f1; f2]) -> doit i ( (i, f1) :: acc) s f2
+      | FBind (`Forall,  x, _ , f) -> doit (i+1) acc ((x,Sflex)::s) f 
+      | f -> (List.rev acc, f, s)
+    in fun f -> doit 0 [] [] f
 
   let rec remove_form f = function
       | [] -> raise TacticNotApplicable
@@ -360,18 +361,6 @@ end = struct
 
   type pnode += TElim of Handle.t
 
-  let rec n_first i = 
-    if i = 0 then [] else (i - 1)::(n_first (i - 1))
-
-  let rec
-    tln n l =
-    if n <= 0 then l else tln (n - 1) (List.tl l)
-      
-  let rec stos = function
-    | [] -> ""
-    | (i,e)::l -> let EVar(n, _) = e in  (string_of_int i)^n^(stos l)
-
-
   let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     let gl = Proof.byid pr id in
     let hy = (Proof.Hyps.byid gl.g_hyps h).h_form in
@@ -379,21 +368,19 @@ end = struct
     if Form.f_equal hy gl.g_goal
     then  Proof.progress pr id (TElim id) [] 
     else
-      let pre, hy, i = prune_premisses_fa hy in
-      let subs = List.map (fun (f, _) -> [Some h, []], f) pre in
-      
-      match Form.f_matchl i [] (n_first i) [(hy, gl.g_goal)] with
-	| Some (s, []) ->  
+      let pre, hy, s = prune_premisses_fa hy in
 
-	    let sso = List.sort (fun (x,_)(y,_) -> if x < y then -1 else 1) s in
-	    let ar = List.length sso in
-	    let subs = List.map
-			 (fun (f, i) ->
-			    let subst_i = tln (ar - i - 1) sso in
-			    [Some h, []], (Form.iter_subst subst_i f))
-			 pre in
-	    Proof.sprogress pr id (TElim id) subs
-	| Some (_,_) -> failwith "incomplete match"
+
+      let subs = List.map (fun (_, f) -> [Some h, []], f) pre in
+      
+      match Form.f_matchl s [(hy, gl.g_goal)] with
+	| Some s when Form.s_complete s ->  
+	    let pres = List.map 
+			 (fun x -> [Some h, []], (Form.iter_subst s x))
+			 pre
+	      in 	    Proof.sprogress pr id (TElim id) pres
+			      
+	| Some _ -> failwith "incomplete match"
 	| _ ->
 	 ( match hy with
 	    | FConn (`And, [f1; f2]) ->
