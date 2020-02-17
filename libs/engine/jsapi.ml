@@ -314,8 +314,11 @@ object%js (self)
   (* the handle position in its context *)
   val position = i
 
-  (* the hypothesis as a [js_form] *)
-  val form = js_type ty
+  (* the local variable name *)
+  val name = Js.string x
+
+  (* the local variable type as a [js_type] *)
+  val type_ = js_type ty
 
   (* The enclosing proof engine *)
   val proof = parent##.parent
