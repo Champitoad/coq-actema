@@ -204,8 +204,15 @@ module Form : sig
   val erecheck : env -> type_ -> expr -> unit
   val check    : env -> pform -> form
   val recheck  : env -> form -> unit
-  val tostring : form -> string
-  val tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
+
+  val t_tostring : type_ -> string
+  val t_tohtml   : type_ -> Tyxml.Xml.elt
+
+  val e_tostring : expr -> string
+  val e_tohtml   : expr -> Tyxml.Xml.elt
+
+  val f_tostring : form -> string
+  val f_tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
 
   val t_equal : ?bds:VName.bds -> type_ -> type_ -> bool
   val e_equal : ?bds:VName.bds -> expr  -> expr  -> bool
@@ -464,7 +471,7 @@ end = struct
   and prio_Imp   = 2
   and prio_Equiv = 1
 
-  let tostring =
+  let f_tostring, e_tostring, t_tostring =
     let pr doit c =
       if doit then Format.sprintf "(%s)" c else c in
 
@@ -560,9 +567,11 @@ end = struct
           Format.sprintf "%s %s : %s . %s"
             (UTF8.of_latin1 bd) (UTF8.of_latin1 x) (for_type ty) (for_form f)
 
-    in fun (form : form) -> for_form form
+    in ((fun (form : form ) -> for_form form ),
+        (fun (expr : expr ) -> for_expr expr ),
+        (fun (ty   : type_) -> for_type ty   ))
 
-  let tohtml ?(id : string option option) =
+  let f_tohtml, e_tohtml, t_tohtml =
     let open Tyxml in
 
     let pr doit c =
@@ -624,7 +633,9 @@ end = struct
 
           in List.flatten (List.join [Xml.pcdata " "] aout)
 
-    and for_form (p : int list) (form : form) =
+    and for_form ?(id : string option option) (p : int list) (form : form) =
+      let for_form = for_form ?id in
+
       let data =
         match form with
         | FTrue ->
@@ -701,8 +712,9 @@ end = struct
 
       [Xml.node ~a:(List.of_option thisid) "span" data] in
 
-    fun (form : form) ->
-      Xml.node "span" (for_form [] form)
+    ((fun ?id (form : form ) -> Xml.node "span" (for_form ?id [] form)),
+     (fun     (expr : expr ) -> Xml.node "span" (for_expr expr)),
+     (fun     (ty   : type_) -> Xml.node "span" (for_type ty)))
 
 end
 
