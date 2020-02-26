@@ -304,6 +304,13 @@ end = struct
       | f -> (List.rev acc, f, s)
     in fun f -> doit 0 [] [] f
 
+  let prune_premisses_ex =
+    let rec doit i acc s = function
+      | FBind (`Exist, x, _, f) -> doit (i+1) acc ((x, Sflex)::s) f
+      | f -> (List.rev acc, f, s)
+    in fun f -> doit 0 [] [] f
+
+	
   let rec remove_form f = function
       | [] -> raise TacticNotApplicable
       | g::l when Form.f_equal g f -> l
@@ -368,10 +375,11 @@ end = struct
     if Form.f_equal hy gl.g_goal
     then  Proof.progress pr id (TElim id) [] 
     else
-      let pre, hy, s = prune_premisses_fa hy in
+
+    try
+(      let pre, hy, s = prune_premisses_fa hy in
 
 
-      let subs = List.map (fun (_, f) -> [Some h, []], f) pre in
       
       match Form.f_matchl s [(hy, gl.g_goal)] with
 	| Some s when Form.s_complete s ->  
@@ -382,33 +390,64 @@ end = struct
 			      
 	| Some _ -> failwith "incomplete match"
 	| _ ->
-	 ( match hy with
-	    | FConn (`And, [f1; f2]) ->
-        Proof.sprogress pr ?clear id (TElim id)
-          (subs @ [[Some h, [f1; f2]], gl.g_goal])
+	      let subs = List.map (fun (_, f) -> [Some h, []], f) pre in
+	      ( match hy with
+		  | FConn (`And, [f1; f2]) ->
+		      Proof.sprogress pr ?clear id (TElim id)
+			(subs @ [[Some h, [f1; f2]], gl.g_goal])
+			
+		  | FConn (`Or, [f1; f2]) ->
+		      Proof.sprogress pr ?clear id (TElim id)
+			(subs @ [[Some h, [f1]], gl.g_goal;
+				 [Some h, [f2]], gl.g_goal])
 
-    | FConn (`Or, [f1; f2]) ->
-        Proof.sprogress pr ?clear id (TElim id)
-          (subs @ [[Some h, [f1]], gl.g_goal;
-                   [Some h, [f2]], gl.g_goal])
+		  | FConn (`Equiv, [f1; f2]) ->
+		      Proof.sprogress pr ?clear id (TElim id)
+			(subs @ [[Some h, [Form.f_imp f1 f2; Form.f_imp f2 f1]], gl.g_goal])
 
-    | FConn (`Equiv, [f1; f2]) ->
-        Proof.sprogress pr ?clear id (TElim id)
-          (subs @ [[Some h, [Form.f_imp f1 f2; Form.f_imp f2 f1]], gl.g_goal])
+		  | FConn (`Not, [f]) ->
+		      Proof.sprogress pr ?clear id (TElim id)
+			(subs @ [[Some h, []], f])
+			
+		  | FFalse ->
+		      Proof.sprogress pr ?clear id (TElim id) subs
+			
+		  | FTrue ->
+		      Proof.sprogress pr ?clear id (TElim id)
+			(subs @ [[Some h, []], gl.g_goal])
 
-    | FConn (`Not, [f]) ->
-        Proof.sprogress pr ?clear id (TElim id)
-          (subs @ [[Some h, []], f])
+		  | _ -> raise TacticNotApplicable)
+)
+      with
+	| TacticNotApplicable ->
+      let _ , goal, s = prune_premisses_ex gl.g_goal in
+      match Form.f_matchl s [(goal, hy)] with
+	| Some s when Form.s_complete s ->
+	    Proof.sprogress pr id (TElim id) []
+	| Some _ -> failwith "incomplete ex match"
+	| None ->
+	    match goal with
+	      | FConn (`Or , _) ->
+		  let gll = Form.flatten_disjunctions goal in
+		  let rec aux = function
+		    | [] -> false
+		    | g::l ->
+			(  match Form.f_matchl s [(g, hy)] with
+			     | Some s when Form.s_complete s -> true
+			     | _ -> aux l
+			)
+		  in 
+		  if aux gll 
+		  then Proof.sprogress pr id (TElim id) []
+		  else raise TacticNotApplicable
+	      | _ -> raise TacticNotApplicable
 
-    | FFalse ->
-        Proof.sprogress pr ?clear id (TElim id) subs
 
-    | FTrue ->
-        Proof.sprogress pr ?clear id (TElim id)
-          (subs @ [[Some h, []], gl.g_goal])
 
-    | _ -> raise TacticNotApplicable)
 
+      
+
+	    
   let ivariants ((pr, id) : targ) =
     match (Proof.byid pr id).g_goal with
     | FConn (`And  , _) -> ["And-intro"]
