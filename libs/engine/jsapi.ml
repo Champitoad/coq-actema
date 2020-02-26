@@ -197,6 +197,14 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
     let vars = List.fst (Map.bindings (Fo.Prps.all goal.g_env)) in
     Js.array (Array.of_list (List.map Js.string vars))
 
+  (* Return all the local variables as a [js_tvar array] *)
+  method tvars =
+    let goal  = Proof.byid parent##.proof self##.handle in
+    let tvars = Map.bindings (Fo.Vars.all goal.g_env) in
+    let tvars = List.map (snd_map List.hd) tvars in
+
+    Js.array (Array.of_list (List.mapi (fun i xty -> js_tvar self (i, xty)) tvars))
+
   (* Return all the local hypotheses (context) as a [js_hyps array] *)
   method context =
     let goal = Proof.byid parent##.proof self##.handle in
@@ -294,6 +302,35 @@ object%js (self)
 end
 
 (* -------------------------------------------------------------------- *)
+(* JS Wrapper for a local variable                                      *)
+and js_tvar parent (i, (x, ty) : int * (Fo.name * Fo.type_)) =
+object%js (self)
+  (* back-link to the [js_subgoal] this local variable belongs to *)
+  val parent = parent
+
+  (* the handle (UID) of the hypothesis *)
+  val handle = Handle.ofint (-(Hashtbl.hash x)) (* FIXME *)
+
+  (* the handle position in its context *)
+  val position = i
+
+  (* the local variable name *)
+  val name = Js.string x
+
+  (* the local variable type as a [js_type] *)
+  val type_ = js_type ty
+
+  (* The enclosing proof engine *)
+  val proof = parent##.parent
+
+  method getmeta =
+    Js.Opt.option (Proof.get_meta self##.proof##.proof self##.handle)
+
+  method setmeta meta =
+    Proof.set_meta self##.proof##.proof self##.handle (Js.Opt.to_option meta)
+end
+
+(* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
 and js_form (source : source) (form : Fo.form) :> < > Js.t = object%js (self)
   (* Return the [html] of the formula *)  
@@ -311,11 +348,25 @@ and js_form (source : source) (form : Fo.form) :> < > Js.t = object%js (self)
     in
       Js.string
         (Format.asprintf "%a" (Tyxml.Xml.pp ())
-        (Fo.Form.tohtml ?id:prefix form))
+        (Fo.Form.f_tohtml ?id:prefix form))
 
   (* Return an UTF8 string representation of the formula *)
   method tostring =
-    Js.string (Fo.Form.tostring form)
+    Js.string (Fo.Form.f_tostring form)
+end
+
+(* -------------------------------------------------------------------- *)
+(* JS Wrapper for formulas                                              *)
+and js_type (ty : Fo.type_) :> < > Js.t = object%js
+  (* Return the [html] of the type *)  
+  method htmltag =
+    Js.string
+      (Format.asprintf "%a" (Tyxml.Xml.pp ())
+       (Fo.Form.t_tohtml ty))
+
+  (* Return an UTF8 string representation of the formula *)
+  method tostring =
+    Js.string (Fo.Form.t_tostring ty)
 end
 
 (* -------------------------------------------------------------------- *)
