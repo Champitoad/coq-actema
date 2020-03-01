@@ -322,7 +322,8 @@ end = struct
 	| (x, Sbound e)::s ->
 	    let f1 = f_subst f x 0 e in
 	    iter_subst s (i - 1, f1)
-	| _ -> failwith "iter_subst2"
+	| (_, _)::s -> iter_subst s (i - 1, f)
+	    
 
   let rec flex_subst (n, i) = function
     | [] -> false
@@ -351,6 +352,8 @@ end = struct
 	else fetch_subst (n, i - 1) l
     | _::l -> fetch_subst (n, i) l
 
+(* warning : one relies on the fact that the order *)
+(* of the variables is unchanged *)
   let rec add_subst (n, i) e = function
     | [] -> failwith "add_subst1"
     | (m, t)::l when n<>m -> (m, t)::(add_subst (n, i) e l)
