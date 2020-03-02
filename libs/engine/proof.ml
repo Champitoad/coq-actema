@@ -735,7 +735,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 			   | ff,s  -> Form.iter_subst s (k,ff)
 		   in let nf = (reconstruct (List.length sr) i (f, sr)) 
 		  in
-                  let path = rebuild_path i in
+                  let path = (rebuild_path i)@[0] in
                   let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
                   let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(path)  in
                   let aui = `DnD (ipath_strip src, ipath_strip dst) in
