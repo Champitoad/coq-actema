@@ -268,7 +268,7 @@ module CoreLogic : sig
     | `Elim    of Handle.t
     | `Intro   of int
     | `Forward of Handle.t * Handle.t * form
-    | `DisjDrop of Handle.t
+    | `DisjDrop of Handle.t * form list
     | `ConjDrop of Handle.t
   ]
 
@@ -357,11 +357,11 @@ end = struct
 
   type pnode += OrDrop of Handle.t
 
-  let or_drop (h : Handle.t) ((pr, id) : targ) =
+  let or_drop (h : Handle.t) ((pr, id) : targ) hl =
     let gl   = Proof.byid pr id in
     let _hy  = (Proof.Hyps.byid gl.g_hyps h).h_form in
     let _gll = Form.flatten_disjunctions gl.g_goal in
-    Proof.sprogress pr id (OrDrop id) []
+    Proof.sprogress pr id (OrDrop id) hl
 
   type pnode += AndDrop of Handle.t
 
@@ -575,7 +575,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     | `Elim    of Handle.t
     | `Intro   of int
     | `Forward of Handle.t * Handle.t * form
-    | `DisjDrop of Handle.t
+    | `DisjDrop of Handle.t * form list
     | `ConjDrop of Handle.t
   ]
 
@@ -713,37 +713,66 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
               when not (Handle.eq tg1 tg2) 
 		-> 
 	      begin
-              let (hl, s, fc) = prune_premisses_fad f in
+              let (hl, fc, s) = prune_premisses_fad f in
 	      let rec f_aux i = function
 		| [] -> []
-		| (s, g)::l -> match Form.f_matchl s [(g, f1)] with
-		    | Some s -> [i, s]  (* we could look for other matches here *)
+		| (s, g)::l -> match Form.search_match_p s g f1 with
+		    | Some (s, pt) -> [i, s, pt]  (* we could look for other matches here *)
 		    | None -> f_aux (i+1) l 
 	      in 
 	      match f_aux 0 hl with
 		| [] -> raise E.Nothing
-		| (i, sr)::_ ->
+		| (i, sr, pt)::_ ->
+		    let path = ref [] in
 		    let rec reconstruct k j = function
 		      | ((FBind ( `Forall, x, ty, f)), ((y, Sflex)::s)) ->
+			   path := 0::!path; 
 			  FBind ( `Forall, x, ty, reconstruct (k-1) j (f, s))
-		      | ((FBind ( `Forall, x, ty, f)), ((y, Sbound e)::s)) ->
-                           reconstruct j (k-1) (Form.f_subst f x 0 e, s)
+			 | ((FBind ( `Forall, x, ty, f)), ((y, Sbound e)::s)) ->
+    			  path := 0::!path; 
+                           reconstruct (k-1) j (Form.f_subst f x 0 e, s)
 	              | (FConn (`Imp, [f1; f2]), s) ->
 			   if j = 0
-			   then reconstruct k (-1) (f2, s)
-			   else FConn (`Imp, [Form.iter_subst s (k, f1) ; reconstruct k (j-1) (f2, s)])
-			   | ff,s  -> Form.iter_subst s (k,ff)
+			   then (
+			     path := (List.rev !path)@[0]@pt; 
+			    reconstruct k (-1) (f2, s)
+			   )
+			   else 
+			   ( if j>0 then path := 1::!path else ();
+			    FConn (`Imp, [Form.iter_subst s (k, f1) ; reconstruct k (j-1) (f2, s)]))
+			| ff,s  -> Form.iter_subst s (k,ff)
 		   in let nf = (reconstruct (List.length sr) i (f, sr)) 
 		  in
-                  let path = (rebuild_path i)@[0] in
                   let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-                  let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(path)  in
+                  let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(!path)  in
                   let aui = `DnD (ipath_strip src, ipath_strip dst) in
                   ["Forward", [dst], aui, (hd1, `Forward (tg1, tg2, nf))]  end 
 
-         | `H (tg1, { h_form = f1; _ }), `C f2 ->
-              let _, subf1 = prune_premisses f1 in
+         | `H (tg1, { h_form = f1; _ }), `C f2  ->
+             let (hl, subf1, s) = prune_premisses_fa f1 in begin
+	      match Form.search_match_f s subf1 f2 with
+		| Some (sr, pt) when Form.s_complete sr ->
+		    let pres = List.map
+				 (Form.iter_subst sr) hl in
+                    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
+                    let dst = mk_ipath (Handle.toint hd1) ~sub:(pt) in
+                    let aui = `DnD (ipath_strip src, ipath_strip dst) in
 
+                    ["DisjDrop",  [dst], aui, (hd1, `DisjDrop (tg1,pres) )]
+		| None ->
+		    let (hl, goal, s) = prune_premisses_ex f2 in
+		    let pre, hy = prune_premisses f1 in
+		    match Form.search_match_p s goal hy with
+		      | Some (sr, pt) when Form.s_complete sr ->
+			  let pt = (rebuild_path (List.length sr - 1))@pt in 
+                    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
+                    let dst = mk_ipath (Handle.toint hd1) ~sub:(pt) in
+                    let aui = `DnD (ipath_strip src, ipath_strip dst) in
+
+			  ["DisjDrop",  [dst], aui, (hd1, `DisjDrop (tg1,pre) )]
+		      | _ ->		    raise E.Nothing
+	      end
+	      (*
               if Form.f_equal subf1 f2 then
                 let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
                 let dst = mk_ipath (Handle.toint hd1) in
@@ -773,7 +802,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
                     ["ConjDrop",  [dst], aui, (hd1, `ConjDrop tg1 )]
 
                 | None, None -> raise E.Nothing end
-
+*)
          | _ -> raise E.Nothing
   
         with E.Nothing -> [] in
@@ -829,8 +858,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         intro ~variant (proof, hd)
     | `Elim subhd ->
         elim subhd (proof, hd)
-    | `DisjDrop subhd ->
-        or_drop subhd (proof, hd)
+    | `DisjDrop (subhd, fl) ->
+        or_drop subhd (proof, hd) (List.map (fun x -> [Some hd, []],x) fl)
     | `ConjDrop subhd ->
         and_drop subhd (proof, hd)    
     | `Forward (src, dst, nf) ->
