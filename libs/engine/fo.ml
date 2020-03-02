@@ -225,6 +225,8 @@ module Form : sig
   val f_equal : ?bds:VName.bds -> form  -> form  -> bool
   val e_matchl : subst -> (expr * expr) list -> subst option
   val f_matchl : subst -> (form * form) list -> subst option
+  val search_match_p : subst -> form -> form -> (subst * int list) option
+  val search_match_f : subst -> form -> form -> (subst * int list) option
   val f_subst : form -> name -> int -> expr -> form
   val e_subst : expr -> name -> int -> expr -> expr
   val iter_subst : subst -> (int * form) -> form
@@ -399,7 +401,7 @@ end = struct
     in  fun ?(bds = VName.Map.empty) f1 f2 -> aux bds f1 f2
 
   let rec f_matchl s = function
-    | [] -> Some s
+    | [] -> Some (List.rev s)
     | (FConn (c1, l1), FConn (c2, l2))::l
 	when c1 = c2 && List.length l1 = List.length l2 ->
        f_matchl s ((List.map2 (fun x y -> (x, y)) l1 l2)@l)
@@ -419,7 +421,38 @@ end = struct
 	)
     | _::_ -> None
 	
-	
+
+  let rec search_match_p s p t = 
+      match f_matchl s [p, t] with
+	| Some s -> Some (s, [])
+	| None ->
+	    match p with
+	      | FConn (`Or, [p1; p2]) ->
+		  ( match search_match_p s p1 t with
+		     | Some (s, pt) -> Some (s, 0::pt)
+		     | None ->
+			 match search_match_p s p2 t with
+			   | Some (s, pt) -> Some (s, 1::pt)
+			   | None -> None
+		  )
+	      | _ -> None
+		
+
+  let rec search_match_f s p t = 
+      match f_matchl s [p, t] with
+	| Some s -> Some (s, [])
+	| None ->
+	    match t with
+	      | FConn (`Or, [t1; t2]) ->
+		  ( match search_match_f s p t1 with
+		     | Some (s, pt) -> Some (s, 0::pt)
+		     | None ->
+			 match search_match_f s p t2 with
+			   | Some (s, pt) -> Some (s, 1::pt)
+			   | None -> None
+		  )
+	      | _ -> None
+		
 (* first version of unification : *)
 (*    I suppose that all indexes under a certain bound are flexible *)
 (*  thus terms in equations come with the index i *)			
