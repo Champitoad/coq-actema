@@ -337,8 +337,10 @@ end = struct
         Proof.progress pr id TIntro
           [Form.f_imp f1 f2; Form.f_imp f2 f1]
 
-    | 0, FConn (`Or, [f; _]) ->
-        Proof.progress pr id TIntro [f]
+    | i, (FConn (`Or, _) as f) ->
+        let fl = Form.flatten_disjunctions f in
+	let g = List.nth fl i in
+        Proof.progress pr id TIntro [g]
 
     | 1, FConn (`Or, [_; f]) ->
         Proof.progress pr id TIntro [f]
@@ -532,7 +534,9 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   let ivariants ((pr, id) : targ) =
     match (Proof.byid pr id).g_goal with
     | FConn (`And  , _) -> ["And-intro"]
-    | FConn (`Or   , _) -> ["Or-intro-L"; "Or-intro-R"]
+    | FConn (`Or   , _) as f ->
+        let fl = Form.flatten_disjunctions f in
+	List.mapi (fun i _ -> "Or-intro-"^(string_of_int i)) fl
     | FConn (`Imp  , _) -> ["Imp-intro"]
     | FConn (`Equiv, _) -> ["Equiv-intro"]
     | FConn (`Not  , _) -> ["Not-intro"]
@@ -755,10 +759,10 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 		    let pres = List.map
 				 (Form.iter_subst sr) hl in
                     let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-                    let dst = mk_ipath (Handle.toint hd1) ~sub:(pt) in
+                    let dst = mk_ipath (Handle.toint hd2) ~sub:(pt) in
                     let aui = `DnD (ipath_strip src, ipath_strip dst) in
 
-                    ["DisjDrop",  [dst], aui, (hd1, `DisjDrop (tg1,pres) )]
+                    ["Elim",  [dst], aui, (hd1, `Elim tg1)]
 		| None ->
 		    let (hl, goal, s) = prune_premisses_ex f2 in
 		    let pre, hy = prune_premisses f1 in
@@ -833,12 +837,12 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 	    | `C _ -> begin
 		let iv = ivariants (proof, hd) in
 		let bv = List.length iv <= 1 in
-  
 		List.mapi
 		  (fun i x ->
-		     let sub = if bv then None else Some i in
-		     let sub = List.of_option sub in
-		     let hg  = mk_ipath (Handle.toint hd) ~sub:sub in
+		     let hg  = mk_ipath (Handle.toint hd) 
+				 ~sub:(if bv 
+				       then [] 
+				       else  rebuild_pathd (List.length iv) i)  in
 		     (x, [hg], `Click hg, (hd, `Intro i)))
 		       iv
                end 
