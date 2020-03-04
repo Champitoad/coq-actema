@@ -294,6 +294,14 @@ object%js (self)
   (* The enclosing proof engine *)
   val proof = parent##.parent
 
+  (* Return the [html] of the enclosed formula *)  
+  method html =
+    self##.form##html
+
+  (* Return an UTF8 string representation of the enclosed formula *)
+  method tostring =
+    self##.form##tostring
+
   method getmeta =
     Js.Opt.option (Proof.get_meta self##.proof##.proof self##.handle)
 
@@ -323,6 +331,23 @@ object%js (self)
   (* The enclosing proof engine *)
   val proof = parent##.parent
 
+  (* Return the [html] of the enclosed formula *)  
+  method html =
+    let open Tyxml in
+
+    let id = Format.sprintf "#[%d]" 3 in
+    let dt =
+      Xml.node ~a:[Xml.string_attrib "id" id] "span" [
+        Xml.node "span" [Xml.pcdata (UTF8.of_latin1 x)];
+        Xml.node "span" [Xml.pcdata " : "];
+        self##.type_##rawhtml;
+      ]
+    in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
+
+  (* Return an UTF8 string representation of the enclosed formula *)
+  method tostring =
+    Js.string (Format.sprintf "%s : %s" x self##.type_##rawstring)
+
   method getmeta =
     Js.Opt.option (Proof.get_meta self##.proof##.proof self##.handle)
 
@@ -332,7 +357,7 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
-and js_form (source : source) (form : Fo.form) :> < > Js.t = object%js (self)
+and js_form (source : source) (form : Fo.form) = object%js (self)
   (* Return the [html] of the formula *)  
   method html =
     self##htmltag true
@@ -357,16 +382,22 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
-and js_type (ty : Fo.type_) :> < > Js.t = object%js
+and js_type (ty : Fo.type_) = object%js (self)
+  (* Return the raw [html] fo the type *)
+  method rawhtml =
+    Fo.Form.t_tohtml ty
+
+  (* Return the raw string representation fo the type *)
+  method rawstring =
+    Fo.Form.t_tostring ty
+
   (* Return the [html] of the type *)  
-  method htmltag =
-    Js.string
-      (Format.asprintf "%a" (Tyxml.Xml.pp ())
-       (Fo.Form.t_tohtml ty))
+  method html =
+    Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) self##rawhtml)
 
   (* Return an UTF8 string representation of the formula *)
   method tostring =
-    Js.string (Fo.Form.t_tostring ty)
+    Js.string self##rawstring
 end
 
 (* -------------------------------------------------------------------- *)
