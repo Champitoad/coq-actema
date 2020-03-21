@@ -2,7 +2,7 @@
 open Utils
 open Fo
 
-(* -------------------------------------------------------------------- *)
+(* ------------------------------------------------------------------- *)
 module Handle : sig
   type t = private int
 
@@ -248,7 +248,7 @@ module CoreLogic : sig
   val intro     : ?variant:int -> tactic
   val elim      : ?clear:bool -> Handle.t -> tactic
   val ivariants : targ -> string list
-  val forward   : (Handle.t * Handle.t) -> form -> tactic
+  val forward   : (Handle.t * Handle.t * int list * Fo.subst) -> tactic
 
   type asource = [
     | `Click of gpath
@@ -267,7 +267,7 @@ module CoreLogic : sig
   type action = Handle.t * [
     | `Elim    of Handle.t
     | `Intro   of int
-    | `Forward of Handle.t * Handle.t * form
+    | `Forward of Handle.t * Handle.t * (int list) * Fo.subst 
     | `DisjDrop of Handle.t * form list
     | `ConjDrop of Handle.t
   ]
@@ -546,17 +546,31 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
   type pnode += TForward of Handle.t * Handle.t
 
-  let core_forward (hsrc, hdst) nf ((pr, id) : targ)  =
+  let core_forward (hsrc, hdst, p, s) ((pr, id) : targ)  =
     let gl  = Proof.byid pr id in
     let src = (Proof.Hyps.byid gl.g_hyps hsrc).h_form in
     let dst = (Proof.Hyps.byid gl.g_hyps hdst).h_form in
 
+    let rec build_dest = function
+      | ((FBind (`Forall, x, ty, f)), 0::p, ((y, Sflex)::s)) ->
+	  FBind (`Forall, x,ty, build_dest (f, p, s))
+      | ((FBind (`Forall, x, ty, f)), 0::p, ((y, (Sbound e))::s)) ->
+          build_dest ((Form.f_subst f x 0 e), p, s)
+      | (FConn (`Imp, [f1 ; f2]), (0::_), s) ->
+   	   Form.iter_subst s (List.length s, f2)
+      | (FConn (`Imp, [f1; f2]), (1::p), s) ->
+          FConn(`Imp, [Form.iter_subst s (List.length s, f1) ;
+		       build_dest (f2, p, s)])
+	| _ -> failwith "cannot build forward"
+	in
+	let nf = build_dest (dst, p, s) in
+      
 	[ (TForward (hsrc, hdst)),[[Some hdst, [nf]], gl.g_goal] ]
 
 
 
-  let forward   (hsrc, hdst) nf ((pr, id) : targ)  =
-    perform (core_forward  (hsrc, hdst) nf (pr, id)) pr id 
+  let forward   (hsrc, hdst, p, s) ((pr, id) : targ)  =
+    perform (core_forward  (hsrc, hdst, p, s) (pr, id)) pr id 
 
 
 
@@ -578,7 +592,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   type action = Handle.t * [
     | `Elim    of Handle.t
     | `Intro   of int
-    | `Forward of Handle.t * Handle.t * form
+    | `Forward of Handle.t * Handle.t * (int list) * Fo.subst 
     | `DisjDrop of Handle.t * form list
     | `ConjDrop of Handle.t
   ]
@@ -728,30 +742,22 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 		| [] -> raise E.Nothing
 		| (i, sr, pt)::_ ->
 		    let path = ref [] in
-		    let rec reconstruct k j = function
-		      | ((FBind ( `Forall, x, ty, f)), ((y, Sflex)::s)) ->
-			   path := 0::!path; 
-			  FBind ( `Forall, x, ty, reconstruct (k-1) j (f, s))
-			 | ((FBind ( `Forall, x, ty, f)), ((y, Sbound e)::s)) ->
-    			  path := 0::!path; 
-                           reconstruct (k-1) j (Form.f_subst f x 0 e, s)
-	              | (FConn (`Imp, [f1; f2]), s) ->
-			   if j = 0
-			   then (
-			     path := (List.rev !path)@[0]@pt; 
-			    reconstruct k (-1) (f2, s)
-			   )
-			   else 
-			   ( if j>0 then path := 1::!path else ();
-			    FConn (`Imp, [Form.iter_subst s (k, f1) ; reconstruct k (j-1) (f2, s)]))
-			| ff,s  -> Form.iter_subst s (k,ff)
-		   in let nf = (reconstruct (List.length sr) i (f, sr)) 
-		  in
-                  let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-                  let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(!path)  in
-                  let aui = `DnD (ipath_strip src, ipath_strip dst) in
-                  ["Forward", [dst], aui, (hd1, `Forward (tg1, tg2, nf))]  end 
+		    let rec rebuild_path j p = function
+		      | FBind (`Forall, _, _, f) -> rebuild_path j (0::p) f
+		      | FConn (`Imp, [_ ; f2] ) ->
+			  if j = 0 
+			  then p
+			  else rebuild_path (j-1) (1::p) f2
+		    in 
+		    let p = (List.rev (rebuild_path i [] f)@[0]@pt) in
+                    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
+                    let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(p)  in
+                    let aui = `DnD (ipath_strip src, ipath_strip dst) in
 
+		    ["Forward", [dst], aui, (hd1, `Forward (tg1, tg2, p, sr))]
+
+	      end 
+ 
          | `H (tg1, { h_form = f1; _ }), `C f2  ->
              let (hl, subf1, s) = prune_premisses_fa f1 in begin
 	      match Form.search_match_f s subf1 f2 with
@@ -866,6 +872,6 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         or_drop subhd (proof, hd) (List.map (fun x -> [Some hd, []],x) fl)
     | `ConjDrop subhd ->
         and_drop subhd (proof, hd)    
-    | `Forward (src, dst, nf) ->
-        forward (src, dst) nf (proof, hd)
+    | `Forward (src, dst, p, s) ->
+        forward (src, dst, p, s) (proof, hd)
 end
