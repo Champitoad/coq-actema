@@ -740,6 +740,23 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 			(i, s, pt)::aux_c (* we  look for other matches here *)
 		    | None -> f_aux (i+1) l 
 	      in 
+	      let build_action (i, sr, pt) =
+		let path = ref [] in
+		let rec rebuild_path j p = function
+		  | FBind (`Forall, _, _, f) -> rebuild_path j (0::p) f
+		  | FConn (`Imp, [_ ; f2] ) ->
+		      if j = 0 
+		      then p
+			  else rebuild_path (j-1) (1::p) f2
+		    in 
+		    let p = (List.rev (rebuild_path i [] f)@[0]@pt) in
+                    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
+                    let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(p)  in
+                    let aui = `DnD (ipath_strip src, ipath_strip dst) in
+		    ("Forward", [dst], aui, (hd1, `Forward (tg1, tg2, p, sr)))
+	      in List.map build_action (f_aux 0 hl)
+
+(*
 	      match f_aux 0 hl with
 		| [] -> raise E.Nothing
 		| ((i, sr, pt)::_) as al ->
@@ -757,8 +774,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
                     let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(p)  in
                     let aui = `DnD (src,  dst) in
 
-		    ("Forward", [dst], aui, (hd1, `Forward (tg1, tg2, p, sr)))
-		    in List.map f al
+		    ["Forward", [dst], aui, (hd1, `Forward (tg1, tg2, p, sr))]
+*)
 
 	      end 
  
@@ -781,7 +798,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 			  let pt = (rebuild_path (List.length sr - 1))@pt in 
                     let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
                     let dst = mk_ipath (Handle.toint hd1) ~sub:(pt) in
-                    let aui = `DnD (ipath_strip src, ipath_strip dst) in
+                    let aui = `DnD (src, dst) in
 
 			  ["DisjDrop",  [dst], aui, (hd1, `DisjDrop (tg1,pre) )]
 		      | _ ->		    raise E.Nothing
