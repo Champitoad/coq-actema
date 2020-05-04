@@ -13,4 +13,4 @@
 (rule
   (target jsprover.js)
   (deps (file jsprover.js.bc))
-  (action (run js_of_ocaml --sourcemap --source-map-inline --pretty -o %{target} +nat.js %{deps})))
+  (action (run js_of_ocaml --sourcemap --source-map-inline --pretty -o %{target} %{deps})))
