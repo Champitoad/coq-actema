@@ -551,6 +551,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     let src = (Proof.Hyps.byid gl.g_hyps hsrc).h_form in
     let dst = (Proof.Hyps.byid gl.g_hyps hdst).h_form in
 
+    (* Here we eventually should have the call to the proof tactics *)
     let rec build_dest = function
       | ((FBind (`Forall, x, ty, f)), 0::p, ((y, Sflex)::s)) ->
 	  FBind (`Forall, x,ty, build_dest (f, p, s))
@@ -571,7 +572,6 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
   let forward   (hsrc, hdst, p, s) ((pr, id) : targ)  =
     perform (core_forward  (hsrc, hdst, p, s) (pr, id)) pr id 
-
 
 
 
@@ -735,12 +735,15 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 	      let rec f_aux i = function
 		| [] -> []
 		| (s, g)::l -> match Form.search_match_p s g f1 with
-		    | Some (s, pt) -> [i, s, pt]  (* we could look for other matches here *)
+		    | Some (s, pt) ->
+			let aux_c = f_aux (i+1) l in
+			(i, s, pt)::aux_c (* we  look for other matches here *)
 		    | None -> f_aux (i+1) l 
 	      in 
 	      match f_aux 0 hl with
 		| [] -> raise E.Nothing
-		| (i, sr, pt)::_ ->
+		| ((i, sr, pt)::_) as al ->
+		    let f (i, sr, pt) =
 		    let path = ref [] in
 		    let rec rebuild_path j p = function
 		      | FBind (`Forall, _, _, f) -> rebuild_path j (0::p) f
@@ -752,9 +755,10 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 		    let p = (List.rev (rebuild_path i [] f)@[0]@pt) in
                     let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
                     let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(p)  in
-                    let aui = `DnD (ipath_strip src, ipath_strip dst) in
+                    let aui = `DnD (src,  dst) in
 
-		    ["Forward", [dst], aui, (hd1, `Forward (tg1, tg2, p, sr))]
+		    ("Forward", [dst], aui, (hd1, `Forward (tg1, tg2, p, sr)))
+		    in List.map f al
 
 	      end 
  
