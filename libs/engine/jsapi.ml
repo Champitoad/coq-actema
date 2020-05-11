@@ -262,6 +262,21 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
       CoreLogic.cut form (parent##.proof, self##.handle)
     in js_proof_engine (!!doit ())
 
+  (* [this#alias (name : string) (expr : expr) parses [expr] in the goal
+   * [context] and add it to the local [context] under the name [name]. *)
+  method alias (name : string) (expr : Fo.expr) =
+    js_proof_engine parent##.proof
+
+  (* [this#move (from : js_hyps) (before : js_hyps option)] move
+   * hypothesis [from] before hypothesis [before]. Both hypothesis
+   * must be part of this sub-goal. *)
+  method move (from : unit) (before : unit option) =
+    js_proof_engine parent##.proof
+
+  (* [this#generalize (h : js_hyps) generalizes the hypothesis [h] *)
+  method generalize (from : unit) (before : unit option) =
+    js_proof_engine parent##.proof
+
   method getmeta =
     Js.Opt.option (Proof.get_meta parent##.proof self##.handle)
 
