@@ -752,31 +752,13 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 		    let p = (List.rev (rebuild_path i [] f)@[0]@pt) in
                     let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
                     let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(p)  in
-                    let aui = `DnD (ipath_strip src, ipath_strip dst) in
-		    ("Forward", [dst], aui, (hd1, `Forward (tg1, tg2, p, sr)))
+		    let dst' = match dsts with
+		      | None -> ipath_strip dst
+		      | _ -> dst
+		    in
+                    let aui = `DnD (src, dst) in  (* C'est ici que ça se passe *)
+		    ("Forward", [dst'], aui, (hd1, `Forward (tg1, tg2, p, sr)))
 	      in List.map build_action (f_aux 0 hl)
-
-(*
-	      match f_aux 0 hl with
-		| [] -> raise E.Nothing
-		| ((i, sr, pt)::_) as al ->
-		    let f (i, sr, pt) =
-		    let path = ref [] in
-		    let rec rebuild_path j p = function
-		      | FBind (`Forall, _, _, f) -> rebuild_path j (0::p) f
-		      | FConn (`Imp, [_ ; f2] ) ->
-			  if j = 0 
-			  then p
-			  else rebuild_path (j-1) (1::p) f2
-		    in 
-		    let p = (List.rev (rebuild_path i [] f)@[0]@pt) in
-                    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-                    let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(p)  in
-                    let aui = `DnD (src,  dst) in
-
-		    ["Forward", [dst], aui, (hd1, `Forward (tg1, tg2, p, sr))]
-*)
-
 	      end 
  
          | `H (tg1, { h_form = f1; _ }), `C f2  ->
