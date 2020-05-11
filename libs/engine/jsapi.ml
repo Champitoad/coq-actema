@@ -267,10 +267,14 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
   method alias (name : string) (expr : Fo.expr) =
     js_proof_engine parent##.proof
 
-  (* [this#move_hyp (from : js_hyps) (before : js_hyps option)] move
+  (* [this#move (from : js_hyps) (before : js_hyps option)] move
    * hypothesis [from] before hypothesis [before]. Both hypothesis
    * must be part of this sub-goal. *)
   method move (from : unit) (before : unit option) =
+    js_proof_engine parent##.proof
+
+  (* [this#generalize (h : js_hyps) generalizes the hypothesis [h] *)
+  method generalize (from : unit) (before : unit option) =
     js_proof_engine parent##.proof
 
   method getmeta =
