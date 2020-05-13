@@ -9,4 +9,5 @@
   (public_name prover.engine)
   (libraries lwt menhirLib batteries tyxml js_of_ocaml)
   (preprocess (pps tyxml-ppx js_of_ocaml-ppx lwt_ppx))
-  (synopsis "Mini-prover (engine library)"))
+  (synopsis "Mini-prover (engine library)")
+  (flags -w -8))
