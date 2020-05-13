@@ -54,6 +54,8 @@ module Proof : sig
     g_goal : form;
   }
 
+  and goal = { g_id: Handle.t; g_pregoal: pregoal; }
+
   type pregoals = pregoal list
 
   val init   : env -> form -> proof
@@ -654,7 +656,9 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
     { root; ctxt; sub; }
 
-  let of_ipath (proof : Proof.proof) (p : ipath) =
+  let of_ipath (proof : Proof.proof) (p : ipath)
+    : Proof.goal * [> `C of form | `H of Handle.t * Proof.hyp ] * (uid list * form)
+  =
     let { root; ctxt; sub; } = p in
 
     let goal =
@@ -677,8 +681,10 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
           end
 
       with InvalidFormPath -> raise InvalidPath
+    in
 
-    in (goal, Handle.ofint root, target, (sub, subf))
+    let goal = Proof.{ g_id = Handle.ofint root; g_pregoal = goal } in
+    (goal, target, (sub, subf))
 
   let ipath_of_gpath (p : gpath) =
     match p with `S p -> ipath_of_path p | `P p -> p
@@ -726,11 +732,11 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     begin
       let module E = struct exception Nothing end in
 
-      let pr, hd1, tg1, _ = of_gpath proof src in
+      let Proof.{ g_id = hd1; g_pregoal = pr}, tg1, _ = of_gpath proof src in
 
       let for_destination (dst : gpath) =
         try
-          let _, hd2, tg2, _ = of_gpath proof dst in
+          let Proof.{ g_id = hd2; _}, tg2, _ = of_gpath proof dst in
   
           if not (Handle.eq hd1 hd2) then
             raise E.Nothing;
@@ -854,7 +860,9 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   =
     match p with
       | `Click p -> begin
-          let _goal, hd, target, (_fs, _subf) = of_gpath proof p in
+          let Proof.{ g_id = hd; g_pregoal = _goal}, target, (_fs, _subf) =
+            of_gpath proof p
+          in
           match target with
           | `C _ -> begin
               let iv = ivariants (proof, hd) in
