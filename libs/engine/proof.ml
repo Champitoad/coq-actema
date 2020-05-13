@@ -696,7 +696,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   (* Handling of polarities *)
 
   let pol_of_path : path -> pol =
-    assert false
+    fun _ -> Pos
 
   (* -------------------------------------------------------------------- *)
 
