@@ -374,7 +374,7 @@ end = struct
   let and_drop (h : Handle.t) ((pr, id) : targ) =
     let gl  = Proof.byid pr id in
     let hy  = (Proof.Hyps.byid gl.g_hyps h).h_form in
-    let gll = Form.flatten_disjunctions gl.g_goal in
+    let gll = Form.flatten_conjunctions gl.g_goal in
     let ng  = Form.f_ands (remove_form hy gll) in
 
     Proof.sprogress pr id (AndDrop id) [[None, []], ng]
