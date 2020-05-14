@@ -421,36 +421,40 @@ end = struct
 	)
     | _::_ -> None
 	
-
+  (* [search_match_p s p t] looks for a subformula of [p] that matches [t] under the
+     substitution [s]. It returns [Some (s', pt)] with [s'] the new substitution and
+     [pt] the path of the subformula if it succeeds, and [None] otherwise. *)
   let rec search_match_p s p t = 
-      match f_matchl s [p, t] with
-	| Some s -> Some (s, [])
-	| None ->
+    match f_matchl s [p, t] with
+    | Some s -> Some (s, [])
+    | None ->
 	    match p with
-	      | FConn (`Or, [p1; p2]) ->
-		  ( match search_match_p s p1 t with
-		     | Some (s, pt) -> Some (s, 0::pt)
-		     | None ->
-			 match search_match_p s p2 t with
-			   | Some (s, pt) -> Some (s, 1::pt)
-			   | None -> None
-		  )
+      | FConn (`Or, [p1; p2]) -> begin
+        match search_match_p s p1 t with
+        | Some (s, pt) -> Some (s, 0::pt)
+        | None -> begin
+          match search_match_p s p2 t with
+          | Some (s, pt) -> Some (s, 1::pt)
+          | None -> None
+          end
+		    end
 	      | _ -> None
 		
-
+  (* Same as [search_match_p], but we look for a subformula in [t] instead of [p]. *)
   let rec search_match_f s p t = 
-      match f_matchl s [p, t] with
-	| Some s -> Some (s, [])
-	| None ->
+    match f_matchl s [p, t] with
+    | Some s -> Some (s, [])
+    | None ->
 	    match t with
-	      | FConn (`Or, [t1; t2]) ->
-		  ( match search_match_f s p t1 with
-		     | Some (s, pt) -> Some (s, 0::pt)
-		     | None ->
-			 match search_match_f s p t2 with
-			   | Some (s, pt) -> Some (s, 1::pt)
-			   | None -> None
-		  )
+      | FConn (`Or, [t1; t2]) -> begin
+        match search_match_f s p t1 with
+        | Some (s, pt) -> Some (s, 0::pt)
+        | None -> begin
+          match search_match_f s p t2 with
+          | Some (s, pt) -> Some (s, 1::pt)
+          | None -> None
+          end
+        end
 	      | _ -> None
 		
 (* first version of unification : *)

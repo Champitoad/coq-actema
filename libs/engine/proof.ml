@@ -727,6 +727,11 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     in
     if i = 0 then (aux (l-1)) else
       (aux (l - i - 1))@[1]
+  
+  let link (src : gpath) (dst : gpath) (proof : Proof.proof)
+    : unit
+  =
+    ()
 
   let dnD_actions src dsts (proof : Proof.proof) =
     begin
@@ -734,6 +739,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
       let Proof.{ g_id = hd1; g_pregoal = pr}, tg1, _ = of_gpath proof src in
 
+      (* [for_destination] is the actual subformula linking operation *)
       let for_destination (dst : gpath) =
         try
           let Proof.{ g_id = hd2; _}, tg2, _ = of_gpath proof dst in
@@ -743,7 +749,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   
           match tg1, tg2 with
           | `H (tg1, { h_form = f1; _ }),
-            `H (tg2, { h_form = ((FConn (`Imp, [_; _]))| (FBind (`Forall, _, _, _))) as f; _})
+            `H (tg2, { h_form = ((FConn (`Imp, [_; _])) | (FBind (`Forall, _, _, _))) as f; _})
               when not (Handle.eq tg1 tg2) 
             -> 
             begin
@@ -788,7 +794,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
                 let dst = mk_ipath (Handle.toint hd2) ~sub:(pt) in
                 let aui = `DnD (ipath_strip src, ipath_strip dst) in
 
-                ["Elim",  [dst], aui, (hd1, `Elim tg1)]
+                ["Elim", [dst], aui, (hd1, `Elim tg1)]
 
               | None ->
                 let (hl, goal, s) = prune_premisses_ex f2 in
@@ -841,14 +847,19 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       in
       match dsts with
       | None ->
+        (* Get the list of hypotheses handles *)
         let dsts = List.of_enum (Map.keys pr.Proof.g_hyps) in
+        (* Create a list of paths to each hypothesis *)
         let dsts =
           List.map
             (fun id -> mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint id))
             dsts
         in
+        (* Add a path to the conclusion *)
         let dsts = mk_ipath (Handle.toint hd1) :: dsts in
         let dsts = List.map (fun p -> `P p) dsts in
+        (* Get the possible actions for each formula in the goal,
+           that is the hypotheses and the conclusion *)
         List.flatten (List.map for_destination dsts)
 
       | Some dst ->
