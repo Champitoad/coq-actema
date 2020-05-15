@@ -71,6 +71,9 @@ module Proof : sig
   val progress :
     proof -> Handle.t -> pnode -> form list -> proof
 
+  val sgprogress :
+    pregoal -> ?clear:bool ->
+      ((Handle.t option * form list) list * form) list -> pregoals
   val sprogress :
     proof -> ?clear:bool -> Handle.t -> pnode ->
       ((Handle.t option * form list) list * form) list -> proof
@@ -208,9 +211,7 @@ end = struct
         p_bkwd = List.fold_right (Map.add^~ dep) sids pr.p_bkwd;
         p_meta = ref meta; }
 
-  let sprogress (pr : proof) ?(clear = false) (id : Handle.t) (pn : pnode) sub =
-    let goal = byid pr id in
-
+  let sgprogress (goal : pregoal) ?(clear = false) sub =
     let for1 (newlc, concl) =
       let subfor1 hyps (hid, newlc) =
         let hyps =
@@ -228,7 +229,12 @@ end = struct
       let hyps = List.fold_left subfor1 goal.g_hyps newlc in
       { g_env = goal.g_env; g_hyps = hyps; g_goal = concl; }
 
-    in xprogress pr id pn (List.map for1 sub)      
+    in List.map for1 sub
+
+  let sprogress (pr : proof) ?(clear = false) (id : Handle.t) (pn : pnode) sub =
+    let goal = byid pr id in
+    let sub = sgprogress goal ~clear sub in
+    xprogress pr id pn sub
 
   let progress (pr : proof) (id : Handle.t) (pn : pnode) (sub : form list) =
     let goal = byid pr id in
@@ -767,11 +773,62 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     in
     if i = 0 then (aux (l-1)) else
       (aux (l - i - 1))@[1]
+
+  type pnode += TLink
   
+  (* [link] is the equivalent of Proof by Pointing's [finger_tac], but using the
+     interaction rules specific to subformula linking *)
   let link (src : ipath) (dst : ipath) (s : Fo.subst) (proof : Proof.proof)
     : Proof.proof
   =
-    proof
+    let Proof.{ g_id; g_pregoal = pr }, tg_src, (sub_src, _) =
+      of_ipath proof src
+    in
+    let _, tg_dst, (sub_dst, _) = of_ipath proof dst in
+
+    let gen_subgoals ?(clear = true) sub_goal sub_ogoals =
+      let ogoals = Proof.sgprogress ~clear pr sub_ogoals in
+      let goal =
+        match Proof.sgprogress ~clear pr sub_goal with
+        | [g] -> g
+      in
+      (goal, ogoals)
+    in
+
+    let rec pbp (goal, ogoals) target sub =
+      match sub with
+
+      (* Axiom *)
+      | [] -> ogoals
+
+      | i :: sub -> match target with
+        
+        (* Right rules *)
+        | `C f -> begin match f, i+1 with
+
+          | FConn (`And, [f1; f2]), 1 ->
+            pbp (gen_subgoals [[], f1] [[], f2]) (`C f1) sub
+          
+          | FConn (`And, [f1; f2]), 2 ->
+            pbp (gen_subgoals [[], f2] [[], f1]) (`C f2) sub
+
+          | _ -> raise TacticNotApplicable
+          
+          end
+
+        (* Left rules *)
+        | `H (_, Proof.{ h_form = f }) -> begin match f, i+1 with
+          
+          | _ -> raise TacticNotApplicable
+
+          end
+
+        (* Should not happen if unification went smoothly *)
+        | _ -> raise TacticNotApplicable
+    in
+
+    let subgoals = pbp (pr, []) tg_dst sub_dst in
+    Proof.xprogress proof g_id TLink subgoals
 
   (* [search_match pol_scrutinee scrutinee pol_target target] returns the list of
       paths that lead to a subformula of [target] matching [scrutinee], given that
