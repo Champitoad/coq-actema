@@ -698,10 +698,31 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   (* -------------------------------------------------------------------- *)
   (* Handling of polarities *)
 
+  (* [opp p] returns the opposite polarity of [p] *)
   let opp = function
     | Pos -> Neg
     | Neg -> Pos
 
+  (* [direct_subform_pol p i f] returns the [i]th direct subformula of [f] together
+     with its polarity, given that [f]'s polarity is [p] *)
+  let direct_subform_pol (p : pol) (f : Fo.form) (i : int) =
+    match f with
+    | FConn (c, fs) ->
+      let subp =
+        match c, i with
+        | `Imp, 0 -> opp p
+        | _, _ -> p
+      in
+      let subf =
+        try List.nth fs i
+        with Failure _ -> raise InvalidFormPath
+      in
+      subp, subf
+    | FBind (_, _, _, subf) ->
+      p, subf
+
+  (* [pol_of_gpath proof p] returns the polarity of the subformula
+     at path [p] in [proof] *)
   let pol_of_gpath (proof : Proof.proof) (p : gpath) : pol =
     let _, target, (sub, _) = of_gpath proof p in
     let pol, form =
@@ -712,23 +733,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     let rec aux pol form = function
       | [] -> pol
       | i :: sub ->
-        let subpol, subform =
-          match form with
-          | FConn (c, fs) ->
-            let pol =
-              match c, i with
-              | `Imp, 0 -> opp pol
-              | _, _ -> pol
-            in
-            let subf =
-              try  List.nth fs i
-              with Failure _ -> raise InvalidFormPath
-            in
-            pol, subf
-          | FBind (_, _, _, subf) ->
-            pol, subf
-        in
-        aux subpol subform sub
+        let subp, subf = direct_subform_pol pol form i in
+        aux subp subf sub
     in
     aux pol form sub
 
@@ -767,44 +773,49 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   =
     proof
 
+  (* [search_match pol_scrutinee scrutinee pol_target target] returns the list of
+      paths that lead to a subformula of [target] matching [scrutinee], given that
+      they have opposite polarities. *)
+  let search_match pol_scrutinee scrutinee pol_target target : (int list) list =
+    let rec aux sub (pol, target) =
+      (* Check if there is a direct match *)
+      if pol_scrutinee <> pol && Fo.Form.f_equal scrutinee target then
+        [List.rev sub]
+      (* Otherwise, look for matches in subformulas *)
+      else
+        (* Compute number of subformulas *)
+        let n =
+          match target with
+          | FConn (_, fs) -> List.length fs
+          | FBind _ -> 1
+          | _ -> 0
+        in
+        (* Combine results of recursive calls on subformulas *)
+        List.init n (fun i ->
+          aux (i :: sub) (direct_subform_pol pol target i)) |>
+        List.concat
+    in
+    aux [] (pol_target, target)
+
   let dnd_actions src dsts (proof : Proof.proof) =
-    let Proof.{ g_id; g_pregoal}, _, (sub_src, subf_src) = of_gpath proof src in
+    let src = ipath_of_gpath src in
+    let Proof.{ g_id; g_pregoal}, _, (sub_src, subf_src) = of_ipath proof src in
 
     let for_destination dst =
       let dst = ipath_of_gpath dst in
       let Proof.{ g_id = g_id'; _}, _, (sub_dst, subf_dst) = of_ipath proof dst in
   
       if not (Handle.eq g_id g_id') then [] else
-
-      (* [search_match scrutinee target] returns the list of paths that
-         lead to a subformula of [target] matching [scrutinee] *)
-      let search_match scrutinee target : (int list) list =
-        let rec aux sub target =
-          if Fo.Form.f_equal scrutinee target then
-            [List.rev sub]
-          else
-            let subfs =
-              match target with
-              | FConn (_, fs) -> fs
-              | FBind (_, _, _, f) -> [f]
-              | _ -> []
-            in
-            List.(concat (mapi (fun i -> aux (i :: sub)) subfs))
-        in
-        aux [] target
-      in
       
-      let pol_src = pol_of_gpath proof src in
-      let src = ipath_of_gpath src in
+      let pol_src = pol_of_gpath proof (`P src) in
+      let pol_dst = pol_of_gpath proof (`P dst) in
 
       let targets =
-        search_match subf_src subf_dst |>
+        search_match pol_src subf_src pol_dst subf_dst |>
         List.map (fun sub -> { 
           root = dst.root;
           ctxt = dst.ctxt;
-          sub = sub_dst @ sub }) |>
-        List.filter (fun p ->
-          pol_of_gpath proof (`P p) <> pol_src)
+          sub = sub_dst @ sub })
       in
 
       List.map (fun tgt ->
