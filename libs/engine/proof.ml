@@ -273,6 +273,7 @@ module CoreLogic : sig
     | `Forward of Handle.t * Handle.t * (int list) * Fo.subst 
     | `DisjDrop of Handle.t * form list
     | `ConjDrop of Handle.t
+    | `Link of ipath * ipath * Fo.subst
   ]
 
   exception InvalidPath
@@ -291,6 +292,7 @@ end = struct
   type path   = string
   type ipath  = { root : int; ctxt : int; sub : int list; }
   type gpath  = [`S of path | `P of ipath]
+
   type pol = Pos | Neg
 
   type pnode += TIntro
@@ -599,6 +601,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     | `Forward of Handle.t * Handle.t * (int list) * Fo.subst 
     | `DisjDrop of Handle.t * form list
     | `ConjDrop of Handle.t
+    | `Link of ipath * ipath * Fo.subst
   ]
 
   exception InvalidPath
@@ -695,8 +698,39 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   (* -------------------------------------------------------------------- *)
   (* Handling of polarities *)
 
-  let pol_of_path : path -> pol =
-    fun _ -> Pos
+  let opp = function
+    | Pos -> Neg
+    | Neg -> Pos
+
+  let pol_of_gpath (proof : Proof.proof) (p : gpath) : pol =
+    let _, target, (sub, _) = of_gpath proof p in
+    let pol, form =
+      match target with
+      | `H (_, { h_form = f }) -> Neg, f
+      | `C f -> Pos, f
+    in
+    let rec aux pol form = function
+      | [] -> pol
+      | i :: sub ->
+        let subpol, subform =
+          match form with
+          | FConn (c, fs) ->
+            let pol =
+              match c, i with
+              | `Imp, 0 -> opp pol
+              | _, _ -> pol
+            in
+            let subf =
+              try  List.nth fs i
+              with Failure _ -> raise InvalidFormPath
+            in
+            pol, subf
+          | FBind (_, _, _, subf) ->
+            pol, subf
+        in
+        aux subpol subform sub
+    in
+    aux pol form sub
 
   (* -------------------------------------------------------------------- *)
 
@@ -728,10 +762,75 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     if i = 0 then (aux (l-1)) else
       (aux (l - i - 1))@[1]
   
-  let link (src : gpath) (dst : gpath) (proof : Proof.proof)
-    : unit
+  let link (src : ipath) (dst : ipath) (s : Fo.subst) (proof : Proof.proof)
+    : Proof.proof
   =
-    ()
+    proof
+
+  let dnd_actions src dsts (proof : Proof.proof) =
+    let Proof.{ g_id; g_pregoal}, _, (sub_src, subf_src) = of_gpath proof src in
+
+    let for_destination dst =
+      let dst = ipath_of_gpath dst in
+      let Proof.{ g_id = g_id'; _}, _, (sub_dst, subf_dst) = of_ipath proof dst in
+  
+      if not (Handle.eq g_id g_id') then [] else
+
+      (* [search_match scrutinee target] returns the list of paths that
+         lead to a subformula of [target] matching [scrutinee] *)
+      let search_match scrutinee target : (int list) list =
+        let rec aux sub target =
+          if Fo.Form.f_equal scrutinee target then
+            [List.rev sub]
+          else
+            let subfs =
+              match target with
+              | FConn (_, fs) -> fs
+              | FBind (_, _, _, f) -> [f]
+              | _ -> []
+            in
+            List.(concat (mapi (fun i -> aux (i :: sub)) subfs))
+        in
+        aux [] target
+      in
+      
+      let pol_src = pol_of_gpath proof src in
+      let src = ipath_of_gpath src in
+
+      let targets =
+        search_match subf_src subf_dst |>
+        List.map (fun sub -> { 
+          root = dst.root;
+          ctxt = dst.ctxt;
+          sub = sub_dst @ sub }) |>
+        List.filter (fun p ->
+          pol_of_gpath proof (`P p) <> pol_src)
+      in
+
+      List.map (fun tgt ->
+        "Link", [tgt], `DnD (src, tgt), (g_id, `Link (src, tgt, [])))
+        targets
+    in
+    match dsts with
+    | None ->
+      (* Get the list of hypotheses handles *)
+      let dsts = List.of_enum (Map.keys g_pregoal.Proof.g_hyps) in
+      (* Create a list of paths to each hypothesis *)
+      let dsts =
+        List.map
+          (fun id -> mk_ipath (Handle.toint g_id) ~ctxt:(Handle.toint id))
+          dsts
+      in
+      (* Add a path to the conclusion *)
+      let dsts = mk_ipath (Handle.toint g_id) :: dsts in
+      let dsts = List.map (fun p -> `P p) dsts in
+      (* Get the possible actions for each formula in the goal,
+         that is the hypotheses and the conclusion *)
+      List.flatten (List.map for_destination dsts)
+
+    | Some dst ->
+      for_destination dst
+
 
   let dnD_actions src dsts (proof : Proof.proof) =
     begin
@@ -739,7 +838,6 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
       let Proof.{ g_id = hd1; g_pregoal = pr}, tg1, _ = of_gpath proof src in
 
-      (* [for_destination] is the actual subformula linking operation *)
       let for_destination (dst : gpath) =
         try
           let Proof.{ g_id = hd2; _}, tg2, _ = of_gpath proof dst in
@@ -883,7 +981,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
                   let hg = mk_ipath (Handle.toint hd) 
                     ~sub:(if bv 
                           then [] 
-                          else  rebuild_pathd (List.length iv) i)
+                          else rebuild_pathd (List.length iv) i)
                   in
                   (x, [hg], `Click hg, (hd, `Intro i)))
                 iv
@@ -895,7 +993,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         end
 
       | `DnD { source = src; destination = dsts; } ->
-        dnD_actions src dsts proof 
+        dnd_actions src dsts proof 
 
   
   let apply (proof : Proof.proof) ((hd, a) : action) =
@@ -910,4 +1008,6 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         and_drop subhd (proof, hd)    
     | `Forward (src, dst, p, s) ->
         forward (src, dst, p, s) (proof, hd)
+    | `Link (src, dst, s) ->
+        link src dst s proof
 end
