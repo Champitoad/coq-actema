@@ -811,6 +811,9 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
             | FConn (`And, [f1; f2]), 1 -> (`C f1), [[], f1], [[], f2]
             | FConn (`And, [f1; f2]), 2 -> (`C f2), [[], f2], [[], f1]
 
+            | FConn (`Or, [f1; f2]), 1 -> (`C f1), [[], f1], []
+            | FConn (`Or, [f1; f2]), 2 -> (`C f2), [[], f2], []
+
             | _ -> raise TacticNotApplicable
 
             end
