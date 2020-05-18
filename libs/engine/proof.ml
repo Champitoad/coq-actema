@@ -831,23 +831,23 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
             end
 
           (* Left rules *)
-          | `H (_, Proof.{ h_form = f }) -> begin match f, i+1 with
+          | `H (src, Proof.{ h_form = f }) -> begin match f, i+1 with
 
               (* And *)
               | FConn (`And, [f1; f2]), 1 ->
-                `H (Handle.fresh (), Proof.mk_hyp f1),
-                ([None, [f2]], goal.g_goal), []
+                `H (Handle.fresh (), Proof.mk_hyp f1 ~src),
+                ([Some src, [f2]], goal.g_goal), []
               | FConn (`And, [f1; f2]), 2 ->
-                `H (Handle.fresh (), Proof.mk_hyp f2),
-                ([None, [f1]], goal.g_goal), []
+                `H (Handle.fresh (), Proof.mk_hyp f2 ~src),
+                ([Some src, [f1]], goal.g_goal), []
 
               (* Or *)
               | FConn (`Or, [f1; f2]), 1 ->
-                `H (Handle.fresh (), Proof.mk_hyp f1),
-                ([], goal.g_goal), [[None, [f2]], goal.g_goal]
+                `H (Handle.fresh (), Proof.mk_hyp f1 ~src),
+                ([], goal.g_goal), [[Some src, [f2]], goal.g_goal]
               | FConn (`Or, [f1; f2]), 2 ->
-                `H (Handle.fresh (), Proof.mk_hyp f2),
-                ([], goal.g_goal), [[None, [f1]], goal.g_goal]
+                `H (Handle.fresh (), Proof.mk_hyp f2 ~src),
+                ([], goal.g_goal), [[Some src, [f1]], goal.g_goal]
               
               | _ -> raise TacticNotApplicable
             end
