@@ -42,6 +42,8 @@ module Proof : sig
     h_form : form;
   }
 
+  val mk_hyp : ?src:Handle.t -> ?gen:int -> form -> hyp
+
   type hyps = (Handle.t, hyp) Map.t
 
   module Hyps : sig
@@ -786,16 +788,20 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     in
     let _, tg_dst, (sub_dst, _) = of_ipath proof dst in
 
-    let gen_subgoals goal sub_ngoal sub_ogoals =
-      let ogoals = Proof.sgprogress goal sub_ogoals in
-      let ngoal =
-        match Proof.sgprogress goal sub_ngoal with
-        | [g] -> g
-      in
-      (ngoal, ogoals)
-    in
-
     let rec pbp goal ogoals target sub =
+
+      let gen_subgoals target sub_ngoal sub_ogoals =
+        let ogoals = Proof.sgprogress goal sub_ogoals in
+        let ngoal =
+          let ngoal = List.hd (Proof.sgprogress goal [sub_ngoal]) in
+          match target with
+          | `H (uid, hyp) ->
+            { ngoal with g_hyps = Map.add uid hyp ngoal.g_hyps }
+          | _ -> ngoal
+        in
+        (ngoal, ogoals)
+      in
+
       match sub with
 
       (* Axiom *)
@@ -806,19 +812,22 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         (* Right rules *)
         | `C f ->
           let target, sub_ngoal, sub_ogoals =
-            begin match f, i+1 with
+            match f, i+1 with
 
-            | FConn (`And, [f1; f2]), 1 -> (`C f1), [[], f1], [[], f2]
-            | FConn (`And, [f1; f2]), 2 -> (`C f2), [[], f2], [[], f1]
+            | FConn (`And, [f1; f2]), 1 -> `C f1, ([], f1), [[], f2]
+            | FConn (`And, [f1; f2]), 2 -> `C f2, ([], f2), [[], f1]
 
-            | FConn (`Or, [f1; f2]), 1 -> (`C f1), [[], f1], []
-            | FConn (`Or, [f1; f2]), 2 -> (`C f2), [[], f2], []
+            | FConn (`Or, [f1; f2]), 1 -> `C f1, ([], f1), []
+            | FConn (`Or, [f1; f2]), 2 -> `C f2, ([], f2), []
+
+            | FConn (`Imp, [f1; f2]), 1 ->
+              `H (Handle.fresh (), Proof.mk_hyp f1), ([], f2), []
+            | FConn (`Imp, [f1; f2]), 2 ->
+              `C f2, ([None, [f1]], f2), []
 
             | _ -> raise TacticNotApplicable
-
-            end
           in
-          let new_goal, new_ogoals = gen_subgoals goal sub_ngoal sub_ogoals in
+          let new_goal, new_ogoals = gen_subgoals target sub_ngoal sub_ogoals in
           pbp new_goal (ogoals @ new_ogoals) target sub
 
         (* Left rules *)
