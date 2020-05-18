@@ -848,6 +848,14 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
               | FConn (`Or, [f1; f2]), 2 ->
                 `H (Handle.fresh (), Proof.mk_hyp f2 ~src),
                 ([], goal.g_goal), [[Some src, [f1]], goal.g_goal]
+
+              (* Imp *)
+              | FConn (`Imp, [f1; f2]), 1 ->
+                `C f1,
+                ([], f1), [[Some src, [f2]], goal.g_goal]
+              | FConn (`Imp, [f1; f2]), 2 ->
+                `H (Handle.fresh (), Proof.mk_hyp f2 ~src),
+                ([], goal.g_goal), [[], f1]
               
               | _ -> raise TacticNotApplicable
             end
