@@ -812,13 +812,16 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
           
           (* Right rules *)
           | `C f -> begin match f, i+1 with
-
+              
+              (* And *)
               | FConn (`And, [f1; f2]), 1 -> `C f1, ([], f1), [[], f2]
               | FConn (`And, [f1; f2]), 2 -> `C f2, ([], f2), [[], f1]
 
+              (* Or *)
               | FConn (`Or, [f1; f2]), 1 -> `C f1, ([], f1), []
               | FConn (`Or, [f1; f2]), 2 -> `C f2, ([], f2), []
 
+              (* Imp *)
               | FConn (`Imp, [f1; f2]), 1 ->
                 `H (Handle.fresh (), Proof.mk_hyp f1), ([], f2), []
               | FConn (`Imp, [f1; f2]), 2 ->
@@ -830,7 +833,13 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
           (* Left rules *)
           | `H (_, Proof.{ h_form = f }) -> begin match f, i+1 with
 
-              | FConn (`And, [f1; f2]), 1 -> raise TacticNotApplicable
+              (* And *)
+              | FConn (`And, [f1; f2]), 1 ->
+                `H (Handle.fresh (), Proof.mk_hyp f1),
+                ([None, [f2]], goal.g_goal), []
+              | FConn (`And, [f1; f2]), 2 ->
+                `H (Handle.fresh (), Proof.mk_hyp f2),
+                ([None, [f1]], goal.g_goal), []
               
               | _ -> raise TacticNotApplicable
             end
