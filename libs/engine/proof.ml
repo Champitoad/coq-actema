@@ -790,16 +790,16 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
     let rec pbp goal ogoals target sub =
 
-      let gen_subgoals target sub_ngoal sub_ogoals =
+      let gen_subgoals target sub_goal sub_ogoals =
         let ogoals = Proof.sgprogress goal sub_ogoals in
-        let ngoal =
-          let ngoal = List.hd (Proof.sgprogress goal [sub_ngoal]) in
+        let goal =
+          let goal = List.hd (Proof.sgprogress goal [sub_goal]) in
           match target with
           | `H (uid, hyp) ->
-            { ngoal with g_hyps = Map.add uid hyp ngoal.g_hyps }
-          | _ -> ngoal
+            { goal with g_hyps = Map.add uid hyp goal.g_hyps }
+          | _ -> goal
         in
-        (ngoal, ogoals)
+        (goal, ogoals)
       in
 
       match sub with
@@ -807,38 +807,36 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       (* Axiom *)
       | [] -> ogoals
 
-      | i :: sub -> match target with
-        
-        (* Right rules *)
-        | `C f ->
-          let target, sub_ngoal, sub_ogoals =
-            match f, i+1 with
-
-            | FConn (`And, [f1; f2]), 1 -> `C f1, ([], f1), [[], f2]
-            | FConn (`And, [f1; f2]), 2 -> `C f2, ([], f2), [[], f1]
-
-            | FConn (`Or, [f1; f2]), 1 -> `C f1, ([], f1), []
-            | FConn (`Or, [f1; f2]), 2 -> `C f2, ([], f2), []
-
-            | FConn (`Imp, [f1; f2]), 1 ->
-              `H (Handle.fresh (), Proof.mk_hyp f1), ([], f2), []
-            | FConn (`Imp, [f1; f2]), 2 ->
-              `C f2, ([None, [f1]], f2), []
-
-            | _ -> raise TacticNotApplicable
-          in
-          let new_goal, new_ogoals = gen_subgoals target sub_ngoal sub_ogoals in
-          pbp new_goal (ogoals @ new_ogoals) target sub
-
-        (* Left rules *)
-        | `H (_, Proof.{ h_form = f }) -> begin match f, i+1 with
+      | i :: sub ->
+        let target, sub_goal, sub_ogoals = match target with
           
-          | _ -> raise TacticNotApplicable
+          (* Right rules *)
+          | `C f -> begin match f, i+1 with
 
-          end
+              | FConn (`And, [f1; f2]), 1 -> `C f1, ([], f1), [[], f2]
+              | FConn (`And, [f1; f2]), 2 -> `C f2, ([], f2), [[], f1]
 
-        (* Should not happen if unification went smoothly *)
-        | _ -> raise TacticNotApplicable
+              | FConn (`Or, [f1; f2]), 1 -> `C f1, ([], f1), []
+              | FConn (`Or, [f1; f2]), 2 -> `C f2, ([], f2), []
+
+              | FConn (`Imp, [f1; f2]), 1 ->
+                `H (Handle.fresh (), Proof.mk_hyp f1), ([], f2), []
+              | FConn (`Imp, [f1; f2]), 2 ->
+                `C f2, ([None, [f1]], f2), []
+
+              | _ -> raise TacticNotApplicable
+            end
+
+          (* Left rules *)
+          | `H (_, Proof.{ h_form = f }) -> begin match f, i+1 with
+
+              | FConn (`And, [f1; f2]), 1 -> raise TacticNotApplicable
+              
+              | _ -> raise TacticNotApplicable
+            end
+        in
+        let goal, new_ogoals = gen_subgoals target sub_goal sub_ogoals in
+        pbp goal (ogoals @ new_ogoals) target sub
     in
 
     let subgoals = pbp goal [] tg_dst sub_dst in
