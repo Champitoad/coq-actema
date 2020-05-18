@@ -777,25 +777,25 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   type pnode += TLink
   
   (* [link] is the equivalent of Proof by Pointing's [finger_tac], but using the
-     interaction rules specific to subformula linking *)
+     interaction rules specific to subformula linking. *)
   let link (src : ipath) (dst : ipath) (s : Fo.subst) (proof : Proof.proof)
     : Proof.proof
   =
-    let Proof.{ g_id; g_pregoal = pr }, tg_src, (sub_src, _) =
+    let Proof.{ g_id; g_pregoal = goal }, tg_src, (sub_src, _) =
       of_ipath proof src
     in
     let _, tg_dst, (sub_dst, _) = of_ipath proof dst in
 
-    let gen_subgoals ?(clear = true) sub_goal sub_ogoals =
-      let ogoals = Proof.sgprogress ~clear pr sub_ogoals in
-      let goal =
-        match Proof.sgprogress ~clear pr sub_goal with
+    let gen_subgoals goal sub_ngoal sub_ogoals =
+      let ogoals = Proof.sgprogress goal sub_ogoals in
+      let ngoal =
+        match Proof.sgprogress goal sub_ngoal with
         | [g] -> g
       in
-      (goal, ogoals)
+      (ngoal, ogoals)
     in
 
-    let rec pbp (goal, ogoals) target sub =
+    let rec pbp goal ogoals target sub =
       match sub with
 
       (* Axiom *)
@@ -804,17 +804,19 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | i :: sub -> match target with
         
         (* Right rules *)
-        | `C f -> begin match f, i+1 with
+        | `C f ->
+          let target, sub_ngoal, sub_ogoals =
+            begin match f, i+1 with
 
-          | FConn (`And, [f1; f2]), 1 ->
-            pbp (gen_subgoals [[], f1] [[], f2]) (`C f1) sub
-          
-          | FConn (`And, [f1; f2]), 2 ->
-            pbp (gen_subgoals [[], f2] [[], f1]) (`C f2) sub
+            | FConn (`And, [f1; f2]), 1 -> (`C f1), [[], f1], [[], f2]
+            | FConn (`And, [f1; f2]), 2 -> (`C f2), [[], f2], [[], f1]
 
-          | _ -> raise TacticNotApplicable
-          
-          end
+            | _ -> raise TacticNotApplicable
+
+            end
+          in
+          let new_goal, new_ogoals = gen_subgoals goal sub_ngoal sub_ogoals in
+          pbp new_goal (ogoals @ new_ogoals) target sub
 
         (* Left rules *)
         | `H (_, Proof.{ h_form = f }) -> begin match f, i+1 with
@@ -827,7 +829,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         | _ -> raise TacticNotApplicable
     in
 
-    let subgoals = pbp (pr, []) tg_dst sub_dst in
+    let subgoals = pbp goal [] tg_dst sub_dst in
     Proof.xprogress proof g_id TLink subgoals
 
   (* [search_match pol_scrutinee scrutinee pol_target target] returns the list of
