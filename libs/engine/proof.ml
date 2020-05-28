@@ -805,7 +805,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       match sub with
 
       (* Axiom *)
-      | [] -> ogoals
+      | [] -> List.rev ogoals
 
       | i :: sub ->
         let target, sub_goal, sub_ogoals = match target with
