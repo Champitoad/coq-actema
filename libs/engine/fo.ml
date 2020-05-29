@@ -177,11 +177,11 @@ module VName : sig
 end = struct
   type bds = (name * name) list
 
-  let equal (_bds : bds) ((_x, _i) : vname) ((_y, _j) : vname) =
-    _i = _j &&
-    match List.find_opt (fun (x, y) -> x = _x || y = _y) _bds with
+  let equal (bds : bds) ((x, i) : vname) ((y, j) : vname) =
+    i = j &&
+    match List.find_opt (fun (x0, y0) -> x = x0 || y = y0) bds with
     | None -> false
-    | Some (x, y) -> x = _x && y = _y
+    | Some (x0, y0) -> x = x0 && y = y0
 
   module Map = struct
     let empty : bds =
