@@ -178,7 +178,10 @@ end = struct
   type bds = (name * name) list
 
   let equal (_bds : bds) ((_x, _i) : vname) ((_y, _j) : vname) =
-    _i = _j && _x = _y
+    _i = _j &&
+    match List.find_opt (fun (x, y) -> x = _x || y = _y) _bds with
+    | None -> false
+    | Some (x, y) -> x = _x && y = _y
 
   module Map = struct
     let empty : bds =
