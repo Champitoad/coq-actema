@@ -570,7 +570,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | ((FBind (`Forall, x, ty, f)), 0::p, ((y, Sflex)::s)) ->
 	  FBind (`Forall, x,ty, build_dest (f, p, s))
       | ((FBind (`Forall, x, ty, f)), 0::p, ((y, (Sbound e))::s)) ->
-          build_dest ((Form.f_subst f x 0 e), p, s)
+          build_dest ((Form.f_subst x 0 e f), p, s)
       | (FConn (`Imp, [f1 ; f2]), (0::_), s) ->
    	   Form.iter_subst s (List.length s, f2)
       | (FConn (`Imp, [f1; f2]), (1::p), s) ->

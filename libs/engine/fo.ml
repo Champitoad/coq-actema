@@ -7,6 +7,22 @@ open Syntax
 type name  = string
 type vname = name * int
 
+(** [fresh_evar_name ~basename ()] generates a fresh name for an
+    existential variable, based on an optional [basename].
+
+    We choose by convention to name existential variables with a leading '?'.
+    This ensures freshness by avoiding clashes with variables names input
+    by the user, by the definition of identifiers in the lexer. This also
+    means that every new existential variable must be instanciated through
+    this function.
+*)
+
+let evar_name_counter = ref (-1)
+
+let fresh_evar_name ?(basename = "x") () =
+  incr evar_name_counter;
+  "?" ^ basename ^ string_of_int !evar_name_counter
+
 (* -------------------------------------------------------------------- *)
 type type_ =
   | TVar  of vname
@@ -39,11 +55,14 @@ type sitem =
 
 type subst = (name * sitem) list
 
+type 'a eqns = ('a * 'a) list
+
 (* -------------------------------------------------------------------- *)
 type env = {
   env_prp  : (name, arity     ) Map.t;
   env_fun  : (name, sig_      ) Map.t;
   env_var  : (name, type_ list) Map.t;
+  env_evar : (name, type_ list) Map.t;
   env_tvar : (name, int       ) Map.t;
 }
 
@@ -55,6 +74,7 @@ end = struct
     env_prp  = Map.empty;
     env_fun  = Map.empty;
     env_var  = Map.empty;
+    env_evar = Map.empty;
     env_tvar = Map.empty;
   }
 end
@@ -127,6 +147,35 @@ end = struct
 
   let all (env : env) =
     env.env_var
+end
+
+(* -------------------------------------------------------------------- *)
+module EVars : sig
+  val push   : env -> name * type_ -> env
+  val exists : env -> vname -> bool
+  val get    : env -> vname -> type_ option
+  val remove : env -> vname -> env
+  val all    : env -> (name, type_ list) Map.t
+end = struct
+  let push (env : env) ((name, ty) : name * type_) =
+    { env with env_evar = Map.modify_opt name (fun bds ->
+          Some (ty :: Option.default [] bds)
+        ) env.env_evar; }
+
+  let get (env : env) ((name, idx) : vname) =
+    let bds = Map.find_default [] name env.env_evar in
+    List.nth_opt bds idx
+
+  let exists (env : env) (vname : vname) =
+    Option.is_some (get env vname)
+
+  let remove (env : env) ((name, idx) : vname) =
+    let bds = Map.find_default [] name env.env_evar in
+    let bds = List.remove_at idx bds in
+    { env with env_evar = Map.add name bds env.env_evar }
+
+  let all (env : env) =
+    env.env_evar
 end
 
 (* -------------------------------------------------------------------- *)
@@ -228,12 +277,12 @@ module Form : sig
   val f_equal : ?bds:VName.bds -> form  -> form  -> bool
   val e_matchl : subst -> (expr * expr) list -> subst option
   val f_matchl : subst -> (form * form) list -> subst option
-  val e_unify : subst -> (expr * expr) list -> subst option
-  val f_unify : subst -> (form * form) list -> subst option
+  val e_unify : env -> subst -> expr eqns -> (env * subst) option
+  val f_unify : env -> subst -> form eqns -> (env * subst) option
   val search_match_p : subst -> form -> form -> (subst * int list) option
   val search_match_f : subst -> form -> form -> (subst * int list) option
-  val f_subst : form -> name -> int -> expr -> form
-  val e_subst : expr -> name -> int -> expr -> expr
+  val f_subst : name -> int -> expr -> form -> form
+  val e_subst : name -> int -> expr -> expr -> expr
   val iter_subst : subst -> (int * form) -> form
   val s_complete : subst -> bool
 
@@ -277,21 +326,18 @@ end = struct
   let e_equal =
     let rec aux bds e1 e2 =
       match e1, e2 with
-	| EVar x1, EVar x2 -> VName.equal bds x1 x2
-	| EFun (f1, es1), EFun (f2, es2) 
-            when List.length es1 = List.length es2
-              ->
-            (f1 = f2) && List.for_all2 (aux bds) es1 es2
-
-	| _, _ ->
+      | EVar x1, EVar x2 -> VName.equal bds x1 x2
+      | EFun (f1, es1), EFun (f2, es2) 
+        when List.length es1 = List.length es2 ->
+          (f1 = f2) && List.for_all2 (aux bds) es1 es2
+      | _, _ ->
           false
-
-    in fun ?(bds = VName.Map.empty) e1 e2 -> aux bds e1 e2
+    in
+    fun ?(bds = VName.Map.empty) e1 e2 -> aux bds e1 e2
 
   let rec e_lift (x:name) (i:int) = function
-    | EVar (y, j) when x=y ->
-      if j >= i then EVar(y, j+1) else EVar(y, j)
-    | (EVar (_,_)) as e -> e
+    | EVar (y, j) when x = y && j >= i -> EVar(y, j+1)
+    | EVar _ as e -> e
     | EFun (f1, l) -> EFun(f1, List.map (e_lift x i) l)
  
   let rec f_lift x i = function
@@ -303,21 +349,20 @@ end = struct
       else FBind(b, y, ty, f_lift x (i+1) f)
     | FTrue | FFalse as f -> f	 
 	  
-  let rec e_subst t x i e =
-    match t with
-      | EFun (f, l) -> EFun (f, List.map (fun y -> e_subst y x i e) l)
-      | EVar (n, j) when x = n ->
-	  if i=j then e
-	  else if j > i then EVar (n, j - 1) else EVar (n, j)
-      | f -> f
+  let rec e_subst x i e = function 
+    | EFun (f, l) -> EFun (f, List.map (e_subst x i e) l)
+    | EVar (y, j) when x = y ->
+      if i=j then e
+      else if j > i then EVar (y, j - 1)
+      else EVar (y, j)
+    | f -> f
 	    
 	    
-  let rec f_subst f x i e =
-    match f with
-      | FPred (p, l) -> FPred (p, List.map (fun ei -> e_subst ei x i e) l)
-      | FConn (c, l) -> FConn (c, List.map (fun y -> f_subst y x i e) l)
-      | FBind (b, n, t, g) -> FBind (b, n, t, f_subst g x (i+1) e)
-      | FTrue | FFalse as g -> g
+  let rec f_subst x i e = function
+    | FPred (p, l) -> FPred (p, List.map (e_subst x i e) l)
+    | FConn (c, l) -> FConn (c, List.map (f_subst x i e) l)
+    | FBind (b, n, t, g) -> FBind (b, n, t, f_subst x (i+1) e g)
+    | FTrue | FFalse as g -> g
 	  
 			
   let rec iter_subst s (i, f) =
@@ -325,28 +370,29 @@ end = struct
     then f
     else
       match s with
-	| [] -> failwith "iter_subst1"
-	| (x, Sbound e)::s ->
-	    let f1 = f_subst f x 0 e in
-	    iter_subst s (i - 1, f1)
-	| (_, _)::s -> iter_subst s (i - 1, f)
-	    
+      | [] -> failwith "iter_subst1"
+      | (x, Sbound e)::s ->
+          let f1 = f_subst x 0 e f in
+          iter_subst s (i - 1, f1)
+      | (_, _)::s -> iter_subst s (i - 1, f)
+        
 
   let rec flex_subst (n, i) = function
     | [] -> false
     | (m, tag)::l when n=m ->
-	if i=0 then tag=Sflex else flex_subst (n, i - 1) l
+        if i=0 then tag=Sflex else flex_subst (n, i - 1) l
     | _::l -> flex_subst (n, i) l
 
 	
   let rec bound_subst (n, i) = function
     | [] -> false
     | (m, tag)::l when n=m ->
-	if i=0 then
-	  match tag with
-	     | Sbound _ -> true
-	     | _ -> false
-	else bound_subst (n, i - 1) l
+      if i = 0 then
+        match tag with
+          | Sbound _ -> true
+          | _ -> false
+      else
+        bound_subst (n, i - 1) l
     | _::l -> bound_subst (n, i) l
 
   let rec fetch_subst (n, i) = function
@@ -381,26 +427,50 @@ end = struct
         e_matchl s ((List.map2 (fun x y -> (x,y)) fl gl)@l)
     | _ -> None
 
-  (* Martelli and Montanari's unification algorithm *)
-  let rec e_unify s = function
+
+  (** [e_unify env s eqns] implements a variant of Martelli and Montanari's
+      unification algorithm on a list of term equations [eqns], with additional
+      handling of a substitution [s] and an environement [env] holding a context
+      of existential variables.
+  *)
+  let rec e_unify env s = function
 
     (* success *)
-    | [] -> Some s
+    | [] -> Some (env, s)
 
-    | (t, u) :: l ->
-      match t, u with
+    | (t, u) :: eqns -> match t, u with
 
-      (* delete *)
-      | _ when e_equal t u ->
-        e_unify s l
+      (* (eliminate) is decomposed into the 2 following mutually exclusive cases: *)
 
-      (* decompose *)
+      (* (existential) *)
+      | EVar (x, i), t
+        when EVars.exists env (x, i) ->
+        let env = EVars.remove env (x, i) in
+        let s = (x, Sbound t) :: s in
+        e_unify env s eqns
+
+      (* (instanciate) *)
+      | EVar x, t
+        when bound_subst x s ->
+        e_unify env s (((fetch_subst x s), t) :: eqns)
+
+      (* (delete) *)
+      | EVar x, EVar y
+        when x = y ->
+        e_unify env s eqns
+
+      (* (decompose) *)
       | EFun (f, ts), EFun (g, us) when f = g ->
-        e_matchl s ((List.combine ts us) @ l)
+        e_unify env s ((List.combine ts us) @ eqns)
 
-      (* fail *)
+      (* swap *)
+      | (EFun (_, _) as f), (EVar _ as x) ->
+        e_unify env s ((x, f) :: eqns)
+
+      (* failure *)
       | _ -> None
 	
+
   let f_equal =
     let rec aux bds f1 f2 =
       match f1, f2 with
@@ -448,7 +518,7 @@ end = struct
         when b1 = b2 && ty1 = ty2 ->
 
         (* the following seems correct even when x1=x2 *)
-        begin match f_matchl ((x1, Srigid)::s) [(f1, f_subst (f_lift x1 0 f2) x2 0 (EVar (x1, 0)))] with
+        begin match f_matchl ((x1, Srigid)::s) [(f1, f_subst x2 0 (EVar (x1, 0)) (f_lift x1 0 f2))] with
         | Some (_::s') -> f_matchl s' l
         | None -> None
         | _ -> failwith "f_matchl bind"
@@ -456,9 +526,52 @@ end = struct
 
       | _ -> None
 
-  let rec f_unify s = function
-    | _ -> None
+
+  (** [f_unify env s eqns] does oriented unification of a list of equations [eqns]
+      between formulas of opposite polarities, updating along the way a substitution
+      [s] and an environment [env] holding a context of existential variables.
+  *)
+  let rec f_unify env s = function
+
+    | [] -> Some (env, List.rev s)
+
+    | (f1, f2) :: eqns -> match f1, f2 with
+
+      | FPred (p1, l1), FPred (p2, l2)
+        when p1 = p2 && List.length l1 = List.length l2 ->       
+
+        begin match e_unify env s (List.combine l1 l2) with
+        | Some (env, s) -> f_unify env s eqns
+        | None -> None
+        end
+
+      | FConn (c1, l1), FConn (c2, l2)
+        when c1 = c2 && List.length l1 = List.length l2 ->
+
+        let subeqns = match c1, l1, l2 with
+          | `Imp, [a; b], [c; d] -> [c, a; b, d]
+          | _ -> List.combine l1 l2
+        in
+        f_unify env s (subeqns @ eqns)
+
+      | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
+        when b1 = b2 && ty1 = ty2 ->
+
+        let z, f1, f2 = match b1 with
+          | `Forall ->
+            let z = fresh_evar_name ~basename:x2 () in
+            z, f1, f_subst x2 0 (EVar (z, 0)) f2
+          | `Exist ->
+            let z = fresh_evar_name ~basename:x1 () in
+            z, f_subst x1 0 (EVar (z, 0)) f1, f2
+        in
+        let env = EVars.push env (z, ty1) in
+        let eqns = (f1, f2) :: eqns in
+        f_unify env s eqns
+
+      | _ -> None
 	
+
   (* [search_match_p s p t] looks for a subformula of [p] that matches [t] under the
      substitution [s]. It returns [Some (s', pt)] with [s'] the new substitution and
      [pt] the path of the subformula if it succeeds, and [None] otherwise. *)
