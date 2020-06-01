@@ -228,6 +228,8 @@ module Form : sig
   val f_equal : ?bds:VName.bds -> form  -> form  -> bool
   val e_matchl : subst -> (expr * expr) list -> subst option
   val f_matchl : subst -> (form * form) list -> subst option
+  val e_unify : subst -> (expr * expr) list -> subst option
+  val f_unify : subst -> (form * form) list -> subst option
   val search_match_p : subst -> form -> form -> (subst * int list) option
   val search_match_f : subst -> form -> form -> (subst * int list) option
   val f_subst : form -> name -> int -> expr -> form
@@ -288,17 +290,17 @@ end = struct
 
   let rec e_lift (x:name) (i:int) = function
     | EVar (y, j) when x=y ->
-	if j >= i then EVar(y, j+1) else EVar(y, j)
-      | (EVar (_,_)) as e -> e
-      | EFun (f1, l) -> EFun(f1, List.map (e_lift x i) l)
+      if j >= i then EVar(y, j+1) else EVar(y, j)
+    | (EVar (_,_)) as e -> e
+    | EFun (f1, l) -> EFun(f1, List.map (e_lift x i) l)
  
   let rec f_lift x i = function
     | FConn(c, l) -> FConn(c, List.map (f_lift x i) l)
     | FPred(p, l) -> FPred(p, List.map (e_lift x i) l)
     | FBind(b, y, ty, f) ->
-	if y<>x
-	then FBind(b, y, ty, f_lift x i f)
-	else FBind(b, y, ty, f_lift x (i+1) f)
+      if y<>x
+      then FBind(b, y, ty, f_lift x i f)
+      else FBind(b, y, ty, f_lift x (i+1) f)
     | FTrue | FFalse as f -> f	 
 	  
   let rec e_subst t x i e =
@@ -350,11 +352,12 @@ end = struct
   let rec fetch_subst (n, i) = function
     | [] -> failwith "fetch_subst1"
     | (m, t)::l when n=m ->
-	if i = 0 then
-	  (match t with
-	     | Sbound e -> e
-	     | _ -> failwith "fetch_subst2")
-	else fetch_subst (n, i - 1) l
+        if i = 0 then
+          match t with
+          | Sbound e -> e
+          | _ -> failwith "fetch_subst2"
+        else
+          fetch_subst (n, i - 1) l
     | _::l -> fetch_subst (n, i) l
 
 (* warning : one relies on the fact that the order *)
@@ -366,18 +369,37 @@ end = struct
     | (m, Sflex)::l when n=m && i=0 -> (m, Sbound e)::l
     | _ -> failwith "add_subst2"
 
-  let rec e_matchl s =  function
+  let rec e_matchl s = function
     | [] -> Some s
     | (EVar x, e)::l when flex_subst x s ->
-	let s' = add_subst x e s in
-	e_matchl s' l
+        let s' = add_subst x e s in
+        e_matchl s' l
     | ((EVar x, e)::l) when bound_subst x s ->
-	e_matchl s (((fetch_subst x s), e)::l)
+        e_matchl s (((fetch_subst x s), e)::l)
     | ((EVar x, EVar y)::l) when x=y -> e_matchl s l
     | (EFun(f, fl), (EFun(g, gl)))::l when f=g -> 
-	e_matchl s ((List.map2 (fun x y -> (x,y)) fl gl)@l)
+        e_matchl s ((List.map2 (fun x y -> (x,y)) fl gl)@l)
     | _ -> None
 
+  (* Martelli and Montanari's unification algorithm *)
+  let rec e_unify s = function
+
+    (* success *)
+    | [] -> Some s
+
+    | (t, u) :: l ->
+      match t, u with
+
+      (* delete *)
+      | _ when e_equal t u ->
+        e_unify s l
+
+      (* decompose *)
+      | EFun (f, ts), EFun (g, us) when f = g ->
+        e_matchl s ((List.combine ts us) @ l)
+
+      (* fail *)
+      | _ -> None
 	
   let f_equal =
     let rec aux bds f1 f2 =
@@ -386,43 +408,56 @@ end = struct
       | FFalse, FFalse -> true
 
       | FPred (p1, es1), FPred (p2, es2)
-          when List.length es1 = List.length es2
+        when List.length es1 = List.length es2
         -> (p1 = p2)  && List.for_all2 (e_equal ~bds) es1 es2 
 
       | FConn (c1, fs1), FConn (c2, fs2)
-          when List.length fs1 = List.length fs2 
+        when List.length fs1 = List.length fs2 
         -> (c1 = c2) && List.for_all2 (aux bds) fs1 fs2
 
       | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
-	  when b1 = b2 ->
-             t_equal ty1 ty2
+        when b1 = b2 ->
+            t_equal ty1 ty2
          && aux (VName.Map.push bds x1 x2) f1 f2
 
       | _, _ ->
           false
 
-    in  fun ?(bds = VName.Map.empty) f1 f2 -> aux bds f1 f2
+    in fun ?(bds = VName.Map.empty) f1 f2 -> aux bds f1 f2
 
   let rec f_matchl s = function
+
     | [] -> Some (List.rev s)
-    | (FConn (c1, l1), FConn (c2, l2))::l
-	when c1 = c2 && List.length l1 = List.length l2 ->
-       f_matchl s ((List.map2 (fun x y -> (x, y)) l1 l2)@l)
-    | (FPred (p1, l1), FPred (p2, l2))::l
-	when p1 = p2 && List.length l1 = List.length l2 ->       
-      ( match e_matchl s  (List.map2 (fun x y -> (x, y)) l1 l2) with
-	  | Some (s') -> f_matchl s' l
-	  | None -> None
-      )
-    | (FBind (b1, x1, ty1, f1), FBind(b2, x2, ty2, f2))::l
-	when b1 = b2 && ty1 = ty2 ->
-	(* the following seems correct even when x1=x2 *)
-	(match f_matchl ((x1, Srigid)::s) [(f1,f_subst (f_lift x1 0 f2) x2 0 (EVar(x1,0)))] with
-	   | Some (_::s') -> f_matchl s' l
-	   | None -> None
-	   | _ -> failwith "f_matchl bind"
-	)
-    | _::_ -> None
+
+    | (f1, f2) :: l -> match f1, f2 with
+
+      | FPred (p1, l1), FPred (p2, l2)
+        when p1 = p2 && List.length l1 = List.length l2 ->       
+
+        begin match e_matchl s (List.combine l1 l2) with
+        | Some (s') -> f_matchl s' l
+        | None -> None
+        end
+
+      | FConn (c1, l1), FConn (c2, l2)
+        when c1 = c2 && List.length l1 = List.length l2 ->
+
+        f_matchl s ((List.combine l1 l2)@l)
+
+      | FBind (b1, x1, ty1, f1), FBind(b2, x2, ty2, f2)
+        when b1 = b2 && ty1 = ty2 ->
+
+        (* the following seems correct even when x1=x2 *)
+        begin match f_matchl ((x1, Srigid)::s) [(f1, f_subst (f_lift x1 0 f2) x2 0 (EVar (x1, 0)))] with
+        | Some (_::s') -> f_matchl s' l
+        | None -> None
+        | _ -> failwith "f_matchl bind"
+        end
+
+      | _ -> None
+
+  let rec f_unify s = function
+    | _ -> None
 	
   (* [search_match_p s p t] looks for a subformula of [p] that matches [t] under the
      substitution [s]. It returns [Some (s', pt)] with [s'] the new substitution and
