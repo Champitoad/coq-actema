@@ -7,22 +7,6 @@ open Syntax
 type name  = string
 type vname = name * int
 
-(** [fresh_evar_name ~basename ()] generates a fresh name for an
-    existential variable, based on an optional [basename].
-
-    We choose by convention to name existential variables with a leading '?'.
-    This ensures freshness by avoiding clashes with variables names input
-    by the user, by the definition of identifiers in the lexer. This also
-    means that every new existential variable must be instanciated through
-    this function.
-*)
-
-let evar_name_counter = ref (-1)
-
-let fresh_evar_name ?(basename = "x") () =
-  incr evar_name_counter;
-  "?" ^ basename ^ string_of_int !evar_name_counter
-
 (* -------------------------------------------------------------------- *)
 type type_ =
   | TVar  of vname
@@ -150,16 +134,34 @@ end
 
 (* -------------------------------------------------------------------- *)
 module EVars : sig
-  val push   : env -> name * type_ -> env
+  val push   : env -> name option * type_ -> name * env
   val exists : env -> vname -> bool
   val get    : env -> vname -> type_ option
   val remove : env -> vname -> env
   val all    : env -> (name, type_ list) Map.t
 end = struct
-  let push (env : env) ((name, ty) : name * type_) =
-    { env with env_evar = Map.modify_opt name (fun bds ->
-          Some (ty :: Option.default [] bds)
-        ) env.env_evar; }
+
+  (** [fresh_evar_name ~basename ()] generates a fresh name for an
+      existential variable, based on an optional [basename].
+
+      We choose by convention to name existential variables with a leading '?'.
+      This ensures freshness by avoiding clashes with variables names input
+      by the user, by the definition of identifiers in the lexer. This also
+      means that every new existential variable must be instanciated through
+      this function.
+  *)
+
+  let evar_name_counter = ref (-1)
+
+  let fresh_evar_name ?(basename = "x") () =
+    incr evar_name_counter;
+    "?" ^ basename ^ string_of_int !evar_name_counter
+
+  let push (env : env) ((name, ty) : name option * type_) =
+    let name = fresh_evar_name ?basename:name () in
+    name, { env with env_evar = Map.modify_opt name (fun bds ->
+              Some (ty :: Option.default [] bds))
+              env.env_evar; }
 
   let get (env : env) ((name, idx) : vname) =
     let bds = Map.find_default [] name env.env_evar in
@@ -557,16 +559,6 @@ end = struct
       | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
         when b1 = b2 && ty1 = ty2 ->
 
-        let z, f1, f2 = match b1 with
-          | `Forall ->
-            let z = fresh_evar_name ~basename:x2 () in
-            z, f1, f_subst x2 0 (EVar (z, 0)) f2
-          | `Exist ->
-            let z = fresh_evar_name ~basename:x1 () in
-            z, f_subst x1 0 (EVar (z, 0)) f1, f2
-        in
-        let env = EVars.push env (z, ty1) in
-        let eqns = (f1, f2) :: eqns in
         f_unify env s eqns
 
       | _ -> None
