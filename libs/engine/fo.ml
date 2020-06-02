@@ -50,7 +50,6 @@ type arity = type_ list
 
 type sitem = 
   | Sbound of expr
-  | Srigid
   | Sflex
 
 type subst = (name * sitem) list
@@ -518,7 +517,7 @@ end = struct
         when b1 = b2 && ty1 = ty2 ->
 
         (* the following seems correct even when x1=x2 *)
-        begin match f_matchl ((x1, Srigid)::s) [(f1, f_subst x2 0 (EVar (x1, 0)) (f_lift x1 0 f2))] with
+        begin match f_matchl s [(f1, f_subst x2 0 (EVar (x1, 0)) (f_lift x1 0 f2))] with
         | Some (_::s') -> f_matchl s' l
         | None -> None
         | _ -> failwith "f_matchl bind"
@@ -550,6 +549,7 @@ end = struct
 
         let subeqns = match c1, l1, l2 with
           | `Imp, [a; b], [c; d] -> [c, a; b, d]
+          | `Not, [a], [b] -> [b, a]
           | _ -> List.combine l1 l2
         in
         f_unify env s (subeqns @ eqns)
