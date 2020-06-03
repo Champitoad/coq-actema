@@ -278,12 +278,12 @@ module Form : sig
   val f_equal : ?bds:VName.bds -> form  -> form  -> bool
   val e_matchl : subst -> (expr * expr) list -> subst option
   val f_matchl : subst -> (form * form) list -> subst option
-  val e_unify : env -> subst -> expr eqns -> (env * subst) option
-  val f_unify : env -> subst -> form eqns -> (env * subst) option
+  val e_unify : env -> subst -> expr eqns -> subst option
+  val f_unify : env -> subst -> form eqns -> subst option
   val search_match_p : subst -> form -> form -> (subst * int list) option
   val search_match_f : subst -> form -> form -> (subst * int list) option
-  val f_subst : name -> int -> expr -> form -> form
-  val e_subst : name -> int -> expr -> expr -> expr
+  val f_subst : vname -> expr -> form -> form
+  val e_subst : vname -> expr -> expr -> expr
   val iter_subst : subst -> (int * form) -> form
   val s_complete : subst -> bool
 
@@ -336,22 +336,24 @@ end = struct
     in
     fun ?(bds = VName.Map.empty) e1 e2 -> aux bds e1 e2
 
-  let rec e_lift (x:name) (i:int) = function
+  let rec e_lift (x, i : vname) = function
     | EVar (y, j) when x = y && j >= i -> EVar(y, j+1)
     | EVar _ as e -> e
-    | EFun (f1, l) -> EFun(f1, List.map (e_lift x i) l)
+    | EFun (f1, l) -> EFun(f1, List.map (e_lift (x, i)) l)
  
-  let rec f_lift x i = function
-    | FConn(c, l) -> FConn(c, List.map (f_lift x i) l)
-    | FPred(p, l) -> FPred(p, List.map (e_lift x i) l)
+  (* [f_lift (x, i) f] increases by 1 the index of every occurrence of [x] in [f]
+     that appears under [i] quantifiers that bind [x]. *)
+  let rec f_lift (x, i : vname) = function
+    | FConn(c, l) -> FConn(c, List.map (f_lift (x, i)) l)
+    | FPred(p, l) -> FPred(p, List.map (e_lift (x, i)) l)
     | FBind(b, y, ty, f) ->
       if y<>x
-      then FBind(b, y, ty, f_lift x i f)
-      else FBind(b, y, ty, f_lift x (i+1) f)
+      then FBind(b, y, ty, f_lift (x, i) f)
+      else FBind(b, y, ty, f_lift (x, i+1) f)
     | FTrue | FFalse as f -> f	 
 	  
-  let rec e_subst x i e = function 
-    | EFun (f, l) -> EFun (f, List.map (e_subst x i e) l)
+  let rec e_subst (x, i) e = function 
+    | EFun (f, l) -> EFun (f, List.map (e_subst (x, i) e) l)
     | EVar (y, j) when x = y ->
       if i=j then e
       else if j > i then EVar (y, j - 1)
@@ -359,10 +361,10 @@ end = struct
     | f -> f
 	    
 	    
-  let rec f_subst x i e = function
-    | FPred (p, l) -> FPred (p, List.map (e_subst x i e) l)
-    | FConn (c, l) -> FConn (c, List.map (f_subst x i e) l)
-    | FBind (b, n, t, g) -> FBind (b, n, t, f_subst x (i+1) e g)
+  let rec f_subst (x, i) e = function
+    | FPred (p, l) -> FPred (p, List.map (e_subst (x, i) e) l)
+    | FConn (c, l) -> FConn (c, List.map (f_subst (x, i) e) l)
+    | FBind (b, n, t, g) -> FBind (b, n, t, f_subst (x, i+1) e g)
     | FTrue | FFalse as g -> g
 	  
 			
@@ -373,7 +375,7 @@ end = struct
       match s with
       | [] -> failwith "iter_subst1"
       | (x, Sbound e)::s ->
-          let f1 = f_subst x 0 e f in
+          let f1 = f_subst (x, 0) e f in
           iter_subst s (i - 1, f1)
       | (_, _)::s -> iter_subst s (i - 1, f)
         
@@ -437,7 +439,7 @@ end = struct
   let rec e_unify env s = function
 
     (* success *)
-    | [] -> Some (env, s)
+    | [] -> Some s
 
     | (t, u) :: eqns -> match t, u with
 
@@ -519,7 +521,7 @@ end = struct
         when b1 = b2 && ty1 = ty2 ->
 
         (* the following seems correct even when x1=x2 *)
-        begin match f_matchl s [(f1, f_subst x2 0 (EVar (x1, 0)) (f_lift x1 0 f2))] with
+        begin match f_matchl s [(f1, f_subst (x2, 0) (EVar (x1, 0)) (f_lift (x1, 0) f2))] with
         | Some (_::s') -> f_matchl s' l
         | None -> None
         | _ -> failwith "f_matchl bind"
@@ -534,7 +536,7 @@ end = struct
   *)
   let rec f_unify env s = function
 
-    | [] -> Some (env, List.rev s)
+    | [] -> Some (List.rev s)
 
     | (f1, f2) :: eqns -> match f1, f2 with
 
@@ -542,7 +544,7 @@ end = struct
         when p1 = p2 && List.length l1 = List.length l2 ->       
 
         begin match e_unify env s (List.combine l1 l2) with
-        | Some (env, s) -> f_unify env s eqns
+        | Some s -> f_unify env s eqns
         | None -> None
         end
 
@@ -559,6 +561,8 @@ end = struct
       | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
         when b1 = b2 && ty1 = ty2 ->
 
+        let env = Vars.push env (x1, ty1) in
+        let env = Vars.push env (x2, ty2) in
         f_unify env s eqns
 
       | _ -> None
