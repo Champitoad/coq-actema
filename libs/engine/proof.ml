@@ -719,6 +719,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       let subp =
         match c, i with
         | `Imp, 0 -> opp p
+        | `Not, 0 -> opp p
         | _, _ -> p
       in
       let subf =
@@ -827,6 +828,10 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
               | FConn (`Imp, [f1; f2]), 2 ->
                 `C f2, ([None, [f1]], f2), []
 
+              (* Not *)
+              | FConn (`Not, [f1]), 1 ->
+                `H (Handle.fresh (), Proof.mk_hyp f1), ([], Form.f_false), []
+
               | _ -> raise TacticNotApplicable
             end
 
@@ -856,6 +861,11 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
               | FConn (`Imp, [f1; f2]), 2 ->
                 `H (Handle.fresh (), Proof.mk_hyp f2 ~src),
                 ([], goal.g_goal), [[], f1]
+
+              (* Not *)
+              | FConn (`Not, [f1]), 1 ->
+                `C f1,
+                ([], f1), []
               
               | _ -> raise TacticNotApplicable
             end
