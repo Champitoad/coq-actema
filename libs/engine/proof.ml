@@ -568,27 +568,23 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     (* Here we eventually should have the call to the proof tactics *)
     let rec build_dest = function
       | ((FBind (`Forall, x, ty, f)), 0::p, ((y, Sflex)::s)) ->
-	  FBind (`Forall, x,ty, build_dest (f, p, s))
+          FBind (`Forall, x, ty, build_dest (f, p, s))
       | ((FBind (`Forall, x, ty, f)), 0::p, ((y, (Sbound e))::s)) ->
           build_dest ((Form.f_subst (x, 0) e f), p, s)
-      | (FConn (`Imp, [f1 ; f2]), (0::_), s) ->
-   	   Form.iter_subst s (List.length s, f2)
+      | (FConn (`Imp, [f1; f2]), (0::_), s) ->
+          Form.iter_subst s (List.length s, f2)
       | (FConn (`Imp, [f1; f2]), (1::p), s) ->
-          FConn(`Imp, [Form.iter_subst s (List.length s, f1) ;
-		       build_dest (f2, p, s)])
-	| _ -> failwith "cannot build forward"
-	in
-	let nf = build_dest (dst, p, s) in
-      
-	[ (TForward (hsrc, hdst)),[[Some hdst, [nf]], gl.g_goal] ]
+          FConn(`Imp, [Form.iter_subst s (List.length s, f1);
+          build_dest (f2, p, s)])
+      | _ -> failwith "cannot build forward"
+    in
+    let nf = build_dest (dst, p, s) in
+
+    [ (TForward (hsrc, hdst)), [[Some hdst, [nf]], gl.g_goal] ]
 
 
-
-  let forward   (hsrc, hdst, p, s) ((pr, id) : targ)  =
-    perform (core_forward  (hsrc, hdst, p, s) (pr, id)) pr id 
-
-
-
+  let forward (hsrc, hdst, p, s) ((pr, id) : targ) =
+    perform (core_forward (hsrc, hdst, p, s) (pr, id)) pr id 
 
 
   type pnode += TCut of Fo.form * Handle.t
@@ -789,7 +785,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     in
     let _, tg_dst, (sub_dst, _) = of_ipath proof dst in
 
-    let rec pbp goal ogoals target sub =
+    let rec pbp goal ogoals target sub (s : subst) =
 
       let gen_subgoals target sub_goal sub_ogoals =
         let ogoals = Proof.sgprogress goal sub_ogoals in
@@ -809,72 +805,137 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | [] -> List.rev ogoals
 
       | i :: sub ->
-        let target, sub_goal, sub_ogoals = match target with
+        let (goal, new_ogoals), s = match target with
           
           (* Right rules *)
+
           | `C f -> begin match f, i+1 with
               
               (* And *)
-              | FConn (`And, [f1; f2]), 1 -> `C f1, ([], f1), [[], f2]
-              | FConn (`And, [f1; f2]), 2 -> `C f2, ([], f2), [[], f1]
+
+              | FConn (`And, [f1; f2]), 1 ->
+                gen_subgoals (`C f1) ([], f1) [[], f2], s
+
+              | FConn (`And, [f1; f2]), 2 ->
+                gen_subgoals (`C f2) ([], f2) [[], f1], s
 
               (* Or *)
-              | FConn (`Or, [f1; f2]), 1 -> `C f1, ([], f1), []
-              | FConn (`Or, [f1; f2]), 2 -> `C f2, ([], f2), []
+
+              | FConn (`Or, [f1; f2]), 1 ->
+                gen_subgoals (`C f1) ([], f1) [] , s
+
+              | FConn (`Or, [f1; f2]), 2 ->
+                gen_subgoals (`C f2) ([], f2) [], s
 
               (* Imp *)
+
               | FConn (`Imp, [f1; f2]), 1 ->
-                `H (Handle.fresh (), Proof.mk_hyp f1), ([], f2), []
+                let tgt = `H (Handle.fresh (), Proof.mk_hyp f1) in
+                gen_subgoals tgt ([], f2) [], s
+
               | FConn (`Imp, [f1; f2]), 2 ->
-                `C f2, ([None, [f1]], f2), []
+                gen_subgoals (`C f2) ([None, [f1]], f2) [], s
 
               (* Not *)
+
               | FConn (`Not, [f1]), 1 ->
-                `H (Handle.fresh (), Proof.mk_hyp f1), ([], Form.f_false), []
+                let tgt = `H (Handle.fresh (), Proof.mk_hyp f1) in
+                gen_subgoals tgt ([], Form.f_false) [], s
+
+              (* Forall *)
+
+              | FBind (`Forall, x, ty, f), 1 ->
+                let s, Sbound (EVar (z, _)) = List.pop_assoc x s in
+                let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
+                let goal, ogoals = gen_subgoals (`C f) ([], f) [] in
+                let goal = { goal with g_env = Vars.bind goal.g_env (z, ty) } in
+                (goal, ogoals), s
+
+              (* Exists *)
+
+              | FBind (`Exist, x, ty, f), 1 ->
+                let s, item = List.pop_assoc x s in
+                let subgoals =
+                  match item with
+                  | Sbound t -> 
+                    let f = Form.f_subst (x, 0) t f in
+                    gen_subgoals (`C f) ([], f) []
+                  | Sflex -> failwith "cannot go through uninstanciated quantifiers"
+                in
+                subgoals, s
 
               | _ -> raise TacticNotApplicable
             end
 
           (* Left rules *)
+
           | `H (src, Proof.{ h_form = f }) -> begin match f, i+1 with
 
               (* And *)
+
               | FConn (`And, [f1; f2]), 1 ->
-                `H (Handle.fresh (), Proof.mk_hyp f1 ~src),
-                ([Some src, [f2]], goal.g_goal), []
+                let tgt = `H (Handle.fresh (), Proof.mk_hyp f1 ~src) in
+                gen_subgoals tgt ([Some src, [f2]], goal.g_goal) [], s
+
               | FConn (`And, [f1; f2]), 2 ->
-                `H (Handle.fresh (), Proof.mk_hyp f2 ~src),
-                ([Some src, [f1]], goal.g_goal), []
+                let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
+                gen_subgoals tgt ([Some src, [f1]], goal.g_goal) [], s
 
               (* Or *)
+
               | FConn (`Or, [f1; f2]), 1 ->
-                `H (Handle.fresh (), Proof.mk_hyp f1 ~src),
-                ([], goal.g_goal), [[Some src, [f2]], goal.g_goal]
+                let tgt = `H (Handle.fresh (), Proof.mk_hyp f1 ~src) in
+                gen_subgoals tgt ([], goal.g_goal) [[Some src, [f2]], goal.g_goal], s
+
               | FConn (`Or, [f1; f2]), 2 ->
-                `H (Handle.fresh (), Proof.mk_hyp f2 ~src),
-                ([], goal.g_goal), [[Some src, [f1]], goal.g_goal]
+                let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
+                gen_subgoals tgt ([], goal.g_goal) [[Some src, [f1]], goal.g_goal], s
 
               (* Imp *)
+
               | FConn (`Imp, [f1; f2]), 1 ->
-                `C f1,
-                ([], f1), [[Some src, [f2]], goal.g_goal]
+                gen_subgoals (`C f1) ([], f1) [[Some src, [f2]], goal.g_goal], s
+
               | FConn (`Imp, [f1; f2]), 2 ->
-                `H (Handle.fresh (), Proof.mk_hyp f2 ~src),
-                ([], goal.g_goal), [[], f1]
+                let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
+                gen_subgoals tgt ([], goal.g_goal) [[], f1], s
 
               (* Not *)
+
               | FConn (`Not, [f1]), 1 ->
-                `C f1,
-                ([], f1), []
+                gen_subgoals (`C f1) ([], f1) [], s
+
+              (* Forall *)
+
+              | FBind (`Forall, x, ty, f), 1 ->
+                let s, item = List.pop_assoc x s in
+                let subgoals =
+                  match item with
+                  | Sbound t -> 
+                    let f = Form.f_subst (x, 0) t f in
+                    let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
+                    gen_subgoals tgt ([], goal.g_goal) []
+                  | Sflex -> failwith "cannot go through uninstanciated quantifiers"
+                in
+                subgoals, s
+
+              (* Exists *)
+
+              | FBind (`Exist, x, ty, f), 1 ->
+                let s, Sbound (EVar (z, _)) = List.pop_assoc x s in
+                let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
+                let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
+                let goal, ogoals = gen_subgoals tgt ([], f) [] in
+                let goal = { goal with g_env = Vars.bind goal.g_env (z, ty) } in
+                (goal, ogoals), s
               
               | _ -> raise TacticNotApplicable
             end
         in
-        let goal, new_ogoals = gen_subgoals target sub_goal sub_ogoals in
-        pbp goal (ogoals @ new_ogoals) target sub
+        pbp goal (ogoals @ new_ogoals) target sub s
     in
 
-    let subgoals = pbp goal [] tg_dst sub_dst in
+    let subgoals = pbp goal [] tg_dst sub_dst s in
     Proof.xprogress proof g_id TLink subgoals
 
   (* [search_match pol_scrutinee scrutinee pol_target target] returns the list of

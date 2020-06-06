@@ -33,6 +33,8 @@ module List : sig
   val fst : ('a * 'b) list -> 'a list
   val snd : ('a * 'b) list -> 'b list
 
+  val pop_assoc : 'a -> ('a * 'b) list -> ('a * 'b) list * 'b
+
   val findex : ('a -> bool) -> 'a list -> int option
   val join   : 'a -> 'a list -> 'a list
 
@@ -51,6 +53,11 @@ end = struct
 
   let fst xs = List.map fst xs
   let snd xs = List.map snd xs
+
+  let rec pop_assoc a = function
+    | [] -> raise Not_found
+    | (b, x) :: l when a = b -> l, x
+    | _ :: l -> pop_assoc a l
 
   let findex (type a) (check : a -> bool) (xs : a list) : int option =
     match Exceptionless.findi (fun _ x -> check x) xs with
