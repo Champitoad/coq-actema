@@ -620,9 +620,10 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
           try  List.nth fs i
           with Failure _ -> raise InvalidFormPath
         in subform subf subp
+    
+    | FBind (_, _, _, f) -> f
 
-    | _ ->
-        raise InvalidFormPath
+    | _ -> raise InvalidFormPath
 
   let mk_ipath ?(ctxt : int = 0) ?(sub : int list = []) (root : int) =
     { root; ctxt; sub; }
@@ -714,13 +715,12 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     | FConn (c, fs) ->
       let subp =
         match c, i with
-        | `Imp, 0 -> opp p
-        | `Not, 0 -> opp p
+        | `Imp, 0 | `Not, 0 -> opp p
         | _, _ -> p
       in
       let subf =
-        try List.nth fs i
-        with Failure _ -> raise InvalidFormPath
+        try List.at fs i
+        with Invalid_argument _ -> raise InvalidFormPath
       in
       subp, subf
     | FBind (_, _, _, subf) ->
@@ -805,7 +805,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | [] -> List.rev ogoals
 
       | i :: sub ->
-        let (goal, new_ogoals), s = match target with
+        let target, (goal, new_ogoals), s = match target with
           
           (* Right rules *)
 
@@ -814,55 +814,69 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
               (* And *)
 
               | FConn (`And, [f1; f2]), 1 ->
-                gen_subgoals (`C f1) ([], f1) [[], f2], s
+                let tgt = `C f1 in
+                let subgoals = gen_subgoals tgt ([], f1) [[], f2] in
+                tgt, subgoals, s
 
               | FConn (`And, [f1; f2]), 2 ->
-                gen_subgoals (`C f2) ([], f2) [[], f1], s
+                let tgt = `C f2 in
+                let subgoals = gen_subgoals tgt ([], f2) [[], f1] in
+                tgt, subgoals, s
 
               (* Or *)
 
               | FConn (`Or, [f1; f2]), 1 ->
-                gen_subgoals (`C f1) ([], f1) [] , s
+                let tgt = `C f1 in
+                let subgoals = gen_subgoals tgt ([], f1) [] in
+                tgt, subgoals, s
 
               | FConn (`Or, [f1; f2]), 2 ->
-                gen_subgoals (`C f2) ([], f2) [], s
+                let tgt = `C f2 in
+                let subgoals = gen_subgoals tgt ([], f2) [] in
+                tgt, subgoals, s
 
               (* Imp *)
 
               | FConn (`Imp, [f1; f2]), 1 ->
                 let tgt = `H (Handle.fresh (), Proof.mk_hyp f1) in
-                gen_subgoals tgt ([], f2) [], s
+                let subgoals = gen_subgoals tgt ([], f2) [] in
+                tgt, subgoals, s
 
               | FConn (`Imp, [f1; f2]), 2 ->
-                gen_subgoals (`C f2) ([None, [f1]], f2) [], s
+                let tgt = `C f2 in
+                let subgoals = gen_subgoals tgt ([None, [f1]], f2) [] in
+                tgt, subgoals, s
 
               (* Not *)
 
               | FConn (`Not, [f1]), 1 ->
                 let tgt = `H (Handle.fresh (), Proof.mk_hyp f1) in
-                gen_subgoals tgt ([], Form.f_false) [], s
+                let subgoals = gen_subgoals tgt ([], Form.f_false) [] in
+                tgt, subgoals, s
 
               (* Forall *)
 
               | FBind (`Forall, x, ty, f), 1 ->
                 let s, Sbound (EVar (z, _)) = List.pop_assoc x s in
                 let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
-                let goal, ogoals = gen_subgoals (`C f) ([], f) [] in
+                let tgt = `C f in
+                let goal, ogoals = gen_subgoals tgt ([], f) [] in
                 let goal = { goal with g_env = Vars.push goal.g_env (z, ty) } in
-                (goal, ogoals), s
+                tgt, (goal, ogoals), s
 
               (* Exists *)
 
               | FBind (`Exist, x, ty, f), 1 ->
                 let s, item = List.pop_assoc x s in
-                let subgoals =
+                let tgt, subgoals =
                   match item with
                   | Sbound t -> 
                     let f = Form.f_subst (x, 0) t f in
-                    gen_subgoals (`C f) ([], f) []
+                    let tgt = `C f in
+                    tgt, gen_subgoals tgt ([], f) []
                   | Sflex -> failwith "cannot go through uninstanciated quantifiers"
                 in
-                subgoals, s
+                tgt, subgoals, s
 
               | _ -> raise TacticNotApplicable
             end
@@ -875,49 +889,58 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
               | FConn (`And, [f1; f2]), 1 ->
                 let tgt = `H (Handle.fresh (), Proof.mk_hyp f1 ~src) in
-                gen_subgoals tgt ([Some src, [f2]], goal.g_goal) [], s
+                let subgoals =  gen_subgoals tgt ([Some src, [f2]], goal.g_goal) [] in
+                tgt, subgoals, s
 
               | FConn (`And, [f1; f2]), 2 ->
                 let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
-                gen_subgoals tgt ([Some src, [f1]], goal.g_goal) [], s
+                let subgoals = gen_subgoals tgt ([Some src, [f1]], goal.g_goal) [] in
+                tgt, subgoals, s
 
               (* Or *)
 
               | FConn (`Or, [f1; f2]), 1 ->
                 let tgt = `H (Handle.fresh (), Proof.mk_hyp f1 ~src) in
-                gen_subgoals tgt ([], goal.g_goal) [[Some src, [f2]], goal.g_goal], s
+                let subgoals = gen_subgoals tgt ([], goal.g_goal) [[Some src, [f2]], goal.g_goal] in
+                tgt, subgoals, s
 
               | FConn (`Or, [f1; f2]), 2 ->
                 let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
-                gen_subgoals tgt ([], goal.g_goal) [[Some src, [f1]], goal.g_goal], s
+                let subgoals = gen_subgoals tgt ([], goal.g_goal) [[Some src, [f1]], goal.g_goal] in
+                tgt, subgoals, s
 
               (* Imp *)
 
               | FConn (`Imp, [f1; f2]), 1 ->
-                gen_subgoals (`C f1) ([], f1) [[Some src, [f2]], goal.g_goal], s
+                let tgt = `C f1 in
+                let subgoals = gen_subgoals tgt ([], f1) [[Some src, [f2]], goal.g_goal] in
+                tgt, subgoals, s
 
               | FConn (`Imp, [f1; f2]), 2 ->
                 let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
-                gen_subgoals tgt ([], goal.g_goal) [[], f1], s
+                let subgoals = gen_subgoals tgt ([], goal.g_goal) [[], f1] in
+                tgt, subgoals, s
 
               (* Not *)
 
               | FConn (`Not, [f1]), 1 ->
-                gen_subgoals (`C f1) ([], f1) [], s
+                let tgt = `C f1 in
+                let subgoals = gen_subgoals tgt ([], f1) [] in
+                tgt, subgoals, s
 
               (* Forall *)
 
               | FBind (`Forall, x, ty, f), 1 ->
                 let s, item = List.pop_assoc x s in
-                let subgoals =
+                let tgt, subgoals =
                   match item with
                   | Sbound t -> 
                     let f = Form.f_subst (x, 0) t f in
                     let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
-                    gen_subgoals tgt ([], goal.g_goal) []
+                    tgt, gen_subgoals tgt ([], goal.g_goal) []
                   | Sflex -> failwith "cannot go through uninstanciated quantifiers"
                 in
-                subgoals, s
+                tgt, subgoals, s
 
               (* Exists *)
 
@@ -927,7 +950,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
                 let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
                 let goal, ogoals = gen_subgoals tgt ([], f) [] in
                 let goal = { goal with g_env = Vars.push goal.g_env (z, ty) } in
-                (goal, ogoals), s
+                tgt, (goal, ogoals), s
               
               | _ -> raise TacticNotApplicable
             end
@@ -945,7 +968,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   let search_match env pol_scrutinee scrutinee pol_target target
     : (int list * subst) list =
     let rec aux sub (pol, target) (s : subst) =
-      let commute () =
+      let recurse () =
         (* Compute number of subformulas and new substitution *)
         let n, s =
           match pol, target with
@@ -970,9 +993,9 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         match Form.f_unify Env.empty s [scrutinee, target] with
         | Some s -> [List.rev sub, s]
       (* Otherwise, look for matches in subformulas *)
-        | None -> commute ()
+        | None -> recurse ()
       else
-        commute ()
+        recurse ()
     in
     aux [] (pol_target, target) []
 

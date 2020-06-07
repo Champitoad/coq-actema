@@ -124,17 +124,14 @@ end = struct
   (* [fresh env ~basename ()] generates a fresh name for a
      local variable in [env], based on an optional [basename]. *)
   let fresh env ?(basename = "x") () =
-    if not (Map.mem basename env.env_var) then
-      basename
-    else
-      let n =
-        try Map.find env !name_counters
-        with Not_found ->
-          let n = ref 0 in
-          name_counters := Map.add env n !name_counters;
-          n
-      in
-      incr n; basename ^ string_of_int !n
+    let n =
+      try Map.find env !name_counters
+      with Not_found ->
+        let n = ref 0 in
+        name_counters := Map.add env n !name_counters;
+        n
+    in
+    incr n; basename ^ string_of_int !n
 
   let bind (env : env) ((name, ty) : name * type_) =
     let env_var =
@@ -440,7 +437,7 @@ end = struct
           | Sbound e -> e
           | _ -> failwith "fetch_subst2"
         else
-          fetch_subst (n, i - 1) s
+          fetch_subst (n, i-1) s
     | _ :: s -> fetch_subst (n, i) s
 
 
@@ -448,9 +445,9 @@ end = struct
 (* of the variables is unchanged *)
   let rec add_subst ((n, i) as x : vname) (e : expr) : subst -> subst = function
     | [] -> failwith "add_subst1"
-    | (m, t) :: l when n <> m -> (m, t) :: (add_subst x e l)
-    | (m, t) :: l when n = m && i > 0 -> (m, t) :: (add_subst (n, i-1) e l)
-    | (m, Sflex) :: l when n = m && i = 0 -> (m, Sbound e) :: l
+    | (m, t) :: s when n <> m -> (m, t) :: (add_subst x e s)
+    | (m, t) :: s when n = m && i > 0 -> (m, t) :: (add_subst (n, i-1) e s)
+    | (m, Sflex) :: s when n = m && i = 0 -> (m, Sbound e) :: s
     | _ -> failwith "add_subst2"
 
   let rec e_matchl s = function
@@ -466,7 +463,7 @@ end = struct
     | _ -> None
 
 
-  let rec occurs ((n, i) as x : vname) : expr -> bool = function
+  let rec occurs (x : vname) : expr -> bool = function
     | EVar y when x = y -> true
     | EFun (f, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
     | _ -> false
@@ -500,24 +497,30 @@ end = struct
                env.env_var ->
         let s = add_subst x t s in
         e_unify env s eqns
+      | t, EVar x
+        when flex_subst x s
+          && not (occurs x t) (* maybe unnecessary check? *)
+          && Map.for_all (fun x tys -> 
+               not (occurs_under (x, List.length tys) t))
+               env.env_var ->
+        let s = add_subst x t s in
+        e_unify env s eqns
 
       (* (substitute) *)
       | EVar x, t
         when bound_subst x s ->
         e_unify env s (((fetch_subst x s), t) :: eqns)
+      | t, EVar x
+        when bound_subst x s ->
+        e_unify env s (((fetch_subst x s), t) :: eqns)
 
       (* (delete) *)
-      | EVar x, EVar y
-        when x = y ->
+      | EVar x, EVar y when x = y ->
         e_unify env s eqns
 
       (* (decompose) *)
       | EFun (f, ts), EFun (g, us) when f = g ->
         e_unify env s ((List.combine ts us) @ eqns)
-
-      (* (swap) *)
-      | (EFun (_, _) as f), (EVar _ as x) ->
-        e_unify env s ((x, f) :: eqns)
 
       (* (fail) *)
       | _ -> None
