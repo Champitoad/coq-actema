@@ -857,7 +857,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
               (* Forall *)
 
               | FBind (`Forall, x, ty, f), 1 ->
-                let s, Sbound (EVar (z, _)) = List.pop_assoc x s in
+                let z = Vars.fresh goal.g_env ~basename:x () in
                 let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
                 let tgt = `C f in
                 let goal, ogoals = gen_subgoals tgt ([], f) [] in
@@ -945,7 +945,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
               (* Exists *)
 
               | FBind (`Exist, x, ty, f), 1 ->
-                let s, Sbound (EVar (z, _)) = List.pop_assoc x s in
+                let z = Vars.fresh goal.g_env ~basename:x () in
                 let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
                 let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
                 let goal, ogoals = gen_subgoals tgt ([], f) [] in
@@ -967,25 +967,29 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
      have opposite polarities. *)
   let search_match env pol_scrutinee scrutinee pol_target target
     : (int list * subst) list =
-    let rec aux sub (pol, target) (s : subst) =
+    let rec aux sub scrutinee (pol, target) (env : env) (s : subst) =
       let recurse () =
-        (* Compute number of subformulas and new substitution *)
-        let n, s =
+        (* Compute number of subformulas, new scrutinee,
+           new (local) environment and new substitution *)
+        let n, scrutinee, env, s =
           match pol, target with
           | _, FConn (_, fs) ->
-            List.length fs, s
-          | Pos, FBind (`Forall, x, _, f)
-          | Neg, FBind (`Exist, x, _, f) ->
-            let z = Vars.fresh env ~basename:x () in
-            1, (x, Sbound (EVar (z, 0))) :: s
+            List.length fs, scrutinee, env, s
+          | Pos, FBind (`Forall, x, ty, f)
+          | Neg, FBind (`Exist, x, ty, f) ->
+            let scrutinee = Form.f_lift (x, 0) scrutinee in
+            let env = Vars.push env (x, ty) in
+            1, scrutinee, env, s
           | Neg, FBind (`Forall, x, _, f)
           | Pos, FBind (`Exist, x, _, f) ->
-            1, (x, Sflex) :: s
-          | _ -> 0, s
+            let scrutinee = Form.f_lift (x, 0) scrutinee in
+            let s = (x, Sflex) :: s in
+            1, scrutinee, env, s
+          | _ -> 0, scrutinee, env, s
         in
         (* Combine results of recursive calls on subformulas *)
         List.init n (fun i ->
-          aux (i :: sub) (direct_subform_pol pol target i) s) |>
+          aux (i :: sub) scrutinee (direct_subform_pol pol target i) env s) |>
         List.concat
       in
       (* Check if there is a direct match *)
@@ -997,7 +1001,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       else
         recurse ()
     in
-    aux [] (pol_target, target) []
+    aux [] scrutinee (pol_target, target) env []
 
   let dnd_actions src dsts (proof : Proof.proof) =
     let src = ipath_of_gpath src in

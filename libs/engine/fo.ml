@@ -124,14 +124,17 @@ end = struct
   (* [fresh env ~basename ()] generates a fresh name for a
      local variable in [env], based on an optional [basename]. *)
   let fresh env ?(basename = "x") () =
-    let n =
-      try Map.find env !name_counters
-      with Not_found ->
-        let n = ref 0 in
-        name_counters := Map.add env n !name_counters;
-        n
-    in
-    incr n; basename ^ string_of_int !n
+    if not (Map.mem basename env.env_var) then
+      basename
+    else
+      let n =
+        try Map.find env !name_counters
+        with Not_found ->
+          let n = ref 0 in
+          name_counters := Map.add env n !name_counters;
+          n
+      in
+      incr n; basename ^ string_of_int !n
 
   let bind (env : env) ((name, ty) : name * type_) =
     let env_var =
@@ -303,6 +306,7 @@ module Form : sig
   val f_tostring : form -> string
   val f_tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
 
+  val f_lift : vname -> form -> form
   val t_equal : ?bds:VName.bds -> type_ -> type_ -> bool
   val e_equal : ?bds:VName.bds -> expr  -> expr  -> bool
   val f_equal : ?bds:VName.bds -> form  -> form  -> bool
@@ -484,35 +488,36 @@ end = struct
     (* success *)
     | [] -> Some s
 
-    | (t, u) :: eqns -> match t, u with
+    | (t, u) :: eqns ->
+
+      let unify_cond x t =
+        flex_subst x s &&
+        not (occurs x t) && (* maybe unnecessary check? *)
+        Map.for_all (fun x tys -> 
+          not (occurs_under (x, List.length tys) t))
+          env.env_var
+      in
+      let unify_body x t =
+        let s = add_subst x t s in
+        e_unify env s eqns
+      in
+
+      let substitute_cond x = bound_subst x s in
+      let substitute_body x t =
+        e_unify env s (((fetch_subst x s), t) :: eqns)
+      in
+    
+      match t, u with
 
       (* (eliminate) is decomposed into the 2 following mutually exclusive cases: *)
 
       (* (unify) *)
-      | EVar x, t
-        when flex_subst x s
-          && not (occurs x t) (* maybe unnecessary check? *)
-          && Map.for_all (fun x tys -> 
-               not (occurs_under (x, List.length tys) t))
-               env.env_var ->
-        let s = add_subst x t s in
-        e_unify env s eqns
-      | t, EVar x
-        when flex_subst x s
-          && not (occurs x t) (* maybe unnecessary check? *)
-          && Map.for_all (fun x tys -> 
-               not (occurs_under (x, List.length tys) t))
-               env.env_var ->
-        let s = add_subst x t s in
-        e_unify env s eqns
+      | EVar x, t when unify_cond x t -> unify_body x t
+      | t, EVar x when unify_cond x t -> unify_body x t
 
       (* (substitute) *)
-      | EVar x, t
-        when bound_subst x s ->
-        e_unify env s (((fetch_subst x s), t) :: eqns)
-      | t, EVar x
-        when bound_subst x s ->
-        e_unify env s (((fetch_subst x s), t) :: eqns)
+      | EVar x, t when substitute_cond x -> substitute_body x t
+      | t, EVar x when substitute_cond x -> substitute_body x t
 
       (* (delete) *)
       | EVar x, EVar y when x = y ->
