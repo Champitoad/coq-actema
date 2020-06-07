@@ -111,6 +111,7 @@ end
 
 (* -------------------------------------------------------------------- *)
 module Vars : sig
+  val fresh  : env -> ?basename:name -> unit -> name
   val bind   : env -> name * type_ -> env
   val push   : env -> name * type_ -> env
   val get    : env -> vname -> type_ option
@@ -118,22 +119,26 @@ module Vars : sig
   val depth  : env -> name -> int
   val all    : env -> (name, type_ list) Map.t
 end = struct
-  let var_name_counter = ref (-1)
+  let name_counters : (env, int ref) Map.t ref = ref Map.empty
 
-  (* [fresh_var_name ~basename ()] generates a fresh name for a
-     local variable, based on an optional [basename]. *)
-  let fresh_var_name ?(basename = "x") () =
-    incr var_name_counter;
-    basename ^ string_of_int !var_name_counter
+  (* [fresh env ~basename ()] generates a fresh name for a
+     local variable in [env], based on an optional [basename]. *)
+  let fresh env ?(basename = "x") () =
+    if not (Map.mem basename env.env_var) then
+      basename
+    else
+      let n =
+        try Map.find env !name_counters
+        with Not_found ->
+          let n = ref 0 in
+          name_counters := Map.add env n !name_counters;
+          n
+      in
+      incr n; basename ^ string_of_int !n
 
   let bind (env : env) ((name, ty) : name * type_) =
     let env_var =
-      let name =
-        if Map.mem name env.env_var then
-          fresh_var_name ~basename:name ()
-        else
-          name
-      in
+      let name = fresh env ~basename:name () in
       Map.add name [ty] env.env_var
     in
     { env with env_var }
