@@ -858,7 +858,10 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
               | FBind (`Forall, x, ty, f), 1 ->
                 let z = Vars.fresh goal.g_env ~basename:x () in
-                let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
+                let f =
+                  Form.f_subst (x, 0) (EVar (z, 0)) f |>
+                  Form.f_lift ~incr:(-1) (x, 0)
+                in
                 let tgt = `C f in
                 let goal, ogoals = gen_subgoals tgt ([], f) [] in
                 let goal = { goal with g_env = Vars.push goal.g_env (z, ty) } in
@@ -871,7 +874,10 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
                 let tgt, subgoals =
                   match item with
                   | Sbound t -> 
-                    let f = Form.f_subst (x, 0) t f in
+                    let f =
+                      Form.f_subst (x, 0) t f |>
+                      Form.f_lift ~incr:(-1) (x, 0)
+                    in
                     let tgt = `C f in
                     tgt, gen_subgoals tgt ([], f) []
                   | Sflex -> failwith "cannot go through uninstanciated quantifiers"
@@ -935,7 +941,10 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
                 let tgt, subgoals =
                   match item with
                   | Sbound t -> 
-                    let f = Form.f_subst (x, 0) t f in
+                    let f =
+                      Form.f_subst (x, 0) t f |>
+                      Form.f_lift ~incr:(-1) (x, 0)
+                    in
                     let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
                     tgt, gen_subgoals tgt ([], goal.g_goal) []
                   | Sflex -> failwith "cannot go through uninstanciated quantifiers"
@@ -946,7 +955,10 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
               | FBind (`Exist, x, ty, f), 1 ->
                 let z = Vars.fresh goal.g_env ~basename:x () in
-                let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
+                let f =
+                  Form.f_subst (x, 0) (EVar (z, 0)) f |>
+                  Form.f_lift ~incr:(-1) (x, 0)
+                in
                 let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
                 let goal, ogoals = gen_subgoals tgt ([], f) [] in
                 let goal = { goal with g_env = Vars.push goal.g_env (z, ty) } in

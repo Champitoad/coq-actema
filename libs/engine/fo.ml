@@ -306,7 +306,7 @@ module Form : sig
   val f_tostring : form -> string
   val f_tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
 
-  val f_lift : vname -> form -> form
+  val f_lift : ?incr:int -> vname -> form -> form
   val t_equal : ?bds:VName.bds -> type_ -> type_ -> bool
   val e_equal : ?bds:VName.bds -> expr  -> expr  -> bool
   val f_equal : ?bds:VName.bds -> form  -> form  -> bool
@@ -371,20 +371,20 @@ end = struct
     in
     fun ?(bds = VName.Map.empty) e1 e2 -> aux bds e1 e2
 
-  let rec e_lift (x, i : vname) = function
-    | EVar (y, j) when x = y && j >= i -> EVar (y, j+1)
+  let rec e_lift ?(incr = 1) (x, i : vname) = function
+    | EVar (y, j) when x = y && j >= i -> EVar (y, j + incr)
     | EVar _ as e -> e
-    | EFun (f1, l) -> EFun (f1, List.map (e_lift (x, i)) l)
+    | EFun (f1, l) -> EFun (f1, List.map (e_lift ~incr (x, i)) l)
  
-  (* [f_lift (x, i) f] increases by 1 the index of every occurrence of [x] in [f]
-     that appears under [i] quantifiers that bind [x]. *)
-  let rec f_lift (x, i : vname) = function
-    | FConn (c, l) -> FConn (c, List.map (f_lift (x, i)) l)
-    | FPred (p, l) -> FPred (p, List.map (e_lift (x, i)) l)
+  (* [f_lift ~incr (x, i) f] increases by [incr] the index of every occurrence of [x]
+     in [f] that appears under [i] quantifiers that bind [x]. *)
+  let rec f_lift ?(incr = 1) (x, i : vname) = function
+    | FConn (c, l) -> FConn (c, List.map (f_lift ~incr (x, i)) l)
+    | FPred (p, l) -> FPred (p, List.map (e_lift ~incr (x, i)) l)
     | FBind (b, y, ty, f) ->
       if x <> y
-      then FBind (b, y, ty, f_lift (x, i) f)
-      else FBind (b, y, ty, f_lift (x, i+1) f)
+      then FBind (b, y, ty, f_lift ~incr (x, i) f)
+      else FBind (b, y, ty, f_lift ~incr (x, i+1) f)
     | FTrue | FFalse as f -> f	 
 	  
   let rec e_subst (x, i) e = function 
