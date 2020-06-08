@@ -123,7 +123,7 @@ end = struct
 
   (* [fresh env ~basename ()] generates a fresh name for a
      local variable in [env], based on an optional [basename]. *)
-  let fresh env ?(basename = "x") () =
+  let rec fresh env ?(basename = "x") () =
     if not (Map.mem basename env.env_var) then
       basename
     else
@@ -134,7 +134,14 @@ end = struct
           name_counters := Map.add env n !name_counters;
           n
       in
-      incr n; basename ^ string_of_int !n
+      let rec aux n =
+        let basename = basename ^ string_of_int n in
+        if not (Map.mem basename env.env_var)
+        then (basename, n)
+        else aux (n+1)
+      in
+      let (basename, n') = aux !n in
+      n := n'; basename
 
   let bind (env : env) ((name, ty) : name * type_) =
     let env_var =
