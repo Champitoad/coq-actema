@@ -399,7 +399,7 @@ end = struct
   let rec f_subst (x, i) e = function
     | FPred (p, l) -> FPred (p, List.map (e_subst (x, i) e) l)
     | FConn (c, l) -> FConn (c, List.map (f_subst (x, i) e) l)
-    | FBind (b, n, t, g) -> FBind (b, n, t, f_subst (x, i+1) e g)
+    | FBind (b, y, t, g) -> FBind (b, y, t, f_subst (x, if x=y then i+1 else i) e g)
     | FTrue | FFalse as g -> g
 	  
 			
