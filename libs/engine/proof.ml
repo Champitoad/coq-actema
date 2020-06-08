@@ -313,14 +313,14 @@ end = struct
 
   let prune_premisses_fa =
     let rec doit i acc s = function
-      | FConn (`Imp, [f1; f2]) -> doit i ( (i, f1) :: acc) s f2
-      | FBind (`Forall,  x, _ , f) -> doit (i+1) acc ((x,Sflex)::s) f 
+      | FConn (`Imp, [f1; f2]) -> doit i ((i, f1) :: acc) s f2
+      | FBind (`Forall, x, _, f) -> doit (i+1) acc ((x,Sflex)::s) f 
       | f -> (List.rev acc, f, s)
     in fun f -> doit 0 [] [] f
 
   let prune_premisses_fad =
     let rec doit i acc s = function
-      | FConn (`Imp, [f1; f2]) -> doit  i (( s, f1) :: acc) s f2
+      | FConn (`Imp, [f1; f2]) -> doit i ((s, f1) :: acc) s f2
       | FBind (`Forall, x, _, f) -> doit (i+1) acc ((x, Sflex)::s) f
       | f -> (List.rev acc, f, s)
     in fun f -> doit 0 [] [] f
@@ -480,7 +480,7 @@ end = struct
 
     let pre, hy, s = prune_premisses_fa hyp in
     (
-      match Form.f_matchl s [(hy, gl.g_goal)] with
+      match Form.f_unify Env.empty s [(hy, gl.g_goal)] with
 	| Some s when Form.s_complete s ->  
 	    let pres = List.map
 			 (fun x-> [Some h, []], (Form.iter_subst s x) ) pre in
@@ -510,7 +510,7 @@ end = struct
 (  let _ , goal, s = prune_premisses_ex gl.g_goal in
    let pre, hy = prune_premisses hyp in
    let pre = List.map (fun x -> [(Some h), []],x) pre in
-      match Form.f_matchl s [(goal, hy)] with
+      match Form.f_unify Env.empty s [(goal, hy)] with
 	| Some s when Form.s_complete s ->
 	   	  result:=((TElim id), pre)::!result
 	| Some _ ->() (* failwith "incomplete ex match" *)
@@ -521,7 +521,7 @@ end = struct
 		  let rec aux = function
 		    | [] -> false
 		    | g::l ->
-			(  match Form.f_matchl s [(g, hyp)] with
+			(  match Form.f_unify Env.empty s [(g, hyp)] with
 			     | Some s when Form.s_complete s -> true
 			     | _ -> aux l
 			)
