@@ -123,7 +123,7 @@ end = struct
 
   (* [fresh env ~basename ()] generates a fresh name for a
      local variable in [env], based on an optional [basename]. *)
-  let rec fresh env ?(basename = "x") () =
+  let fresh env ?(basename = "x") () =
     if not (Map.mem basename env.env_var) then
       basename
     else
