@@ -604,6 +604,10 @@ end = struct
 
     | (f1, f2) :: eqns -> match f1, f2 with
 
+      | FTrue, FTrue | FFalse, FFalse ->
+        
+        f_unify env s eqns
+
       | FPred (p1, l1), FPred (p2, l2)
         when p1 = p2 && List.length l1 = List.length l2 ->       
 
