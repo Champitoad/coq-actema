@@ -1002,28 +1002,46 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | tgt', sub', `H (src, Proof.{ h_form = f }), i :: sub
       | `H (src, Proof.{ h_form = f }), i :: sub, tgt', sub' ->
 
-        let tgt, subgoals, s = begin match f, i+1 with
+        let tgt, subgoals, s = begin match tgt' with
 
-          (* Imp *)
+          (* Hypothesis vs. Conclusion *)
 
-          | FConn (`Imp, [f1; f2]), 1 ->
-            let tgt = `C f1 in
-            let subgoals = gen_subgoals tgt ([], f1) [[Some src, [f2]], goal.g_goal] in
-            tgt, subgoals, s
+          | `C _ -> begin match f, i+1 with
 
-          | FConn (`Imp, [f1; f2]), 2 ->
-            let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
-            let subgoals = gen_subgoals tgt ([], goal.g_goal) [[], f1] in
-            tgt, subgoals, s
+            (* Imp *)
 
-          (* Not *)
+            | FConn (`Imp, [f1; f2]), 2 ->
+              let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
+              let subgoals = gen_subgoals tgt ([], goal.g_goal) [[], f1] in
+              tgt, subgoals, s
 
-          | FConn (`Not, [f1]), 1 ->
-            let tgt = `C f1 in
-            let subgoals = gen_subgoals tgt ([], f1) [] in
-            tgt, subgoals, s
+            end
 
-        end
+          (* Hypothesis vs. Hypothesis *)
+
+          | `H _ -> begin match f, i+1 with
+
+            (* Imp *)
+
+            | FConn (`Imp, [f1; f2]), 1 ->
+              let tgt = `C f1 in
+              let subgoals = gen_subgoals tgt ([], f1) [[Some src, [f2]], goal.g_goal] in
+              tgt, subgoals, s
+
+            | FConn (`Imp, [f1; f2]), 2 ->
+              let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
+              let subgoals = gen_subgoals tgt ([], goal.g_goal) [[], f1] in
+              tgt, subgoals, s
+
+            (* Not *)
+
+            | FConn (`Not, [f1]), 1 ->
+              let tgt = `C f1 in
+              let subgoals = gen_subgoals tgt ([], f1) [] in
+              tgt, subgoals, s
+
+            end
+          end
         in pbp subgoals tgt sub tgt' sub' s
     in
 
