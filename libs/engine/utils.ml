@@ -173,6 +173,9 @@ let snd_map f (x, y) = (x, f y)
 let curry   f (x, y) = f x y
 let uncurry f x y = f (x, y)
 
+let (|>>) f g = fun x -> g (f x)
+let (<<|) f g = fun x -> f (g x)
+
 let (^~) f = fun x y -> f y x
 
 let (/>) (x : 'a option) (f : 'a -> 'b) =
