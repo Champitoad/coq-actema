@@ -384,7 +384,8 @@ end = struct
     | EFun (f1, l) -> EFun (f1, List.map (e_lift ~incr (x, i)) l)
  
   (* [f_lift ~incr (x, i) f] increases by [incr] the index of every occurrence of [x]
-     in [f] that appears under [i] quantifiers that bind [x]. *)
+     in [f] that appears under at least [i] quantifiers that bind [x], and whose index
+     is at least [i]. *)
   let rec f_lift ?(incr = 1) (x, i : vname) = function
     | FConn (c, l) -> FConn (c, List.map (f_lift ~incr (x, i)) l)
     | FPred (p, l) -> FPred (p, List.map (e_lift ~incr (x, i)) l)

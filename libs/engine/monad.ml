@@ -51,9 +51,12 @@ end
 module State (T : Type) : sig
   include Env with type 'a t = T.t -> 'a * T.t
 
-  (* Monadic version of List.iter *)
-  val iter : ('a -> 'b t) -> 'a list -> unit t
+  (* Monadic version of List.iter and List.fold_left *)
+  val fold : ('a -> 'b -> 'a t) -> 'a -> 'b list -> 'a t
+  val iter : ('a -> unit t) -> 'a list -> unit t
 
+  val get : T.t t
+  val put : T.t -> unit t
   val run : 'a t -> T.t -> 'a
 end = struct
   type env = T.t
@@ -63,10 +66,13 @@ end = struct
     let x, st' = m st in
     f x st'
   let ( >>= ) = bind
-  let iter f l = fun st ->
-    (), List.fold_left
-      (fun st x -> (f x |>> snd) st)
-      st l
+  let fold f x l = fun st ->
+    List.fold_left
+      (fun (x, st) y -> f x y st)
+      (x, st) l
+  let iter f l = fold (fun _ y -> f y) () l
+  let get = fun st -> (st, st)
+  let put st = fun _ -> ((), st)
   let run m = m |>> fst
 end
 
