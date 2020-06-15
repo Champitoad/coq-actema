@@ -811,6 +811,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   let link (src : ipath) (dst : ipath) (s : Fo.subst) (proof : Proof.proof)
     : Proof.proof
   =
+    assert (src.ctxt <> dst.ctxt);
+    
     let Proof.{ g_id; g_pregoal = goal }, top_src, (sub_src, _) =
       of_ipath proof src
     in
@@ -1175,6 +1177,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       (* Add a path to the conclusion *)
       let dsts = mk_ipath (Handle.toint g_id) :: dsts in
       let dsts = List.map (fun p -> `P p) dsts in
+      (* Remove [src] from the list of paths *)
+      let dsts = List.remove dsts (`P src) in
       (* Get the possible actions for each formula in the goal,
          that is the hypotheses and the conclusion *)
       List.flatten (List.map for_destination dsts)
