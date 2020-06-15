@@ -1073,7 +1073,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | FBind (_, _, _, f) ->
         let sub = 0 :: sub in
         sub :: aux sub f
-      | _ -> []
+      | _ -> [[]]
     in aux [] f
 
 
