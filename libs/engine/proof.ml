@@ -729,6 +729,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       subp, subf
     | FBind (_, _, _, subf) ->
       p, subf
+    | _ -> raise InvalidFormPath
   
 
   (* [subform_pol (p, f) sub] returns the subformula of [f] at path [sub] together
@@ -1064,14 +1065,14 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   (** [subs f] returns all the paths leading to a subformula in [f]. *)
 
   let rec subs (f : form) : (int list) list =
-    let open Monad.List in
     let rec aux sub = function
       | FConn (_, fs) ->
-        List.mapi (fun i f -> (i, f)) fs >>= fun (i, f) ->
-        let sub = i :: sub in
-        sub :: aux sub f
+        fs |> List.mapi (fun i f ->
+                let sub = sub @ [i] in
+                sub :: aux sub f)
+           |> List.concat
       | FBind (_, _, _, f) ->
-        let sub = 0 :: sub in
+        let sub = sub @ [0] in
         sub :: aux sub f
       | _ -> [[]]
     in aux [] f
@@ -1133,8 +1134,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     in
 
     if sp1 <> sp2 then
-      match Form.f_unify env s [sf1, sf2] with
-      | Some s -> return (List.rev sub1, List.rev sub2, s)
+      match Form.f_unify Fo.Env.empty s [sf1, sf2] with
+      | Some s -> return (sub1, sub2, s)
       | None -> zero
     else zero
 
