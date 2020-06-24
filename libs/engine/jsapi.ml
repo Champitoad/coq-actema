@@ -202,8 +202,8 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
     let goal  = Proof.byid parent##.proof self##.handle in
     let tvars = Map.bindings (Fo.Vars.all goal.g_env) in
     let tvars = List.map (snd_map List.hd) tvars in
-
-    Js.array (Array.of_list (List.mapi (fun i xty -> js_tvar self (i, xty)) tvars))
+    let aout  = List.mapi (fun i (x, (ty, body)) -> js_tvar self (i, (x, ty, body))) tvars in
+    Js.array (Array.of_list aout)
 
   (* Return all the local hypotheses (context) as a [js_hyps array] *)
   method context =
@@ -264,8 +264,14 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
 
   (* [this#alias (name : string) (expr : expr) parses [expr] in the goal
    * [context] and add it to the local [context] under the name [name]. *)
-  method alias (name : string) (expr : Fo.expr) =
-    js_proof_engine parent##.proof
+  method alias name expr =
+    let doit () =
+      let goal = Proof.byid parent##.proof self##.handle in
+      let expr = Io.parse_expr (Io.from_string (Js.to_string expr)) in
+      let expr, ty = Fo.Form.echeck goal.g_env expr in
+      CoreLogic.add_local (Js.to_string name, ty, expr) (parent##.proof, self##.handle)
+
+    in js_proof_engine (!!doit ())
 
   (* [this#move (from : js_hyps) (before : js_hyps option)] move
    * hypothesis [from] before hypothesis [before]. Both hypothesis
@@ -326,7 +332,7 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for a local variable                                      *)
-and js_tvar parent (i, (x, ty) : int * (Fo.name * Fo.type_)) =
+and js_tvar parent ((i, (x, ty, body)) : int * (Fo.name * Fo.type_ * Fo.expr option)) =
 object%js (self)
   (* back-link to the [js_subgoal] this local variable belongs to *)
   val parent = parent
@@ -342,6 +348,10 @@ object%js (self)
 
   (* the local variable type as a [js_type] *)
   val type_ = js_type ty
+
+  (* the local definition - return an optional expression *)
+  val body =
+    Js.Opt.option (Option.map js_expr body)
 
   (* The enclosing proof engine *)
   val proof = parent##.parent
@@ -393,6 +403,24 @@ and js_form (source : source) (form : Fo.form) = object%js (self)
   (* Return an UTF8 string representation of the formula *)
   method tostring =
     Js.string (Fo.Form.f_tostring form)
+end
+
+(* -------------------------------------------------------------------- *)
+(* JS Wrapper for expressions                                           *)
+and js_expr (expr : Fo.expr) = object%js (self)
+  (* Return the [html] of the formula *)  
+  method html =
+    self##htmltag
+
+  (* Return the [html] of the formula *)  
+  method htmltag =
+    Js.string
+      (Format.asprintf "%a" (Tyxml.Xml.pp ())
+      (Fo.Form.e_tohtml expr))
+
+  (* Return an UTF8 string representation of the expression *)
+  method tostring =
+    Js.string (Fo.Form.e_tostring expr)
 end
 
 (* -------------------------------------------------------------------- *)

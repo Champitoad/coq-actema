@@ -43,9 +43,11 @@ type subst = (name * sitem) list
 type env = {
   env_prp  : (name, arity     ) Map.t;
   env_fun  : (name, sig_      ) Map.t;
-  env_var  : (name, type_ list) Map.t;
+  env_var  : (name, bvar  list) Map.t;
   env_tvar : (name, int       ) Map.t;
 }
+
+and bvar = type_ * expr option
 
 (* -------------------------------------------------------------------- *)
 module Env : sig
@@ -108,14 +110,14 @@ end
 
 (* -------------------------------------------------------------------- *)
 module Vars : sig
-  val push   : env -> name * type_ -> env
+  val push   : env -> name * type_ * expr option -> env
   val exists : env -> vname -> bool
-  val get    : env -> vname -> type_ option
-  val all    : env -> (name, type_ list) Map.t
+  val get    : env -> vname -> (type_ * expr option) option
+  val all    : env -> (name, (type_ * expr option) list) Map.t
 end = struct
-  let push (env : env) ((name, ty) : name * type_) =
+  let push (env : env) ((name, ty, body) : name * type_ * expr option) =
     { env with env_var = Map.modify_opt name (fun bds ->
-          Some (ty :: Option.default [] bds)
+          Some ((ty, body) :: Option.default [] bds)
         ) env.env_var; }
 
   let get (env : env) ((name, idx) : vname) =
@@ -151,7 +153,7 @@ end
 type entry =
   | EPVar of (name * arity)
   | ETFun of (name * sig_)
-  | ETVar of (name * type_)
+  | ETVar of (name * type_ * expr option)
 
 let env_of_entries (entries : entry list) =
   List.fold_left (fun env entry ->
@@ -560,7 +562,7 @@ end = struct
   let rec erecheck (env : env) (ty : type_) (expr : expr) : unit =
     match expr with
     | EVar x ->
-        let xty = Option.get_exn (Vars.get env x) RecheckFailure in
+        let xty, _ = Option.get_exn (Vars.get env x) RecheckFailure in
         if not (t_equal ty xty) then raise RecheckFailure
 
     | EFun (f, args) ->
@@ -588,7 +590,7 @@ end = struct
         List.iter (recheck env) forms
 
     | FBind (_, x, xty, f) ->
-        trecheck env xty; recheck (Vars.push env (x, xty)) f
+        trecheck env xty; recheck (Vars.push env (x, xty, None)) f
 
   let rec tcheck (env : env) (ty : ptype) =
     match unloc ty with
@@ -608,8 +610,8 @@ end = struct
     match unloc e with
     | PEVar x -> begin
         match Vars.get env (unloc x, 0) with
-        | None     -> raise TypingError
-        | Some xty -> EVar (unloc x, 0), xty
+        | None          -> raise TypingError
+        | Some (xty, _) -> EVar (unloc x, 0), xty
       end
 
     | PEApp (f, args) -> begin
@@ -651,12 +653,12 @@ end = struct
 
     | PFForall ((x, xty), f) ->
         let xty = tcheck env xty in
-        let f   = check (Vars.push env (unloc x, xty)) f in
+        let f   = check (Vars.push env (unloc x, xty, None)) f in
         FBind (`Forall, unloc x, xty, f)
 
     | PFExists ((x, xty), f) ->
         let xty = tcheck env xty in
-        let f   = check (Vars.push env (unloc x, xty)) f in
+        let f   = check (Vars.push env (unloc x, xty, None)) f in
         FBind (`Exist, unloc x, xty, f)
 
   let rec prio_of_form = function
@@ -946,7 +948,7 @@ end = struct
         | PFun (name, (ar, ty)) ->
             ETFun (unloc name, (List.map for_type ar, for_type ty))
         | PVar (name, ty) ->
-            ETVar (unloc name, for_type ty)
+            ETVar (unloc name, for_type ty, None)
       in env_of_entries (List.map for_entry ps) in
     (env, Form.check env f)
 end

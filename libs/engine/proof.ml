@@ -26,7 +26,6 @@ end = struct
 end
 
 (* -------------------------------------------------------------------- *)
-
 type pnode = ..
 
 exception InvalidGoalId    of Handle.t
@@ -245,6 +244,7 @@ module CoreLogic : sig
   type gpath  = [`S of path | `P of ipath]
 
   val cut       : Fo.form -> tactic
+  val add_local : string * Fo.type_ * Fo.expr -> tactic
   val intro     : ?variant:int -> tactic
   val elim      : ?clear:bool -> Handle.t -> tactic
   val ivariants : targ -> string list
@@ -568,14 +568,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       
 	[ (TForward (hsrc, hdst)),[[Some hdst, [nf]], gl.g_goal] ]
 
-
-
   let forward   (hsrc, hdst, p, s) ((pr, id) : targ)  =
     perform (core_forward  (hsrc, hdst, p, s) (pr, id)) pr id 
-
-
-
-
 
   type pnode += TCut of Fo.form * Handle.t
 
@@ -588,6 +582,17 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     
     Proof.sprogress proof hd (TCut (form, hd))
       (subs @ [[None, [form]], goal.g_goal])
+
+  type pnode += TDef of (Fo.type_ * Fo.expr) * Handle.t
+
+  let add_local ((name, ty, body) : string * Fo.type_ * Fo.expr) ((proof, hd) : targ) =
+    let goal = Proof.byid proof hd in
+
+    Fo.Form.erecheck goal.g_env ty body;
+
+    let env = Fo.Vars.push goal.g_env (name, ty, Some body) in
+    
+    Proof.xprogress proof hd (TDef ((ty, body), hd)) [{ goal with g_env = env }]
 
   type action = Handle.t * [
     | `Elim    of Handle.t
