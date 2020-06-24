@@ -339,11 +339,8 @@ end = struct
 
     | i, (FConn (`Or, _) as f) ->
         let fl = Form.flatten_disjunctions f in
-	let g = List.nth fl i in
+        let g = List.nth fl i in
         Proof.progress pr id TIntro [g]
-
-    | 1, FConn (`Or, [_; f]) ->
-        Proof.progress pr id TIntro [f]
 
     | 0, FConn (`Not, [f]) ->
         Proof.sprogress pr id TIntro
@@ -352,8 +349,13 @@ end = struct
     | 0, FTrue ->
         Proof.progress pr id TIntro []
 
-    | 0, FBind (`Forall, x, xty, f) ->
-	Proof.progress pr id TIntro [f]
+    | 0, FBind (`Forall, x, xty, body) ->
+        let goal = Proof.byid pr id in
+        let goal = { goal with
+          g_env  = Vars.push goal.g_env (x, xty, None);
+          g_goal = body;
+        }
+        in Proof.xprogress pr id TIntro [goal]
 
     | _ -> raise TacticNotApplicable
 
