@@ -24,6 +24,10 @@ let parserfun_expr =
     MenhirLib.Convert.Simplified.traditional2revised P.xexpr
 
 (* -------------------------------------------------------------------- *)
+let parserfun_nexpr =
+    MenhirLib.Convert.Simplified.traditional2revised P.xnexpr
+
+(* -------------------------------------------------------------------- *)
 let parserfun_form =
     MenhirLib.Convert.Simplified.traditional2revised P.xform
 
@@ -75,6 +79,10 @@ let parse_type (reader : reader) =
 (* -------------------------------------------------------------------- *)
 let parse_expr (reader : reader) =
   parserfun_expr (fun () -> lexer (lexbuf reader))
+
+(* -------------------------------------------------------------------- *)
+let parse_nexpr (reader : reader) =
+  parserfun_nexpr (fun () -> lexer (lexbuf reader))
 
 (* -------------------------------------------------------------------- *)
 let parse_form (reader : reader) =

@@ -262,14 +262,25 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
       CoreLogic.cut form (parent##.proof, self##.handle)
     in js_proof_engine (!!doit ())
 
-  (* [this#alias (name : string) (expr : expr) parses [expr] in the goal
+  (* [this#add_local (name : string) (expr : string) parses [expr] in the goal
    * [context] and add it to the local [context] under the name [name]. *)
-  method alias name expr =
+  method addlocal name expr =
     let doit () =
       let goal = Proof.byid parent##.proof self##.handle in
       let expr = Io.parse_expr (Io.from_string (Js.to_string expr)) in
       let expr, ty = Fo.Form.echeck goal.g_env expr in
       CoreLogic.add_local (Js.to_string name, ty, expr) (parent##.proof, self##.handle)
+
+    in js_proof_engine (!!doit ())
+
+  (* [this#add_alias (nexpr : string) parses [nexpr] as a named expression
+   * in the goal [context] and add it to the local [context]. *)
+  method addalias expr =
+    let doit () =
+      let goal = Proof.byid parent##.proof self##.handle in
+      let name, expr = Io.parse_nexpr (Io.from_string (Js.to_string expr)) in
+      let expr, ty = Fo.Form.echeck goal.g_env expr in
+      CoreLogic.add_local (Location.unloc name, ty, expr) (parent##.proof, self##.handle)
 
     in js_proof_engine (!!doit ())
 
