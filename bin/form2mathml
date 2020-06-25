@@ -1,3 +1,0 @@
-#! /bin/sh
-
-dune exec -- src/form2mathml.exe "$@"
