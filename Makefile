@@ -1,7 +1,7 @@
 # --------------------------------------------------------------------
 .PHONY: default build install uninstall clean mkproper
 
-DUNEOPTS := --display=short
+DUNEOPTS := --display=verbose
 
 # --------------------------------------------------------------------
 default: build

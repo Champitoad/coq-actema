@@ -1,15 +1,20 @@
 (executables
   (names jsprover)
+  (public_names -)
   (libraries prover.engine)
-  (modes byte)
-  (preprocess (pps js_of_ocaml-ppx)))
+  (package prover))
 
 (rule
-  (targets jsprover.js)
-  (action
-    (run %{bin:js_of_ocaml}
-         +nat.js --opt 1 --source-map %{dep:jsprover.bc} -o %{targets})))
+  (target jsprover.js.bc)
+  (deps (file jsprover.bc))
+  (action (run ocamlfind ocamlc -g -o jsprover.js.bc
+     -package menhirLib,batteries,tyxml,lwt,js_of_ocaml
+     -linkpkg ../libs/engine/engine.cma
+     .jsprover.eobjs/byte/jsprover.cmo)))
 
-(alias
-  (name default)
-  (deps jsprover.js))
+(rule
+  (target jsprover.js)
+  (deps (file jsprover.js.bc))
+  (action (run %{bin:js_of_ocaml}
+     --disable genprim --pretty
+     --source-map --source-map-inline --no-inline -o %{target} %{deps})))
