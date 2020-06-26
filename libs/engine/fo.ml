@@ -312,6 +312,7 @@ module Form : sig
   val f_tostring : form -> string
   val f_tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
 
+  val e_vars : expr -> vname list
   val f_lift : ?incr:int -> vname -> form -> form
   val t_equal : ?bds:VName.bds -> type_ -> type_ -> bool
   val e_equal : ?bds:VName.bds -> expr  -> expr  -> bool
@@ -376,6 +377,13 @@ end = struct
           false
     in
     fun ?(bds = VName.Map.empty) e1 e2 -> aux bds e1 e2
+
+
+  let rec e_vars =
+    let open Monad.List in function
+    | EVar x -> return x
+    | EFun (_, ts) -> ts >>= e_vars
+
 
   let rec e_lift ?(incr = 1) (x, i : vname) = function
     | EVar (y, j) when x = y && j >= i -> EVar (y, j + incr)

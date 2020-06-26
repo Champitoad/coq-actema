@@ -1083,8 +1083,19 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     let module Deps = struct
       include Graph.Persistent.Digraph.Concrete(Name)
 
-      let subst : Fo.subst -> t -> t =
-        assert false
+      let subst : t -> subst -> t =
+        List.fold_left begin fun deps (x, tag) ->
+          try fold_succ begin fun y deps ->
+              begin match tag with
+                | Sbound e -> Form.e_vars e
+                | Sflex -> []
+              end |>
+              List.fold_left begin fun deps (x, _) ->
+                add_edge deps x y
+              end deps
+            end deps x deps
+          with Invalid_argument _ -> deps
+        end
     end in
     let module TraverseDeps = Graph.Traverse.Dfs(Deps) in
     let acyclic = not <<| TraverseDeps.has_cycle in
@@ -1094,7 +1105,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
          record and update multiple informations handling the first-order content
          of the proof. We do so with a tuple of the form
            
-           [(deps, ex, exs, env, subst)]
+           [(deps, exs, env, subst)]
            
          where:
 
@@ -1173,7 +1184,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
     if sp1 <> sp2 then
       match Form.f_unify Fo.Env.empty (s1 @ s2) [sf1, sf2] with
-      | Some s when acyclic (Deps.subst s deps) ->
+      | Some s when acyclic (Deps.subst deps s) ->
         let s1, s2 = List.split_at (List.length s1) s in
         let rename exs = List.map (fun (x, tag) ->
           Option.default x (List.assoc_opt x exs), tag)
