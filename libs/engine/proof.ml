@@ -1072,7 +1072,49 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   let search_match env (p1, f1) (p2, f2)
     : (int list * subst * int list * subst) list =
 
-    let module Env = struct type t = (name * name) list * env * subst end in
+    let module Name : Graph.Sig.COMPARABLE = struct
+      include String
+      let hash = Hashtbl.hash
+    end in
+    let module Deps = struct
+      include Graph.Persistent.Digraph.Concrete(Name)
+
+      let subst : Fo.subst -> t -> t =
+        assert false
+    end in
+    let module TraverseDeps = Graph.Traverse.Dfs(Deps) in
+    let acyclic = not <<| TraverseDeps.has_cycle in
+
+    let module Env = struct
+      (* While traversing formulas in search for targets to unify, we need to
+         record and update multiple informations handling the first-order content
+         of the proof. We do so with a tuple of the form
+           
+           [(deps, ex, exs, env, subst)]
+           
+         where:
+
+         - [deps] is a directed graph recording the dependency relation between
+           existential and eigenvariables, in the same spirit of the dependency
+           relation of expansion trees.
+
+         - [ex] is the last encountered existential variable, used to build [deps].
+
+         - [exs] is an association list, where each item [(z, x)] maps a fresh name
+           [z] to the existential variable [x] it renames. Indeed, to avoid name
+           clashes between existential variables of [f1] and [f2] during unification,
+           we give them temporary fresh names, which are reverted to the original
+           names with [exs] when producing the final substitution for each formula.
+          
+         - [env] is (a copy of) the goal's environment, used to compute fresh
+           names for eigenvariables that will be introduced by the [link] tactic.
+          
+         - [subst] is the substitution that will be fed to unification, in which we
+           record existential variables in [Sflex] entries, as well as the fresh
+           eigenvariables in [Sbound] entries together with their original names.
+      *)
+      type t = Deps.t * name option * (name * name) list * env * subst
+    end in
     let module State = Monad.State(Env) in
 
     let rec traverse (p, f) i : (pol * form) State.t =
@@ -1082,20 +1124,20 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | Pos, FBind (`Forall, x, ty, f)
       | Neg, FBind (`Exist, x, ty, f) ->
 
-        get >>= fun (exs, env, s) ->
+        get >>= fun (deps, ex, exs, env, s) ->
         let z, env = Vars.bind env (x, ty) in
         let s = (x, Sbound (EVar (z, 0))) :: s in
-        put (exs, env, s) >>= fun _ ->
+        put (deps, ex, exs, env, s) >>= fun _ ->
         return (p, Form.f_subst (x, 0) (EVar (z, 0)) f)
 
       | Neg, FBind (`Forall, x, ty, f)
       | Pos, FBind (`Exist, x, ty, f) ->
 
-        get >>= fun (exs, env, s) ->
+        get >>= fun (deps, ex, exs, env, s) ->
         let z = EVars.fresh () in
         let exs = (z, x) :: exs in
         let s = (z, Sflex) :: s in
-        put (exs, env, s) >>= fun _ ->
+        put (deps, ex, exs, env, s) >>= fun _ ->
         return (p, Form.f_subst (x, 0) (EVar (z, 0)) f)
 
       | _ -> return (direct_subform_pol (p, f) i)
@@ -1108,24 +1150,24 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     subs f1 >>= fun sub1 ->
     subs f2 >>= fun sub2 ->
 
-    let sp1, sf1, exs1, s1, sp2, sf2, exs2, s2 =
+    let deps, sp1, sf1, exs1, s1, sp2, sf2, exs2, s2 =
       let open State in
       run begin
         traverse (p1, f1) sub1 >>= fun (sp1, sf1) ->
-        get >>= fun (exs1, env, s1) ->
-        put ([], env, []) >>= fun _ ->
+        get >>= fun (deps, _, exs1, env, s1) ->
+        put (deps, None, [], env, []) >>= fun _ ->
 
         traverse (p2, f2) sub2 >>= fun (sp2, sf2) ->
-        get >>= fun (exs2, _, s2) ->
+        get >>= fun (deps, _, exs2, _, s2) ->
 
-        return (sp1, sf1, exs1, s1, sp2, sf2, exs2, s2)
+        return (deps, sp1, sf1, exs1, s1, sp2, sf2, exs2, s2)
       end
-      ([], env, [])
+      (Deps.empty, None, [], env, [])
     in
 
     if sp1 <> sp2 then
       match Form.f_unify Fo.Env.empty (s1 @ s2) [sf1, sf2] with
-      | Some s ->
+      | Some s when acyclic (Deps.subst s deps) ->
         let s1, s2 = List.split_at (List.length s1) s in
         let rename exs = List.map (fun (x, tag) ->
           Option.default x (List.assoc_opt x exs), tag)
