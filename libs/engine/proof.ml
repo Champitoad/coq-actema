@@ -1072,8 +1072,12 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   let search_match env (p1, f1) (p2, f2)
     : (int list * subst * int list * subst) list =
 
-    let module Name : Graph.Sig.COMPARABLE = struct
-      include String
+    let module Name : Graph.Sig.COMPARABLE
+      with type t = Fo.name
+    = struct
+      type t = Fo.name
+      let equal = String.equal
+      let compare = String.compare
       let hash = Hashtbl.hash
     end in
     let module Deps = struct
@@ -1098,8 +1102,6 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
            existential and eigenvariables, in the same spirit of the dependency
            relation of expansion trees.
 
-         - [ex] is the last encountered existential variable, used to build [deps].
-
          - [exs] is an association list, where each item [(z, x)] maps a fresh name
            [z] to the existential variable [x] it renames. Indeed, to avoid name
            clashes between existential variables of [f1] and [f2] during unification,
@@ -1113,7 +1115,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
            record existential variables in [Sflex] entries, as well as the fresh
            eigenvariables in [Sbound] entries together with their original names.
       *)
-      type t = Deps.t * name option * (name * name) list * env * subst
+      type t = Deps.t * (name * name) list * env * subst
     end in
     let module State = Monad.State(Env) in
 
@@ -1124,20 +1126,24 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | Pos, FBind (`Forall, x, ty, f)
       | Neg, FBind (`Exist, x, ty, f) ->
 
-        get >>= fun (deps, ex, exs, env, s) ->
+        get >>= fun (deps, exs, env, s) ->
         let z, env = Vars.bind env (x, ty) in
+        let deps = match exs with
+          | (y, _) :: _ -> Deps.add_edge deps y z
+          | _ -> deps
+        in
         let s = (x, Sbound (EVar (z, 0))) :: s in
-        put (deps, ex, exs, env, s) >>= fun _ ->
+        put (deps, exs, env, s) >>= fun _ ->
         return (p, Form.f_subst (x, 0) (EVar (z, 0)) f)
 
       | Neg, FBind (`Forall, x, ty, f)
       | Pos, FBind (`Exist, x, ty, f) ->
 
-        get >>= fun (deps, ex, exs, env, s) ->
+        get >>= fun (deps, exs, env, s) ->
         let z = EVars.fresh () in
         let exs = (z, x) :: exs in
         let s = (z, Sflex) :: s in
-        put (deps, ex, exs, env, s) >>= fun _ ->
+        put (deps, exs, env, s) >>= fun _ ->
         return (p, Form.f_subst (x, 0) (EVar (z, 0)) f)
 
       | _ -> return (direct_subform_pol (p, f) i)
@@ -1154,15 +1160,15 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       let open State in
       run begin
         traverse (p1, f1) sub1 >>= fun (sp1, sf1) ->
-        get >>= fun (deps, _, exs1, env, s1) ->
-        put (deps, None, [], env, []) >>= fun _ ->
+        get >>= fun (deps, exs1, env, s1) ->
+        put (deps, [], env, []) >>= fun _ ->
 
         traverse (p2, f2) sub2 >>= fun (sp2, sf2) ->
-        get >>= fun (deps, _, exs2, _, s2) ->
+        get >>= fun (deps, exs2, _, s2) ->
 
         return (deps, sp1, sf1, exs1, s1, sp2, sf2, exs2, s2)
       end
-      (Deps.empty, None, [], env, [])
+      (Deps.empty, [], env, [])
     in
 
     if sp1 <> sp2 then
