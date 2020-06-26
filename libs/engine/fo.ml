@@ -112,7 +112,7 @@ end
 (* -------------------------------------------------------------------- *)
 module Vars : sig
   val fresh  : env -> ?basename:name -> unit -> name
-  val bind   : env -> name * type_ -> env
+  val bind   : env -> name * type_ -> name * env
   val push   : env -> name * type_ -> env
   val get    : env -> vname -> type_ option
   val exists : env -> vname -> bool
@@ -144,11 +144,9 @@ end = struct
       n := n'; basename
 
   let bind (env : env) ((name, ty) : name * type_) =
-    let env_var =
-      let name = fresh env ~basename:name () in
-      Map.add name [ty] env.env_var
-    in
-    { env with env_var }
+    let name = fresh env ~basename:name () in
+    let env_var = Map.add name [ty] env.env_var in
+    name, { env with env_var }
 
   let push (env : env) ((name, ty) : name * type_) =
     let env_var =
@@ -174,6 +172,7 @@ end
 
 (* -------------------------------------------------------------------- *)
 module EVars : sig
+  val fresh  : ?basename:name -> unit -> name
   val push   : env -> name option * type_ -> name * env
   val exists : env -> vname -> bool
   val get    : env -> vname -> type_ option
@@ -193,12 +192,12 @@ end = struct
 
   let evar_name_counter = ref (-1)
 
-  let fresh_evar_name ?(basename = "x") () =
+  let fresh ?(basename = "x") () =
     incr evar_name_counter;
     "?" ^ basename ^ string_of_int !evar_name_counter
 
   let push (env : env) ((name, ty) : name option * type_) =
-    let name = fresh_evar_name ?basename:name () in
+    let name = fresh ?basename:name () in
     name, { env with env_evar = Map.modify_opt name (fun bds ->
               Some (ty :: Option.default [] bds))
               env.env_evar; }
@@ -441,6 +440,7 @@ end = struct
         bound_subst (n, i-1) s
     | _ :: s -> bound_subst x s
 
+
   let rec fetch_subst (n, i : vname) : subst -> expr = function
     | [] -> failwith "fetch_subst1"
     | (m, t) :: s when n = m ->
@@ -601,7 +601,7 @@ end = struct
   *)
   let rec f_unify env s = function
 
-    | [] -> Some (List.rev s)
+    | [] -> Some s
 
     | (f1, f2) :: eqns -> match f1, f2 with
 

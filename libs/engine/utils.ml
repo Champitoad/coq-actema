@@ -58,10 +58,12 @@ end = struct
   let fst xs = List.map fst xs
   let snd xs = List.map snd xs
 
-  let rec pop_assoc a = function
-    | [] -> raise Not_found
-    | (b, x) :: l when a = b -> l, x
-    | _ :: l -> pop_assoc a l
+  let pop_assoc a l =
+    let rec aux acc a = function
+      | [] -> raise Not_found
+      | (b, x) :: l when a = b -> (List.rev acc) @ l, x
+      | i :: l -> aux (i :: acc) a l
+    in aux [] a l
 
   let findex (type a) (check : a -> bool) (xs : a list) : int option =
     match Exceptionless.findi (fun _ x -> check x) xs with

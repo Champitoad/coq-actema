@@ -281,7 +281,7 @@ module CoreLogic : sig
     | `Forward of Handle.t * Handle.t * (int list) * Fo.subst 
     | `DisjDrop of Handle.t * form list
     | `ConjDrop of Handle.t
-    | `Link of ipath * ipath * Fo.subst
+    | `Link of ipath * Fo.subst * ipath * Fo.subst
   ]
 
   exception InvalidPath
@@ -510,7 +510,7 @@ end = struct
 (  let _ , goal, s = prune_premisses_ex gl.g_goal in
    let pre, hy = prune_premisses hyp in
    let pre = List.map (fun x -> [(Some h), []],x) pre in
-      match Form.f_unify Env.empty s [(goal, hy)] with
+      match Form.f_unify Env.empty s [(hy, goal)] with
 	| Some s when Form.s_complete s ->
 	   	  result:=((TElim id), pre)::!result
 	| Some _ ->() (* failwith "incomplete ex match" *)
@@ -521,7 +521,7 @@ end = struct
 		  let rec aux = function
 		    | [] -> false
 		    | g::l ->
-			(  match Form.f_unify Env.empty s [(g, hyp)] with
+			(  match Form.f_unify Env.empty s [(hyp, g)] with
 			     | Some s when Form.s_complete s -> true
 			     | _ -> aux l
 			)
@@ -605,7 +605,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     | `Forward of Handle.t * Handle.t * (int list) * Fo.subst 
     | `DisjDrop of Handle.t * form list
     | `ConjDrop of Handle.t
-    | `Link of ipath * ipath * Fo.subst
+    | `Link of ipath * Fo.subst * ipath * Fo.subst
   ]
 
   exception InvalidPath
@@ -621,7 +621,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
           with Failure _ -> raise InvalidFormPath
         in subform subf subp
     
-    | FBind (_, _, _, f) -> f
+    | FBind (_, _, _, f) -> subform f subp
 
     | _ -> raise InvalidFormPath
 
@@ -809,8 +809,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   (** [link] is the equivalent of Proof by Pointing's [finger_tac], but using the
       interaction rules specific to subformula linking. *)
 
-  let link (src : ipath) (dst : ipath) (s : Fo.subst) (proof : Proof.proof)
-    : Proof.proof
+  let link src s_src dst s_dst proof : Proof.proof
   =
     assert (src.ctxt <> dst.ctxt);
     
@@ -819,7 +818,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     in
     let _, top_dst, (sub_dst, _) = of_ipath proof dst in
 
-    let rec pbp (goal, ogoals) tgt sub tgt' sub' (s : subst) =
+    let rec pbp (goal, ogoals) tgt sub s tgt' sub' s' =
 
       let gen_subgoals target sub_goal sub_ogoals =
         let ogoals = Proof.sgprogress goal sub_ogoals in
@@ -833,8 +832,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         (goal, ogoals)
       in
 
-      let right_inv_rules f i sub tgt' sub' =
-        let tgt, subgoals, s = begin match f, i+1 with
+      let right_inv_rules f i sub s tgt' sub' s' =
+        let tgt, (goal, new_ogoals), s = begin match f, i+1 with
 
           (* And *)
 
@@ -870,22 +869,19 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
           (* Forall *)
 
           | FBind (`Forall, x, ty, f), 1 ->
-            let z = Vars.fresh goal.g_env ~basename:x () in
-            let f =
-              Form.f_subst (x, 0) (EVar (z, 0)) f |>
-              Form.f_lift ~incr:(-1) (x, 0)
-            in
+            let s, Sbound (EVar (z, _)) = List.pop_assoc x s in
+            let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
             let tgt = `C f in
             let goal, ogoals = gen_subgoals tgt ([], f) [] in
             let goal = { goal with g_env = Vars.push goal.g_env (z, ty) } in
             tgt, (goal, ogoals), s
 
         end
-        in pbp subgoals tgt sub tgt' sub' s
+        in pbp (goal, ogoals @ new_ogoals) tgt sub s tgt' sub' s'
       in
 
-      let left_inv_rules f src i sub tgt' sub' =
-        let tgt, subgoals, s = begin match f, i+1 with
+      let left_inv_rules f src i sub s tgt' sub' s' =
+        let tgt, (goal, new_ogoals), s = begin match f, i+1 with
 
           (* And *)
 
@@ -918,10 +914,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
             let tgt, subgoals =
               match item with
               | Sbound t -> 
-                let f =
-                  Form.f_subst (x, 0) t f |>
-                  Form.f_lift ~incr:(-1) (x, 0)
-                in
+                let f = Form.f_subst (x, 0) t f in
                 let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
                 tgt, gen_subgoals tgt ([], goal.g_goal) []
               | Sflex -> failwith "cannot go through uninstanciated quantifiers"
@@ -931,52 +924,49 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
           (* Exists *)
 
           | FBind (`Exist, x, ty, f), 1 ->
-            let z = Vars.fresh goal.g_env ~basename:x () in
-            let f =
-              Form.f_subst (x, 0) (EVar (z, 0)) f |>
-              Form.f_lift ~incr:(-1) (x, 0)
-            in
+            let s, Sbound (EVar (z, _)) = List.pop_assoc x s in
+            let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
             let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
             let goal, ogoals = gen_subgoals tgt ([], f) [] in
             let goal = { goal with g_env = Vars.push goal.g_env (z, ty) } in
             tgt, (goal, ogoals), s
 
         end
-        in pbp subgoals tgt sub tgt' sub' s
+        in pbp (goal, ogoals @ new_ogoals) tgt sub s tgt' sub' s'
       in
 
-      match tgt, sub, tgt', sub' with
+      match tgt, sub, s, tgt', sub', s' with
 
       (* Axiom *)
 
-      | _, [], _, [] -> List.rev ogoals
+      | _, [], _, _, [], _ -> List.rev ogoals
 
       (* Right invertible rules *)
 
-      | tgt', sub', `C f, i :: sub
+      | tgt', sub', s', `C f, i :: sub, s
         when invertible Pos f ->
-        right_inv_rules f i sub tgt' sub'
+        right_inv_rules f i sub s tgt' sub' s'
 
-      | `C f, i :: sub, tgt', sub'
+      | `C f, i :: sub, s, tgt', sub', s'
         when invertible Pos f ->
-        right_inv_rules f i sub tgt' sub'
+        right_inv_rules f i sub s tgt' sub' s'
 
       (* Left invertible rules *)
 
-      | tgt', sub', `H (src, Proof.{ h_form = f }), i :: sub
+      | tgt', sub', s', `H (src, Proof.{ h_form = f }), i :: sub, s
         when invertible Neg f ->
-        left_inv_rules f src i sub tgt' sub'
+        left_inv_rules f src i sub s tgt' sub' s'
 
-      | `H (src, Proof.{ h_form = f }), i :: sub, tgt', sub'
+      | `H (src, Proof.{ h_form = f }), i :: sub, s, tgt', sub', s'
         when invertible Neg f ->
-        left_inv_rules f src i sub tgt' sub'
+        left_inv_rules f src i sub s tgt' sub' s'
 
       (* Right non-invertible rules *)
 
-      | tgt', sub', `C f, i :: sub
-      | `C f, i :: sub, tgt', sub' ->
+      | tgt', sub', s', `C f, i :: sub, s
+      | `C f, i :: sub, s, tgt', sub', s' ->
 
-        let tgt, subgoals, s = begin match f, i+1 with
+        let tgt, (goal, new_ogoals), s = begin match f, i+1 with
 
           (* Or *)
 
@@ -997,10 +987,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
             let tgt, subgoals =
               match item with
               | Sbound t -> 
-                let f =
-                  Form.f_subst (x, 0) t f |>
-                  Form.f_lift ~incr:(-1) (x, 0)
-                in
+                let f = Form.f_subst (x, 0) t f in
                 let tgt = `C f in
                 tgt, gen_subgoals tgt ([], f) []
               | Sflex -> failwith "cannot go through uninstanciated quantifiers"
@@ -1008,14 +995,14 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
             tgt, subgoals, s
 
         end
-        in pbp subgoals tgt sub tgt' sub' s
+        in pbp (goal, ogoals @ new_ogoals) tgt sub s tgt' sub' s'
 
       (* Left non-invertible rules *)
 
-      | tgt', sub', `H (src, Proof.{ h_form = f }), i :: sub
-      | `H (src, Proof.{ h_form = f }), i :: sub, tgt', sub' ->
+      | tgt', sub', s', `H (src, Proof.{ h_form = f }), i :: sub, s
+      | `H (src, Proof.{ h_form = f }), i :: sub, s, tgt', sub', s' ->
 
-        let tgt, subgoals, s = begin match tgt' with
+        let tgt, (goal, new_ogoals), s = begin match tgt' with
 
           (* Hypothesis vs. Conclusion *)
 
@@ -1055,10 +1042,10 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
             end
           end
-        in pbp subgoals tgt sub tgt' sub' s
+        in pbp (goal, ogoals @ new_ogoals) tgt sub s tgt' sub' s'
     in
 
-    let subgoals = pbp (goal, []) top_src sub_src top_dst sub_dst s in
+    let subgoals = pbp (goal, []) top_src sub_src s_src top_dst sub_dst s_dst in
     Proof.xprogress proof g_id TLink subgoals
 
 
@@ -1083,32 +1070,35 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       the associated substitutions generated by unification. *)
 
   let search_match env (p1, f1) (p2, f2)
-    : (int list * int list * subst) list =
+    : (int list * subst * int list * subst) list =
 
-    let module Env = struct type t = form * env * subst end in
+    let module Env = struct type t = (name * name) list * env * subst end in
     let module State = Monad.State(Env) in
 
-    let rec traverse target i : (pol * form) State.t =
+    let rec traverse (p, f) i : (pol * form) State.t =
       let open State in
+      match p, f with
 
-      begin match target with
+      | Pos, FBind (`Forall, x, ty, f)
+      | Neg, FBind (`Exist, x, ty, f) ->
 
-      | _, FConn (_, fs) -> return ()
+        get >>= fun (exs, env, s) ->
+        let z, env = Vars.bind env (x, ty) in
+        let s = (x, Sbound (EVar (z, 0))) :: s in
+        put (exs, env, s) >>= fun _ ->
+        return (p, Form.f_subst (x, 0) (EVar (z, 0)) f)
 
-      | Pos, FBind (`Forall, x, ty, _)
-      | Neg, FBind (`Exist, x, ty, _) ->
-        get >>= fun (scrutinee, env, s) ->
-        put (Form.f_lift (x, 0) scrutinee, Vars.push env (x, ty), s)
+      | Neg, FBind (`Forall, x, ty, f)
+      | Pos, FBind (`Exist, x, ty, f) ->
 
-      | Neg, FBind (`Forall, x, _, _)
-      | Pos, FBind (`Exist, x, _, _) ->
-        get >>= fun (scrutinee, env, s) ->
-        put (Form.f_lift (x, 0) scrutinee, env, (x, Sflex) :: s)
+        get >>= fun (exs, env, s) ->
+        let z = EVars.fresh () in
+        let exs = (z, x) :: exs in
+        let s = (z, Sflex) :: s in
+        put (exs, env, s) >>= fun _ ->
+        return (p, Form.f_subst (x, 0) (EVar (z, 0)) f)
 
-      | _ -> return ()
-
-      end >>= fun _ ->
-      return (direct_subform_pol target i)
+      | _ -> return (direct_subform_pol (p, f) i)
     in
 
     let traverse = State.fold traverse in
@@ -1118,24 +1108,30 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     subs f1 >>= fun sub1 ->
     subs f2 >>= fun sub2 ->
 
-    let sp1, sf1, sp2, sf2, env, s =
+    let sp1, sf1, exs1, s1, sp2, sf2, exs2, s2 =
       let open State in
       run begin
         traverse (p1, f1) sub1 >>= fun (sp1, sf1) ->
-        get >>= fun (f2, env, s) ->
-        put (sf1, env, s) >>= fun _ ->
+        get >>= fun (exs1, env, s1) ->
+        put ([], env, []) >>= fun _ ->
 
         traverse (p2, f2) sub2 >>= fun (sp2, sf2) ->
-        get >>= fun (sf1, env, s) ->
+        get >>= fun (exs2, _, s2) ->
 
-        return (sp1, sf1, sp2, sf2, env, s)
+        return (sp1, sf1, exs1, s1, sp2, sf2, exs2, s2)
       end
-      (f2, env, [])
+      ([], env, [])
     in
 
     if sp1 <> sp2 then
-      match Form.f_unify Fo.Env.empty s [sf1, sf2] with
-      | Some s -> return (sub1, sub2, s)
+      match Form.f_unify Fo.Env.empty (s1 @ s2) [sf1, sf2] with
+      | Some s ->
+        let s1, s2 = List.split_at (List.length s1) s in
+        let rename exs = List.map (fun (x, tag) ->
+          Option.default x (List.assoc_opt x exs), tag)
+        in return (
+          sub1, s1 |> rename exs1 |> List.rev,
+          sub2, s2 |> rename exs2 |> List.rev)
       | None -> zero
     else zero
 
@@ -1155,14 +1151,13 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
       let targets =
         search_match g_pregoal.g_env (pol_src, f_src) (pol_dst, f_dst) |>
-        List.map (fun (sub_scrutinee, sub_target, s) ->
-          mk_ipath ~ctxt:src.ctxt ~sub:(sub_src @ sub_scrutinee) src.root,
-          mk_ipath ~ctxt:dst.ctxt ~sub:(sub_dst @ sub_target) dst.root,
-          s)
+        List.map (fun (sub1, s1, sub2, s2) ->
+          mk_ipath ~ctxt:src.ctxt ~sub:(sub_src @ sub1) src.root, s1,
+          mk_ipath ~ctxt:dst.ctxt ~sub:(sub_dst @ sub2) dst.root, s2)
       in
 
-      List.map (fun (src, tgt, s) ->
-        "Link", [tgt], `DnD (src, tgt), (g_id, `Link (src, tgt, s)))
+      List.map (fun (src, s_src, tgt, s_tgt) ->
+        "Link", [src; tgt], `DnD (src, tgt), (g_id, `Link (src, s_src, tgt, s_tgt)))
         targets
     in
     match dsts with
@@ -1364,6 +1359,6 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         and_drop subhd (proof, hd)    
     | `Forward (src, dst, p, s) ->
         forward (src, dst, p, s) (proof, hd)
-    | `Link (src, dst, s) ->
-        link src dst s proof
+    | `Link (src, s, dst, s') ->
+        link src s dst s' proof
 end
