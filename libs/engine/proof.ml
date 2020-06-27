@@ -927,7 +927,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
             let s, Sbound (EVar (z, _)) = List.pop_assoc x s in
             let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
             let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
-            let goal, ogoals = gen_subgoals tgt ([], f) [] in
+            let goal, ogoals = gen_subgoals tgt ([], goal.g_goal) [] in
             let goal = { goal with g_env = Vars.push goal.g_env (z, ty) } in
             tgt, (goal, ogoals), s
 
