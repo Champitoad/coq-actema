@@ -1105,7 +1105,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
          record and update multiple informations handling the first-order content
          of the proof. We do so with a tuple of the form
            
-           [(deps, exs, env, subst)]
+           [(deps, rnm, env, s)]
            
          where:
 
@@ -1113,16 +1113,16 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
            existential and eigenvariables, in the same spirit of the dependency
            relation of expansion trees.
 
-         - [exs] is an association list, where each item [(z, x)] maps a fresh name
-           [z] to the existential variable [x] it renames. Indeed, to avoid name
-           clashes between existential variables of [f1] and [f2] during unification,
-           we give them temporary fresh names, which are reverted to the original
-           names with [exs] when producing the final substitution for each formula.
+         - [rnm] is an association list, where each item [(z, x)] maps a fresh name
+           [z] to the variable [x] it renames. Indeed, to avoid name clashes between
+           bound variables of [f1] and [f2] during unification, we give them temporary
+           fresh names, which are reverted to the original names with [rnm] when
+           producing the final substitution for each formula.
           
          - [env] is (a copy of) the goal's environment, used to compute fresh
            names for eigenvariables that will be introduced by the [link] tactic.
           
-         - [subst] is the substitution that will be fed to unification, in which we
+         - [s] is the substitution that will be fed to unification, in which we
            record existential variables in [Sflex] entries, as well as the fresh
            eigenvariables in [Sbound] entries together with their original names.
       *)
@@ -1137,24 +1137,29 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | Pos, FBind (`Forall, x, ty, f)
       | Neg, FBind (`Exist, x, ty, f) ->
 
-        get >>= fun (deps, exs, env, s) ->
-        let z, env = Vars.bind env (x, ty) in
-        let deps = match exs with
-          | (y, _) :: _ -> Deps.add_edge deps y z
-          | _ -> deps
+        get >>= fun (deps, rnm, env, s) ->
+        let y, env = Vars.bind env (x, ty) in
+        let last_ex = List.find_map_opt
+          (function (x, Sflex) -> Some x | _ -> None) s
         in
-        let s = (x, Sbound (EVar (z, 0))) :: s in
-        put (deps, exs, env, s) >>= fun _ ->
-        return (p, Form.f_subst (x, 0) (EVar (z, 0)) f)
+        let deps = Option.map_default
+          (fun x -> Deps.add_edge deps x y)
+          deps last_ex
+        in
+        let z = EVars.fresh () in
+        let rnm = (z, x) :: rnm in
+        let s = (z, Sbound (EVar (y, 0))) :: s in
+        put (deps, rnm, env, s) >>= fun _ ->
+        return (p, Form.f_subst (x, 0) (EVar (y, 0)) f)
 
       | Neg, FBind (`Forall, x, ty, f)
       | Pos, FBind (`Exist, x, ty, f) ->
 
-        get >>= fun (deps, exs, env, s) ->
+        get >>= fun (deps, rnm, env, s) ->
         let z = EVars.fresh () in
-        let exs = (z, x) :: exs in
+        let rnm = (z, x) :: rnm in
         let s = (z, Sflex) :: s in
-        put (deps, exs, env, s) >>= fun _ ->
+        put (deps, rnm, env, s) >>= fun _ ->
         return (p, Form.f_subst (x, 0) (EVar (z, 0)) f)
 
       | _ -> return (direct_subform_pol (p, f) i)
@@ -1167,17 +1172,17 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     subs f1 >>= fun sub1 ->
     subs f2 >>= fun sub2 ->
 
-    let deps, sp1, sf1, exs1, s1, sp2, sf2, exs2, s2 =
+    let deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2 =
       let open State in
       run begin
         traverse (p1, f1) sub1 >>= fun (sp1, sf1) ->
-        get >>= fun (deps, exs1, env, s1) ->
+        get >>= fun (deps, rnm1, env, s1) ->
         put (deps, [], env, []) >>= fun _ ->
 
         traverse (p2, f2) sub2 >>= fun (sp2, sf2) ->
-        get >>= fun (deps, exs2, _, s2) ->
+        get >>= fun (deps, rnm2, _, s2) ->
 
-        return (deps, sp1, sf1, exs1, s1, sp2, sf2, exs2, s2)
+        return (deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2)
       end
       (Deps.empty, [], env, [])
     in
@@ -1189,8 +1194,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         let rename exs = List.map (fun (x, tag) ->
           Option.default x (List.assoc_opt x exs), tag)
         in return (
-          sub1, s1 |> rename exs1 |> List.rev,
-          sub2, s2 |> rename exs2 |> List.rev)
+          sub1, s1 |> rename rnm1 |> List.rev,
+          sub2, s2 |> rename rnm2 |> List.rev)
       | None -> zero
     else zero
 

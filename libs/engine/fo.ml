@@ -496,7 +496,7 @@ end = struct
   (** [e_unify env s eqns] implements a variant of Martelli and Montanari's
       unification algorithm on a list of term equations [eqns], with additional
       handling of a substitution [s] holding the list of bindings and unifiable (or
-      "flex") variables, and an environement [env] holding a context of locally
+      "flex") variables, and an environment [env] holding a context of locally
       bound variables.
   *)
   let rec e_unify (env : env) (s : subst) = function
@@ -508,6 +508,7 @@ end = struct
 
       let unify_cond x t =
         flex_subst x s &&
+        (match t with EVar y when flex_subst y s -> false | _ -> true) &&
         not (occurs x t) && (* maybe unnecessary check? *)
         Map.for_all (fun x tys -> 
           not (occurs_under (x, List.length tys) t))
