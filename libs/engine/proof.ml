@@ -1084,15 +1084,19 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       include Graph.Persistent.Digraph.Concrete(Name)
 
       let subst : t -> subst -> t =
+        (* For each item [x := e] in the substitution *)
         List.fold_left begin fun deps (x, tag) ->
+          let fvs = match tag with
+            | Sbound e -> Form.e_vars e
+            | Sflex -> []
+          in
+          (* For each variable [y] depending on [x] *)
           try fold_succ begin fun y deps ->
-              begin match tag with
-                | Sbound e -> Form.e_vars e
-                | Sflex -> []
-              end |>
-              List.fold_left begin fun deps (x, _) ->
-                add_edge deps x y
-              end deps
+            (* For each variable [z] occurring in [e] *)
+            List.fold_left begin fun deps (z, _) ->
+                (* Add an edge stating that [y] depends on [z] *)
+                add_edge deps z y
+              end deps fvs
             end deps x deps
           with Invalid_argument _ -> deps
         end
@@ -1139,12 +1143,12 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
         get >>= fun (deps, rnm, env, s) ->
         let y, env = Vars.bind env (x, ty) in
-        let last_ex = List.find_map_opt
+        let exs = List.filter_map
           (function (x, Sflex) -> Some x | _ -> None) s
         in
-        let deps = Option.map_default
-          (fun x -> Deps.add_edge deps x y)
-          deps last_ex
+        let deps = List.fold_left
+          (fun deps x -> Deps.add_edge deps x y)
+          deps exs
         in
         let z = EVars.fresh () in
         let rnm = (z, x) :: rnm in
