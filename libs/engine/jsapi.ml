@@ -257,7 +257,8 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
   method cut form =
     let doit () =
       let goal = Proof.byid parent##.proof self##.handle in
-      let form = Io.parse_form (Io.from_string (Js.to_string form)) in
+      let form = String.trim (Js.to_string form) in
+      let form = Io.parse_form (Io.from_string form) in
       let form = Fo.Form.check goal.g_env form in
       CoreLogic.cut form (parent##.proof, self##.handle)
     in js_proof_engine (!!doit ())
@@ -267,7 +268,8 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
   method addlocal name expr =
     let doit () =
       let goal = Proof.byid parent##.proof self##.handle in
-      let expr = Io.parse_expr (Io.from_string (Js.to_string expr)) in
+      let expr = String.trim (Js.to_string expr) in
+      let expr = Io.parse_expr (Io.from_string expr) in
       let expr, ty = Fo.Form.echeck goal.g_env expr in
       CoreLogic.add_local (Js.to_string name, ty, expr) (parent##.proof, self##.handle)
 
@@ -278,7 +280,8 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
   method addalias expr =
     let doit () =
       let goal = Proof.byid parent##.proof self##.handle in
-      let name, expr = Io.parse_nexpr (Io.from_string (Js.to_string expr)) in
+      let expr = String.trim (Js.to_string expr) in
+      let name, expr = Io.parse_nexpr (Io.from_string expr) in
       let expr, ty = Fo.Form.echeck goal.g_env expr in
       CoreLogic.add_local (Location.unloc name, ty, expr) (parent##.proof, self##.handle)
 
@@ -463,7 +466,8 @@ let export (name : string) : unit =
      * Raise an exception if [input] is invalid *)
     method parse x =
       let env, goal = !!(fun () ->
-        let goal = Io.parse_goal (Io.from_string (Js.to_string x)) in
+        let goal = String.trim (Js.to_string x) in
+        let goal = Io.parse_goal (Io.from_string goal) in
         Fo.Goal.check goal
       ) () in js_proof_engine (Proof.init env goal)
   end)
