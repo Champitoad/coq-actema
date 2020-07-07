@@ -236,6 +236,8 @@ module Form : sig
 
   val flatten_disjunctions : form -> form list
   val flatten_conjunctions : form -> form list
+
+  val subst1 : name * int -> expr -> form -> form
 end = struct
   let f_and   = fun f1 f2 -> FConn (`And  , [f1; f2])
   let f_or    = fun f1 f2 -> FConn (`Or   , [f1; f2])
@@ -787,6 +789,45 @@ end = struct
     in ((fun (form : form ) -> for_form form ),
         (fun (expr : expr ) -> for_expr expr ),
         (fun (ty   : type_) -> for_type ty   ))
+
+  let rec eshift ((x, i) : name * int) (d : int) (e : expr) =
+    match e with
+    | EVar (y, j) when x = y && i <= j ->
+        EVar (y, j+d)
+
+    | EVar _ ->
+        e
+
+    | EFun (f, args) ->
+        EFun (f, List.map (eshift (x, i) d) args)
+
+  let rec esubst1 ((x, i) : name * int) (e : expr) (tg : expr) : expr =
+    match tg with
+    | EVar (y, j) when x = y && i = j ->
+        e
+
+    | EVar (y, j) when x = y && i < j ->
+        EVar (y, j-1)
+
+    | EVar _ ->
+        tg
+
+    | EFun (f, args) ->
+        EFun (f, List.map (esubst1 (x, i) e) args)
+
+  let rec subst1 ((x, i) : name * int) (e : expr) (f : form) : form =
+    match f with
+    | FTrue | FFalse ->
+        f
+
+    | FConn (lg, fs) ->
+        FConn (lg, List.map (subst1 (x, i) e) fs)
+
+    | FPred (name, args) ->
+        FPred (name, List.map (esubst1 (x, i) e) args)
+
+    | FBind (bd, x, xty, f) ->
+        FBind (bd, x, xty, subst1 (x, i+1) (eshift (x, i) 1 e) f)
 
   let f_tohtml, e_tohtml, t_tohtml =
     let open Tyxml in

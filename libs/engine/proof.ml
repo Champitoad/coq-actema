@@ -245,7 +245,7 @@ module CoreLogic : sig
 
   val cut       : Fo.form -> tactic
   val add_local : string * Fo.type_ * Fo.expr -> tactic
-  val intro     : ?variant:int -> tactic
+  val intro     : ?variant:(int * (expr * type_) option) -> tactic
   val elim      : ?clear:bool -> Handle.t -> tactic
   val ivariants : targ -> string list
   val forward   : (Handle.t * Handle.t * int list * Fo.subst) -> tactic
@@ -289,8 +289,6 @@ end = struct
   type ipath  = { root : int; ctxt : int; sub : int list; }
   type gpath  = [`S of path | `P of ipath]
 
-  type pnode += TIntro
-
   let prune_premisses =
     let rec doit acc = function
       | FConn (`Imp, [f1; f2]) -> doit (f1 :: acc) f2
@@ -316,46 +314,58 @@ end = struct
       | FBind (`Exist, x, _, f) -> doit (i+1) acc ((x, Sflex)::s) f
       | f -> (List.rev acc, f, s)
     in fun f -> doit 0 [] [] f
-
 	
   let rec remove_form f = function
       | [] -> raise TacticNotApplicable
       | g::l when Form.f_equal g f -> l
       | g::l -> g::(remove_form f l)
 
-  let intro ?(variant = 0) ((pr, id) : targ) =
-    match variant, (Proof.byid pr id).g_goal with
-    | 0, FConn (`And, [f1; f2]) ->
-        Proof.progress pr id TIntro [f1; f2]
+  type pnode += TIntro of (int * (expr * type_) option)
 
-    | 0, FConn (`Imp, [f1; f2]) ->
-        Proof.sprogress pr id TIntro
+  let intro ?(variant = (0, None)) ((pr, id) : targ) =
+    let pterm = TIntro variant in
+
+    match variant, (Proof.byid pr id).g_goal with
+    | (0, None), FConn (`And, [f1; f2]) ->
+        Proof.progress pr id pterm [f1; f2]
+
+    | (0, None), FConn (`Imp, [f1; f2]) ->
+        Proof.sprogress pr id pterm
           [[None, [f1]], f2]
 
-
-    | 0, FConn (`Equiv, [f1; f2]) ->
-        Proof.progress pr id TIntro
+    | (0, None), FConn (`Equiv, [f1; f2]) ->
+        Proof.progress pr id pterm
           [Form.f_imp f1 f2; Form.f_imp f2 f1]
 
-    | i, (FConn (`Or, _) as f) ->
+    | (i, None), (FConn (`Or, _) as f) ->
         let fl = Form.flatten_disjunctions f in
         let g = List.nth fl i in
-        Proof.progress pr id TIntro [g]
+        Proof.progress pr id pterm [g]
 
-    | 0, FConn (`Not, [f]) ->
-        Proof.sprogress pr id TIntro
+    | (0, None), FConn (`Not, [f]) ->
+        Proof.sprogress pr id pterm
           [[None, [f]], FFalse]
 
-    | 0, FTrue ->
-        Proof.progress pr id TIntro []
+    | (0, None), FTrue ->
+        Proof.progress pr id pterm []
 
-    | 0, FBind (`Forall, x, xty, body) ->
+    | (0, None), FBind (`Forall, x, xty, body) ->
         let goal = Proof.byid pr id in
         let goal = { goal with
           g_env  = Vars.push goal.g_env (x, xty, None);
           g_goal = body;
         }
-        in Proof.xprogress pr id TIntro [goal]
+        in Proof.xprogress pr id pterm [goal]
+
+    | (0, Some (e, ety)), FBind (`Exist, x, xty, body) -> begin
+        let goal = Proof.byid pr id in
+
+        Fo.Form.erecheck goal.g_env ety e;
+        if not (Form.t_equal xty ety) then
+          raise TacticNotApplicable;
+        let goal = Fo.Form.subst1 (x, 0) e body in
+        Proof.sprogress pr id pterm [[], goal]
+      end
 
     | _ -> raise TacticNotApplicable
 
@@ -875,7 +885,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   let apply (proof : Proof.proof) ((hd, a) : action) =
     match a with
     | `Intro variant ->
-        intro ~variant (proof, hd)
+        intro ~variant:(variant, None) (proof, hd)
     | `Elim subhd ->
         elim subhd (proof, hd)
     | `DisjDrop (subhd, fl) ->
