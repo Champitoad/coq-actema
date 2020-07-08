@@ -27,6 +27,7 @@
   (lwt                  (>= 4.3))
   (lwt_ppx              (>= 1.2))
   (menhir               (>= 20181113))
+  (ocamlgraph           (>= 1.8))
   (yojson               (>= 1.7))
   )
 )
