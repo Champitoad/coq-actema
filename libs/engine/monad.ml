@@ -83,7 +83,7 @@ module List : Plus
 struct
   type 'a t = 'a list
   let return x = [x]
-  let bind m f = List.concat_map f m
+  let bind m f =  List.concat (List.map f m)
   let ( >>= ) = bind
   let zero = []
   let ( + ) = ( @ )
