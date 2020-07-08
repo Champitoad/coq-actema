@@ -25,7 +25,8 @@ type pexpr_r =
   | PEVar of psymbol
   | PEApp of psymbol * pexpr list
 
-and pexpr = pexpr_r loced
+and pexpr  = pexpr_r loced
+and pnexpr = psymbol * pexpr
 
 (* -------------------------------------------------------------------- *)
 type pform_r =

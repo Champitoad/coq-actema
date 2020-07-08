@@ -54,6 +54,7 @@ rule main = parse
   | "."   { DOT     }
   | ":"   { COLON   }
   | "::"  { DCOLON  }
+  | ":="  { COLONEQ }
   | "&"   { AMP     }
   | "+"   { PLUS    }
   | "*"   { STAR    }

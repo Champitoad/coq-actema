@@ -26,7 +26,6 @@ end = struct
 end
 
 (* -------------------------------------------------------------------- *)
-
 type pnode = ..
 
 exception InvalidGoalId    of Handle.t
@@ -256,7 +255,8 @@ module CoreLogic : sig
   type pol = Pos | Neg
 
   val cut       : Fo.form -> tactic
-  val intro     : ?variant:int -> tactic
+  val add_local : string * Fo.type_ * Fo.expr -> tactic
+  val intro     : ?variant:(int * (expr * type_) option) -> tactic
   val elim      : ?clear:bool -> Handle.t -> tactic
   val ivariants : targ -> string list
   val forward   : (Handle.t * Handle.t * int list * Fo.subst) -> tactic
@@ -300,10 +300,7 @@ end = struct
   type path   = string
   type ipath  = { root : int; ctxt : int; sub : int list; }
   type gpath  = [`S of path | `P of ipath]
-
-  type pol = Pos | Neg
-
-  type pnode += TIntro
+  type pol    = Pos | Neg
 
   let prune_premisses =
     let rec doit acc = function
@@ -330,40 +327,57 @@ end = struct
       | FBind (`Exist, x, _, f) -> doit (i+1) acc ((x, Sflex)::s) f
       | f -> (List.rev acc, f, s)
     in fun f -> doit 0 [] [] f
-
 	
   let rec remove_form f = function
       | [] -> raise TacticNotApplicable
       | g::l when Form.f_equal g f -> l
       | g::l -> g::(remove_form f l)
 
-  let intro ?(variant = 0) ((pr, id) : targ) =
-    match variant, (Proof.byid pr id).g_goal with
-    | 0, FConn (`And, [f1; f2]) ->
-        Proof.progress pr id TIntro [f1; f2]
+  type pnode += TIntro of (int * (expr * type_) option)
 
-    | 0, FConn (`Imp, [f1; f2]) ->
-        Proof.sprogress pr id TIntro
+  let intro ?(variant = (0, None)) ((pr, id) : targ) =
+    let pterm = TIntro variant in
+
+    match variant, (Proof.byid pr id).g_goal with
+    | (0, None), FConn (`And, [f1; f2]) ->
+        Proof.progress pr id pterm [f1; f2]
+
+    | (0, None), FConn (`Imp, [f1; f2]) ->
+        Proof.sprogress pr id pterm
           [[None, [f1]], f2]
 
-    | 0, FConn (`Equiv, [f1; f2]) ->
-        Proof.progress pr id TIntro
+    | (0, None), FConn (`Equiv, [f1; f2]) ->
+        Proof.progress pr id pterm
           [Form.f_imp f1 f2; Form.f_imp f2 f1]
 
-    | i, (FConn (`Or, _) as f) ->
+    | (i, None), (FConn (`Or, _) as f) ->
         let fl = Form.flatten_disjunctions f in
         let g = List.nth fl i in
-        Proof.progress pr id TIntro [g]
+        Proof.progress pr id pterm [g]
 
-    | 0, FConn (`Not, [f]) ->
-        Proof.sprogress pr id TIntro
-          [[None, [f]], FFalse]
+    | (0, None), FConn (`Not, [f]) ->
+        Proof.sprogress pr id pterm [[None, [f]], FFalse]
 
-    | 0, FTrue ->
-        Proof.progress pr id TIntro []
+    | (0, None), FTrue ->
+        Proof.progress pr id pterm []
 
-    | 0, FBind (`Forall, x, xty, f) ->
-        Proof.progress pr id TIntro [f]
+    | (0, None), FBind (`Forall, x, xty, body) ->
+        let goal = Proof.byid pr id in
+        let goal = { goal with
+          g_env  = Vars.push goal.g_env (x, xty, None);
+          g_goal = body;
+        }
+        in Proof.xprogress pr id pterm [goal]
+
+    | (0, Some (e, ety)), FBind (`Exist, x, xty, body) -> begin
+        let goal = Proof.byid pr id in
+
+        Fo.Form.erecheck goal.g_env ety e;
+        if not (Form.t_equal xty ety) then
+          raise TacticNotApplicable;
+        let goal = Fo.Form.subst1 (x, 0) e body in
+        Proof.sprogress pr id pterm [[], goal]
+      end
 
     | _ -> raise TacticNotApplicable
 
@@ -577,10 +591,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
     [ (TForward (hsrc, hdst)), [[Some hdst, [nf]], gl.g_goal] ]
 
-
   let forward (hsrc, hdst, p, s) ((pr, id) : targ) =
     perform (core_forward (hsrc, hdst, p, s) (pr, id)) pr id 
-
 
   type pnode += TCut of Fo.form * Handle.t
 
@@ -593,6 +605,17 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     
     Proof.sprogress proof hd (TCut (form, hd))
       (subs @ [[None, [form]], goal.g_goal])
+
+  type pnode += TDef of (Fo.type_ * Fo.expr) * Handle.t
+
+  let add_local ((name, ty, body) : string * Fo.type_ * Fo.expr) ((proof, hd) : targ) =
+    let goal = Proof.byid proof hd in
+
+    Fo.Form.erecheck goal.g_env ty body;
+
+    let env = Fo.Vars.push goal.g_env (name, ty, Some body) in
+    
+    Proof.xprogress proof hd (TDef ((ty, body), hd)) [{ goal with g_env = env }]
 
   type action = Handle.t * [
     | `Elim    of Handle.t
@@ -868,7 +891,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
             let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
             let tgt = `C f in
             let goal, ogoals = gen_subgoals tgt ([], f) [] in
-            let goal = { goal with g_env = Vars.push goal.g_env (z, ty) } in
+            let goal = { goal with g_env = Vars.push goal.g_env (z, ty, None) } in
             tgt, (goal, ogoals), s
 
         end
@@ -923,7 +946,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
             let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
             let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
             let goal, ogoals = gen_subgoals tgt ([], goal.g_goal) [] in
-            let goal = { goal with g_env = Vars.push goal.g_env (z, ty) } in
+            let goal = { goal with g_env = Vars.push goal.g_env (z, ty, None) } in
             tgt, (goal, ogoals), s
 
         end
@@ -1413,7 +1436,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   let apply (proof : Proof.proof) ((hd, a) : action) =
     match a with
     | `Intro variant ->
-        intro ~variant (proof, hd)
+        intro ~variant:(variant, None) (proof, hd)
     | `Elim subhd ->
         elim subhd (proof, hd)
     | `DisjDrop (subhd, fl) ->

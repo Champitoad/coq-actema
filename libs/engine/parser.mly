@@ -17,7 +17,7 @@
 %token PROOF
 
 %token LAND LOR LNEG PLUS STAR
-%token AMP DCOLON COLON COMMA DOT
+%token AMP DCOLON COLON COLONEQ COMMA DOT
 
 %nonassoc BINDING_prec
 %right    LARROW LRARROW
@@ -26,13 +26,15 @@
 %left     LAND STAR
 %left     LNEG
 
-%type <Syntax.ptype> xtype
-%type <Syntax.pexpr> xexpr
-%type <Syntax.pform> xform
-%type <Syntax.pgoal> xgoal
+%type <Syntax.ptype > xtype
+%type <Syntax.pexpr > xexpr
+%type <Syntax.pnexpr> xnexpr
+%type <Syntax.pform > xform
+%type <Syntax.pgoal > xgoal
 
 %start xtype
 %start xexpr
+%start xnexpr
 %start xform
 %start xgoal
 %%
@@ -50,6 +52,13 @@ xexpr:
     { raise (ParseError (Some (Location.make $startpos $endpos), None)) }
 
 | e=expr EOF { e }
+
+(* -------------------------------------------------------------------- *)
+xnexpr:
+| error
+    { raise (ParseError (Some (Location.make $startpos $endpos), None)) }
+
+| e=nexpr EOF { e }
 
 (* -------------------------------------------------------------------- *)
 xform:
@@ -107,6 +116,10 @@ expr_r:
 
 expr:
 | e=loc(expr_r) { e }
+
+(* -------------------------------------------------------------------- *)
+nexpr:
+| x=ident COLONEQ e=expr { (x, e) }
 
 (* -------------------------------------------------------------------- *)
 form_r:

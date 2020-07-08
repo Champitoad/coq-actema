@@ -44,10 +44,12 @@ type 'a eqns = ('a * 'a) list
 type env = {
   env_prp  : (name, arity     ) Map.t;
   env_fun  : (name, sig_      ) Map.t;
-  env_var  : (name, type_ list) Map.t;
+  env_var  : (name, bvar  list) Map.t;
   env_evar : (name, type_ list) Map.t;
   env_tvar : (name, int       ) Map.t;
 }
+
+and bvar = type_ * expr option
 
 (* -------------------------------------------------------------------- *)
 module Env : sig
@@ -113,11 +115,10 @@ end
 module Vars : sig
   val fresh  : env -> ?basename:name -> unit -> name
   val bind   : env -> name * type_ -> name * env
-  val push   : env -> name * type_ -> env
-  val get    : env -> vname -> type_ option
+  val push   : env -> name * type_ * expr option -> env
   val exists : env -> vname -> bool
-  val depth  : env -> name -> int
-  val all    : env -> (name, type_ list) Map.t
+  val get    : env -> vname -> (type_ * expr option) option
+  val all    : env -> (name, (type_ * expr option) list) Map.t
 end = struct
   let name_counters : (env, int ref) Map.t ref = ref Map.empty
 
@@ -145,16 +146,13 @@ end = struct
 
   let bind (env : env) ((name, ty) : name * type_) =
     let name = fresh env ~basename:name () in
-    let env_var = Map.add name [ty] env.env_var in
+    let env_var = Map.add name [(ty, None)] env.env_var in
     name, { env with env_var }
 
-  let push (env : env) ((name, ty) : name * type_) =
-    let env_var =
-      Map.modify_opt name (fun bds ->
-        Some (ty :: Option.default [] bds))
-        env.env_var
-    in
-    { env with env_var }
+  let push (env : env) ((name, ty, body) : name * type_ * expr option) =
+    { env with env_var = Map.modify_opt name (fun bds ->
+          Some ((ty, body) :: Option.default [] bds)
+        ) env.env_var; }
 
   let get (env : env) ((name, idx) : vname) =
     let bds = Map.find_default [] name env.env_var in
@@ -240,7 +238,7 @@ end
 type entry =
   | EPVar of (name * arity)
   | ETFun of (name * sig_)
-  | ETVar of (name * type_)
+  | ETVar of (name * type_ * expr option)
 
 let env_of_entries (entries : entry list) =
   List.fold_left (fun env entry ->
@@ -331,6 +329,8 @@ module Form : sig
 
   val flatten_disjunctions : form -> form list
   val flatten_conjunctions : form -> form list
+
+  val subst1 : name * int -> expr -> form -> form
 end = struct
   let f_and   = fun f1 f2 -> FConn (`And  , [f1; f2])
   let f_or    = fun f1 f2 -> FConn (`Or   , [f1; f2])
@@ -636,7 +636,7 @@ end = struct
         when b1 = b2 && ty1 = ty2 ->
 
         let f2 = f_subst (x2, 0) (EVar (x1, 0)) (f_lift (x1, 0) f2) in
-        let env' = Vars.push env (x1, ty1) in
+        let env' = Vars.push env (x1, ty1, None) in
         begin match f_unify env' s [f1, f2] with
         | Some s -> f_unify env s eqns
         | None -> None
@@ -788,7 +788,7 @@ end = struct
   let rec erecheck (env : env) (ty : type_) (expr : expr) : unit =
     match expr with
     | EVar x ->
-        let xty = Option.get_exn (Vars.get env x) RecheckFailure in
+        let xty, _ = Option.get_exn (Vars.get env x) RecheckFailure in
         if not (t_equal ty xty) then raise RecheckFailure
 
     | EFun (f, args) ->
@@ -816,7 +816,7 @@ end = struct
         List.iter (recheck env) forms
 
     | FBind (_, x, xty, f) ->
-        trecheck env xty; recheck (Vars.push env (x, xty)) f
+        trecheck env xty; recheck (Vars.push env (x, xty, None)) f
 
   let rec tcheck (env : env) (ty : ptype) =
     match unloc ty with
@@ -836,8 +836,8 @@ end = struct
     match unloc e with
     | PEVar x -> begin
         match Vars.get env (unloc x, 0) with
-        | None     -> raise TypingError
-        | Some xty -> EVar (unloc x, 0), xty
+        | None          -> raise TypingError
+        | Some (xty, _) -> EVar (unloc x, 0), xty
       end
 
     | PEApp (f, args) -> begin
@@ -879,12 +879,12 @@ end = struct
 
     | PFForall ((x, xty), f) ->
         let xty = tcheck env xty in
-        let f   = check (Vars.push env (unloc x, xty)) f in
+        let f   = check (Vars.push env (unloc x, xty, None)) f in
         FBind (`Forall, unloc x, xty, f)
 
     | PFExists ((x, xty), f) ->
         let xty = tcheck env xty in
-        let f   = check (Vars.push env (unloc x, xty)) f in
+        let f   = check (Vars.push env (unloc x, xty, None)) f in
         FBind (`Exist, unloc x, xty, f)
 
   let rec prio_of_form = function
@@ -1013,6 +1013,45 @@ end = struct
     in ((fun (form : form ) -> for_form form ),
         (fun (expr : expr ) -> for_expr expr ),
         (fun (ty   : type_) -> for_type ty   ))
+
+  let rec eshift ((x, i) : name * int) (d : int) (e : expr) =
+    match e with
+    | EVar (y, j) when x = y && i <= j ->
+        EVar (y, j+d)
+
+    | EVar _ ->
+        e
+
+    | EFun (f, args) ->
+        EFun (f, List.map (eshift (x, i) d) args)
+
+  let rec esubst1 ((x, i) : name * int) (e : expr) (tg : expr) : expr =
+    match tg with
+    | EVar (y, j) when x = y && i = j ->
+        e
+
+    | EVar (y, j) when x = y && i < j ->
+        EVar (y, j-1)
+
+    | EVar _ ->
+        tg
+
+    | EFun (f, args) ->
+        EFun (f, List.map (esubst1 (x, i) e) args)
+
+  let rec subst1 ((x, i) : name * int) (e : expr) (f : form) : form =
+    match f with
+    | FTrue | FFalse ->
+        f
+
+    | FConn (lg, fs) ->
+        FConn (lg, List.map (subst1 (x, i) e) fs)
+
+    | FPred (name, args) ->
+        FPred (name, List.map (esubst1 (x, i) e) args)
+
+    | FBind (bd, x, xty, f) ->
+        FBind (bd, x, xty, subst1 (x, i+1) (eshift (x, i) 1 e) f)
 
   let f_tohtml, e_tohtml, t_tohtml =
     let open Tyxml in
@@ -1174,7 +1213,7 @@ end = struct
         | PFun (name, (ar, ty)) ->
             ETFun (unloc name, (List.map for_type ar, for_type ty))
         | PVar (name, ty) ->
-            ETVar (unloc name, for_type ty)
+            ETVar (unloc name, for_type ty, None)
       in env_of_entries (List.map for_entry ps) in
     (env, Form.check env f)
 end
