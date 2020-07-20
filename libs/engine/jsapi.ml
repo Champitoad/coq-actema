@@ -295,7 +295,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
 
   (* [this#generalize (h : js_hyps) generalizes the hypothesis [h] *)
   method generalize hid =
-    let doit () = CoreLogic.generalize hid (parent##.proof, self##.handle) in
+    let doit () = CoreLogic.generalize hid##.handle (parent##.proof, self##.handle) in
     js_proof_engine (!!doit ())
 
   method getmeta =

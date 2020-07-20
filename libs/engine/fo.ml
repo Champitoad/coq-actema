@@ -68,6 +68,48 @@ end
 exception DuplicatedEntry of [`Prp | `Fun] * name
 
 (* -------------------------------------------------------------------- *)
+module LEnv : sig
+  type lenv 
+
+  exception EmptyLEnv
+
+  val empty : lenv
+  val enter : name -> lenv -> lenv
+  val exit  : lenv -> lenv
+  val fold  : name -> lenv -> 'a -> (lenv -> 'a -> 'b) -> 'b
+end = struct
+  type lenv = {
+    le_indices  : (name, int) Map.t;
+    le_bindings : name list;
+  }
+
+  exception EmptyLEnv
+
+  let empty =
+    { le_indices = Map.empty; le_bindings = []; }
+
+  let enter (name : name) (lenv : lenv) =
+    { le_indices  = Map.modify_def 0 name ((+) 1) lenv.le_indices;
+      le_bindings = name :: lenv.le_bindings; }
+
+  let exit (lenv : lenv) =
+    match lenv.le_bindings with
+    | [] ->
+        raise EmptyLEnv
+
+    | name :: names ->
+        let update i =
+          let i = Option.get i - 1 in
+          if i = 0 then None else Some i in
+
+        { le_bindings = names;
+          le_indices  = Map.modify_opt name update lenv.le_indices; }
+
+   let fold (name : name) (lenv : lenv) (x : 'a) (f : lenv -> 'a -> 'b) =
+     f (enter name lenv) x
+end
+
+(* -------------------------------------------------------------------- *)
 module Prps : sig
   val push   : env -> name * arity -> env
   val exists : env -> name -> bool
