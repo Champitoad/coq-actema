@@ -254,12 +254,13 @@ module CoreLogic : sig
   type gpath  = [`S of path | `P of ipath]
   type pol = Pos | Neg
 
-  val cut       : Fo.form -> tactic
-  val add_local : string * Fo.type_ * Fo.expr -> tactic
-  val intro     : ?variant:(int * (expr * type_) option) -> tactic
-  val elim      : ?clear:bool -> Handle.t -> tactic
-  val ivariants : targ -> string list
-  val forward   : (Handle.t * Handle.t * int list * Fo.subst) -> tactic
+  val cut        : Fo.form -> tactic
+  val add_local  : string * Fo.type_ * Fo.expr -> tactic
+  val generalize : Handle.t -> tactic
+  val intro      : ?variant:(int * (expr * type_) option) -> tactic
+  val elim       : ?clear:bool -> Handle.t -> tactic
+  val ivariants  : targ -> string list
+  val forward    : (Handle.t * Handle.t * int list * Fo.subst) -> tactic
 
   type asource = [
     | `Click of gpath
@@ -616,6 +617,17 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     let env = Fo.Vars.push goal.g_env (name, ty, Some body) in
     
     Proof.xprogress proof hd (TDef ((ty, body), hd)) [{ goal with g_env = env }]
+
+  type pnode += TGeneralize of Handle.t
+
+  let generalize (hid : Handle.t) ((proof, id) : targ) =
+    let goal = Proof.byid proof id in
+    let hyp  = (Proof.Hyps.byid goal.g_hyps hid).h_form in
+
+    Proof.xprogress proof id (TGeneralize hid)
+      [{ g_env  = goal.g_env;
+         g_hyps = Map.remove hid goal.g_hyps;
+         g_goal = FConn (`Imp, [hyp; goal.g_goal]) } ]
 
   type action = Handle.t * [
     | `Elim    of Handle.t
