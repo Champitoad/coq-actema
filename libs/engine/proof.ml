@@ -43,10 +43,17 @@ module Proof : sig
 
   val mk_hyp : ?src:Handle.t -> ?gen:int -> form -> hyp
 
-  type hyps = (Handle.t, hyp) Map.t
+  type hyps
 
   module Hyps : sig
-    val byid : hyps -> Handle.t -> hyp
+    val empty   : hyps
+    val byid    : hyps -> Handle.t -> hyp
+    val add     : hyps -> Handle.t -> hyp -> hyps
+    val remove  : hyps -> Handle.t -> hyps
+    val move    : hyps -> Handle.t -> Handle.t option -> hyps
+    val bump    : hyps -> hyps
+    val ids     : hyps -> Handle.t list
+    val to_list : hyps -> (Handle.t * hyp) list
   end
 
   type pregoal = {
@@ -69,12 +76,13 @@ module Proof : sig
   val set_meta : proof -> Handle.t -> meta option -> unit
   val get_meta : proof -> Handle.t -> meta option
 
-  val progress :
-    proof -> Handle.t -> pnode -> form list -> proof
-
   val sgprogress :
     pregoal -> ?clear:bool ->
       ((Handle.t option * form list) list * form) list -> pregoals
+
+  val progress :
+    proof -> Handle.t -> pnode -> form list -> proof
+
   val sprogress :
     proof -> ?clear:bool -> Handle.t -> pnode ->
       ((Handle.t option * form list) list * form) list -> proof
@@ -90,7 +98,64 @@ end = struct
     h_form : form;
   }
 
-  type hyps = (Handle.t, hyp) Map.t
+  module Hyps : sig
+    type hyps
+
+    val empty   : hyps
+    val byid    : hyps -> Handle.t -> hyp
+    val add     : hyps -> Handle.t -> hyp -> hyps
+    val remove  : hyps -> Handle.t -> hyps
+    val move    : hyps -> Handle.t -> Handle.t option -> hyps
+    val bump    : hyps -> hyps
+    val ids     : hyps -> Handle.t list
+    val to_list : hyps -> (Handle.t * hyp) list
+  end = struct
+    type hyps = (Handle.t * hyp) list
+
+    let empty : hyps =
+      []
+
+    let byid (hyps : hyps) (id : Handle.t) =
+      Option.get_exn
+        (List.Exceptionless.assoc id hyps)
+        (InvalidHyphId id)
+
+    let add (hyps : hyps) (id : Handle.t) (h : hyp) : hyps =
+      assert (Option.is_none (List.Exceptionless.assoc id hyps));
+      (id, h) :: hyps
+
+    let remove (hyps : hyps) (id : Handle.t) : hyps =
+      List.filter (fun (x, _) -> Handle.eq x id) hyps
+
+    let move (hyps : hyps) (from : Handle.t) (before : Handle.t option) =
+      let tg   = byid hyps from in
+      let hyps = remove hyps from in
+
+      match before with
+      | None ->
+          (from, tg) :: hyps
+
+      | Some before ->
+          let pos, _ =
+            Option.get_exn
+              (List.Exceptionless.findi (fun _ (x, _) -> Handle.eq x before) hyps)
+              (InvalidHyphId before) in
+
+          let post, pre = List.split_at (1+pos) hyps in
+
+          post @ (from, tg) :: pre
+
+    let bump (hyps : hyps) : hyps =
+      List.map (fun (id, h) -> (id, { h with h_gen = h.h_gen + 1 })) hyps
+
+    let ids (hyps : hyps) =
+      List.fst hyps
+
+    let to_list (hyps : hyps) =
+      hyps
+  end
+
+  type hyps = Hyps.hyps
 
   type pregoal = {
     g_env  : env;
@@ -117,13 +182,6 @@ end = struct
     d_ndn : pnode;
   }
 
-  module Hyps = struct
-    let byid (hyps : hyps) (id : Handle.t) =
-      Option.get_exn
-        (Map.Exceptionless.find id hyps)
-        (InvalidHyphId id)
-  end
-
   let mk_hyp ?(src : Handle.t option) ?(gen : int = 0) form =
     { h_src = src; h_gen = gen; h_form = form; }
 
@@ -133,7 +191,7 @@ end = struct
     let uid  = Handle.fresh () in
     let root = { g_id = uid; g_pregoal = {
         g_env  = env;
-        g_hyps = Map.empty;
+        g_hyps = Hyps.empty;
         g_goal = goal;
       }
     } in
@@ -176,7 +234,7 @@ end = struct
 
     let sub =
       let for1 sub =
-        let hyps = Map.map (fun h -> { h with h_gen = h.h_gen + 1 }) sub.g_hyps in
+        let hyps = Hyps.bump sub.g_hyps in
         let sub  = { sub with g_hyps = hyps } in
         { g_id = Handle.fresh (); g_pregoal = sub; }
       in List.map for1 sub in
@@ -218,12 +276,12 @@ end = struct
         let hyps =
           Option.fold (fun hyps hid ->
             let _h = (Hyps.byid hyps hid).h_form in
-            if clear then Map.remove hid hyps else hyps)
+            if clear then Hyps.remove hyps hid else hyps)
           hyps hid in
         let hsrc = if clear then None else hid in
 
         let hyps = List.fold_left (fun hyps newh ->
-            Map.add (Handle.fresh ()) (mk_hyp ?src:hsrc newh) hyps)
+            Hyps.add hyps (Handle.fresh ()) (mk_hyp ?src:hsrc newh))
           hyps newlc
         in hyps in
 
@@ -257,6 +315,7 @@ module CoreLogic : sig
   val cut        : Fo.form -> tactic
   val add_local  : string * Fo.type_ * Fo.expr -> tactic
   val generalize : Handle.t -> tactic
+  val move       : Handle.t -> Handle.t option -> tactic
   val intro      : ?variant:(int * (expr * type_) option) -> tactic
   val elim       : ?clear:bool -> Handle.t -> tactic
   val ivariants  : targ -> string list
@@ -626,8 +685,19 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
     Proof.xprogress proof id (TGeneralize hid)
       [{ g_env  = goal.g_env;
-         g_hyps = Map.remove hid goal.g_hyps;
+         g_hyps = Proof.Hyps.remove goal.g_hyps hid;
          g_goal = FConn (`Imp, [hyp; goal.g_goal]) } ]
+
+  type pnode += TMove of Handle.t * Handle.t option
+
+  let move (from : Handle.t) (before : Handle.t option) ((proof, id) : targ) =
+    let goal    = Proof.byid proof id in
+    let _from   = Proof.Hyps.byid goal.g_hyps in (* KEEP *)
+    let _before = Option.map (Proof.Hyps.byid goal.g_hyps) before in (* KEEP *)
+    let hyps    = Proof.Hyps.move goal.g_hyps from before in
+
+    Proof.xprogress proof id (TMove (from, before))
+      [{ goal with g_hyps = hyps }]
 
   type action = Handle.t * [
     | `Elim    of Handle.t
@@ -856,7 +926,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
           let goal = List.hd (Proof.sgprogress goal [sub_goal]) in
           match target with
           | `H (uid, hyp) ->
-            { goal with g_hyps = Map.add uid hyp goal.g_hyps }
+            { goal with g_hyps = Proof.Hyps.add goal.g_hyps uid hyp }
           | _ -> goal
         in
         (goal, ogoals)
@@ -1261,7 +1331,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     match dsts with
     | None ->
       (* Get the list of hypotheses handles *)
-      let dsts = List.of_enum (Map.keys g_pregoal.Proof.g_hyps) in
+      let dsts = Proof.Hyps.ids g_pregoal.Proof.g_hyps in
       (* Create a list of paths to each hypothesis *)
       let dsts =
         List.map
@@ -1395,7 +1465,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       match dsts with
       | None ->
         (* Get the list of hypotheses handles *)
-        let dsts = List.of_enum (Map.keys pr.Proof.g_hyps) in
+        let dsts = Proof.Hyps.ids pr.Proof.g_hyps in
         (* Create a list of paths to each hypothesis *)
         let dsts =
           List.map

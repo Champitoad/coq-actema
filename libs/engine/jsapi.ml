@@ -208,15 +208,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
   (* Return all the local hypotheses (context) as a [js_hyps array] *)
   method context =
     let goal = Proof.byid parent##.proof self##.handle in
-    let hyps = Map.bindings goal.g_hyps in
-    let hyps =
-      let key  = fun ((i, _) : Handle.t * Proof.hyp) -> Handle.toint i in
-      let deps = fun ((_, x) : Handle.t * Proof.hyp) ->
-        List.of_option (Option.map Handle.toint x.h_src) in
-
-      try  List.rev (List.topo key deps hyps)
-      with List.TopoFailure -> hyps
-    in
+    let hyps = List.rev (Proof.Hyps.to_list goal.g_hyps) in
 
     Js.array (Array.of_list (List.mapi (fun i x -> js_hyps self (i, x)) hyps))
 
@@ -287,16 +279,22 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
 
     in js_proof_engine (!!doit ())
 
-  (* [this#move (from : js_hyps) (before : js_hyps option)] move
+  (* [this#move_hyp (from : js_hyps) (before : js_hyps option)] move
    * hypothesis [from] before hypothesis [before]. Both hypothesis
    * must be part of this sub-goal. *)
-  method move (from : unit) (before : unit option) =
-    js_proof_engine parent##.proof
+  method move_hyp from before =
+    let doit () =
+      CoreLogic.move
+        from##.handle
+        (Option.map (fun x -> x##.handle) (Js.Opt.to_option before))
+        (parent##.proof, self##.handle)
+    in js_proof_engine (!!doit ())
 
   (* [this#generalize (h : js_hyps) generalizes the hypothesis [h] *)
   method generalize hid =
-    let doit () = CoreLogic.generalize hid##.handle (parent##.proof, self##.handle) in
-    js_proof_engine (!!doit ())
+    let doit () =
+      CoreLogic.generalize hid##.handle (parent##.proof, self##.handle)
+    in js_proof_engine (!!doit ())
 
   method getmeta =
     Js.Opt.option (Proof.get_meta parent##.proof self##.handle)
