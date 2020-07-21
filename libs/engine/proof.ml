@@ -125,7 +125,7 @@ end = struct
       (id, h) :: hyps
 
     let remove (hyps : hyps) (id : Handle.t) : hyps =
-      List.filter (fun (x, _) -> Handle.eq x id) hyps
+      List.filter (fun (x, _) -> not (Handle.eq x id)) hyps
 
     let move (hyps : hyps) (from : Handle.t) (before : Handle.t option) =
       let tg   = byid hyps from in
@@ -701,12 +701,12 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       [{ goal with g_hyps = hyps }]
 
   type action = Handle.t * [
-    | `Elim    of Handle.t
-    | `Intro   of int
-    | `Forward of Handle.t * Handle.t * (int list) * Fo.subst 
+    | `Elim     of Handle.t
+    | `Intro    of int
+    | `Forward  of Handle.t * Handle.t * (int list) * Fo.subst 
     | `DisjDrop of Handle.t * form list
     | `ConjDrop of Handle.t
-    | `Link of ipath * Fo.subst * ipath * Fo.subst
+    | `Link     of ipath * Fo.subst * ipath * Fo.subst
   ]
 
   exception InvalidPath
