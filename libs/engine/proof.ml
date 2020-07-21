@@ -905,6 +905,86 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | FBind _ -> true
       | _ -> false
       end
+
+  
+  (** [dlink] stands for _d_eep link, and implements the deep interaction phase
+      à la Chaudhuri for intuitionistic logic (propositional case for now). *)
+  
+  let dlink src s_src dst s_dst : tactic =
+    fun (proof, g_id) ->
+
+    let Proof.{ g_pregoal = goal }, top_src, (sub_src, _) = of_ipath proof src in
+    let _, top_dst, (sub_dst, _) = of_ipath proof dst in
+
+    let open Form in
+
+    (* Positively invertible contexts *)
+    let invp : form -> bool = function
+      | _ -> false
+    in
+
+    (* Negatively invertible contexts *)
+    let invn : form -> bool = function
+      | _ -> false
+    in
+
+    let rec backward : (form * int list) * (form * int list) -> form = function
+
+      (** End rules *)
+
+      | (h, []), (c, []) ->      
+        if h = c
+        
+        (* lnid *)
+        then f_true
+        
+        (* unlnp *)
+        else f_imp h c
+
+      (** Left rules *)
+
+      (* lnplc1 *)
+      | (FConn (`And, [h1; h2]), 0 :: subh), c ->
+        f_imp h2 (backward ((h1, subh), c))
+
+      (* lnplc2 *)
+      | (FConn (`And, [h1; h2]), 1 :: subh), c ->
+        f_imp h1 (backward ((h2, subh), c))
+
+      (** Right rules *)
+
+      (* lnprc1 *)
+      | h, (FConn (`And, [c1; c2]), 0 :: subc) ->
+        f_and (backward (h, (c1, subc))) c2
+
+      (* lnprc2 *)
+      | h, (FConn (`And, [c1; c2]), 1 :: subc) ->
+        f_and c1 (backward (h, (c2, subc)))
+
+    and forward : (form * int list) * (form * int list) -> form = function
+
+      (** End rules *)
+
+      | (h, []), (h', []) ->      
+
+        (* unlnp *)
+        f_and h h'
+
+      (** Left rules *)
+
+      (** Right rules *)
+    in
+
+    let subgoal = match top_src, top_dst, sub_src, sub_dst with
+      | `H (_, Proof.{ h_form = h }), `C c, subh, subc
+      | `C c, `H (_, Proof.{ h_form = h }), subc, subh ->
+        [[], backward ((h, subh), (c, subc))]
+      
+      | `H (_, Proof.{ h_form = h }), `H (_, Proof.{ h_form = h' }), subh, subh' ->
+        [[None, [forward ((h, subh), (h', subh'))]], goal.g_goal]
+    in
+
+    Proof.sprogress proof g_id TLink subgoal
   
 
   (** [link] is the equivalent of Proof by Pointing's [finger_tac], but using the
@@ -1529,5 +1609,5 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     | `Forward (src, dst, p, s) ->
         forward (src, dst, p, s) (proof, hd)
     | `Link (src, s, dst, s') ->
-        link src s dst s' proof
+        dlink src s dst s' (proof, hd)
 end
