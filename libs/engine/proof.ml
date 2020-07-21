@@ -890,7 +890,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     (* Right invertible *)
     | Pos -> begin match f with
       | FConn (c, _) -> begin match c with
-        | `And | `Imp | `Not -> true
+        | `Or | `Imp | `Not -> true
         | _ -> false
         end
       | FBind (`Forall, _, _, _) -> true
@@ -905,250 +905,133 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | FBind _ -> true
       | _ -> false
       end
+
   
+  (** [dlink] stands for _d_eep link, and implements the deep interaction phase
+      à la Chaudhuri for intuitionistic logic (propositional case for now). *)
+  
+  let dlink src s_src dst s_dst : tactic =
+    fun (proof, g_id) ->
 
-  (** [link] is the equivalent of Proof by Pointing's [finger_tac], but using the
-      interaction rules specific to subformula linking. *)
-
-  let link src s_src dst s_dst proof : Proof.proof
-  =
-    assert (src.ctxt <> dst.ctxt);
-    
-    let Proof.{ g_id; g_pregoal = goal }, top_src, (sub_src, _) =
-      of_ipath proof src
-    in
+    let Proof.{ g_pregoal = goal }, top_src, (sub_src, _) = of_ipath proof src in
     let _, top_dst, (sub_dst, _) = of_ipath proof dst in
 
-    let rec pbp (goal, ogoals) tgt sub s tgt' sub' s' =
+    let open Form in
 
-      let gen_subgoals target sub_goal sub_ogoals =
-        let ogoals = Proof.sgprogress goal sub_ogoals in
-        let goal =
-          let goal = List.hd (Proof.sgprogress goal [sub_goal]) in
-          match target with
-          | `H (uid, hyp) ->
-            { goal with g_hyps = Proof.Hyps.add goal.g_hyps uid hyp }
-          | _ -> goal
-        in
-        (goal, ogoals)
-      in
+    let rec backward : (form * int list) * (form * int list) -> form = function
 
-      let right_inv_rules f i sub s tgt' sub' s' =
-        let tgt, (goal, new_ogoals), s = begin match f, i+1 with
+      (** End rules *)
 
-          (* And *)
+      | (h, []), (c, []) ->      
+        if h = c
+        
+        (* lnid *)
+        then f_true
+        
+        (* unlnp *)
+        else f_imp h c
 
-          | FConn (`And, [f1; f2]), 1 ->
-            let tgt = `C f1 in
-            let subgoals = gen_subgoals tgt ([], f1) [[], f2] in
-            tgt, subgoals, s
+      (** Left rules *)
 
-          | FConn (`And, [f1; f2]), 2 ->
-            let tgt = `C f2 in
-            let subgoals = gen_subgoals tgt ([], f2) [[], f1] in
-            tgt, subgoals, s
+      (* lnplc1 *)
+      | (FConn (`And, [h1; h2]), 0 :: subh), c ->
+        f_imp h2 (backward ((h1, subh), c))
 
-          (* Imp *)
+      (* lnplc2 *)
+      | (FConn (`And, [h1; h2]), 1 :: subh), c ->
+        f_imp h1 (backward ((h2, subh), c))
 
-          | FConn (`Imp, [f1; f2]), 1 ->
-            let tgt = `H (Handle.fresh (), Proof.mk_hyp f1) in
-            let subgoals = gen_subgoals tgt ([], f2) [] in
-            tgt, subgoals, s
+      (* lnpld1 *)
+      | (FConn (`Or, [h1; h2]), 0 :: subh), (c, subc) ->
+        f_and (backward ((h1, subh), (c, subc))) (f_imp h2 c)
+      
+      (* lnpld2 *)
+      | (FConn (`Or, [h1; h2]), 1 :: subh), (c, subc) ->
+        f_and (f_imp h1 c) (backward ((h2, subh), (c, subc)))
 
-          | FConn (`Imp, [f1; f2]), 2 ->
-            let tgt = `C f2 in
-            let subgoals = gen_subgoals tgt ([None, [f1]], f2) [] in
-            tgt, subgoals, s
+      (* lnpli2 *)
+      | (FConn (`Imp, [h1; h2]), 1 :: subh), (c, subc)
+        when not (invertible Pos c) ->
+        f_and h1 (backward ((h2, subh), (c, subc)))
 
-          (* Not *)
+      (** Right rules *)
 
-          | FConn (`Not, [f1]), 1 ->
-            let tgt = `H (Handle.fresh (), Proof.mk_hyp f1) in
-            let subgoals = gen_subgoals tgt ([], Form.f_false) [] in
-            tgt, subgoals, s
+      (* lnprc1 *)
+      | (h, subh), (FConn (`And, [c1; c2]), 0 :: subc)
+        when not (invertible Neg h) ->
+        f_and (backward ((h, subh), (c1, subc))) c2
 
-          (* Forall *)
+      (* lnprc2 *)
+      | (h, subh), (FConn (`And, [c1; c2]), 1 :: subc)
+        when not (invertible Neg h) ->
+        f_and c1 (backward ((h, subh), (c2, subc)))
 
-          | FBind (`Forall, x, ty, f), 1 ->
-            let s, Sbound (EVar (z, _)) = List.pop_assoc x s in
-            let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
-            let tgt = `C f in
-            let goal, ogoals = gen_subgoals tgt ([], f) [] in
-            let goal = { goal with g_env = Vars.push goal.g_env (z, ty, None) } in
-            tgt, (goal, ogoals), s
+      (* lnprd1 *)
+      | h, (FConn (`Or, [c1; c2]), 0 :: subc) ->
+        f_or (backward (h, (c1, subc))) c2
 
-        end
-        in pbp (goal, ogoals @ new_ogoals) tgt sub s tgt' sub' s'
-      in
+      (* lnprd2 *)
+      | h, (FConn (`Or, [c1; c2]), 1 :: subc) ->
+        f_or c1 (backward (h, (c2, subc)))
 
-      let left_inv_rules f src i sub s tgt' sub' s' =
-        let tgt, (goal, new_ogoals), s = begin match f, i+1 with
+      (* lnpri1 *)
+      | (h, subh), (FConn (`Imp, [c1; c2]), 0 :: subc) ->
+        f_imp (forward ((h, subh), (c1, subc))) c2
 
-          (* And *)
+      (* lnpri2 *)
+      | (h, subh), (FConn (`Imp, [c1; c2]), 1 :: subc) ->
+        f_imp c1 (backward ((h, subh), (c2, subc)))
 
-          | FConn (`And, [f1; f2]), 1 ->
-            let tgt = `H (Handle.fresh (), Proof.mk_hyp f1 ~src) in
-            let subgoals =  gen_subgoals tgt ([Some src, [f2]], goal.g_goal) [] in
-            tgt, subgoals, s
+    and forward : (form * int list) * (form * int list) -> form = function
 
-          | FConn (`And, [f1; f2]), 2 ->
-            let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
-            let subgoals = gen_subgoals tgt ([Some src, [f1]], goal.g_goal) [] in
-            tgt, subgoals, s
+      (** End rules *)
 
-          (* Or *)
+      | (h, []), (h', []) ->      
 
-          | FConn (`Or, [f1; f2]), 1 ->
-            let tgt = `H (Handle.fresh (), Proof.mk_hyp f1 ~src) in
-            let subgoals = gen_subgoals tgt ([], goal.g_goal) [[Some src, [f2]], goal.g_goal] in
-            tgt, subgoals, s
+        (* unlnn *)
+        f_and h h'
 
-          | FConn (`Or, [f1; f2]), 2 ->
-            let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
-            let subgoals = gen_subgoals tgt ([], goal.g_goal) [[Some src, [f1]], goal.g_goal] in
-            tgt, subgoals, s
+      (* lnnc1 *)
+      | h, (FConn (`And, [h1; h2]), 0 :: subh') ->
+        f_and (forward (h, (h1, subh'))) h2
 
-          (* Forall *)
+      (* lnnc2 *)
+      | h, (FConn (`And, [h1; h2]), 1 :: subh') ->
+        f_and h1 (forward (h, (h2, subh')))
 
-          | FBind (`Forall, x, ty, f), 1 ->
-            let s, item = List.pop_assoc x s in
-            let tgt, subgoals =
-              match item with
-              | Sbound t -> 
-                let f = Form.f_subst (x, 0) t f in
-                let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
-                tgt, gen_subgoals tgt ([], goal.g_goal) []
-              | Sflex -> failwith "cannot go through uninstanciated quantifiers"
-            in
-            tgt, subgoals, s
+      (* lnnd1 *)
+      | h, (FConn (`Or, [h1; h2]), 0 :: subh') ->
+        f_or (forward (h, (h1, subh'))) h2
 
-          (* Exists *)
+      (* lnnd2 *)
+      | h, (FConn (`Or, [h1; h2]), 1 :: subh') ->
+        f_or h1 (forward (h, (h2, subh')))
 
-          | FBind (`Exist, x, ty, f), 1 ->
-            let s, Sbound (EVar (z, _)) = List.pop_assoc x s in
-            let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
-            let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
-            let goal, ogoals = gen_subgoals tgt ([], goal.g_goal) [] in
-            let goal = { goal with g_env = Vars.push goal.g_env (z, ty, None) } in
-            tgt, (goal, ogoals), s
+      (* lnni1 *)
+      | (h, subh), (FConn (`Imp, [h1; h2]), 0 :: subh')
+        when not (invertible Neg h) ->
+        f_imp (backward ((h, subh), (h1, subh'))) h2
 
-        end
-        in pbp (goal, ogoals @ new_ogoals) tgt sub s tgt' sub' s'
-      in
+      (* lnnd2 *)
+      | (h, subh), (FConn (`Imp, [h1; h2]), 1 :: subh')
+        when not (invertible Neg h) ->
+        f_imp h1 (forward ((h, subh), (h2, subh')))
 
-      match tgt, sub, s, tgt', sub', s' with
-
-      (* Axiom *)
-
-      | _, [], _, _, [], _ -> List.rev ogoals
-
-      (* Right invertible rules *)
-
-      | tgt', sub', s', `C f, i :: sub, s
-        when invertible Pos f ->
-        right_inv_rules f i sub s tgt' sub' s'
-
-      | `C f, i :: sub, s, tgt', sub', s'
-        when invertible Pos f ->
-        right_inv_rules f i sub s tgt' sub' s'
-
-      (* Left invertible rules *)
-
-      | tgt', sub', s', `H (src, Proof.{ h_form = f }), i :: sub, s
-        when invertible Neg f ->
-        left_inv_rules f src i sub s tgt' sub' s'
-
-      | `H (src, Proof.{ h_form = f }), i :: sub, s, tgt', sub', s'
-        when invertible Neg f ->
-        left_inv_rules f src i sub s tgt' sub' s'
-
-      (* Right non-invertible rules *)
-
-      | tgt', sub', s', `C f, i :: sub, s
-      | `C f, i :: sub, s, tgt', sub', s' ->
-
-        let tgt, (goal, new_ogoals), s = begin match f, i+1 with
-
-          (* Or *)
-
-          | FConn (`Or, [f1; f2]), 1 ->
-            let tgt = `C f1 in
-            let subgoals = gen_subgoals tgt ([], f1) [] in
-            tgt, subgoals, s
-
-          | FConn (`Or, [f1; f2]), 2 ->
-            let tgt = `C f2 in
-            let subgoals = gen_subgoals tgt ([], f2) [] in
-            tgt, subgoals, s
-
-          (* Exists *)
-
-          | FBind (`Exist, x, ty, f), 1 ->
-            let s, item = List.pop_assoc x s in
-            let tgt, subgoals =
-              match item with
-              | Sbound t -> 
-                let f = Form.f_subst (x, 0) t f in
-                let tgt = `C f in
-                tgt, gen_subgoals tgt ([], f) []
-              | Sflex -> failwith "cannot go through uninstanciated quantifiers"
-            in
-            tgt, subgoals, s
-
-        end
-        in pbp (goal, ogoals @ new_ogoals) tgt sub s tgt' sub' s'
-
-      (* Left non-invertible rules *)
-
-      | tgt', sub', s', `H (src, Proof.{ h_form = f }), i :: sub, s
-      | `H (src, Proof.{ h_form = f }), i :: sub, s, tgt', sub', s' ->
-
-        let tgt, (goal, new_ogoals), s = begin match tgt' with
-
-          (* Hypothesis vs. Conclusion *)
-
-          | `C _ -> begin match f, i+1 with
-
-            (* Imp *)
-
-            | FConn (`Imp, [f1; f2]), 2 ->
-              let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
-              let subgoals = gen_subgoals tgt ([], goal.g_goal) [[], f1] in
-              tgt, subgoals, s
-
-            end
-
-          (* Hypothesis vs. Hypothesis *)
-
-          | `H _ -> begin match f, i+1 with
-
-            (* Imp *)
-
-            | FConn (`Imp, [f1; f2]), 1 ->
-              let tgt = `C f1 in
-              let subgoals = gen_subgoals tgt ([], f1) [[Some src, [f2]], goal.g_goal] in
-              tgt, subgoals, s
-
-            | FConn (`Imp, [f1; f2]), 2 ->
-              let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
-              let subgoals = gen_subgoals tgt ([], goal.g_goal) [[], f1] in
-              tgt, subgoals, s
-
-            (* Not *)
-
-            | FConn (`Not, [f1]), 1 ->
-              let tgt = `C f1 in
-              let subgoals = gen_subgoals tgt ([], f1) [] in
-              tgt, subgoals, s
-
-            end
-          end
-        in pbp (goal, ogoals @ new_ogoals) tgt sub s tgt' sub' s'
+      (* lnncomm *)
+      | h, h' -> forward (h', h)
     in
 
-    let subgoals = pbp (goal, []) top_src sub_src s_src top_dst sub_dst s_dst in
-    Proof.xprogress proof g_id TLink subgoals
+    let subgoal = match top_src, top_dst, sub_src, sub_dst with
+      | `H (_, Proof.{ h_form = h }), `C c, subh, subc
+      | `C c, `H (_, Proof.{ h_form = h }), subc, subh ->
+        [[], backward ((h, subh), (c, subc))]
+      
+      | `H (_, Proof.{ h_form = h }), `H (_, Proof.{ h_form = h' }), subh, subh' ->
+        [[None, [forward ((h, subh), (h', subh'))]], goal.g_goal]
+    in
 
+    Proof.sprogress proof g_id TLink subgoal
+  
 
   (** [subs f] returns all the paths leading to a subformula in [f]. *)
 
@@ -1301,6 +1184,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         in return (
           sub1, s1 |> rename rnm1 |> List.rev,
           sub2, s2 |> rename rnm2 |> List.rev)
+      (* | None -> return (sub1, [], sub2, []) *)
       | None -> zero
     else zero
 
@@ -1529,5 +1413,5 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     | `Forward (src, dst, p, s) ->
         forward (src, dst, p, s) (proof, hd)
     | `Link (src, s, dst, s') ->
-        link src s dst s' proof
+        dlink src s dst s' (proof, hd)
 end
