@@ -616,6 +616,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 	    
   let ivariants ((pr, id) : targ) =
     match (Proof.byid pr id).g_goal with
+    | FTrue -> ["True-intro"]
     | FConn (`And  , _) -> ["And-intro"]
     | FConn (`Or   , _) as f ->
         let fl = Form.flatten_disjunctions f in
