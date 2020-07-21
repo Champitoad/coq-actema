@@ -619,11 +619,12 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     | FConn (`And  , _) -> ["And-intro"]
     | FConn (`Or   , _) as f ->
         let fl = Form.flatten_disjunctions f in
-	List.mapi (fun i _ -> "Or-intro-"^(string_of_int i)) fl
+        List.mapi (fun i _ -> "Or-intro-"^(string_of_int i)) fl
     | FConn (`Imp  , _) -> ["Imp-intro"]
     | FConn (`Equiv, _) -> ["Equiv-intro"]
     | FConn (`Not  , _) -> ["Not-intro"]
     | FBind (`Forall, _, _, _) -> ["FA-intro"] 
+    | FBind (`Exist, _, _, _) -> ["Ex-intro"]
 
     | _ -> []
 
@@ -1151,7 +1152,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
   (** [subs f] returns all the paths leading to a subformula in [f]. *)
 
-  let rec subs (f : form) : (int list) list =
+  let subs (f : form) : (int list) list =
     let rec aux sub = function
       | FConn (_, fs) ->
         fs |> List.mapi (fun i f ->
