@@ -983,6 +983,10 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | (h, subh), (FConn (`Imp, [c1; c2]), 1 :: subc) ->
         f_imp c1 (backward ((h, subh), (c2, subc)))
 
+      (* lnprn1 *)
+      | (h, subh), (FConn (`Not, [c1]), 0 :: subc) ->
+        f_not (forward ((h, subh), (c1, subc)))
+
     and forward : (form * int list) * (form * int list) -> form = function
 
       (** End rules *)
@@ -1013,10 +1017,15 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         when not (invertible Neg h) ->
         f_imp (backward ((h, subh), (h1, subh'))) h2
 
-      (* lnnd2 *)
+      (* lnni2 *)
       | (h, subh), (FConn (`Imp, [h1; h2]), 1 :: subh')
         when not (invertible Neg h) ->
         f_imp h1 (forward ((h, subh), (h2, subh')))
+
+      (* lnnn1 *)
+      | (h, subh), (FConn (`Not, [h1]), 0 :: subh')
+        when not (invertible Neg h) ->
+        f_not (backward ((h, subh), (h1, subh')))
 
       (* lnncomm *)
       | h, h' -> forward (h', h)
