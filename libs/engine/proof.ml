@@ -939,6 +939,29 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       if fs = fs' then f else elim_units (FConn (c, fs'))
 
   
+  (* The [close_with_unit] tactic tries to close the goal either with
+     the falsity elimination rule, or the truth introduction rule. *)
+
+  let close_with_unit : tactic =
+    fun (proof, g_id as targ) ->
+
+    let open Proof in
+
+    let goal = byid proof g_id in
+
+    (* Truth intro *)
+    if goal.g_goal = FTrue then intro targ else
+
+    (* Falsity elim *)
+    Hyps.to_list goal.g_hyps
+    |>
+    List.find_map_opt
+      (fun (hd, { h_form = f }) ->
+       if f = FFalse then Some (elim hd targ) else None)
+    |>
+    Option.default proof
+
+  
   (** [dlink] stands for _d_eep link, and implements the deep interaction phase
       à la Chaudhuri for intuitionistic logic (propositional case for now). *)
   
@@ -1063,19 +1086,23 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | h, h' -> forward (h', h)
     in
 
-    let Proof.{ g_pregoal = goal }, top_src, (sub_src, _) = of_ipath proof src in
+    let open Proof in
+
+    let { g_pregoal = goal }, top_src, (sub_src, _) = of_ipath proof src in
     let _, top_dst, (sub_dst, _) = of_ipath proof dst in
 
     let subgoal = match top_src, top_dst, sub_src, sub_dst with
-      | `H (_, Proof.{ h_form = h }), `C c, subh, subc
-      | `C c, `H (_, Proof.{ h_form = h }), subc, subh ->
+      | `H (_, { h_form = h }), `C c, subh, subc
+      | `C c, `H (_, { h_form = h }), subc, subh ->
         [[], backward ((h, subh), (c, subc)) |> elim_units]
       
-      | `H (_, Proof.{ h_form = h }), `H (_, Proof.{ h_form = h' }), subh, subh' ->
+      | `H (_, { h_form = h }), `H (_, { h_form = h' }), subh, subh' ->
         [[None, [forward ((h, subh), (h', subh')) |> elim_units]], goal.g_goal]
     in
 
-    Proof.sprogress proof g_id TLink subgoal
+    sprogress proof g_id TLink subgoal
+    |>
+    fun pr -> close_with_unit (pr, List.hd (opened pr))
   
 
   (** [subs f] returns all the paths leading to a subformula in [f]. *)
