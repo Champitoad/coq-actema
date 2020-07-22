@@ -907,15 +907,43 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | _ -> false
       end
 
+
+  let rec elim_units : form -> form = function
+
+    (* Absorbing elements *)
+
+    | FConn (`And, [_; FFalse])
+    | FConn (`And, [FFalse; _])
+    | FConn (`Not, [FTrue]) ->
+      Form.f_false
+
+    | FConn (`Or, [_; FTrue])
+    | FConn (`Or, [FTrue; _])
+    | FConn (`Imp, [_; FTrue])
+    | FConn (`Imp, [FFalse; _])
+    | FConn (`Not, [FFalse]) ->
+      Form.f_true
+
+    (* Neutral elements *)
+
+    | FConn (`And, [f; FTrue])
+    | FConn (`And, [FTrue; f])
+    | FConn (`Or, [f; FFalse])
+    | FConn (`Or, [FFalse; f])
+    | FConn (`Imp, [FTrue; f]) ->
+      elim_units f
+    
+    | FTrue | FFalse | FPred _ as f -> f
+    | FConn (c, fs) as f ->
+      let fs' = List.map elim_units fs in
+      if fs = fs' then f else elim_units (FConn (c, fs'))
+
   
   (** [dlink] stands for _d_eep link, and implements the deep interaction phase
       à la Chaudhuri for intuitionistic logic (propositional case for now). *)
   
   let dlink src s_src dst s_dst : tactic =
     fun (proof, g_id) ->
-
-    let Proof.{ g_pregoal = goal }, top_src, (sub_src, _) = of_ipath proof src in
-    let _, top_dst, (sub_dst, _) = of_ipath proof dst in
 
     let open Form in
 
@@ -932,112 +960,119 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         (* unlnp *)
         else f_imp h c
 
-      (** Left rules *)
+      (** Left interaction rules *)
 
       (* lnplc1 *)
-      | (FConn (`And, [h1; h2]), 0 :: subh), c ->
-        f_imp h2 (backward ((h1, subh), c))
+      | (FConn (`And, [f1; f2]), 0 :: sub), (f, _ as c)
+        when not (invertible Pos f) ->
+        backward ((f1, sub), c)
 
       (* lnplc2 *)
-      | (FConn (`And, [h1; h2]), 1 :: subh), c ->
-        f_imp h1 (backward ((h2, subh), c))
+      | (FConn (`And, [f1; f2]), 1 :: sub), (f, _ as c)
+        when not (invertible Pos f) ->
+        backward ((f2, sub), c)
 
       (* lnpld1 *)
-      | (FConn (`Or, [h1; h2]), 0 :: subh), (c, subc) ->
-        f_and (backward ((h1, subh), (c, subc))) (f_imp h2 c)
+      | (FConn (`Or, [f1; f2]), 0 :: sub), (f, _ as c) ->
+        f_and (backward ((f1, sub), c)) (f_imp f2 f)
       
       (* lnpld2 *)
-      | (FConn (`Or, [h1; h2]), 1 :: subh), (c, subc) ->
-        f_and (f_imp h1 c) (backward ((h2, subh), (c, subc)))
+      | (FConn (`Or, [f1; f2]), 1 :: sub), (f, _ as c) ->
+        f_and (f_imp f1 f) (backward ((f2, sub), c))
 
       (* lnpli2 *)
-      | (FConn (`Imp, [h1; h2]), 1 :: subh), (c, subc)
-        when not (invertible Pos c) ->
-        f_and h1 (backward ((h2, subh), (c, subc)))
-
-      (** Right rules *)
+      | (FConn (`Imp, [f1; f2]), 1 :: sub), (f, _ as c)
+        when not (invertible Pos f) ->
+        f_and f1 (backward ((f2, sub), c))
+        
+      (** Right interaction rules *)
 
       (* lnprc1 *)
-      | (h, subh), (FConn (`And, [c1; c2]), 0 :: subc)
-        when not (invertible Neg h) ->
-        f_and (backward ((h, subh), (c1, subc))) c2
+      | (f, _ as h), (FConn (`And, [f1; f2]), 0 :: sub)
+        when not (invertible Neg f) ->
+        f_and (backward (h, (f1, sub))) f2
 
       (* lnprc2 *)
-      | (h, subh), (FConn (`And, [c1; c2]), 1 :: subc)
-        when not (invertible Neg h) ->
-        f_and c1 (backward ((h, subh), (c2, subc)))
+      | (f, _ as h), (FConn (`And, [f1; f2]), 1 :: sub)
+        when not (invertible Neg f) ->
+        f_and f1 (backward (h, (f2, sub)))
 
       (* lnprd1 *)
-      | h, (FConn (`Or, [c1; c2]), 0 :: subc) ->
-        f_or (backward (h, (c1, subc))) c2
+      | (f, _ as h), (FConn (`Or, [f1; f2]), 0 :: sub) ->
+        f_or (backward (h, (f1, sub))) f2
 
       (* lnprd2 *)
-      | h, (FConn (`Or, [c1; c2]), 1 :: subc) ->
-        f_or c1 (backward (h, (c2, subc)))
+      | (f, _ as h), (FConn (`Or, [f1; f2]), 1 :: sub) ->
+        f_or f1 (backward (h, (f2, sub)))
 
       (* lnpri1 *)
-      | (h, subh), (FConn (`Imp, [c1; c2]), 0 :: subc) ->
-        f_imp (forward ((h, subh), (c1, subc))) c2
+      | (f, _ as h), (FConn (`Imp, [f1; f2]), 0 :: sub) ->
+        f_imp (forward (h, (f1, sub))) f2
 
       (* lnpri2 *)
-      | (h, subh), (FConn (`Imp, [c1; c2]), 1 :: subc) ->
-        f_imp c1 (backward ((h, subh), (c2, subc)))
+      | (f, _ as h), (FConn (`Imp, [f1; f2]), 1 :: sub) ->
+        f_imp f1 (backward (h, (f2, sub)))
 
       (* lnprn1 *)
-      | (h, subh), (FConn (`Not, [c1]), 0 :: subc) ->
-        f_not (forward ((h, subh), (c1, subc)))
+      | (f, _ as h), (FConn (`Not, [f1]), 0 :: sub) ->
+        f_not (forward ((h, (f1, sub))))
 
     and forward : (form * int list) * (form * int list) -> form = function
 
       (** End rules *)
 
-      | (h, []), (h', []) ->      
+      | (h, []), (h', []) ->
 
         (* unlnn *)
         f_and h h'
 
+      (** Interaction rules *)
+
       (* lnnc1 *)
-      | h, (FConn (`And, [h1; h2]), 0 :: subh') ->
-        f_and (forward (h, (h1, subh'))) h2
+      | (f, _ as h), (FConn (`And, [f1; f2]), 0 :: sub) ->
+        f_and (forward (h, (f1, sub))) f2
 
       (* lnnc2 *)
-      | h, (FConn (`And, [h1; h2]), 1 :: subh') ->
-        f_and h1 (forward (h, (h2, subh')))
+      | (f, _ as h), (FConn (`And, [f1; f2]), 1 :: sub) ->
+        f_and f1 (forward (h, (f2, sub)))
 
       (* lnnd1 *)
-      | h, (FConn (`Or, [h1; h2]), 0 :: subh') ->
-        f_or (forward (h, (h1, subh'))) h2
+      | (f, _ as h), (FConn (`Or, [f1; f2]), 0 :: sub) ->
+        f_or (forward (h, (f1, sub))) f2
 
       (* lnnd2 *)
-      | h, (FConn (`Or, [h1; h2]), 1 :: subh') ->
-        f_or h1 (forward (h, (h2, subh')))
+      | (f, _ as h), (FConn (`Or, [f1; f2]), 1 :: sub) ->
+        f_or f1 (forward (h, (f2, sub)))
 
       (* lnni1 *)
-      | (h, subh), (FConn (`Imp, [h1; h2]), 0 :: subh')
-        when not (invertible Neg h) ->
-        f_imp (backward ((h, subh), (h1, subh'))) h2
+      | (f, _ as h), (FConn (`Imp, [f1; f2]), 0 :: sub)
+        when not (invertible Neg f) ->
+        f_imp (backward (h, (f1, sub))) f2
 
       (* lnni2 *)
-      | (h, subh), (FConn (`Imp, [h1; h2]), 1 :: subh')
-        when not (invertible Neg h) ->
-        f_imp h1 (forward ((h, subh), (h2, subh')))
+      | (f, _ as h), (FConn (`Imp, [f1; f2]), 1 :: sub)
+        when not (invertible Neg f) ->
+        f_imp f1 (forward (h, (f2, sub)))
 
       (* lnnn1 *)
-      | (h, subh), (FConn (`Not, [h1]), 0 :: subh')
-        when not (invertible Neg h) ->
-        f_not (backward ((h, subh), (h1, subh')))
-
+      | (f, _ as h), (FConn (`Not, [f1]), 0 :: sub)
+        when not (invertible Neg f) ->
+        f_not (backward (h, (f1, sub)))
+        
       (* lnncomm *)
       | h, h' -> forward (h', h)
     in
 
+    let Proof.{ g_pregoal = goal }, top_src, (sub_src, _) = of_ipath proof src in
+    let _, top_dst, (sub_dst, _) = of_ipath proof dst in
+
     let subgoal = match top_src, top_dst, sub_src, sub_dst with
       | `H (_, Proof.{ h_form = h }), `C c, subh, subc
       | `C c, `H (_, Proof.{ h_form = h }), subc, subh ->
-        [[], backward ((h, subh), (c, subc))]
+        [[], backward ((h, subh), (c, subc)) |> elim_units]
       
       | `H (_, Proof.{ h_form = h }), `H (_, Proof.{ h_form = h' }), subh, subh' ->
-        [[None, [forward ((h, subh), (h', subh'))]], goal.g_goal]
+        [[None, [forward ((h, subh), (h', subh')) |> elim_units]], goal.g_goal]
     in
 
     Proof.sprogress proof g_id TLink subgoal
