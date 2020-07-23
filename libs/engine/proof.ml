@@ -986,13 +986,11 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       (** Left interaction rules *)
 
       (* lnplc1 *)
-      | (FConn (`And, [f1; f2]), 0 :: sub), (f, _ as c)
-        when not (invertible Pos f) ->
+      | (FConn (`And, [f1; f2]), 0 :: sub), (f, _ as c) ->
         backward ((f1, sub), c)
 
       (* lnplc2 *)
-      | (FConn (`And, [f1; f2]), 1 :: sub), (f, _ as c)
-        when not (invertible Pos f) ->
+      | (FConn (`And, [f1; f2]), 1 :: sub), (f, _ as c) ->
         backward ((f2, sub), c)
 
       (* lnpld1 *)
