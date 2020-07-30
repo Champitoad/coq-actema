@@ -310,7 +310,7 @@ module CoreLogic : sig
   type path   = string
   type ipath  = { root : int; ctxt : int; sub : int list; }
   type gpath  = [`S of path | `P of ipath]
-  type pol = Pos | Neg
+  type pol = Pos | Neg | Sup
 
   val cut        : Fo.form -> tactic
   val add_local  : string * Fo.type_ * Fo.expr -> tactic
@@ -360,7 +360,7 @@ end = struct
   type path   = string
   type ipath  = { root : int; ctxt : int; sub : int list; }
   type gpath  = [`S of path | `P of ipath]
-  type pol    = Pos | Neg
+  type pol    = Pos | Neg | Sup
 
   let prune_premisses =
     let rec doit acc = function
@@ -811,6 +811,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   let opp = function
     | Pos -> Neg
     | Neg -> Pos
+    | Sup -> Sup
 
 
   (** [direct_subform_pol (p, f) i] returns the [i]th direct subformula of [f]
@@ -822,6 +823,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       let subp =
         match c, i with
         | `Imp, 0 | `Not, 0 -> opp p
+        | `Equiv, _ -> Sup
         | _, _ -> p
       in
       let subf =
@@ -847,7 +849,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     let _, target, (sub, _) = of_gpath proof p in
     let pol, form =
       match target with
-      | `H (_, { h_form = f }) -> Neg, f
+      | `H (_, { h_form = f; _ }) -> Neg, f
       | `C f -> Pos, f
     in
     subform_pol (pol, form) sub |> fst
@@ -891,7 +893,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     (* Right invertible *)
     | Pos -> begin match f with
       | FConn (c, _) -> begin match c with
-        | `Or | `Imp | `Not -> true
+        | `Or | `Imp | `Not | `Equiv -> true
         | _ -> false
         end
       | FBind (`Forall, _, _, _) -> true
@@ -906,6 +908,9 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | FBind _ -> true
       | _ -> false
       end
+    (* No semantics *)
+    | Sup -> raise (Invalid_argument
+      "Formulas are either positively or negatively invertible")
 
 
   let rec elim_units : form -> form = function
@@ -914,14 +919,16 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
     | FConn (`And, [_; FFalse])
     | FConn (`And, [FFalse; _])
-    | FConn (`Not, [FTrue]) ->
+    | FConn (`Not, [FTrue])
+    | FBind (_, _, _, FFalse) ->
       Form.f_false
 
     | FConn (`Or, [_; FTrue])
     | FConn (`Or, [FTrue; _])
     | FConn (`Imp, [_; FTrue])
     | FConn (`Imp, [FFalse; _])
-    | FConn (`Not, [FFalse]) ->
+    | FConn (`Not, [FFalse])
+    | FBind (_, _, _, FTrue) ->
       Form.f_true
 
     (* Neutral elements *)
@@ -930,13 +937,18 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     | FConn (`And, [FTrue; f])
     | FConn (`Or, [f; FFalse])
     | FConn (`Or, [FFalse; f])
-    | FConn (`Imp, [FTrue; f]) ->
+    | FConn (`Imp, [FTrue; f])
+    | FConn (`Equiv, [FTrue; f])
+    | FConn (`Equiv, [f; FTrue]) ->
       elim_units f
     
     | FTrue | FFalse | FPred _ as f -> f
     | FConn (c, fs) as f ->
       let fs' = List.map elim_units fs in
       if fs = fs' then f else elim_units (FConn (c, fs'))
+    | FBind (b, x, ty, f) ->
+      let f' = elim_units f in
+      if f = f' then f else elim_units (FBind (b, x, ty, f'))
 
   
   (* The [close_with_unit] tactic tries to close the goal either with
@@ -956,7 +968,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     Hyps.to_list goal.g_hyps
     |>
     List.find_map_opt
-      (fun (hd, { h_form = f }) ->
+      (fun (hd, { h_form = f; _ }) ->
        if f = FFalse then Some (elim hd targ) else None)
     |>
     Option.default proof
@@ -977,7 +989,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | (h, []), (c, []) ->      
         if h = c
         
-        (* lnid *)
+        (* lnpid *)
         then f_true
         
         (* unlnp *)
@@ -986,11 +998,11 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       (** Left interaction rules *)
 
       (* lnplc1 *)
-      | (FConn (`And, [f1; f2]), 0 :: sub), (f, _ as c) ->
+      | (FConn (`And, [f1; _]), 0 :: sub), (_, _ as c) ->
         backward ((f1, sub), c)
 
       (* lnplc2 *)
-      | (FConn (`And, [f1; f2]), 1 :: sub), (f, _ as c) ->
+      | (FConn (`And, [_; f2]), 1 :: sub), (_, _ as c) ->
         backward ((f2, sub), c)
 
       (* lnpld1 *)
@@ -1003,6 +1015,16 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
       (* lnpli2 *)
       | (FConn (`Imp, [f1; f2]), 1 :: sub), (f, _ as c)
+        when not (invertible Pos f) ->
+        f_and f1 (backward ((f2, sub), c))
+
+      (* lnple1 *)
+      | (FConn (`Equiv, [f1; f2]), 0 :: sub), (f, _ as c)
+        when not (invertible Pos f) ->
+        f_and f2 (backward ((f1, sub), c))
+
+      (* lnple2 *)
+      | (FConn (`Equiv, [f1; f2]), 1 :: sub), (f, _ as c)
         when not (invertible Pos f) ->
         f_and f1 (backward ((f2, sub), c))
         
@@ -1019,24 +1041,38 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         f_and f1 (backward (h, (f2, sub)))
 
       (* lnprd1 *)
-      | (f, _ as h), (FConn (`Or, [f1; f2]), 0 :: sub) ->
+      | h, (FConn (`Or, [f1; f2]), 0 :: sub) ->
         f_or (backward (h, (f1, sub))) f2
 
       (* lnprd2 *)
-      | (f, _ as h), (FConn (`Or, [f1; f2]), 1 :: sub) ->
+      | h, (FConn (`Or, [f1; f2]), 1 :: sub) ->
         f_or f1 (backward (h, (f2, sub)))
 
       (* lnpri1 *)
-      | (f, _ as h), (FConn (`Imp, [f1; f2]), 0 :: sub) ->
+      | h, (FConn (`Imp, [f1; f2]), 0 :: sub) ->
         f_imp (forward (h, (f1, sub))) f2
 
       (* lnpri2 *)
-      | (f, _ as h), (FConn (`Imp, [f1; f2]), 1 :: sub) ->
+      | h, (FConn (`Imp, [f1; f2]), 1 :: sub) ->
         f_imp f1 (backward (h, (f2, sub)))
 
       (* lnprn1 *)
-      | (f, _ as h), (FConn (`Not, [f1]), 0 :: sub) ->
+      | h, (FConn (`Not, [f1]), 0 :: sub) ->
         f_not (forward ((h, (f1, sub))))
+
+      (* lnpre1 *)
+      | h, (FConn (`Equiv, [f1; f2]), 0 :: sub) ->
+        f_and
+          (f_imp (forward (h, (f1, sub))) f2)
+          (f_imp f2 (backward (h, (f1, sub))))
+
+      (* lnpre2 *)
+      | h, (FConn (`Equiv, [f1; f2]), 1 :: sub) ->
+        f_and
+          (f_imp f1 (backward (h, (f2, sub))))
+          (f_imp (forward (h, (f2, sub))) f1)
+      
+      | _ -> raise TacticNotApplicable
 
     and forward : (form * int list) * (form * int list) -> form = function
 
@@ -1044,25 +1080,30 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
       | (h, []), (h', []) ->
 
+        if h = h'
+        
+        (* lnnid *)
+        then h
+
         (* unlnn *)
-        f_and h h'
+        else f_and h h'
 
       (** Interaction rules *)
 
       (* lnnc1 *)
-      | (f, _ as h), (FConn (`And, [f1; f2]), 0 :: sub) ->
+      | h, (FConn (`And, [f1; f2]), 0 :: sub) ->
         f_and (forward (h, (f1, sub))) f2
 
       (* lnnc2 *)
-      | (f, _ as h), (FConn (`And, [f1; f2]), 1 :: sub) ->
+      | h, (FConn (`And, [f1; f2]), 1 :: sub) ->
         f_and f1 (forward (h, (f2, sub)))
 
       (* lnnd1 *)
-      | (f, _ as h), (FConn (`Or, [f1; f2]), 0 :: sub) ->
+      | h, (FConn (`Or, [f1; f2]), 0 :: sub) ->
         f_or (forward (h, (f1, sub))) f2
 
       (* lnnd2 *)
-      | (f, _ as h), (FConn (`Or, [f1; f2]), 1 :: sub) ->
+      | h, (FConn (`Or, [f1; f2]), 1 :: sub) ->
         f_or f1 (forward (h, (f2, sub)))
 
       (* lnni1 *)
@@ -1079,6 +1120,16 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | (f, _ as h), (FConn (`Not, [f1]), 0 :: sub)
         when not (invertible Neg f) ->
         f_not (backward (h, (f1, sub)))
+
+      (* lnne1 *)
+      | (f, _ as h), (FConn (`Equiv, [f1; f2]), 0 :: sub)
+        when not (invertible Neg f) ->
+        f_imp (backward (h, (f1, sub))) f2
+
+      (* lnne2 *)
+      | (f, _ as h), (FConn (`Equiv, [f1; f2]), 1 :: sub)
+        when not (invertible Neg f) ->
+        f_imp (backward (h, (f2, sub))) f1
         
       (* lnncomm *)
       | h, h' -> forward (h', h)
@@ -1086,19 +1137,21 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
     let open Proof in
 
-    let { g_pregoal = goal }, top_src, (sub_src, _) = of_ipath proof src in
+    let { g_pregoal = goal; _ }, top_src, (sub_src, _) = of_ipath proof src in
     let _, top_dst, (sub_dst, _) = of_ipath proof dst in
 
     let subgoal = match top_src, top_dst, sub_src, sub_dst with
-      | `H (_, { h_form = h }), `C c, subh, subc
-      | `C c, `H (_, { h_form = h }), subc, subh ->
-        [[], backward ((h, subh), (c, subc)) |> elim_units]
+      | `H (hid, { h_form = h; _ }), `C c, subh, subc
+      | `C c, `H (hid, { h_form = h; _ }), subc, subh ->
+        [[Some hid, []], backward ((h, subh), (c, subc)) |> elim_units]
       
-      | `H (_, { h_form = h }), `H (_, { h_form = h' }), subh, subh' ->
-        [[None, [forward ((h, subh), (h', subh')) |> elim_units]], goal.g_goal]
+      | `H (hid, { h_form = h; _ }), `H (hid', { h_form = h'; _ }), subh, subh' ->
+        [[Some hid, []; Some hid', [forward ((h, subh), (h', subh')) |> elim_units]], goal.g_goal]
+      
+      | _ -> raise TacticNotApplicable
     in
 
-    sprogress proof g_id TLink subgoal
+    sprogress ~clear:true proof g_id TLink subgoal
     |>
     fun pr -> close_with_unit (pr, List.hd (opened pr))
   
@@ -1210,8 +1263,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         put (deps, rnm, env, s) >>= fun _ ->
         return (p, Form.f_subst (x, 0) (EVar (y, 0)) f)
 
-      | Neg, FBind (`Forall, x, ty, f)
-      | Pos, FBind (`Exist, x, ty, f) ->
+      | Neg, FBind (`Forall, x, _, f)
+      | Pos, FBind (`Exist, x, _, f) ->
 
         get >>= fun (deps, rnm, env, s) ->
         let z = EVars.fresh () in
@@ -1245,8 +1298,9 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       (Deps.empty, [], env, [])
     in
 
-    if sp1 <> sp2 then
-      match Form.f_unify Fo.Env.empty (s1 @ s2) [sf1, sf2] with
+    match sp1, sp2 with
+    | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
+      begin match Form.f_unify Fo.Env.empty (s1 @ s2) [sf1, sf2] with
       | Some s when acyclic (Deps.subst deps s) ->
         let s1, s2 = List.split_at (List.length s1) s in
         let rename exs = List.map (fun (x, tag) ->
@@ -1254,9 +1308,10 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         in return (
           sub1, s1 |> rename rnm1 |> List.rev,
           sub2, s2 |> rename rnm2 |> List.rev)
-      (* | None -> return (sub1, [], sub2, []) *)
-      | None -> zero
-    else zero
+      (* | _ -> return (sub1, [], sub2, []) *)
+      | _ -> zero
+      end
+    | _ -> zero
 
 
   let dnd_actions src dsts (proof : Proof.proof) =
