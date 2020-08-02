@@ -7,6 +7,8 @@ open Syntax
 type name  = string
 type vname = name * int
 
+let name_of_vname : vname -> name = fst
+
 (* -------------------------------------------------------------------- *)
 type type_ =
   | TVar  of vname
@@ -353,6 +355,8 @@ module Form : sig
   val f_tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
 
   val e_vars : expr -> vname list
+  val free_vars : form -> name list
+  val fresh_var : ?basename:name -> name list -> name
   val f_lift : ?incr:int -> vname -> form -> form
   val t_equal : ?bds:VName.bds -> type_ -> type_ -> bool
   val e_equal : ?bds:VName.bds -> expr  -> expr  -> bool
@@ -425,6 +429,29 @@ end = struct
     let open Monad.List in function
     | EVar x -> return x
     | EFun (_, ts) -> ts >>= e_vars
+
+  
+  let rec free_vars =
+    let open Monad.List in function
+    | FTrue | FFalse -> zero
+    | FPred (_, es) -> (es >>= e_vars) |> List.map name_of_vname
+    | FConn (_, fs) -> fs >>= free_vars
+    | FBind (_, x, _, f) -> List.remove (free_vars f) x
+
+  
+  (* [fresh_var ~basename names] generates a fresh name for a
+     variable relative to the ones in [names], based on an optional [basename]. *)
+  let fresh_var ?(basename = "x") names =
+    if not (List.mem basename names) then
+      basename
+    else
+      let rec aux n =
+        let basename = basename ^ string_of_int n in
+        if not (List.mem basename names)
+        then basename
+        else aux (n+1)
+      in
+      aux 0
 
 
   let rec e_lift ?(incr = 1) (x, i : vname) = function

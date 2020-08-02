@@ -905,7 +905,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         | `And | `Or -> true
         | _ -> false
         end
-      | FBind _ -> true
+      | FBind (`Exist, _, _, _) -> true
       | _ -> false
       end
     (* No semantics *)
@@ -946,9 +946,9 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     | FConn (c, fs) as f ->
       let fs' = List.map elim_units fs in
       if fs = fs' then f else elim_units (FConn (c, fs'))
-    | FBind (b, x, ty, f) ->
-      let f' = elim_units f in
-      if f = f' then f else elim_units (FBind (b, x, ty, f'))
+    | FBind (b, x, ty, f1) as f ->
+      let f1' = elim_units f1 in
+      if f1 = f1' then f else elim_units (FBind (b, x, ty, f1'))
 
   
   (* The [close_with_unit] tactic tries to close the goal either with
@@ -987,13 +987,19 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       (** End rules *)
 
       | (h, []), (c, []) ->      
-        if h = c
+        begin match h, c with
         
         (* lnpid *)
-        then f_true
+        | _ when h = c -> f_true
+        | FPred (c1, ts1), FPred (c2, ts2) when c1 = c2 ->
+          List.fold_left2
+            (fun f t1 t2 -> f_and f (FPred ("EQ", [t1; t2])))
+            f_true ts1 ts2
         
         (* unlnp *)
-        else f_imp h c
+        | _ -> f_imp h c
+
+        end
 
       (** Left interaction rules *)
 
@@ -1027,6 +1033,28 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | (FConn (`Equiv, [f1; f2]), 1 :: sub), (f, _ as c)
         when not (invertible Pos f) ->
         f_and f1 (backward ((f2, sub), c))
+      
+      (* lnplex1 *)
+      | (FBind (`Exist, x, ty, f1), 0 :: sub), (f, _ as c) ->
+        let y, f1 =
+          let fvf = free_vars f in
+          if List.mem x fvf then
+            let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
+            y, f_subst (x, 0) (EVar (y, 0)) f1
+          else x, f1
+        in
+        FBind (`Forall, y, ty, backward ((f1, sub), c))
+
+      (* lnplfa1 *)
+      | (FBind (`Forall, x, ty, f1), 0 :: sub), (f, _ as c) ->
+        let y, f1 =
+          let fvf = free_vars f in
+          if List.mem x fvf then
+            let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
+            y, f_subst (x, 0) (EVar (y, 0)) f1
+          else x, f1
+        in
+        FBind (`Exist, y, ty, backward ((f1, sub), c))
         
       (** Right interaction rules *)
 
@@ -1071,6 +1099,29 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         f_and
           (f_imp f1 (backward (h, (f2, sub))))
           (f_imp (forward (h, (f2, sub))) f1)
+
+      (* lnprex1 *)
+      | (f, _ as h), (FBind (`Exist, x, ty, f1), 0 :: sub)
+        when not (invertible Neg f) ->
+        let y, f1 =
+          let fvf = free_vars f in
+          if List.mem x fvf then
+            let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
+            y, f_subst (x, 0) (EVar (y, 0)) f1
+          else x, f1
+        in
+        FBind (`Exist, y, ty, backward (h, (f1, sub)))
+
+      (* lnprfa1 *)
+      | (f, _ as h), (FBind (`Forall, x, ty, f1), 0 :: sub) ->
+        let y, f1 =
+          let fvf = free_vars f in
+          if List.mem x fvf then
+            let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
+            y, f_subst (x, 0) (EVar (y, 0)) f1
+          else x, f1
+        in
+        FBind (`Forall, y, ty, backward (h, (f1, sub)))
       
       | _ -> raise TacticNotApplicable
 
@@ -1130,6 +1181,29 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | (f, _ as h), (FConn (`Equiv, [f1; f2]), 1 :: sub)
         when not (invertible Neg f) ->
         f_imp (backward (h, (f2, sub))) f1
+      
+      (* lnnex1 *)
+      | (f, _ as h), (FBind (`Exist, x, ty, f1), 0 :: sub) ->
+        let y, f1 =
+          let fvf = free_vars f in
+          if List.mem x fvf then
+            let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
+            y, f_subst (x, 0) (EVar (y, 0)) f1
+          else x, f1
+        in
+        FBind (`Exist, y, ty, forward (h, (f1, sub)))
+      
+      (* lnnfa1 *)
+      | (f, _ as h), (FBind (`Forall, x, ty, f1), 0 :: sub)
+        when not (invertible Neg f) ->
+        let y, f1 =
+          let fvf = free_vars f in
+          if List.mem x fvf then
+            let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
+            y, f_subst (x, 0) (EVar (y, 0)) f1
+          else x, f1
+        in
+        FBind (`Forall, y, ty, forward (h, (f1, sub)))
         
       (* lnncomm *)
       | h, h' -> forward (h', h)
@@ -1151,7 +1225,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | _ -> raise TacticNotApplicable
     in
 
-    sprogress ~clear:true proof g_id TLink subgoal
+    sprogress ~clear:false proof g_id TLink subgoal
     |>
     fun pr -> close_with_unit (pr, List.hd (opened pr))
   
