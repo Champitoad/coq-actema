@@ -527,12 +527,12 @@ end = struct
 
   let rec occurs (x : vname) : expr -> bool = function
     | EVar y when x = y -> true
-    | EFun (f, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
+    | EFun (_, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
     | _ -> false
   
   let rec occurs_under ((n, i) as x : vname) : expr -> bool = function
     | EVar (m, j) when n = m && j <= i -> true
-    | EFun (f, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
+    | EFun (_, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
     | _ -> false
 
   (** [e_unify env s eqns] implements a variant of Martelli and Montanari's

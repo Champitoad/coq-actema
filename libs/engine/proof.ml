@@ -846,7 +846,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     let _, target, (sub, _) = of_gpath proof p in
     let pol, form =
       match target with
-      | `H (_, { h_form = f }) -> Neg, f
+      | `H (_, { h_form = f; _ }) -> Neg, f
       | `C f -> Pos, f
     in
     subform_pol (pol, form) sub |> fst
@@ -970,12 +970,17 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
           (* Forall *)
 
           | FBind (`Forall, x, ty, f), 1 ->
-            let s, Sbound (EVar (z, _)) = List.pop_assoc x s in
-            let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
-            let tgt = `C f in
-            let goal, ogoals = gen_subgoals tgt ([], f) [] in
-            let goal = { goal with g_env = Vars.push goal.g_env (z, ty, None) } in
-            tgt, (goal, ogoals), s
+            begin match List.pop_assoc x s with
+            | s, Sbound (EVar (z, _)) ->
+              let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
+              let tgt = `C f in
+              let goal, ogoals = gen_subgoals tgt ([], f) [] in
+              let goal = { goal with g_env = Vars.push goal.g_env (z, ty, None) } in
+              tgt, (goal, ogoals), s
+            | _ -> raise TacticNotApplicable
+            end
+          
+          | _ -> raise TacticNotApplicable
 
         end
         in pbp (goal, ogoals @ new_ogoals) tgt sub s tgt' sub' s'
@@ -1010,7 +1015,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
           (* Forall *)
 
-          | FBind (`Forall, x, ty, f), 1 ->
+          | FBind (`Forall, x, _, f), 1 ->
             let s, item = List.pop_assoc x s in
             let tgt, subgoals =
               match item with
@@ -1025,12 +1030,17 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
           (* Exists *)
 
           | FBind (`Exist, x, ty, f), 1 ->
-            let s, Sbound (EVar (z, _)) = List.pop_assoc x s in
-            let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
-            let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
-            let goal, ogoals = gen_subgoals tgt ([], goal.g_goal) [] in
-            let goal = { goal with g_env = Vars.push goal.g_env (z, ty, None) } in
-            tgt, (goal, ogoals), s
+            begin match List.pop_assoc x s with
+            | s, Sbound (EVar (z, _)) ->
+              let f = Form.f_subst (x, 0) (EVar (z, 0)) f in
+              let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
+              let goal, ogoals = gen_subgoals tgt ([], goal.g_goal) [] in
+              let goal = { goal with g_env = Vars.push goal.g_env (z, ty, None) } in
+              tgt, (goal, ogoals), s
+            | _ -> raise TacticNotApplicable
+            end
+          
+          | _ -> raise TacticNotApplicable
 
         end
         in pbp (goal, ogoals @ new_ogoals) tgt sub s tgt' sub' s'
@@ -1054,11 +1064,11 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
       (* Left invertible rules *)
 
-      | tgt', sub', s', `H (src, Proof.{ h_form = f }), i :: sub, s
+      | tgt', sub', s', `H (src, Proof.{ h_form = f; _ }), i :: sub, s
         when invertible Neg f ->
         left_inv_rules f src i sub s tgt' sub' s'
 
-      | `H (src, Proof.{ h_form = f }), i :: sub, s, tgt', sub', s'
+      | `H (src, Proof.{ h_form = f; _ }), i :: sub, s, tgt', sub', s'
         when invertible Neg f ->
         left_inv_rules f src i sub s tgt' sub' s'
 
@@ -1071,19 +1081,19 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
           (* Or *)
 
-          | FConn (`Or, [f1; f2]), 1 ->
+          | FConn (`Or, [f1; _]), 1 ->
             let tgt = `C f1 in
             let subgoals = gen_subgoals tgt ([], f1) [] in
             tgt, subgoals, s
 
-          | FConn (`Or, [f1; f2]), 2 ->
+          | FConn (`Or, [_; f2]), 2 ->
             let tgt = `C f2 in
             let subgoals = gen_subgoals tgt ([], f2) [] in
             tgt, subgoals, s
 
           (* Exists *)
 
-          | FBind (`Exist, x, ty, f), 1 ->
+          | FBind (`Exist, x, _, f), 1 ->
             let s, item = List.pop_assoc x s in
             let tgt, subgoals =
               match item with
@@ -1094,14 +1104,16 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
               | Sflex -> failwith "cannot go through uninstanciated quantifiers"
             in
             tgt, subgoals, s
+          
+          | _ -> raise TacticNotApplicable
 
         end
         in pbp (goal, ogoals @ new_ogoals) tgt sub s tgt' sub' s'
 
       (* Left non-invertible rules *)
 
-      | tgt', sub', s', `H (src, Proof.{ h_form = f }), i :: sub, s
-      | `H (src, Proof.{ h_form = f }), i :: sub, s, tgt', sub', s' ->
+      | tgt', sub', s', `H (src, Proof.{ h_form = f; _ }), i :: sub, s
+      | `H (src, Proof.{ h_form = f; _ }), i :: sub, s, tgt', sub', s' ->
 
         let tgt, (goal, new_ogoals), s = begin match tgt' with
 
@@ -1115,6 +1127,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
               let tgt = `H (Handle.fresh (), Proof.mk_hyp f2 ~src) in
               let subgoals = gen_subgoals tgt ([], goal.g_goal) [[], f1] in
               tgt, subgoals, s
+
+            | _ -> raise TacticNotApplicable
 
             end
 
@@ -1140,6 +1154,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
               let tgt = `C f1 in
               let subgoals = gen_subgoals tgt ([], f1) [] in
               tgt, subgoals, s
+            
+            | _ -> raise TacticNotApplicable
 
             end
           end
@@ -1257,8 +1273,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         put (deps, rnm, env, s) >>= fun _ ->
         return (p, Form.f_subst (x, 0) (EVar (y, 0)) f)
 
-      | Neg, FBind (`Forall, x, ty, f)
-      | Pos, FBind (`Exist, x, ty, f) ->
+      | Neg, FBind (`Forall, x, _, f)
+      | Pos, FBind (`Exist, x, _, f) ->
 
         get >>= fun (deps, rnm, env, s) ->
         let z = EVars.fresh () in
@@ -1301,7 +1317,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         in return (
           sub1, s1 |> rename rnm1 |> List.rev,
           sub2, s2 |> rename rnm2 |> List.rev)
-      | None -> zero
+      | _ -> zero
     else zero
 
 
