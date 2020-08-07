@@ -913,6 +913,9 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       "Formulas are either positively or negatively invertible")
 
 
+  (* [elim_units f] eliminates all occurrences of units
+     in formula [f] using algebraic unit laws. *)
+
   let rec elim_units : form -> form = function
 
     (* Absorbing elements *)
@@ -920,7 +923,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     | FConn (`And, [_; FFalse])
     | FConn (`And, [FFalse; _])
     | FConn (`Not, [FTrue])
-    | FBind (_, _, _, FFalse) ->
+    | FBind (`Exist, _, _, FFalse) ->
       Form.f_false
 
     | FConn (`Or, [_; FTrue])
@@ -928,7 +931,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     | FConn (`Imp, [_; FTrue])
     | FConn (`Imp, [FFalse; _])
     | FConn (`Not, [FFalse])
-    | FBind (_, _, _, FTrue) ->
+    | FBind (`Forall, _, _, FTrue) ->
       Form.f_true
 
     (* Neutral elements *)
@@ -949,7 +952,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     | FBind (b, x, ty, f1) as f ->
       let f1' = elim_units f1 in
       if f1 = f1' then f else elim_units (FBind (b, x, ty, f1'))
-
+  
   
   (* The [close_with_unit] tactic tries to close the goal either with
      the falsity elimination rule, or the truth introduction rule. *)
