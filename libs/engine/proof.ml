@@ -1023,7 +1023,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
                 let f = Form.f_subst (x, 0) t f in
                 let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
                 tgt, gen_subgoals tgt ([], goal.g_goal) []
-              | Sflex -> failwith "cannot go through uninstanciated quantifiers"
+              | Sflex -> failwith "cannot go through uninstantiated quantifiers"
             in
             tgt, subgoals, s
 
