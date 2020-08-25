@@ -888,19 +888,19 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   type pnode += TLink
 
 
-  let invertible (pol : pol) (f : form) : bool =
-    match pol with
+  let invertible (kind : [`Left | `Right | `Forward]) (f : form) : bool =
+    match kind with
     (* Right invertible *)
-    | Pos -> begin match f with
+    | `Right -> begin match f with
       | FConn (c, _) -> begin match c with
-        | `Or | `Imp | `Not | `Equiv -> true
+        | `Imp | `Not | `Equiv -> true
         | _ -> false
         end
       | FBind (`Forall, _, _, _) -> true
       | _ -> false
       end
     (* Left invertible *)
-    | Neg -> begin match f with
+    | `Left -> begin match f with
       | FConn (c, _) -> begin match c with
         | `And | `Or -> true
         | _ -> false
@@ -908,9 +908,14 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       | FBind (`Exist, _, _, _) -> true
       | _ -> false
       end
-    (* No semantics *)
-    | Sup -> raise (Invalid_argument
-      "Formulas are either positively or negatively invertible")
+    (* Forward invertible *)
+    | `Forward -> begin match f with
+      | FConn (c, _) -> begin match c with
+        | `And -> true
+        | _ -> false
+        end
+      | _ -> false
+      end
 
 
   (* [elim_units f] eliminates all occurrences of units
@@ -1024,17 +1029,17 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
       (* lnpli2 *)
       | (FConn (`Imp, [f1; f2]), 1 :: sub), (f, _ as c)
-        when not (invertible Pos f) ->
+        when not (invertible `Right f) ->
         f_and f1 (backward ((f2, sub), c))
 
       (* lnple1 *)
       | (FConn (`Equiv, [f1; f2]), 0 :: sub), (f, _ as c)
-        when not (invertible Pos f) ->
+        when not (invertible `Right f) ->
         f_and f2 (backward ((f1, sub), c))
 
       (* lnple2 *)
       | (FConn (`Equiv, [f1; f2]), 1 :: sub), (f, _ as c)
-        when not (invertible Pos f) ->
+        when not (invertible `Right f) ->
         f_and f1 (backward ((f2, sub), c))
       
       (* lnplex1 *)
@@ -1063,20 +1068,22 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
       (* lnprc1 *)
       | (f, _ as h), (FConn (`And, [f1; f2]), 0 :: sub)
-        when not (invertible Neg f) ->
+        when not (invertible `Left f) ->
         f_and (backward (h, (f1, sub))) f2
 
       (* lnprc2 *)
       | (f, _ as h), (FConn (`And, [f1; f2]), 1 :: sub)
-        when not (invertible Neg f) ->
+        when not (invertible `Left f) ->
         f_and f1 (backward (h, (f2, sub)))
 
       (* lnprd1 *)
-      | h, (FConn (`Or, [f1; f2]), 0 :: sub) ->
+      | (f, _ as h), (FConn (`Or, [f1; f2]), 0 :: sub)
+        when not (invertible `Left f) ->
         f_or (backward (h, (f1, sub))) f2
 
       (* lnprd2 *)
-      | h, (FConn (`Or, [f1; f2]), 1 :: sub) ->
+      | (f, _ as h), (FConn (`Or, [f1; f2]), 1 :: sub)
+        when not (invertible `Left f) ->
         f_or f1 (backward (h, (f2, sub)))
 
       (* lnpri1 *)
@@ -1105,7 +1112,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
       (* lnprex1 *)
       | (f, _ as h), (FBind (`Exist, x, ty, f1), 0 :: sub)
-        when not (invertible Neg f) ->
+        when not (invertible `Left f) ->
         let y, f1 =
           let fvf = free_vars f in
           if List.mem x fvf then
@@ -1153,36 +1160,38 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         f_and f1 (forward (h, (f2, sub)))
 
       (* lnnd1 *)
-      | h, (FConn (`Or, [f1; f2]), 0 :: sub) ->
+      | (f, _ as h), (FConn (`Or, [f1; f2]), 0 :: sub)
+        when not (invertible `Forward f) ->
         f_or (forward (h, (f1, sub))) f2
 
       (* lnnd2 *)
-      | h, (FConn (`Or, [f1; f2]), 1 :: sub) ->
+      | (f, _ as h), (FConn (`Or, [f1; f2]), 1 :: sub)
+        when not (invertible `Forward f) ->
         f_or f1 (forward (h, (f2, sub)))
 
       (* lnni1 *)
       | (f, _ as h), (FConn (`Imp, [f1; f2]), 0 :: sub)
-        when not (invertible Neg f) ->
+        when not (invertible `Forward f) ->
         f_imp (backward (h, (f1, sub))) f2
 
       (* lnni2 *)
       | (f, _ as h), (FConn (`Imp, [f1; f2]), 1 :: sub)
-        when not (invertible Neg f) ->
+        when not (invertible `Forward f) ->
         f_imp f1 (forward (h, (f2, sub)))
 
       (* lnnn1 *)
       | (f, _ as h), (FConn (`Not, [f1]), 0 :: sub)
-        when not (invertible Neg f) ->
+        when not (invertible `Forward f) ->
         f_not (backward (h, (f1, sub)))
 
       (* lnne1 *)
       | (f, _ as h), (FConn (`Equiv, [f1; f2]), 0 :: sub)
-        when not (invertible Neg f) ->
+        when not (invertible `Forward f) ->
         f_imp (backward (h, (f1, sub))) f2
 
       (* lnne2 *)
       | (f, _ as h), (FConn (`Equiv, [f1; f2]), 1 :: sub)
-        when not (invertible Neg f) ->
+        when not (invertible `Forward f) ->
         f_imp (backward (h, (f2, sub))) f1
       
       (* lnnex1 *)
@@ -1198,7 +1207,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       
       (* lnnfa1 *)
       | (f, _ as h), (FBind (`Forall, x, ty, f1), 0 :: sub)
-        when not (invertible Neg f) ->
+        when not (invertible `Forward f) ->
         let y, f1 =
           let fvf = free_vars f in
           if List.mem x fvf then
