@@ -279,14 +279,13 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
 
     in js_proof_engine (!!doit ())
 
-  (* [this#move_hyp (from : js_hyps) (before : js_hyps option)] move
+  (* [this#move_hyp (from : handle) (before : handle option)] move
    * hypothesis [from] before hypothesis [before]. Both hypothesis
    * must be part of this sub-goal. *)
   method move_hyp from before =
     let doit () =
       CoreLogic.move
-        from##.handle
-        (Option.map (fun x -> x##.handle) (Js.Opt.to_option before))
+        from (Js.Opt.to_option before)
         (parent##.proof, self##.handle)
     in js_proof_engine (!!doit ())
 
