@@ -567,12 +567,12 @@ end = struct
 
   let rec occurs (x : vname) : expr -> bool = function
     | EVar y when x = y -> true
-    | EFun (f, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
+    | EFun (_, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
     | _ -> false
   
   let rec occurs_under ((n, i) as x : vname) : expr -> bool = function
     | EVar (m, j) when n = m && j <= i -> true
-    | EFun (f, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
+    | EFun (_, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
     | _ -> false
 
   (** [e_unify env s eqns] implements a variant of Martelli and Montanari's
@@ -1203,10 +1203,10 @@ end = struct
       let data =
         match form with
         | FTrue ->
-            [Xml.entity "#x22A4"]
+            [Xml.node "span" [Xml.entity "#x22A4"]]
   
         | FFalse ->
-            [Xml.entity "#x22A5"]
+            [Xml.node "span" [Xml.entity "#x22A5"]]
   
         | FConn (lg, fs) -> begin
             let fs =
@@ -1217,34 +1217,34 @@ end = struct
           match lg, fs with
           | `And, [(p1, f1); (p2, f2)] ->
                 (pr (p1 < prio_And) f1)
-              @ (spaced [Xml.entity "#x2227"])
+              @ (spaced [Xml.node "span" [Xml.entity "#x2227"]])
               @ (pr (p2 <= prio_And) f2)
           | `Or , [(p1, f1); (p2, f2)] ->
                 (pr (p1 < prio_Or) f1)
-              @ (spaced [Xml.entity "#x2228"])
+              @ (spaced [Xml.node "span" [Xml.entity "#x2228"]])
               @ (pr (p2 <= prio_Or) f2)
           | `Imp, [(p1, f1); (p2, f2)] ->
                 (pr (p1 <= prio_Imp) f1)
-              @ (spaced [Xml.entity "#x27F9"])
+              @ (spaced [Xml.node "span" [Xml.entity "#x27F9"]])
               @ (pr (p2 < prio_Imp) f2)
           | `Equiv, [(p1, f1); (p2, f2)] ->
                 (pr (p1 <= prio_Equiv) f1)
-              @ (spaced [Xml.entity "#x27FA"])
+              @ (spaced [Xml.node "span" [Xml.entity "#x27FA"]])
               @ (pr (p2 <= prio_Equiv) f2)
           | `Not, [(p, f)] ->
-                (spaced ~left:false [Xml.entity "#x00AC"])
+                (spaced ~left:false [Xml.node "span" [Xml.entity "#x00AC"]])
               @ (pr (p < prio_Not) f)
           | (`And | `Or | `Imp | `Not | `Equiv), _ ->
               assert false
         end
 
         | FPred (name, []) ->
-            [Xml.pcdata (UTF8.of_latin1 name)]
+            [Xml.node "span" [Xml.pcdata (UTF8.of_latin1 name)]]
 
         | FPred (name, args) ->
             let args = List.map for_expr args in
             let aout =
-                [[Xml.pcdata (UTF8.of_latin1 name)]]
+                [[Xml.node "span" [Xml.pcdata (UTF8.of_latin1 name)]]]
               @ [  [Xml.pcdata "("]
                  @ (List.flatten (List.join [Xml.pcdata ", "] args))
                  @ [Xml.pcdata ")"] ]
@@ -1255,7 +1255,7 @@ end = struct
             let bd = match bd with `Forall -> "forall" | `Exist -> "exist" in
 
             let aout =
-                [[Xml.pcdata (UTF8.of_latin1 bd)]]
+                [[Xml.node "span" [Xml.pcdata (UTF8.of_latin1 bd)]]]
               @ [[Xml.pcdata (UTF8.of_latin1 x)]]
               @ [[Xml.pcdata ":"]]
               @ [for_type ty]
