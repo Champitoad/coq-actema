@@ -8,6 +8,15 @@ type name  = string
 type vname = name * int
 
 (* -------------------------------------------------------------------- *)
+module Name = struct
+  type t = name
+
+  let equal   = String.equal
+  let compare = String.compare
+  let hash    = Hashtbl.hash
+end
+
+(* -------------------------------------------------------------------- *)
 type type_ =
   | TVar  of vname
   | TUnit
@@ -36,6 +45,8 @@ type sitem =
   | Sbound of expr
   | Sflex
 
+(* warning : one relies on the fact that the order *)
+(* of the variables is unchanged *)
 type subst = (name * sitem) list
 
 type 'a eqns = ('a * 'a) list
@@ -335,6 +346,9 @@ module Form : sig
   val f_ors  : form list -> form
   val f_imps : form list -> form -> form
 
+  val flatten_disjunctions : form -> form list
+  val flatten_conjunctions : form -> form list
+
   val parity   : logcon -> int
   val tcheck   : env -> ptype -> type_
   val trecheck : env -> type_ -> unit
@@ -352,25 +366,26 @@ module Form : sig
   val f_tostring : form -> string
   val f_tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
 
-  val e_vars : expr -> vname list
-  val f_lift : ?incr:int -> vname -> form -> form
   val t_equal : ?bds:VName.bds -> type_ -> type_ -> bool
   val e_equal : ?bds:VName.bds -> expr  -> expr  -> bool
   val f_equal : ?bds:VName.bds -> form  -> form  -> bool
-  val e_matchl : subst -> (expr * expr) list -> subst option
-  val f_matchl : subst -> (form * form) list -> subst option
+
+  val e_vars  : expr -> vname list
+  val e_lift  : ?incr:int -> vname -> expr -> expr
+  val f_lift  : ?incr:int -> vname -> form -> form
+
+  module Subst : sig
+    val add         : vname -> expr -> subst -> subst
+    val fetch       : vname -> subst -> expr
+    val is_complete : subst -> bool
+    val iter        : subst -> int -> form -> form
+    val f_apply1    : vname -> expr -> form -> form
+    val e_apply1    : vname -> expr -> expr -> expr
+    val f_apply     : subst -> form -> form
+  end
+
   val e_unify : env -> subst -> expr eqns -> subst option
   val f_unify : env -> subst -> form eqns -> subst option
-  val fetch_subst : vname -> subst -> expr
-  val f_subst : vname -> expr -> form -> form
-  val e_subst : vname -> expr -> expr -> expr
-  val iter_subst : subst -> (int * form) -> form
-  val s_complete : subst -> bool
-
-  val flatten_disjunctions : form -> form list
-  val flatten_conjunctions : form -> form list
-
-  val subst1 : name * int -> expr -> form -> form
 end = struct
   let f_and   = fun f1 f2 -> FConn (`And  , [f1; f2])
   let f_or    = fun f1 f2 -> FConn (`Or   , [f1; f2])
@@ -378,12 +393,6 @@ end = struct
   let f_equiv = fun f1 f2 -> FConn (`Equiv, [f1; f2])
   let f_not   = fun f     -> FConn (`Not  , [f])
 
-  let rec s_complete = function
-    | [] -> true
-    | (_, Sflex) :: _ -> false
-    | _ :: s -> s_complete s
-	
-      
   let t_equal =
     let rec aux bds ty1 ty2 =
       match ty1, ty2 with
@@ -418,12 +427,10 @@ end = struct
     in
     fun ?(bds = VName.Map.empty) e1 e2 -> aux bds e1 e2
 
-
   let rec e_vars =
     let open Monad.List in function
     | EVar x -> return x
     | EFun (_, ts) -> ts >>= e_vars
-
 
   let rec e_lift ?(incr = 1) (x, i : vname) = function
     | EVar (y, j) when x = y && j >= i -> EVar (y, j + incr)
@@ -441,87 +448,66 @@ end = struct
       then FBind (b, y, ty, f_lift ~incr (x, i) f)
       else FBind (b, y, ty, f_lift ~incr (x, i+1) f)
     | FTrue | FFalse as f -> f	 
-	  
-  let rec e_subst (x, i) e = function 
-    | EFun (f, l) -> EFun (f, List.map (e_subst (x, i) e) l)
-    | EVar (y, j) when x = y ->
-      if i = j then e
-      else if j > i then EVar (y, j - 1)
-      else EVar (y, j)
-    | f -> f
+
+  module Subst = struct
+    let rec get_tag ((n, i) as x : vname) (s : subst) =
+        match s with
+        | [] ->
+            None
+        | (m, tag) :: s when n = m ->
+            if i = 0 then Some tag else get_tag (n, i-1) s
+        | _ :: s ->
+            get_tag x s
+
+    let flex_subst (x : vname) (s : subst) =
+      get_tag x s = Some Sflex
+  	            
+    let bound_subst (x : vname) (s : subst) =
+      match get_tag x s with Some (Sbound _) -> true | _ -> false
+  
+    exception UnboundVariable of vname * subst
+  
+    let rec fetch (x : vname) (s : subst) =
+      match get_tag x s with
+      | Some (Sbound e) -> e
+      | _ -> raise (UnboundVariable (x, s))
+  
+    let rec add ((n, i) as x : vname) (e : expr) : subst -> subst = function
+      | [] -> failwith "Subst.add [1]"
+      | (m, t) :: s when n <> m -> (m, t) :: (add x e s)
+      | (m, t) :: s when n = m && i > 0 -> (m, t) :: (add (n, i-1) e s)
+      | (m, Sflex) :: s when n = m && i = 0 -> (m, Sbound e) :: s
+      | _ -> failwith "Subst.add [2]"
+
+    let is_complete (s : subst) =
+      List.for_all (fun (_, tag) -> tag <> Sflex) s
+
+    let rec e_apply1 (x, i) e = function 
+      | EFun (f, l) -> EFun (f, List.map (e_apply1 (x, i) e) l)
+      | EVar (y, j) when x = y ->
+        if i = j then e
+        else if j > i then EVar (y, j - 1)
+        else EVar (y, j)
+      | f -> f
 	    
-	    
-  let rec f_subst (x, i) e = function
-    | FPred (p, l) -> FPred (p, List.map (e_subst (x, i) e) l)
-    | FConn (c, l) -> FConn (c, List.map (f_subst (x, i) e) l)
-    | FBind (b, y, t, g) -> FBind (b, y, t, f_subst (x, if x=y then i+1 else i) e g)
-    | FTrue | FFalse as g -> g
-	  
-			
-  let rec iter_subst s (i, f) =
-    if i = 0
-    then f
-    else
-      match s with
-      | [] -> failwith "iter_subst1"
-      | (x, Sbound e) :: s ->
-          let f1 = f_subst (x, 0) e f in
-          iter_subst s (i-1, f1)
-      | (_, _) :: s -> iter_subst s (i-1, f)
-        
+    let rec f_apply1 (x, i) e = function
+      | FPred (p, l) -> FPred (p, List.map (e_apply1 (x, i) e) l)
+      | FConn (c, l) -> FConn (c, List.map (f_apply1 (x, i) e) l)
+      | FBind (b, y, t, g) -> FBind (b, y, t, f_apply1 (x, if x=y then i+1 else i) e g)
+      | FTrue | FFalse as g -> g
 
-  let rec flex_subst ((n, i) as x : vname) : subst -> bool = function
-    | [] -> false
-    | (m, tag) :: s when n = m ->
-        if i = 0 then tag = Sflex else flex_subst (n, i-1) s
-    | _ :: s -> flex_subst x s
+    let rec iter s i f =
+      if i = 0 then f else
+        match s with
+        | [] -> assert false
+        | (x, Sbound e) :: s ->
+            iter s (i-1) (f_apply1 (x, 0) e f)
+        | (_, _) :: s ->
+            iter s (i-1) f
 
-	
-  let rec bound_subst ((n, i) as x : vname) : subst -> bool = function
-    | [] -> false
-    | (m, tag) :: s when n = m ->
-      if i = 0 then
-        match tag with
-          | Sbound _ -> true
-          | _ -> false
-      else
-        bound_subst (n, i-1) s
-    | _ :: s -> bound_subst x s
-
-
-  let rec fetch_subst (n, i : vname) : subst -> expr = function
-    | [] -> failwith "fetch_subst1"
-    | (m, t) :: s when n = m ->
-        if i = 0 then
-          match t with
-          | Sbound e -> e
-          | _ -> failwith "fetch_subst2"
-        else
-          fetch_subst (n, i-1) s
-    | _ :: s -> fetch_subst (n, i) s
-
-
-(* warning : one relies on the fact that the order *)
-(* of the variables is unchanged *)
-  let rec add_subst ((n, i) as x : vname) (e : expr) : subst -> subst = function
-    | [] -> failwith "add_subst1"
-    | (m, t) :: s when n <> m -> (m, t) :: (add_subst x e s)
-    | (m, t) :: s when n = m && i > 0 -> (m, t) :: (add_subst (n, i-1) e s)
-    | (m, Sflex) :: s when n = m && i = 0 -> (m, Sbound e) :: s
-    | _ -> failwith "add_subst2"
-
-  let rec e_matchl s = function
-    | [] -> Some s
-    | (EVar x, e)::l when flex_subst x s ->
-        let s' = add_subst x e s in
-        e_matchl s' l
-    | ((EVar x, e)::l) when bound_subst x s ->
-        e_matchl s (((fetch_subst x s), e)::l)
-    | ((EVar x, EVar y)::l) when x=y -> e_matchl s l
-    | (EFun(f, fl), (EFun(g, gl)))::l when f=g -> 
-        e_matchl s ((List.map2 (fun x y -> (x,y)) fl gl)@l)
-    | _ -> None
-
+    let f_apply s f =
+      iter s (List.length s) f
+  end
 
   let rec occurs (x : vname) : expr -> bool = function
     | EVar y when x = y -> true
@@ -547,21 +533,21 @@ end = struct
     | (t, u) :: eqns ->
 
       let unify_cond x t =
-        flex_subst x s &&
-        (match t with EVar y when flex_subst y s -> false | _ -> true) &&
+        Subst.flex_subst x s &&
+        (match t with EVar y when Subst.flex_subst y s -> false | _ -> true) &&
         not (occurs x t) && (* maybe unnecessary check? *)
         Map.for_all (fun x tys -> 
           not (occurs_under (x, List.length tys) t))
           env.env_var
       in
       let unify_body x t =
-        let s = add_subst x t s in
+        let s = Subst.add x t s in
         e_unify env s eqns
       in
 
-      let substitute_cond x = bound_subst x s in
+      let substitute_cond x = Subst.bound_subst x s in
       let substitute_body x t =
-        e_unify env s (((fetch_subst x s), t) :: eqns)
+        e_unify env s (((Subst.fetch x s), t) :: eqns)
       in
     
       match t, u with
@@ -612,38 +598,6 @@ end = struct
 
     in fun ?(bds = VName.Map.empty) f1 f2 -> aux bds f1 f2
 
-  let rec f_matchl s = function
-
-    | [] -> Some (List.rev s)
-
-    | (f1, f2) :: l -> match f1, f2 with
-
-      | FPred (p1, l1), FPred (p2, l2)
-        when p1 = p2 && List.length l1 = List.length l2 ->       
-
-        begin match e_matchl s (List.combine l1 l2) with
-        | Some (s') -> f_matchl s' l
-        | None -> None
-        end
-
-      | FConn (c1, l1), FConn (c2, l2)
-        when c1 = c2 && List.length l1 = List.length l2 ->
-
-        f_matchl s ((List.combine l1 l2)@l)
-
-      | FBind (b1, x1, ty1, f1), FBind(b2, x2, ty2, f2)
-        when b1 = b2 && ty1 = ty2 ->
-
-        (* the following seems correct even when x1=x2 *)
-        begin match f_matchl s [(f1, f_subst (x2, 0) (EVar (x1, 0)) (f_lift (x1, 0) f2))] with
-        | Some (_::s') -> f_matchl s' l
-        | None -> None
-        | _ -> failwith "f_matchl bind"
-        end
-
-      | _ -> None
-
-
   (** [f_unify env s eqns] does unification of a list of equations [eqns] between
       formulas, updating along the way a substitution [s] and an environment [env]
       holding a context [env.env_var] of locally bound variables.
@@ -675,7 +629,7 @@ end = struct
       | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
         when b1 = b2 && ty1 = ty2 ->
 
-        let f2 = f_subst (x2, 0) (EVar (x1, 0)) (f_lift (x1, 0) f2) in
+        let f2 = Subst.f_apply1 (x2, 0) (EVar (x1, 0)) (f_lift (x1, 0) f2) in
         let env' = Vars.push env (x1, ty1, None) in
         begin match f_unify env' s [f1, f2] with
         | Some s -> f_unify env s eqns
