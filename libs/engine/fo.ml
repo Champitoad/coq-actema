@@ -45,10 +45,6 @@ type sitem =
   | Sbound of expr
   | Sflex
 
-(* warning : one relies on the fact that the order *)
-(* of the variables is unchanged *)
-type subst = (name * sitem) list
-
 type 'a eqns = ('a * 'a) list
 
 (* -------------------------------------------------------------------- *)
@@ -375,6 +371,10 @@ module Form : sig
   val f_lift  : ?incr:int -> vname -> form -> form
 
   module Subst : sig
+    type subst
+
+    val aslist      : subst -> (name * sitem) list
+    val oflist      : (name * sitem) list -> subst
     val add         : vname -> expr -> subst -> subst
     val fetch       : vname -> subst -> expr
     val is_complete : subst -> bool
@@ -384,8 +384,8 @@ module Form : sig
     val f_apply     : subst -> form -> form
   end
 
-  val e_unify : env -> subst -> expr eqns -> subst option
-  val f_unify : env -> subst -> form eqns -> subst option
+  val e_unify : env -> Subst.subst -> expr eqns -> Subst.subst option
+  val f_unify : env -> Subst.subst -> form eqns -> Subst.subst option
 end = struct
   let f_and   = fun f1 f2 -> FConn (`And  , [f1; f2])
   let f_or    = fun f1 f2 -> FConn (`Or   , [f1; f2])
@@ -450,6 +450,14 @@ end = struct
     | FTrue | FFalse as f -> f	 
 
   module Subst = struct
+    type subst = (name * sitem) list
+
+    let aslist (s : subst) : _ list =
+      s
+
+    let oflist (s : _ list) : subst =
+      s
+
     let rec get_tag ((n, i) as x : vname) (s : subst) =
         match s with
         | [] ->
@@ -525,7 +533,7 @@ end = struct
       "flex") variables, and an environment [env] holding a context of locally
       bound variables.
   *)
-  let rec e_unify (env : env) (s : subst) = function
+  let rec e_unify (env : env) (s : Subst.subst) = function
 
     (* success *)
     | [] -> Some s
