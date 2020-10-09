@@ -361,8 +361,6 @@ module Form : sig
   val f_matchl : subst -> (form * form) list -> subst option
   val e_unify : env -> subst -> expr eqns -> subst option
   val f_unify : env -> subst -> form eqns -> subst option
-  val search_match_p : subst -> form -> form -> (subst * int list) option
-  val search_match_f : subst -> form -> form -> (subst * int list) option
   val fetch_subst : vname -> subst -> expr
   val f_subst : vname -> expr -> form -> form
   val e_subst : vname -> expr -> expr -> expr
@@ -685,94 +683,6 @@ end = struct
         end
 
       | _ -> None
-	
-
-  (* [search_match_p s p t] looks for a subformula of [p] that matches [t] under the
-     substitution [s]. It returns [Some (s', pt)] with [s'] the new substitution and
-     [pt] the path of the subformula if it succeeds, and [None] otherwise. *)
-  let rec search_match_p s p t = 
-    match f_matchl s [p, t] with
-    | Some s -> Some (s, [])
-    | None ->
-	    match p with
-      | FConn (`Or, [p1; p2]) -> begin
-        match search_match_p s p1 t with
-        | Some (s, pt) -> Some (s, 0::pt)
-        | None -> begin
-          match search_match_p s p2 t with
-          | Some (s, pt) -> Some (s, 1::pt)
-          | None -> None
-          end
-		    end
-	      | _ -> None
-		
-  (* Same as [search_match_p], but we look for a subformula in [t] instead of [p]. *)
-  let rec search_match_f s p t = 
-    match f_matchl s [p, t] with
-    | Some s -> Some (s, [])
-    | None ->
-	    match t with
-      | FConn (`Or, [t1; t2]) -> begin
-        match search_match_f s p t1 with
-        | Some (s, pt) -> Some (s, 0::pt)
-        | None -> begin
-          match search_match_f s p t2 with
-          | Some (s, pt) -> Some (s, 1::pt)
-          | None -> None
-          end
-        end
-	      | _ -> None
-		
-(* first version of unification : *)
-(*    I suppose that all indexes under a certain bound are flexible *)
-(*  thus terms in equations come with the index i *)			
-(* an equation is thus (t, i, u, j) where t and u are terms and i and j indexes *)
-
-	(*
-  let rec e_runif s  = function
-    | [] -> Some s
-    | (t, jt, u, ju) :: p ->
-	if e_equal t u
-	then e_runif s p
-	else match t, u with
-	  | EVar (nt, kt), u when kt >= jt ->
-	      let p' = List.map (fun (x,n,y,m) -> (e_subst x kt u, n, e_subst y kt u, m)) p
-	      in  e_runif ((kt,u)::s) p' (* OCCUR CHECK *)
-	  | u, EVar (nt, kt) when kt >= jt ->
-	      let p' = List.map (fun (x,n,y,m) -> (e_subst x kt u, n, e_subst y kt u, m)) p
-	      in  e_runif ((kt,u)::s) p' (* FIX ME *)
-
-      | EFun (f, fl), EFun (g, gl) ->
-	  if f <> g
-	  then None
-	  else
-	    let nl = List.map2 (fun x y -> (x, jt, y, ju)) fl gl in
-	    e_runif s (nl @ p)
-      | _, _ -> None
-	  
-
-  let rec f_runif s = function
-    | [] -> Some s
-    | (t, jt, u, ju) :: p ->
-	if f_equal t u
-	then f_runif s p
-	else match t, u with
-	  | FConn (c1, fs1), FConn (c2, fs2)
-	      when (c1 = c2) && List.length fs1 = List.length fs2
-	    -> f_runif s ((List.map2 (fun x y -> (x, jt, y, ju)) fs1 fs2) @ p)
-	  | FPred (p1, es1), FPred (p2, es2)
-          when (p1 = p2) && List.length es1 = List.length es2
-            -> (
-	      match e_runif s ((List.map2 (fun x y -> (x, jt, y, ju)) es1 es2)) with
-		| None -> None
-		| Some s' -> f_runif s' p
-            )
-          | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2) 
-              when (b1 = b2) && t_equal ty1 ty2
-		-> f_runif s ((f1, jt+1, f2, ju+1)::p)
-	  | _, _ -> None
-	      
-*)
 	
   let f_false : form = FFalse
   let f_true  : form = FTrue

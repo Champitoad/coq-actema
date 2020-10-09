@@ -631,9 +631,9 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
   type pnode += TForward of Handle.t * Handle.t
 
   let core_forward (hsrc, hdst, p, s) ((pr, id) : targ)  =
-    let gl  = Proof.byid pr id in
-    let src = (Proof.Hyps.byid gl.g_hyps hsrc).h_form in
-    let dst = (Proof.Hyps.byid gl.g_hyps hdst).h_form in
+    let gl   = Proof.byid pr id in
+    let _src = (Proof.Hyps.byid gl.g_hyps hsrc).h_form in
+    let dst  = (Proof.Hyps.byid gl.g_hyps hdst).h_form in
 
     (* Here we eventually should have the call to the proof tactics *)
     let rec build_dest = function
@@ -852,7 +852,6 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     subform_pol (pol, form) sub |> fst
 
   (* -------------------------------------------------------------------- *)
-
   type asource = [
     | `Click of gpath
     | `DnD   of adnd
@@ -1366,139 +1365,6 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
     | Some dst ->
       for_destination dst
-
-
-  let dnD_actions src dsts (proof : Proof.proof) =
-    begin
-      let module E = struct exception Nothing end in
-
-      let Proof.{ g_id = hd1; g_pregoal = pr}, tg1, _ = of_gpath proof src in
-
-      let for_destination (dst : gpath) =
-        try
-          let Proof.{ g_id = hd2; _}, tg2, _ = of_gpath proof dst in
-  
-          if not (Handle.eq hd1 hd2) then
-            raise E.Nothing;
-  
-          match tg1, tg2 with
-          | `H (tg1, { h_form = f1; _ }),
-            `H (tg2, { h_form = ((FConn (`Imp, [_; _])) | (FBind (`Forall, _, _, _))) as f; _})
-              when not (Handle.eq tg1 tg2) 
-            -> 
-            begin
-              let (hl, fc, s) = prune_premisses_fad f in
-              let rec f_aux i = function
-                | [] -> []
-                | (s, g)::l -> match Form.search_match_p s g f1 with
-                | Some (s, pt) ->
-                  let aux_c = f_aux (i+1) l in
-                  (i, s, pt)::aux_c (* we look for other matches here *)
-                | None -> f_aux (i+1) l 
-              in 
-              let build_action (i, sr, pt) =
-                let path = ref [] in
-                let rec rebuild_path j p = function
-                  | FBind (`Forall, _, _, f) -> rebuild_path j (0::p) f
-                  | FConn (`Imp, [_ ; f2] ) ->
-                    if j = 0 
-                    then p
-                   else rebuild_path (j-1) (1::p) f2
-                in 
-                let p = (List.rev (rebuild_path i [] f)@[0]@pt) in
-                let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-                let dst = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg2)  ~sub:(p)  in
-                let dst' = match dsts with
-                  | None -> ipath_strip dst
-                  | _ -> dst
-                in
-                let aui = `DnD (src, dst) in  (* C'est ici que ça se passe *)
-                ("Forward", [dst'], aui, (hd1, `Forward (tg1, tg2, p, sr)))
-              in
-              List.map build_action (f_aux 0 hl)
-            end 
- 
-          | `H (tg1, { h_form = f1; _ }), `C f2 ->
-            let (hl, subf1, s) = prune_premisses_fa f1 in
-            begin
-              match Form.search_match_f s subf1 f2 with
-              | Some (sr, pt) when Form.s_complete sr ->
-                let pres = List.map (Form.iter_subst sr) hl in
-                let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-                let dst = mk_ipath (Handle.toint hd2) ~sub:(pt) in
-                let aui = `DnD (ipath_strip src, ipath_strip dst) in
-
-                ["Elim", [dst], aui, (hd1, `Elim tg1)]
-
-              | None ->
-                let (hl, goal, s) = prune_premisses_ex f2 in
-                let pre, hy = prune_premisses f1 in
-                match Form.search_match_p s goal hy with
-                | Some (sr, pt) when Form.s_complete sr ->
-                  let pt = (rebuild_path (List.length sr - 1))@pt in 
-                  let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-                  let dst = mk_ipath (Handle.toint hd1) ~sub:(pt) in
-                  let aui = `DnD (src, dst) in
-
-                  ["DisjDrop",  [dst], aui, (hd1, `DisjDrop (tg1,pre) )]
-
-              | _ -> raise E.Nothing
-            end
-            (*
-              if Form.f_equal subf1 f2 then
-                let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-                let dst = mk_ipath (Handle.toint hd1) in
-                let aui = `DnD (ipath_strip src, ipath_strip dst) in
-
-                ["Elim", [dst], aui, (hd1, `Elim tg1)]
-              else 
-                let dld = Form.flatten_disjunctions f2 in
-                let dlc = Form.flatten_conjunctions f2 in
-
-                begin match List.findex (Form.f_equal f1) dld,
-                            List.findex (Form.f_equal f1) dlc  with
-                | Some i, _  ->
-                    let path = rebuild_pathd (List.length dld) i in
-                    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-                    let dst = mk_ipath (Handle.toint hd1) ~sub:(path) in
-                    let aui = `DnD (ipath_strip src, ipath_strip dst) in
-
-                    ["DisjDrop",  [dst], aui, (hd1, `DisjDrop tg1 )]
-
-                | _, Some i ->
-                    let path = rebuild_pathd (List.length dlc) i in
-                    let src = mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint tg1) in
-                    let dst = mk_ipath (Handle.toint hd1) ~sub:(path) in
-                    let aui = `DnD (ipath_strip src, ipath_strip dst) in
-
-                    ["ConjDrop",  [dst], aui, (hd1, `ConjDrop tg1 )]
-
-                | None, None -> raise E.Nothing end
-            *)
-          | _ -> raise E.Nothing
-  
-        with E.Nothing -> []
-      in
-      match dsts with
-      | None ->
-        (* Get the list of hypotheses handles *)
-        let dsts = Proof.Hyps.ids pr.Proof.g_hyps in
-        (* Create a list of paths to each hypothesis *)
-        let dsts =
-          List.map
-            (fun id -> mk_ipath (Handle.toint hd1) ~ctxt:(Handle.toint id))
-            dsts
-        in
-        (* Add a path to the conclusion *)
-        let dsts = mk_ipath (Handle.toint hd1) :: dsts in
-        let dsts = List.map (fun p -> `P p) dsts in
-        (* Get the possible actions for each formula in the goal,
-           that is the hypotheses and the conclusion *)
-        List.flatten (List.map for_destination dsts)
-
-      | Some dst ->
-        for_destination dst
-    end
       
   let actions (proof : Proof.proof) (p : asource)
       : (string * ipath list * osource * action) list
