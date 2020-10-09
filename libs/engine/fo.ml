@@ -356,6 +356,7 @@ module Form : sig
 
   val e_vars : expr -> vname list
   val free_vars : form -> name list
+  val is_bound : vname -> form -> bool
   val fresh_var : ?basename:name -> name list -> name
   val f_lift : ?incr:int -> vname -> form -> form
   val t_equal : ?bds:VName.bds -> type_ -> type_ -> bool
@@ -437,6 +438,18 @@ end = struct
     | FPred (_, es) -> (es >>= e_vars) |> List.map name_of_vname
     | FConn (_, fs) -> fs >>= free_vars
     | FBind (_, x, _, f) -> List.remove (free_vars f) x
+  
+
+  let rec is_bound (x, i) = function
+    | FTrue | FFalse | FPred _ -> false
+    | FBind (_, y, _, f) ->
+      if x = y then
+        if i = 0 then true
+        else is_bound (x, i-1) f
+      else is_bound (x, i) f
+    | FConn (_, fs) ->
+      List.map (is_bound (x, i)) fs |>
+      List.fold_left (||) false
 
   
   (* [fresh_var ~basename names] generates a fresh name for a
