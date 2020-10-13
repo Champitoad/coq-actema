@@ -919,7 +919,8 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
         | `And -> true
         | _ -> false
         end
-      | _ -> true
+      | FBind _ -> true
+      | _ -> false
       end
 
 
@@ -1004,14 +1005,24 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
     (** [wf_term t] returns [true] if all variables in the term [t]
         are bound either in the environment [goal.g_env], or by a quantifier
-        of [src] or [dst]. *)
-    let wf_term t =
-      List.for_all
-        (fun x -> Vars.exists goal.g_env x || is_bound x top_src_f || is_bound x top_dst_f)
-        (e_vars t)
+        of [src] or [dst], or as a fresh renaming in [s1] or [s2]. *)
+    let wf_term t s1 s2 =
+      List.for_all begin fun x ->
+        let bound_in_subst =
+          List.exists begin fun (_, tag) ->
+            match tag with
+            | Sbound (EVar y) -> x = y
+            | _ -> false
+          end
+        in
+        Vars.exists goal.g_env x ||
+        is_bound x top_src_f || is_bound x top_dst_f ||
+        bound_in_subst s1 || bound_in_subst s2
+      end
+      (e_vars t)
     in
 
-    let rec backward (s : subst) : (form * int list) * (form * int list) -> form = function
+    let rec backward (s1 : subst) (s2 : subst) : (form * int list) * (form * int list) -> form = function
 
       (** End rules *)
 
@@ -1034,55 +1045,57 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
       (* lnplc1 *)
       | (FConn (`And, [f1; _]), 0 :: sub), (_, _ as c) ->
-        backward s ((f1, sub), c)
+        backward s1 s2 ((f1, sub), c)
 
       (* lnplc2 *)
       | (FConn (`And, [_; f2]), 1 :: sub), (_, _ as c) ->
-        backward s ((f2, sub), c)
+        backward s1 s2 ((f2, sub), c)
 
       (* lnpld1 *)
       | (FConn (`Or, [f1; f2]), 0 :: sub), (f, _ as c) ->
-        f_and (backward s ((f1, sub), c)) (f_imp f2 f)
+        f_and (backward s1 s2 ((f1, sub), c)) (f_imp f2 f)
       
       (* lnpld2 *)
       | (FConn (`Or, [f1; f2]), 1 :: sub), (f, _ as c) ->
-        f_and (f_imp f1 f) (backward s ((f2, sub), c))
+        f_and (f_imp f1 f) (backward s1 s2 ((f2, sub), c))
 
       (* lnpli2 *)
       | (FConn (`Imp, [f1; f2]), 1 :: sub), (f, _ as c)
         when not (invertible `Right f) ->
-        f_and f1 (backward s ((f2, sub), c))
+        f_and f1 (backward s1 s2 ((f2, sub), c))
 
       (* lnple1 *)
       | (FConn (`Equiv, [f1; f2]), 0 :: sub), (f, _ as c)
         when not (invertible `Right f) ->
-        f_and f2 (backward s ((f1, sub), c))
+        f_and f2 (backward s1 s2 ((f1, sub), c))
 
       (* lnple2 *)
       | (FConn (`Equiv, [f1; f2]), 1 :: sub), (f, _ as c)
         when not (invertible `Right f) ->
-        f_and f1 (backward s ((f2, sub), c))
+        f_and f1 (backward s1 s2 ((f2, sub), c))
       
       (* lnplex *)
-      | (FBind (`Exist, x, ty, f1), 0 :: sub), (f, _ as c) ->
-        let y, f1 =
-          let fvf = free_vars f in
-          if List.mem x fvf then
-            let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
-            y, f_subst (x, 0) (EVar (y, 0)) f1
-          else x, f1
-        in
-        FBind (`Forall, y, ty, backward s ((f1, sub), c))
+      | (FBind (`Exist, x, ty, f1), 0 :: sub), c ->
+        begin match List.pop_assoc x s1 with
+        | s1, Sbound (EVar (y, _)) ->
+          let f1 = f_subst (x, 0) (EVar (y, 0)) f1 in
+          FBind (`Forall, y, ty, backward s1 s2 ((f1, sub), c))
+        | _ -> raise TacticNotApplicable
+        end
 
       (* lnplfa *)
       | (FBind (`Forall, x, ty, f1), 0 :: sub), (f, _ as c)
-        when not (invertible `Right f) ->
-        let s, t = List.pop_assoc x s in
+        when not (invertible `Right f) &&
+        match List.pop_assoc x s1 with
+        | _, Sbound e -> wf_term e s1 s2
+        | _, Sflex -> true
+        ->
+        let s1, t = List.pop_assoc x s1 in
         begin match t with
-        | Sbound e when wf_term e ->
+        | Sbound e ->
           let f1 = f_subst (x, 0) e f1 in
-          backward s ((f1, sub), c)
-        | _ ->
+          backward s1 s2 ((f1, sub), c)
+        | Sflex ->
           let y, f1 =
             let fvf = free_vars f in
             if List.mem x fvf then
@@ -1090,7 +1103,7 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
               y, f_subst (x, 0) (EVar (y, 0)) f1
             else x, f1
           in
-          FBind (`Exist, y, ty, backward s ((f1, sub), c))
+          FBind (`Exist, y, ty, backward s1 s2 ((f1, sub), c))
         end
         
       (** Right interaction rules *)
@@ -1098,56 +1111,60 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
       (* lnprc1 *)
       | (f, _ as h), (FConn (`And, [f1; f2]), 0 :: sub)
         when not (invertible `Left f) ->
-        f_and (backward s (h, (f1, sub))) f2
+        f_and (backward s1 s2 (h, (f1, sub))) f2
 
       (* lnprc2 *)
       | (f, _ as h), (FConn (`And, [f1; f2]), 1 :: sub)
         when not (invertible `Left f) ->
-        f_and f1 (backward s (h, (f2, sub)))
+        f_and f1 (backward s1 s2 (h, (f2, sub)))
 
       (* lnprd1 *)
       | (f, _ as h), (FConn (`Or, [f1; f2]), 0 :: sub)
         when not (invertible `Left f) ->
-        f_or (backward s (h, (f1, sub))) f2
+        f_or (backward s1 s2 (h, (f1, sub))) f2
 
       (* lnprd2 *)
       | (f, _ as h), (FConn (`Or, [f1; f2]), 1 :: sub)
         when not (invertible `Left f) ->
-        f_or f1 (backward s (h, (f2, sub)))
+        f_or f1 (backward s1 s2 (h, (f2, sub)))
 
       (* lnpri1 *)
       | h, (FConn (`Imp, [f1; f2]), 0 :: sub) ->
-        f_imp (forward s (h, (f1, sub))) f2
+        f_imp (forward s1 s2 (h, (f1, sub))) f2
 
       (* lnpri2 *)
       | h, (FConn (`Imp, [f1; f2]), 1 :: sub) ->
-        f_imp f1 (backward s (h, (f2, sub)))
+        f_imp f1 (backward s1 s2 (h, (f2, sub)))
 
       (* lnprn1 *)
       | h, (FConn (`Not, [f1]), 0 :: sub) ->
-        f_not (forward s ((h, (f1, sub))))
+        f_not (forward s1 s2 ((h, (f1, sub))))
 
       (* lnpre1 *)
       | h, (FConn (`Equiv, [f1; f2]), 0 :: sub) ->
         f_and
-          (f_imp (forward s (h, (f1, sub))) f2)
-          (f_imp f2 (backward s (h, (f1, sub))))
+          (f_imp (forward s1 s2 (h, (f1, sub))) f2)
+          (f_imp f2 (backward s1 s2 (h, (f1, sub))))
 
       (* lnpre2 *)
       | h, (FConn (`Equiv, [f1; f2]), 1 :: sub) ->
         f_and
-          (f_imp f1 (backward s (h, (f2, sub))))
-          (f_imp (forward s (h, (f2, sub))) f1)
+          (f_imp f1 (backward s1 s2 (h, (f2, sub))))
+          (f_imp (forward s1 s2 (h, (f2, sub))) f1)
 
       (* lnprex *)
       | (f, _ as h), (FBind (`Exist, x, ty, f1), 0 :: sub)
-        when not (invertible `Left f) ->
-        let s, t = List.pop_assoc x s in
+        when not (invertible `Left f) &&
+        match List.pop_assoc x s2 with
+        | _, Sbound e -> wf_term e s1 s2
+        | _, Sflex -> true
+        ->
+        let s2, t = List.pop_assoc x s2 in
         begin match t with
-        | Sbound e when wf_term e ->
+        | Sbound e ->
           let f1 = f_subst (x, 0) e f1 in
-          backward s (h, (f1, sub))
-        | _ ->
+          backward s1 s2 (h, (f1, sub))
+        | Sflex ->
           let y, f1 =
             let fvf = free_vars f in
             if List.mem x fvf then
@@ -1155,23 +1172,21 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
               y, f_subst (x, 0) (EVar (y, 0)) f1
             else x, f1
           in
-          FBind (`Exist, y, ty, backward s (h, (f1, sub)))
+          FBind (`Exist, y, ty, backward s1 s2 (h, (f1, sub)))
         end
 
       (* lnprfa *)
-      | (f, _ as h), (FBind (`Forall, x, ty, f1), 0 :: sub) ->
-        let y, f1 =
-          let fvf = free_vars f in
-          if List.mem x fvf then
-            let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
-            y, f_subst (x, 0) (EVar (y, 0)) f1
-          else x, f1
-        in
-        FBind (`Forall, y, ty, backward s (h, (f1, sub)))
+      | h, (FBind (`Forall, x, ty, f1), 0 :: sub) ->
+        begin match List.pop_assoc x s2 with
+        | s2, Sbound (EVar (y, _)) ->
+          let f1 = f_subst (x, 0) (EVar (y, 0)) f1 in
+          FBind (`Forall, y, ty, backward s1 s2 (h, (f1, sub)))
+        | _ -> raise TacticNotApplicable
+        end
       
       | _ -> raise TacticNotApplicable
 
-    and forward (s : subst) : (form * int list) * (form * int list) -> form = function
+    and forward (s1 : subst) (s2 : subst) : (form * int list) * (form * int list) -> form = function
 
       (** End rules *)
 
@@ -1189,46 +1204,46 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
 
       (* lnnc1 *)
       | h, (FConn (`And, [f1; f2]), 0 :: sub) ->
-        f_and (forward s (h, (f1, sub))) f2
+        f_and (forward s1 s2 (h, (f1, sub))) f2
 
       (* lnnc2 *)
       | h, (FConn (`And, [f1; f2]), 1 :: sub) ->
-        f_and f1 (forward s (h, (f2, sub)))
+        f_and f1 (forward s1 s2 (h, (f2, sub)))
 
       (* lnnd1 *)
       | (f, _ as h), (FConn (`Or, [f1; f2]), 0 :: sub)
         when not (invertible `Forward f) ->
-        f_or (forward s (h, (f1, sub))) f2
+        f_or (forward s1 s2 (h, (f1, sub))) f2
 
       (* lnnd2 *)
       | (f, _ as h), (FConn (`Or, [f1; f2]), 1 :: sub)
         when not (invertible `Forward f) ->
-        f_or f1 (forward s (h, (f2, sub)))
+        f_or f1 (forward s1 s2 (h, (f2, sub)))
 
       (* lnni1 *)
       | (f, _ as h), (FConn (`Imp, [f1; f2]), 0 :: sub)
         when not (invertible `Forward f) ->
-        f_imp (backward s (h, (f1, sub))) f2
+        f_imp (backward s1 s2 (h, (f1, sub))) f2
 
       (* lnni2 *)
       | (f, _ as h), (FConn (`Imp, [f1; f2]), 1 :: sub)
         when not (invertible `Forward f) ->
-        f_imp f1 (forward s (h, (f2, sub)))
+        f_imp f1 (forward s1 s2 (h, (f2, sub)))
 
       (* lnnn1 *)
       | (f, _ as h), (FConn (`Not, [f1]), 0 :: sub)
         when not (invertible `Forward f) ->
-        f_not (backward s (h, (f1, sub)))
+        f_not (backward s1 s2 (h, (f1, sub)))
 
       (* lnne1 *)
       | (f, _ as h), (FConn (`Equiv, [f1; f2]), 0 :: sub)
         when not (invertible `Forward f) ->
-        f_imp (backward s (h, (f1, sub))) f2
+        f_imp (backward s1 s2 (h, (f1, sub))) f2
 
       (* lnne2 *)
       | (f, _ as h), (FConn (`Equiv, [f1; f2]), 1 :: sub)
         when not (invertible `Forward f) ->
-        f_imp (backward s (h, (f2, sub))) f1
+        f_imp (backward s1 s2 (h, (f2, sub))) f1
       
       (* lnnex *)
       | (f, _ as h), (FBind (`Exist, x, ty, f1), 0 :: sub) ->
@@ -1239,31 +1254,42 @@ let elim ?clear (h : Handle.t) ((pr, id) : targ) =
             y, f_subst (x, 0) (EVar (y, 0)) f1
           else x, f1
         in
-        FBind (`Exist, y, ty, forward s (h, (f1, sub)))
+        FBind (`Exist, y, ty, forward s1 s2 (h, (f1, sub)))
       
       (* lnnfa *)
       | (f, _ as h), (FBind (`Forall, x, ty, f1), 0 :: sub)
-        when not (invertible `Forward f) ->
-        let y, f1 =
-          let fvf = free_vars f in
-          if List.mem x fvf then
-            let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
-            y, f_subst (x, 0) (EVar (y, 0)) f1
-          else x, f1
-        in
-        FBind (`Forall, y, ty, forward s (h, (f1, sub)))
+        when not (invertible `Forward f) &&
+        match List.pop_assoc x s2 with
+        | _, Sbound e -> wf_term e s1 s2
+        | _, Sflex -> true
+        ->
+        let s2, t = List.pop_assoc x s2 in
+        begin match t with
+        | Sbound e ->
+          let f1 = f_subst (x, 0) e f1 in
+          forward s1 s2 (h, (f1, sub))
+        | Sflex ->
+          let y, f1 =
+            let fvf = free_vars f in
+            if List.mem x fvf then
+              let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
+              y, f_subst (x, 0) (EVar (y, 0)) f1
+            else x, f1
+          in
+          FBind (`Exist, y, ty, forward s1 s2 (h, (f1, sub)))
+        end
         
       (* lnncomm *)
-      | h, h' -> forward s (h', h)
+      | h, h' -> forward s2 s1 (h', h)
     in
 
-    let subgoal = match top_src, top_dst, sub_src, sub_dst with
-      | `H (hid, { h_form = h; _ }), `C c, subh, subc
-      | `C c, `H (hid, { h_form = h; _ }), subc, subh ->
-        [[Some hid, []], backward [] ((h, subh), (c, subc)) |> elim_units]
+    let subgoal = match (top_src, sub_src, s_src), (top_dst, sub_dst, s_dst) with
+      | (`H (hid, { h_form = h; _ }), subh, sh), (`C c, subc, sc)
+      | (`C c, subc, sc), (`H (hid, { h_form = h; _ }), subh, sh) ->
+        [[Some hid, []], backward sh sc ((h, subh), (c, subc)) |> elim_units]
       
-      | `H (hid, { h_form = h; _ }), `H (hid', { h_form = h'; _ }), subh, subh' ->
-        [[Some hid, []; Some hid', [forward [] ((h, subh), (h', subh')) |> elim_units]], goal.g_goal]
+      | (`H (hid, { h_form = h; _ }), subh, s), (`H (hid', { h_form = h'; _ }), subh', s') ->
+        [[Some hid, []; Some hid', [forward s s' ((h, subh), (h', subh')) |> elim_units]], goal.g_goal]
       
       | _ -> raise TacticNotApplicable
     in
