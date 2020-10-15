@@ -379,13 +379,6 @@ end = struct
 
     (pre, hy, Form.Subst.oflist s)
 
-  let prune_premisses_fad =
-    let rec doit i acc s = function
-      | FConn (`Imp, [f1; f2]) -> doit i ((s, f1) :: acc) s f2
-      | FBind (`Forall, x, _, f) -> doit (i+1) acc ((x, Sflex)::s) f
-      | f -> (List.rev acc, f, s)
-    in fun f -> doit 0 [] [] f
-	
   let prune_premisses_ex =
     let rec doit i acc s = function
       | FBind (`Exist, x, _, f) -> doit (i+1) acc ((x, Sflex)::s) f
@@ -470,6 +463,7 @@ end = struct
   type pnode += TElim of Handle.t
 
   let core_elim ?clear (h : Handle.t) ((pr, id) : targ) =
+    let _ = clear in            (* FIXME *)
     let result = ref ([])  in 
     let gl = Proof.byid pr id in
     let hyp = (Proof.Hyps.byid gl.g_hyps h).h_form in
@@ -563,11 +557,11 @@ end = struct
 
     (* Here we eventually should have the call to the proof tactics *)
     let rec build_dest = function
-      | ((FBind (`Forall, x, ty, f)), 0::p, ((y, Sflex)::s)) ->
+      | ((FBind (`Forall, x, ty, f)), 0::p, ((_, Sflex)::s)) ->
           FBind (`Forall, x, ty, build_dest (f, p, s))
-      | ((FBind (`Forall, x, ty, f)), 0::p, ((y, (Sbound e))::s)) ->
+      | ((FBind (`Forall, x, _, f)), 0::p, ((_, (Sbound e))::s)) ->
           build_dest ((Form.Subst.f_apply1 (x, 0) e f), p, s)
-      | (FConn (`Imp, [f1; f2]), (0::_), s) ->
+      | (FConn (`Imp, [_; f2]), (0::_), s) ->
           Form.Subst.f_apply (Form.Subst.oflist s) f2
       | (FConn (`Imp, [f1; f2]), (1::p), s) ->
           FConn(`Imp, [Form.Subst.f_apply (Form.Subst.oflist s) f1;
@@ -659,9 +653,6 @@ end = struct
 
   let mk_ipath ?(ctxt : int = 0) ?(sub : int list = []) (root : int) =
     { root; ctxt; sub; }
-
-  let ipath_strip (p : ipath) =
-    { p with sub = [] }
 
   let path_of_ipath (p : ipath) =
     let pp_sub =
@@ -1586,7 +1577,7 @@ end = struct
     end in
     let module State = Monad.State(Env) in
 
-    let rec traverse (p, f) i : (pol * form) State.t =
+    let traverse (p, f) i : (pol * form) State.t =
       let open State in
       match p, f with
 

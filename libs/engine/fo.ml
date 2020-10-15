@@ -517,7 +517,7 @@ end = struct
   
     exception UnboundVariable of vname * subst
   
-    let rec fetch (x : vname) (s : subst) =
+    let fetch (x : vname) (s : subst) =
       match get_tag x s with
       | Some (Sbound e) -> e
       | _ -> raise (UnboundVariable (x, s))
@@ -564,7 +564,7 @@ end = struct
     | EFun (_, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
     | _ -> false
   
-  let rec occurs_under ((n, i) as x : vname) : expr -> bool = function
+  let occurs_under ((n, i) as x : vname) : expr -> bool = function
     | EVar (m, j) when n = m && j <= i -> true
     | EFun (_, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
     | _ -> false

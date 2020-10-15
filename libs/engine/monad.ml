@@ -39,7 +39,7 @@ module Reader (T : Type) : sig
 end = struct
   type env = T.t
   type 'a t = env -> 'a
-  let return x = fun st -> x
+  let return x = fun _st -> x
   let bind m f = fun st -> f (m st) st
   let ( >>= ) = bind
   let map f l = fun st ->
