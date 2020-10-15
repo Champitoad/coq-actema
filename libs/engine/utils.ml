@@ -50,6 +50,8 @@ module List : sig
   exception TopoFailure
 
   val topo : ('a -> int) -> ('a -> int list) -> 'a list -> 'a list
+
+  val find_map_opt : ('a -> 'b option) -> 'a list -> 'b option
 end = struct
   include BatList
 
@@ -124,6 +126,17 @@ end = struct
       let starts, todo =
         List.partition (fun x -> is_empty (deps x)) xs
       in aux starts [] todo false
+
+  let find_map_opt (f : 'a -> 'b option) =
+    let rec doit xs =
+      match xs with
+      | [] -> None
+
+      | x :: xs ->
+          match f x with
+          | None   -> doit xs
+          | Some v -> Some v
+    in fun xs -> doit xs
 end
 
 (* -------------------------------------------------------------------- *)
