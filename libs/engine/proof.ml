@@ -1217,7 +1217,7 @@ end = struct
           | `And -> true
           | _ -> false
           end
-        | FBind _ -> true
+        | FBind (`Exist, _, _, _) -> true
         | _ -> false
         end
     in
