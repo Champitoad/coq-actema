@@ -1172,23 +1172,21 @@ end = struct
     let top_src_f = form_of_item top_src in
     let top_dst_f = form_of_item top_dst in
 
-    (** [wf_term t] returns [true] if all variables in the term [t]
+    (** [well_scoped t] returns [true] if all variables in the term [t]
         are bound either in the environment [goal.g_env], or by a quantifier
-        of [src] or [dst], or as a fresh renaming in [s1] or [s2]. *)
-    let wf_term t s1 s2 =
-      List.for_all begin fun x ->
+        of [src] or [dst], or as a fresh renaming in [s]. *)
+    let well_scoped t s =
+      e_vars t |> List.for_all begin fun x ->
         let bound_in_subst =
-          List.exists begin fun (_, tag) ->
-            match tag with
-            | Sbound (EVar y) -> x = y
+          List.exists begin function
+            | _, Sbound (EVar y) -> x = y
             | _ -> false
           end
         in
         Vars.exists goal.g_env x ||
         is_bound x top_src_f || is_bound x top_dst_f ||
-        bound_in_subst s1 || bound_in_subst s2
+        bound_in_subst s
       end
-      (e_vars t)
     in
 
     let invertible (kind : [`Left | `Right | `Forward]) (f : form) : bool =
@@ -1288,7 +1286,7 @@ end = struct
       | (FBind (`Forall, x, ty, f1), 0 :: sub), (f, _ as c)
         when not (invertible `Right f) &&
         match List.pop_assoc x (Subst.aslist s1) with
-        | _, Sbound e -> wf_term e (Subst.aslist s1) (Subst.aslist s2)
+        | _, Sbound e -> well_scoped e (Subst.aslist s1)
         | _, Sflex -> true
         ->
         let s1, t = List.pop_assoc x (Subst.aslist s1) in
@@ -1357,7 +1355,7 @@ end = struct
       | (f, _ as h), (FBind (`Exist, x, ty, f1), 0 :: sub)
         when not (invertible `Left f) &&
         match List.pop_assoc x (Subst.aslist s2) with
-        | _, Sbound e -> wf_term e (Subst.aslist s1) (Subst.aslist s2)
+        | _, Sbound e -> well_scoped e (Subst.aslist s2)
         | _, Sflex -> true
         ->
         let s2, t = List.pop_assoc x (Subst.aslist s2) in
@@ -1461,7 +1459,7 @@ end = struct
       | (f, _ as h), (FBind (`Forall, x, ty, f1), 0 :: sub)
         when not (invertible `Forward f) &&
         match List.pop_assoc x (Subst.aslist s2) with
-        | _, Sbound e -> wf_term e (Subst.aslist s1) (Subst.aslist s2)
+        | _, Sbound e -> well_scoped e (Subst.aslist s2)
         | _, Sflex -> true
         ->
         let s2, t = List.pop_assoc x (Subst.aslist s2) in
