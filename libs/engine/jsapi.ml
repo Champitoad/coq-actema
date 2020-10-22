@@ -226,12 +226,12 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
   method intro variant =
     js_proof_engine (!!(CoreLogic.intro ~variant) (parent##.proof, handle))
 
-  (* [this#elim (target : js_hyps)]] applies the relevant elimination
+  (* [this#elim (target : handle<js_hyps>)]] applies the relevant elimination
    * rule to the hypothesis [target] of the subgoal [this].
    *
    * Raise an exception if [target] does not belong to [this] *)
   method elim target =
-    let data = (target##.handle, (parent##.proof, handle)) in
+    let data = (target, (parent##.proof, handle)) in
     js_proof_engine (!!(uc CoreLogic.elim) data)
 
   (* [this#ivariants] Return the available introduction rules that can
@@ -279,7 +279,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
 
     in js_proof_engine (!!doit ())
 
-  (* [this#move_hyp (from : handle) (before : handle option)] move
+  (* [this#move_hyp (from : handle<js_hyp>) (before : handle<js_hyp> option)] move
    * hypothesis [from] before hypothesis [before]. Both hypothesis
    * must be part of this sub-goal. *)
   method move_hyp from before =
@@ -289,10 +289,10 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
         (parent##.proof, self##.handle)
     in js_proof_engine (!!doit ())
 
-  (* [this#generalize (h : js_hyps) generalizes the hypothesis [h] *)
+  (* [this#generalize (h : handle<js_hyps>) generalizes the hypothesis [h] *)
   method generalize hid =
     let doit () =
-      CoreLogic.generalize hid##.handle (parent##.proof, self##.handle)
+      CoreLogic.generalize hid (parent##.proof, self##.handle)
     in js_proof_engine (!!doit ())
 
   method getmeta =
