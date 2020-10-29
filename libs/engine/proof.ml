@@ -1169,9 +1169,6 @@ end = struct
     let { g_pregoal = goal; _ }, top_src, (sub_src, _) = of_ipath proof src in
     let _, top_dst, (sub_dst, _) = of_ipath proof dst in
 
-    let top_src_f = form_of_item top_src in
-    let top_dst_f = form_of_item top_dst in
-
     (** [well_scoped t ctx] returns [true] if all variables in the term [t]
         are bound either in the environment [goal.g_env], or by a quantifier
         in [ctx]. *)
