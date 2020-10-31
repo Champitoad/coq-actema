@@ -400,6 +400,9 @@ end = struct
     let pterm = TIntro variant in
 
     match variant, (Proof.byid pr id).g_goal with
+    | (0, None), FPred ("EQ", [e1; e2]) when Form.e_equal e1 e2 ->
+        Proof.progress pr id pterm []
+
     | (0, None), FConn (`And, [f1; f2]) ->
         Proof.progress pr id pterm [f1; f2]
 
@@ -535,6 +538,7 @@ end = struct
 	
   let ivariants ((pr, id) : targ) =
     match (Proof.byid pr id).g_goal with
+    | FPred ("EQ", _) -> ["EQ-intro"]
     | FTrue -> ["True-intro"]
     | FConn (`And  , _) -> ["And-intro"]
     | FConn (`Or   , _) as f ->
