@@ -70,7 +70,7 @@ module Env : sig
   val empty      : env
 end = struct
   let empty : env = {
-    env_prp  = Map.empty;
+    env_prp  = Map.empty |> Map.add "_EQ" [TUnit; TUnit];
     env_fun  = Map.empty;
     env_var  = Map.empty;
     env_evar = Map.empty;
@@ -989,6 +989,11 @@ end = struct
           | (`And | `Or | `Imp | `Not | `Equiv), _ ->
               assert false
         end
+      
+      | FPred ("_EQ", [e1; e2]) ->
+          Format.sprintf "%s = %s"
+            (for_expr e1)
+            (for_expr e2)
 
       | FPred (name, []) ->
           UTF8.of_latin1 name
@@ -1148,6 +1153,11 @@ end = struct
           | (`And | `Or | `Imp | `Not | `Equiv), _ ->
               assert false
         end
+
+        | FPred ("_EQ", [e1; e2]) ->
+            [Xml.node "span" (for_expr e1);
+             Xml.pcdata " = ";
+             Xml.node "span" (for_expr e2)]
 
         | FPred (name, []) ->
             [Xml.node "span" [Xml.pcdata (UTF8.of_latin1 name)]]

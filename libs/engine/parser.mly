@@ -17,7 +17,7 @@
 %token PROOF
 
 %token LAND LOR LNEG PLUS STAR
-%token AMP DCOLON COLON COLONEQ COMMA DOT
+%token AMP DCOLON COLON EQ COLONEQ COMMA DOT
 
 %nonassoc BINDING_prec
 %right    LARROW LRARROW
@@ -104,15 +104,21 @@ type_:
 | t=loc(type_r) { t }
 
 (* -------------------------------------------------------------------- *)
-expr_r:
-| e=parens(expr_r)
-    { e }
-
+unparens_expr_r:
 | x=ident
     { PEVar x }
 
-| f=ident args=parens(plist0(expr, COMMA))
+| f=ident args=parens(plist1(expr, COMMA))
     { PEApp (f, args) }
+
+expr_r:
+| e=unparens_expr_r
+    { e }
+| e=parens(expr_r)
+    { e }
+
+unparens_expr:
+| e=loc(unparens_expr_r) { e }
 
 expr:
 | e=loc(expr_r) { e }
@@ -134,6 +140,9 @@ form_r:
 
 | x=ident
     { PFApp (x, []) }
+
+| e1=unparens_expr EQ e2=unparens_expr
+    { PFApp (mkloc _dummy "_EQ", [e1; e2]) }
 
 | x=ident args=parens(plist1(expr, COMMA))
     { PFApp (x, args) }

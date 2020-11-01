@@ -400,7 +400,7 @@ end = struct
     let pterm = TIntro variant in
 
     match variant, (Proof.byid pr id).g_goal with
-    | (0, None), FPred ("EQ", [e1; e2]) when Form.e_equal e1 e2 ->
+    | (0, None), FPred ("_EQ", [e1; e2]) when Form.e_equal e1 e2 ->
         Proof.progress pr id pterm []
 
     | (0, None), FConn (`And, [f1; f2]) ->
@@ -538,7 +538,7 @@ end = struct
 	
   let ivariants ((pr, id) : targ) =
     match (Proof.byid pr id).g_goal with
-    | FPred ("EQ", _) -> ["EQ-intro"]
+    | FPred ("_EQ", _) -> ["EQ-intro"]
     | FTrue -> ["True-intro"]
     | FConn (`And  , _) -> ["And-intro"]
     | FConn (`Or   , _) as f ->
@@ -1226,7 +1226,7 @@ end = struct
           | _ when h = c -> f_true
           | FPred (c1, ts1), FPred (c2, ts2) when c1 = c2 ->
             List.fold_left2
-              (fun f t1 t2 -> f_and f (FPred ("EQ", [t1; t2])))
+              (fun f t1 t2 -> f_and f (FPred ("_EQ", [t1; t2])))
               f_true ts1 ts2
         
           (* Brel *)
