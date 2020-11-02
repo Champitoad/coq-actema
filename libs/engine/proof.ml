@@ -1274,9 +1274,8 @@ end = struct
         | _ -> failwith "unrenamed eigenvariable"
         end
 
-      | (FBind (`Forall, x, ty, f1), 0 :: sub), (f, _ as c)
-        when not (invertible `Right f) &&
-        match List.assoc x (Subst.aslist s1) with
+      | (FBind (`Forall, x, ty, f1), 0 :: sub), (f, [] as c)
+        when match List.assoc x (Subst.aslist s1) with
         | Sbound e -> well_scoped e ctx
         | Sflex -> true
         ->
