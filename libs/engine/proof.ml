@@ -1214,6 +1214,11 @@ end = struct
         end
     in
 
+    let atomic = function
+      | FTrue | FFalse | FPred _ -> true
+      | _ -> false
+    in
+
     let rec backward (s1 : Subst.subst) (s2 : Subst.subst) (ctx : fctx) :
       (form * int list) * (form * int list) -> form = function
 
@@ -1255,17 +1260,17 @@ end = struct
       
       (* L⇒₂ *)
       | (FConn (`Imp, [f1; f2]), 1 :: sub), (f, _ as c)
-        when not (invertible `Right f) ->
+        when atomic f ->
         backward s1 s2 (c_and_r f1 ctx) ((f2, sub), c)
 
       (* L⇔₁ *)
       | (FConn (`Equiv, [f1; f2]), 0 :: sub), (f, _ as c)
-        when not (invertible `Right f) ->
+        when atomic f ->
         backward s1 s2 (c_and_r f2 ctx) ((f1, sub), c)
 
       (* L⇔₂ *)
       | (FConn (`Equiv, [f1; f2]), 1 :: sub), (f, _ as c)
-        when not (invertible `Right f) ->
+        when atomic f ->
         backward s1 s2 (c_and_r f1 ctx) ((f2, sub), c)
       
       (* L∃s *)
