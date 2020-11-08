@@ -1533,14 +1533,16 @@ end = struct
   let search_match env (p1, f1) (p2, f2)
     : (int list * Form.Subst.subst * int list * Form.Subst.subst) list =
 
+    let open Form in
+
     let module Deps = struct
       include Graph.Persistent.Digraph.Concrete(Name)
 
-      let subst (deps : t) (s : _ list) : t =
+      let subst (deps : t) (s : Subst.subst) : t =
         (* For each item [x := e] in the substitution *)
-        List.fold_left begin fun deps (x, tag) ->
+        Subst.fold begin fun deps (x, tag) ->
           let fvs = match tag with
-            | Sbound e -> Form.e_vars e
+            | Sbound e -> e_vars e
             | Sflex -> []
           in
           (* For each variable [y] depending on [x] *)
@@ -1583,7 +1585,7 @@ end = struct
            record existential variables in [Sflex] entries, as well as the fresh
            eigenvariables in [Sbound] entries together with their original names.
       *)
-      type t = Deps.t * (name * name) list * env * (name * sitem) list
+      type t = Deps.t * (name * name) list * env * Subst.subst
     end in
     let module State = Monad.State(Env) in
 
@@ -1596,8 +1598,9 @@ end = struct
 
         get >>= fun (deps, rnm, env, s) ->
         let y, env = Vars.bind env (x, ty) in
-        let exs = List.filter_map
-          (function (x, Sflex) -> Some x | _ -> None) s
+        let exs = Subst.fold
+          (fun acc (x, t) -> if t = Sflex then x :: acc else acc)
+          [] s
         in
         let deps = List.fold_left
           (fun deps x -> Deps.add_edge deps x y)
@@ -1605,7 +1608,7 @@ end = struct
         in
         let z = EVars.fresh () in
         let rnm = (z, x) :: rnm in
-        let s = (z, Sbound (EVar (y, 0))) :: s in
+        let s = Subst.push z (Sbound (EVar (y, 0))) s in
         put (deps, rnm, env, s) >>= fun _ ->
         return (p, Form.Subst.f_apply1 (x, 0) (EVar (y, 0)) f)
 
@@ -1615,7 +1618,7 @@ end = struct
         get >>= fun (deps, rnm, env, s) ->
         let z = EVars.fresh () in
         let rnm = (z, x) :: rnm in
-        let s = (z, Sflex) :: s in
+        let s = Subst.push z Sflex s in
         put (deps, rnm, env, s) >>= fun _ ->
         return (p, Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f)
 
@@ -1634,22 +1637,23 @@ end = struct
       run begin
         traverse (p1, f1) sub1 >>= fun (sp1, sf1) ->
         get >>= fun (deps, rnm1, env, s1) ->
-        put (deps, [], env, []) >>= fun _ ->
+        put (deps, [], env, Subst.empty) >>= fun _ ->
 
         traverse (p2, f2) sub2 >>= fun (sp2, sf2) ->
         get >>= fun (deps, rnm2, _, s2) ->
 
         return (deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2)
       end
-      (Deps.empty, [], env, [])
+      (Deps.empty, [], env, Subst.empty)
     in
 
-    let open Form in
+    let s1 = Subst.aslist s1 in
+    let s2 = Subst.aslist s2 in
 
     match sp1, sp2 with
     | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
       begin match Form.f_unify Fo.Env.empty (Subst.oflist (s1 @ s2)) [sf1, sf2] with
-      | Some s when acyclic (Deps.subst deps (Subst.aslist s)) ->
+      | Some s when acyclic (Deps.subst deps s) ->
         let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
         let rename rnm = List.map (fun (x, tag) ->
           Option.default x (List.assoc_opt x rnm), tag)

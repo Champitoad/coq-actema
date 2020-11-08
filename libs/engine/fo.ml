@@ -324,7 +324,7 @@ module VName : sig
 end = struct
   type bds = (name * name) list
 
-  let equal (bds : bds) ((x, i) : vname) ((y, j) : vname) =
+  let equal (_ : bds) ((x, i) : vname) ((y, j) : vname) =
     i = j && x = y
 
   module Map = struct
@@ -400,12 +400,19 @@ module Form : sig
 
     exception UnboundVariable of vname * subst
 
+    val empty       : subst
     val aslist      : subst -> (name * sitem) list
     val oflist      : (name * sitem) list -> subst
+
+    val fold        : ('a -> name * sitem -> 'a) -> 'a -> subst -> 'a
+
     val add         : vname -> expr -> subst -> subst
-    val get_tag     : vname -> subst -> sitem option
+    val push        : name -> sitem -> subst -> subst
     val fetch       : vname -> subst -> expr
+    val get_tag     : vname -> subst -> sitem option
+
     val is_complete : subst -> bool
+
     val iter        : subst -> int -> form -> form
     val f_apply1    : vname -> expr -> form -> form
     val e_apply1    : vname -> expr -> expr -> expr
@@ -538,20 +545,24 @@ end = struct
   module Subst = struct
     type subst = (name * sitem) list
 
+    let empty = []
+
     let aslist (s : subst) : _ list =
       s
 
     let oflist (s : _ list) : subst =
       s
 
+    let fold = List.fold_left
+
     let rec get_tag ((n, i) as x : vname) (s : subst) =
-        match s with
-        | [] ->
-            None
-        | (m, tag) :: s when n = m ->
-            if i = 0 then Some tag else get_tag (n, i-1) s
-        | _ :: s ->
-            get_tag x s
+      match s with
+      | [] ->
+          None
+      | (m, tag) :: s when n = m ->
+          if i = 0 then Some tag else get_tag (n, i-1) s
+      | _ :: s ->
+          get_tag x s
 
     let flex_subst (x : vname) (s : subst) =
       get_tag x s = Some Sflex
@@ -572,6 +583,8 @@ end = struct
       | (m, t) :: s when n = m && i > 0 -> (m, t) :: (add (n, i-1) e s)
       | (m, Sflex) :: s when n = m && i = 0 -> (m, Sbound e) :: s
       | _ -> failwith "Subst.add [2]"
+    
+    let push m t s = (m, t) :: s
 
     let is_complete (s : subst) =
       List.for_all (fun (_, tag) -> tag <> Sflex) s
@@ -635,8 +648,7 @@ end = struct
           env.env_var
       in
       let unify_body x t =
-        let s = Subst.add x t s in
-        e_unify env s eqns
+        e_unify env (Subst.add x t s) eqns
       in
 
       let substitute_cond x = Subst.bound_subst x s in
