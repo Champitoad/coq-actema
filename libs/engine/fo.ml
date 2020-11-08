@@ -89,6 +89,7 @@ module LEnv : sig
 
   val empty : lenv
   val enter : name -> lenv -> lenv
+  val get_index : name -> lenv -> int
   val exit  : lenv -> lenv
   val fold  : name -> lenv -> 'a -> (lenv -> 'a -> 'b) -> 'b
 end = struct
@@ -103,8 +104,11 @@ end = struct
     { le_indices = Map.empty; le_bindings = []; }
 
   let enter (name : name) (lenv : lenv) =
-    { le_indices  = Map.modify_def 0 name ((+) 1) lenv.le_indices;
+    { le_indices  = Map.modify_def (-1) name ((+) 1) lenv.le_indices;
       le_bindings = name :: lenv.le_bindings; }
+  
+  let get_index (name : name) (lenv : lenv) =
+    Map.find name lenv.le_indices
 
   let exit (lenv : lenv) =
     match lenv.le_bindings with
@@ -394,9 +398,12 @@ module Form : sig
   module Subst : sig
     type subst
 
+    exception UnboundVariable of vname * subst
+
     val aslist      : subst -> (name * sitem) list
     val oflist      : (name * sitem) list -> subst
     val add         : vname -> expr -> subst -> subst
+    val get_tag     : vname -> subst -> sitem option
     val fetch       : vname -> subst -> expr
     val is_complete : subst -> bool
     val iter        : subst -> int -> form -> form
