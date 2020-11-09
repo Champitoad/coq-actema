@@ -476,7 +476,7 @@ end = struct
     else ();
 
     let pre, hy, s = prune_premisses_fa hyp in
-    begin match Form.f_unify Env.empty s [(hy, gl.g_goal)] with
+    begin match Form.f_unify LEnv.empty s [(hy, gl.g_goal)] with
     | Some s when Form.Subst.is_complete s ->  
         let pres = List.map
         (fun (i, x) -> [Some h, []], (Form.Subst.iter s i x)) pre in
@@ -506,7 +506,7 @@ end = struct
     let _ , goal, s = prune_premisses_ex gl.g_goal in
     let pre, hy = prune_premisses hyp in
     let pre = List.map (fun x -> [(Some h), []],x) pre in
-    begin match Form.f_unify Env.empty s [(hy, goal)] with
+    begin match Form.f_unify LEnv.empty s [(hy, goal)] with
     | Some s when Form.Subst.is_complete s ->
         result := ((TElim id), pre) :: !result
     | Some _ -> () (* failwith "incomplete ex match" *)
@@ -516,7 +516,7 @@ end = struct
           let gll = Form.flatten_disjunctions goal in
           let rec aux = function
             | [] -> false
-            | g::l -> begin match Form.f_unify Env.empty s [(hyp, g)] with
+            | g::l -> begin match Form.f_unify LEnv.empty s [(hyp, g)] with
                 | Some s when Form.Subst.is_complete s -> true
                 | _ -> aux l
               end
@@ -1652,7 +1652,7 @@ end = struct
 
     match sp1, sp2 with
     | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
-      begin match Form.f_unify Fo.Env.empty (Subst.oflist (s1 @ s2)) [sf1, sf2] with
+      begin match Form.f_unify Fo.LEnv.empty (Subst.oflist (s1 @ s2)) [sf1, sf2] with
       | Some s when acyclic (Deps.subst deps s) ->
         let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
         let rename rnm = List.map (fun (x, tag) ->

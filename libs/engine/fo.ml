@@ -88,8 +88,9 @@ module LEnv : sig
   exception EmptyLEnv
 
   val empty : lenv
-  val enter : name -> lenv -> lenv
+  val indices : lenv -> (name, int) Map.t
   val get_index : name -> lenv -> int
+  val enter : name -> lenv -> lenv
   val exit  : lenv -> lenv
   val fold  : name -> lenv -> 'a -> (lenv -> 'a -> 'b) -> 'b
 end = struct
@@ -103,12 +104,14 @@ end = struct
   let empty =
     { le_indices = Map.empty; le_bindings = []; }
 
+  let indices lenv = lenv.le_indices
+
+  let get_index (name : name) (lenv : lenv) =
+    Map.find name lenv.le_indices
+
   let enter (name : name) (lenv : lenv) =
     { le_indices  = Map.modify_def (-1) name ((+) 1) lenv.le_indices;
       le_bindings = name :: lenv.le_bindings; }
-  
-  let get_index (name : name) (lenv : lenv) =
-    Map.find name lenv.le_indices
 
   let exit (lenv : lenv) =
     match lenv.le_bindings with
@@ -419,8 +422,8 @@ module Form : sig
     val f_apply     : subst -> form -> form
   end
 
-  val e_unify : env -> Subst.subst -> expr eqns -> Subst.subst option
-  val f_unify : env -> Subst.subst -> form eqns -> Subst.subst option
+  val e_unify : LEnv.lenv -> Subst.subst -> expr eqns -> Subst.subst option
+  val f_unify : LEnv.lenv -> Subst.subst -> form eqns -> Subst.subst option
 end = struct
   let f_and   = fun f1 f2 -> FConn (`And  , [f1; f2])
   let f_or    = fun f1 f2 -> FConn (`Or   , [f1; f2])
@@ -629,10 +632,10 @@ end = struct
   (** [e_unify env s eqns] implements a variant of Martelli and Montanari's
       unification algorithm on a list of term equations [eqns], with additional
       handling of a substitution [s] holding the list of bindings and unifiable (or
-      "flex") variables, and an environment [env] holding a context of locally
+      "flex") variables, and a local environment [lenv] holding a context of locally
       bound variables.
   *)
-  let rec e_unify (env : env) (s : Subst.subst) = function
+  let rec e_unify (lenv : LEnv.lenv) (s : Subst.subst) = function
 
     (* success *)
     | [] -> Some s
@@ -643,17 +646,17 @@ end = struct
         Subst.flex_subst x s &&
         (match t with EVar y when Subst.flex_subst y s -> false | _ -> true) &&
         not (occurs x t) && (* maybe unnecessary check? *)
-        Map.for_all (fun x tys -> 
-          not (occurs_under (x, List.length tys) t))
-          env.env_var
+        Map.for_all (fun n i -> 
+          not (occurs_under (n, i) t))
+          (LEnv.indices lenv)
       in
       let unify_body x t =
-        e_unify env (Subst.add x t s) eqns
+        e_unify lenv (Subst.add x t s) eqns
       in
 
       let substitute_cond x = Subst.bound_subst x s in
       let substitute_body x t =
-        e_unify env s (((Subst.fetch x s), t) :: eqns)
+        e_unify lenv s (((Subst.fetch x s), t) :: eqns)
       in
     
       match t, u with
@@ -670,11 +673,11 @@ end = struct
 
       (* (delete) *)
       | EVar x, EVar y when x = y ->
-        e_unify env s eqns
+        e_unify lenv s eqns
 
       (* (decompose) *)
       | EFun (f, ts), EFun (g, us) when f = g ->
-        e_unify env s ((List.combine ts us) @ eqns)
+        e_unify lenv s ((List.combine ts us) @ eqns)
 
       (* (fail) *)
       | _ -> None
@@ -705,10 +708,10 @@ end = struct
     in fun ?(bds = VName.Map.empty) f1 f2 -> aux bds f1 f2
 
   (** [f_unify env s eqns] does unification of a list of equations [eqns] between
-      formulas, updating along the way a substitution [s] and an environment [env]
-      holding a context [env.env_var] of locally bound variables.
+      formulas, updating along the way a substitution [s] and a local environment [lenv]
+      holding a context of locally bound variables.
   *)
-  let rec f_unify env s = function
+  let rec f_unify (lenv : LEnv.lenv) (s : Subst.subst) = function
 
     | [] -> Some s
 
@@ -716,13 +719,13 @@ end = struct
 
       | FTrue, FTrue | FFalse, FFalse ->
         
-        f_unify env s eqns
+        f_unify lenv s eqns
 
       | FPred (p1, l1), FPred (p2, l2)
         when p1 = p2 && List.length l1 = List.length l2 ->       
 
-        begin match e_unify env s (List.combine l1 l2) with
-        | Some s -> f_unify env s eqns
+        begin match e_unify lenv s (List.combine l1 l2) with
+        | Some s -> f_unify lenv s eqns
         | None -> None
         end
 
@@ -730,15 +733,15 @@ end = struct
         when c1 = c2 && List.length l1 = List.length l2 ->
 
         let subeqns = List.combine l1 l2 in
-        f_unify env s (subeqns @ eqns)
+        f_unify lenv s (subeqns @ eqns)
 
       | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
         when b1 = b2 && ty1 = ty2 ->
 
         let f2 = Subst.f_apply1 (x2, 0) (EVar (x1, 0)) (f_lift (x1, 0) f2) in
-        let env' = Vars.push env (x1, ty1, None) in
-        begin match f_unify env' s [f1, f2] with
-        | Some s -> f_unify env s eqns
+        let lenv' = LEnv.enter x1 lenv in
+        begin match f_unify lenv' s [f1, f2] with
+        | Some s -> f_unify lenv s eqns
         | None -> None
         end
 
