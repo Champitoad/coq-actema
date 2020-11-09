@@ -1239,72 +1239,6 @@ end = struct
           end
         in
         c_fill f (c_rev ctx)
-
-      (** Left interaction rules *)
-
-      (* L∧ *)
-      | (FConn (`And, fs), i :: sub), c ->
-        backward ctx s ((List.nth fs i, sub), c)
-
-      (* L∨ *)
-      | (FConn (`Or, fs), i :: sub), (f, _ as c) ->
-        begin match List.split_at i fs with
-        | lfs, fi :: rfs ->
-          let case fi = f_imp fi f in
-          let lfs = List.map case lfs in
-          let rfs = List.map case rfs in
-          backward (CConn (`And, lfs, ctx, rfs)) s ((fi, sub), c)
-        | _ -> failwith "empty disjunction"
-        end
-      
-      (* L⇒₂ *)
-      | (FConn (`Imp, [f1; f2]), 1 :: sub), (_, [] as c) ->
-        backward (c_and_r f1 ctx) s ((f2, sub), c)
-
-      (* L⇔₁ *)
-      | (FConn (`Equiv, [f1; f2]), 0 :: sub), (_, [] as c) ->
-        backward (c_and_r f2 ctx) s ((f1, sub), c)
-
-      (* L⇔₂ *)
-      | (FConn (`Equiv, [f1; f2]), 1 :: sub), (_, [] as c) ->
-        backward (c_and_r f1 ctx) s ((f2, sub), c)
-      
-      (* L∃s *)
-      | (FBind (`Exist, x, ty, f1), 0 :: sub), c ->
-        let env1 = LEnv.enter x env1 in 
-        let s = (env1, s1), es2 in
-        begin match fetch (x, LEnv.get_index x env1) s1 with
-        | EVar (y, _) ->
-          let f1 = f_apply1 (x, 0) (EVar (y, 0)) f1 in
-          backward (CBind (`Forall, y, ty, ctx)) s ((f1, sub), c)
-        | _ -> assert false
-        end
-
-      | (FBind (`Forall, x, ty, f1), 0 :: sub), (f, [] as c)
-        when match get_tag (x, LEnv.get_index x (LEnv.enter x env1)) s1 with
-             | Some Sbound e -> well_scoped e ctx
-             | Some Sflex -> true
-             | None -> false
-        ->
-        let env1 = LEnv.enter x env1 in
-        let s = (env1, s1), es2 in
-        begin match get_tag (x, LEnv.get_index x env1) s1 with
-        (* L∀i *)
-        | Some Sbound e ->
-          let f1 = f_apply1 (x, 0) e f1 in
-          backward ctx s ((f1, sub), c)
-        (* L∀s *)
-        | Some Sflex ->
-          let y, f1 =
-            let fvf = free_vars f in
-            if List.mem x fvf then
-              let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
-              y, f_apply1 (x, 0) (EVar (y, 0)) f1
-            else x, f1
-          in
-          backward (CBind (`Exist, y, ty, ctx)) s ((f1, sub), c)
-        | None -> assert false
-        end
         
       (** Right interaction rules *)
 
@@ -1387,6 +1321,76 @@ end = struct
           let f1 = Subst.f_apply1 (x, 0) (EVar (y, 0)) f1 in
           backward (CBind (`Forall, y, ty, ctx)) s (h, (f1, sub))
         | _ -> assert false
+        end
+
+      (** Left interaction rules *)
+
+      (* L∧ *)
+      | (FConn (`And, fs), i :: sub), c ->
+        backward ctx s ((List.nth fs i, sub), c)
+
+      (* L∨ *)
+      | (FConn (`Or, fs), i :: sub), (f, _ as c) ->
+        begin match List.split_at i fs with
+        | lfs, fi :: rfs ->
+          let case fi = f_imp fi f in
+          let lfs = List.map case lfs in
+          let rfs = List.map case rfs in
+          backward (CConn (`And, lfs, ctx, rfs)) s ((fi, sub), c)
+        | _ -> failwith "empty disjunction"
+        end
+      
+      (* L⇒₂ *)
+      | (FConn (`Imp, [f1; f2]), 1 :: sub), (f, _ as c)
+        when not (invertible `Right f) ->
+        backward (c_and_r f1 ctx) s ((f2, sub), c)
+
+      (* L⇔₁ *)
+      | (FConn (`Equiv, [f1; f2]), 0 :: sub), (f, _ as c)
+        when not (invertible `Right f) ->
+        backward (c_and_r f2 ctx) s ((f1, sub), c)
+
+      (* L⇔₂ *)
+      | (FConn (`Equiv, [f1; f2]), 1 :: sub), (f, _ as c)
+        when not (invertible `Right f) ->
+        backward (c_and_r f1 ctx) s ((f2, sub), c)
+      
+      (* L∃s *)
+      | (FBind (`Exist, x, ty, f1), 0 :: sub), c ->
+        let env1 = LEnv.enter x env1 in 
+        let s = (env1, s1), es2 in
+        begin match fetch (x, LEnv.get_index x env1) s1 with
+        | EVar (y, _) ->
+          let f1 = f_apply1 (x, 0) (EVar (y, 0)) f1 in
+          backward (CBind (`Forall, y, ty, ctx)) s ((f1, sub), c)
+        | _ -> assert false
+        end
+
+      | (FBind (`Forall, x, ty, f1), 0 :: sub), (f, _ as c)
+        when not (invertible `Right f) &&
+        match get_tag (x, LEnv.get_index x (LEnv.enter x env1)) s1 with
+        | Some Sbound e -> well_scoped e ctx
+        | Some Sflex -> true
+        | None -> false
+        ->
+        let env1 = LEnv.enter x env1 in
+        let s = (env1, s1), es2 in
+        begin match get_tag (x, LEnv.get_index x env1) s1 with
+        (* L∀i *)
+        | Some Sbound e ->
+          let f1 = f_apply1 (x, 0) e f1 in
+          backward ctx s ((f1, sub), c)
+        (* L∀s *)
+        | Some Sflex ->
+          let y, f1 =
+            let fvf = free_vars f in
+            if List.mem x fvf then
+              let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
+              y, f_apply1 (x, 0) (EVar (y, 0)) f1
+            else x, f1
+          in
+          backward (CBind (`Exist, y, ty, ctx)) s ((f1, sub), c)
+        | None -> assert false
         end
       
       | _ -> raise TacticNotApplicable
