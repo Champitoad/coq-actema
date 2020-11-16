@@ -1490,7 +1490,7 @@ end = struct
               y, Subst.f_apply1 (x, 0) (EVar (y, 0)) f1
             else x, f1
           in
-          forward (CBind (`Exist, y, ty, ctx)) s (h, (f1, sub))
+          forward (CBind (`Forall, y, ty, ctx)) s (h, (f1, sub))
         | None -> assert false
         end
         
