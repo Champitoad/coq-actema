@@ -1514,9 +1514,10 @@ end = struct
     fun pr -> close_with_unit (pr, List.hd (opened pr))
   
 
-  (** [subs f] returns all the paths leading to a subformula in [f]. *)
+  (** [f_subs f] returns all the paths leading to a subformula in [f]. *)
 
-  let subs (f : form) : (int list) list =
+  let f_subs (f : form) : (int list) list =
+
     let rec aux sub = function
       | FConn (_, fs) ->
         fs |> List.mapi (fun i f ->
@@ -1526,8 +1527,37 @@ end = struct
       | FBind (_, _, _, f) ->
         let sub = sub @ [0] in
         sub :: aux sub f
-      | _ -> [[]]
-    in aux [] f
+      | _ -> []
+
+    in [] :: (aux [] f)
+
+
+  (** [e_subs f] returns all the paths leading to a subterm in [f]. *)
+
+  let e_subs (f : form) : (int list) list =
+
+    let rec f_aux sub = function
+      | FPred (_, es) ->
+        es |> List.mapi (fun i e ->
+                let sub = sub @ [i] in
+                sub :: e_aux sub e)
+           |> List.concat
+      | FConn (_, fs) ->
+        fs |> List.mapi (fun i f -> f_aux (sub @ [i]) f)
+           |> List.concat
+      | FBind (_, _, _, f) ->
+        f_aux (sub @ [0]) f
+      | _ -> []
+
+    and e_aux sub = function
+      | EVar _ -> []
+      | EFun (_, es) ->
+        es |> List.mapi (fun i e ->
+                let sub = sub @ [i] in
+                sub :: e_aux sub e)
+           |> List.concat
+
+    in f_aux [] f
 
 
   (** [search_match env (p1, f1) (p2, f2)] returns the list of pairs of paths that lead
@@ -1633,41 +1663,57 @@ end = struct
 
     let open Monad.List in
 
-    subs f1 >>= fun sub1 ->
-    subs f2 >>= fun sub2 ->
+    let f_subs =
+      f_subs f1 >>= fun sub1 ->
+      f_subs f2 >>= fun sub2 ->
 
-    let deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2 =
-      let open State in
-      run begin
-        traverse (p1, f1) sub1 >>= fun (sp1, sf1) ->
-        get >>= fun (deps, rnm1, env, s1) ->
-        put (deps, [], env, Subst.empty) >>= fun _ ->
+      let deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2 =
+        let open State in
+        run begin
+          traverse (p1, f1) sub1 >>= fun (sp1, sf1) ->
+          get >>= fun (deps, rnm1, env, s1) ->
+          put (deps, [], env, Subst.empty) >>= fun _ ->
 
-        traverse (p2, f2) sub2 >>= fun (sp2, sf2) ->
-        get >>= fun (deps, rnm2, _, s2) ->
+          traverse (p2, f2) sub2 >>= fun (sp2, sf2) ->
+          get >>= fun (deps, rnm2, _, s2) ->
 
-        return (deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2)
-      end
-      (Deps.empty, [], env, Subst.empty)
+          return (deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2)
+        end
+        (Deps.empty, [], env, Subst.empty)
+      in
+
+      let s1 = Subst.aslist s1 in
+      let s2 = Subst.aslist s2 in
+
+      match sp1, sp2 with
+      | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
+        begin match Form.f_unify Fo.LEnv.empty (Subst.oflist (s1 @ s2)) [sf1, sf2] with
+        | Some s when acyclic (Deps.subst deps s) ->
+          let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
+          let rename rnm = List.map (fun (x, tag) ->
+            Option.default x (List.assoc_opt x rnm), tag)
+          in return (
+            sub1, s1 |> rename rnm1 |> List.rev |> Subst.oflist,
+            sub2, s2 |> rename rnm2 |> List.rev |> Subst.oflist)
+        | _ -> zero
+        end
+      | _ -> zero
+    in
+    
+    let e_subs =
+      e_subs f1 >>= fun e_sub1 ->
+      e_subs f2 >>= fun e_sub2 ->
+
+      (* let open Js_of_ocaml in
+
+      let p1 = mk_ipath ~sub:e_sub1 1 |> path_of_ipath in
+      let p2 = mk_ipath ~sub:e_sub2 2 |> path_of_ipath in
+      Firebug.console##log (Js.string (p1 ^ ", " ^ p2)); *)
+
+      return (e_sub1, Subst.empty, e_sub2, Subst.empty)
     in
 
-    let s1 = Subst.aslist s1 in
-    let s2 = Subst.aslist s2 in
-
-    match sp1, sp2 with
-    | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
-      begin match Form.f_unify Fo.LEnv.empty (Subst.oflist (s1 @ s2)) [sf1, sf2] with
-      | Some s when acyclic (Deps.subst deps s) ->
-        let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
-        let rename rnm = List.map (fun (x, tag) ->
-          Option.default x (List.assoc_opt x rnm), tag)
-        in return (
-          sub1, s1 |> rename rnm1 |> List.rev |> Subst.oflist,
-          sub2, s2 |> rename rnm2 |> List.rev |> Subst.oflist)
-      (* | _ -> return (sub1, [], sub2, []) *)
-      | _ -> zero
-      end
-    | _ -> zero
+    f_subs @ e_subs
 
 
   let dnd_actions src dsts (proof : Proof.proof) =
