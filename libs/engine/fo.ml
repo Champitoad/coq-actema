@@ -37,6 +37,11 @@ type form =
   | FConn of logcon * form list
   | FBind of bkind * name * type_ * form
 
+and fctx =
+  | CHole
+  | CConn of logcon * form list * fctx * form list
+  | CBind of bkind * name * type_ * fctx
+
 and logcon = [ `And | `Or | `Imp | `Equiv | `Not ]
 and bkind  = [ `Forall | `Exist ]
 
@@ -65,7 +70,7 @@ module Env : sig
   val empty      : env
 end = struct
   let empty : env = {
-    env_prp  = Map.empty;
+    env_prp  = Map.empty |> Map.add "_EQ" [TUnit; TUnit];
     env_fun  = Map.empty;
     env_var  = Map.empty;
     env_evar = Map.empty;
@@ -316,10 +321,7 @@ end = struct
   type bds = (name * name) list
 
   let equal (bds : bds) ((x, i) : vname) ((y, j) : vname) =
-    i = j &&
-    match List.find_opt (fun (x0, y0) -> x = x0 || y = y0) bds with
-    | None -> false
-    | Some (x0, y0) -> x = x0 && y = y0
+    i = j && x = y
 
   module Map = struct
     let empty : bds =
@@ -339,6 +341,16 @@ module Form : sig
   val f_imp   : form -> form -> form
   val f_equiv : form -> form -> form
   val f_not   : form -> form
+
+  val c_and_l : form -> fctx -> fctx
+  val c_and_r : form -> fctx -> fctx
+  val c_or_l : form -> fctx -> fctx
+  val c_or_r : form -> fctx -> fctx
+  val c_imp_l : form -> fctx -> fctx
+  val c_imp_r : form -> fctx -> fctx
+  val c_equiv_l : form -> fctx -> fctx
+  val c_equiv_r : form -> fctx -> fctx
+  val c_not : fctx -> fctx
 
   val f_ands : form list -> form
   val f_ors  : form list -> form
@@ -373,7 +385,10 @@ module Form : sig
   val e_lift  : ?incr:int -> vname -> expr -> expr
   val f_lift  : ?incr:int -> vname -> form -> form
 
-  val is_bound : vname -> form -> bool
+  val c_is_bound : vname -> fctx -> bool
+  val c_fill : form -> fctx -> form
+  val c_rev : fctx -> fctx
+
   val fresh_var : ?basename:name -> name list -> name
 
   module Subst : sig
@@ -398,6 +413,16 @@ end = struct
   let f_imp   = fun f1 f2 -> FConn (`Imp  , [f1; f2])
   let f_equiv = fun f1 f2 -> FConn (`Equiv, [f1; f2])
   let f_not   = fun f     -> FConn (`Not  , [f])
+
+  let c_and_l = fun f c -> CConn (`And, [], c, [f])
+  let c_and_r = fun f c -> CConn (`And, [f], c, [])
+  let c_or_l = fun f c -> CConn (`Or, [], c, [f])
+  let c_or_r = fun f c -> CConn (`And, [f], c, [])
+  let c_imp_l = fun f c -> CConn (`Imp, [], c, [f])
+  let c_imp_r = fun f c -> CConn (`Imp, [f], c, [])
+  let c_equiv_l = fun f c -> CConn (`Equiv, [], c, [f])
+  let c_equiv_r = fun f c -> CConn (`Equiv, [f], c, [])
+  let c_not = fun c -> CConn (`Not, [], c, [])
 
   let t_equal =
     let rec aux bds ty1 ty2 =
@@ -447,33 +472,6 @@ end = struct
     | FBind (_, x, _, f) -> List.remove (free_vars f) x
   
 
-  let rec is_bound (x, i) = function
-    | FTrue | FFalse | FPred _ -> false
-    | FBind (_, y, _, f) ->
-      if x = y then
-        if i = 0 then true
-        else is_bound (x, i-1) f
-      else is_bound (x, i) f
-    | FConn (_, fs) ->
-      List.map (is_bound (x, i)) fs |>
-      List.fold_left (||) false
-
-  
-  (* [fresh_var ~basename names] generates a fresh name for a
-     variable relative to the ones in [names], based on an optional [basename]. *)
-  let fresh_var ?(basename = "x") names =
-    if not (List.mem basename names) then
-      basename
-    else
-      let rec aux n =
-        let basename = basename ^ string_of_int n in
-        if not (List.mem basename names)
-        then basename
-        else aux (n+1)
-      in
-      aux 0
-
-
   let rec e_lift ?(incr = 1) (x, i : vname) = function
     | EVar (y, j) when x = y && j >= i -> EVar (y, j + incr)
     | EVar _ as e -> e
@@ -490,6 +488,45 @@ end = struct
       then FBind (b, y, ty, f_lift ~incr (x, i) f)
       else FBind (b, y, ty, f_lift ~incr (x, i+1) f)
     | FTrue | FFalse as f -> f	 
+
+
+  let rec c_is_bound (x, i) = function
+    | CHole -> false
+    | CBind (_, y, _, c) ->
+      if x = y then
+        if i = 0 then true
+        else c_is_bound (x, i-1) c
+      else c_is_bound (x, i) c
+    | CConn (_, _, c, _) ->
+      c_is_bound (x, i) c
+
+  let rec c_fill f = function
+    | CHole -> f
+    | CConn (conn, ls, c, rs) -> FConn (conn, ls @ [c_fill f c] @ rs)
+    | CBind (b, x, ty, c) -> FBind (b, x, ty, c_fill f c)
+
+  let c_rev =
+    let rec aux acc = function
+      | CHole -> acc
+      | CConn (conn, ls, c, rs) -> aux (CConn (conn, ls, acc, rs)) c
+      | CBind (b, x, ty, c) -> aux (CBind (b, x, ty, acc)) c
+    in aux CHole
+  
+
+  (* [fresh_var ~basename names] generates a fresh name for a
+     variable relative to the ones in [names], based on an optional [basename]. *)
+  let fresh_var ?(basename = "x") names =
+    if not (List.mem basename names) then
+      basename
+    else
+      let rec aux n =
+        let basename = basename ^ string_of_int n in
+        if not (List.mem basename names)
+        then basename
+        else aux (n+1)
+      in
+      aux 0
+
 
   module Subst = struct
     type subst = (name * sitem) list
@@ -952,6 +989,11 @@ end = struct
           | (`And | `Or | `Imp | `Not | `Equiv), _ ->
               assert false
         end
+      
+      | FPred ("_EQ", [e1; e2]) ->
+          Format.sprintf "%s = %s"
+            (for_expr e1)
+            (for_expr e2)
 
       | FPred (name, []) ->
           UTF8.of_latin1 name
@@ -1111,6 +1153,11 @@ end = struct
           | (`And | `Or | `Imp | `Not | `Equiv), _ ->
               assert false
         end
+
+        | FPred ("_EQ", [e1; e2]) ->
+            [Xml.node "span" (for_expr e1);
+             Xml.pcdata " = ";
+             Xml.node "span" (for_expr e2)]
 
         | FPred (name, []) ->
             [Xml.node "span" [Xml.pcdata (UTF8.of_latin1 name)]]
