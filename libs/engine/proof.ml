@@ -635,6 +635,7 @@ end = struct
 
   exception InvalidPath
   exception InvalidFormPath
+  exception InvalidExprPath
 
 
   let form_of_item = function
@@ -650,10 +651,45 @@ end = struct
           try  List.nth fs i
           with Failure _ -> raise InvalidFormPath
         in subform subf subp
-    
-    | FBind (_, _, _, f) -> subform f subp
+    | FBind (_, _, _, subf) ->
+        subform subf subp
+    | _ ->
+        raise InvalidFormPath
 
-    | _ -> raise InvalidFormPath
+  let rec f_subexpr (f : form) (p : int list) =
+    match p with [] -> raise InvalidExprPath | i :: subp ->
+
+    match f with
+    | FPred (_, es) ->
+        let e =
+          try  List.nth es i
+          with Failure _ -> raise InvalidExprPath
+        in
+        e_subexpr e subp
+    | FConn (_, fs) ->
+        let subf =
+          try  List.nth fs i
+          with Failure _ -> raise InvalidFormPath
+        in
+        f_subexpr subf subp
+    | FBind (_, _, _, subf) ->
+        f_subexpr subf subp
+    | _ ->
+        raise InvalidFormPath
+
+  and e_subexpr (e : expr) (p : int list) =
+    match p with [] -> e | i :: subp ->
+
+    match e with
+    | EFun (_, es) ->
+        let sube =
+          try  List.nth es i
+          with Failure _ -> raise InvalidExprPath
+        in
+        e_subexpr sube subp
+    | _ ->
+        raise InvalidExprPath
+
 
   let mk_ipath ?(ctxt : int = 0) ?(sub : int list = []) (root : int) =
     { root; ctxt; sub; }
