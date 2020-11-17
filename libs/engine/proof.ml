@@ -310,7 +310,8 @@ module CoreLogic : sig
   type path   = string
   type ipath  = { root : int; ctxt : int; sub : int list; }
   type gpath  = [`S of path | `P of ipath]
-  type pol = Pos | Neg | Sup
+  type term   = [`F of form | `E of expr]
+  type pol    = Pos | Neg | Sup
 
   val cut        : Fo.form -> tactic
   val add_local  : string * Fo.type_ * Fo.expr -> tactic
@@ -360,6 +361,7 @@ end = struct
   type path   = string
   type ipath  = { root : int; ctxt : int; sub : int list; }
   type gpath  = [`S of path | `P of ipath]
+  type term   = [`F of form | `E of expr]
   type pol    = Pos | Neg | Sup
 
   let prune_premisses =
@@ -642,53 +644,43 @@ end = struct
   | `C f | `H (_, Proof.{ h_form = f; _ }) -> f
 
 
-  let rec subform (f : form) (p : int list) =
-    match p with [] -> f | i :: subp ->
+  let rec subterm (t : term) (p : int list) =
+    match p with [] -> t | i :: subp ->
 
-    match f with
-    | FConn (_, fs) ->
-        let subf =
-          try  List.nth fs i
-          with Failure _ -> raise InvalidFormPath
-        in subform subf subp
-    | FBind (_, _, _, subf) ->
-        subform subf subp
-    | _ ->
-        raise InvalidFormPath
+    let subt = match t with
+      | `E EFun (_, es)
+      | `F FPred (_, es) ->
+          let sube =
+            try  List.nth es i
+            with Failure _ -> raise InvalidExprPath
+          in (`E sube)
+      | `F FConn (_, fs) ->
+          let subf =
+            try  List.nth fs i
+            with Failure _ -> raise InvalidFormPath
+          in (`F subf)
+      | `F FBind (_, _, _, subf) ->
+          (`F subf)
+      | _ ->
+          raise InvalidPath
+    in
 
-  let rec f_subexpr (f : form) (p : int list) =
-    match p with [] -> raise InvalidExprPath | i :: subp ->
+    subterm subt subp
 
-    match f with
-    | FPred (_, es) ->
-        let e =
-          try  List.nth es i
-          with Failure _ -> raise InvalidExprPath
-        in
-        e_subexpr e subp
-    | FConn (_, fs) ->
-        let subf =
-          try  List.nth fs i
-          with Failure _ -> raise InvalidFormPath
-        in
-        f_subexpr subf subp
-    | FBind (_, _, _, subf) ->
-        f_subexpr subf subp
-    | _ ->
-        raise InvalidFormPath
+  let subform (f : form) (p : int list) =
+    match subterm (`F f) p with
+    | `F f -> f
+    | _ -> raise InvalidFormPath
 
-  and e_subexpr (e : expr) (p : int list) =
-    match p with [] -> e | i :: subp ->
+  let f_subexpr (f : form) (p : int list) =
+    match subterm (`F f) p with
+    | `E e -> e
+    | _ -> raise InvalidExprPath
 
-    match e with
-    | EFun (_, es) ->
-        let sube =
-          try  List.nth es i
-          with Failure _ -> raise InvalidExprPath
-        in
-        e_subexpr sube subp
-    | _ ->
-        raise InvalidExprPath
+  let e_subexpr (e : expr) (p : int list) =
+    match subterm (`E e) p with
+    | `E e -> e
+    | _ -> raise InvalidExprPath
 
 
   let mk_ipath ?(ctxt : int = 0) ?(sub : int list = []) (root : int) =
@@ -728,7 +720,8 @@ end = struct
     { root; ctxt; sub; }
 
   let of_ipath (proof : Proof.proof) (p : ipath)
-    : Proof.goal * [> `C of form | `H of Handle.t * Proof.hyp ] * (uid list * form)
+    : Proof.goal * [> `C of form | `H of Handle.t * Proof.hyp ] * 
+      (uid list * [> `F of form | `E of expr ])
   =
     let { root; ctxt; sub; } = p in
 
@@ -736,26 +729,26 @@ end = struct
       try  Proof.byid proof (Handle.ofint root)
       with InvalidGoalId _ -> raise InvalidPath in
 
-    let target, subf =
-      try
-        match ctxt with
-        | ctxt when ctxt <= 0 ->
-            (`C goal.Proof.g_goal, subform goal.Proof.g_goal sub)
-  
-        | _ -> begin
-            try
-              let rp = Handle.ofint ctxt in
-              let { Proof.h_form = hf; _ } as hyd =
-                Proof.Hyps.byid goal.Proof.g_hyps rp in
-              (`H (rp, hyd), subform hf sub)
-            with InvalidHyphId _ -> raise InvalidPath
-          end
+    let top, topf =
+      match ctxt with
+      | ctxt when ctxt <= 0 ->
+          let f = goal.Proof.g_goal in
+          (`C f, f)
 
-      with InvalidFormPath -> raise InvalidPath
+      | _ -> begin
+          try
+            let rp = Handle.ofint ctxt in
+            let { Proof.h_form = hf; _ } as hyd =
+              Proof.Hyps.byid goal.Proof.g_hyps rp
+            in
+            (`H (rp, hyd), hf)
+          with InvalidHyphId _ -> raise InvalidPath
+        end
     in
+    let target = subterm (`F topf) sub in
 
     let goal = Proof.{ g_id = Handle.ofint root; g_pregoal = goal } in
-    (goal, target, (sub, subf))
+    (goal, top, (sub, target))
 
   let ipath_of_gpath (p : gpath) =
     match p with `S p -> ipath_of_path p | `P p -> p
@@ -1207,8 +1200,13 @@ end = struct
     let open Subst in
     let open Proof in
 
-    let { g_pregoal = goal; _ }, top_src, (sub_src, _) = of_ipath proof src in
-    let _, top_dst, (sub_dst, _) = of_ipath proof dst in
+    let { g_pregoal = goal; _ }, top_src, (sub_src, t_src) = of_ipath proof src in
+    let _, top_dst, (sub_dst, t_dst) = of_ipath proof dst in
+
+    begin match t_src, t_dst with
+      | `F _, `F _ -> ()
+      | _ -> raise TacticNotApplicable
+    end;
 
     (** [well_scoped t ctx] returns [true] if all variables in the term [t]
         are bound either in the environment [goal.g_env], or by a quantifier
@@ -1754,11 +1752,13 @@ end = struct
 
   let dnd_actions src dsts (proof : Proof.proof) =
     let src = ipath_of_gpath src in
-    let Proof.{ g_id; g_pregoal}, _, (sub_src, f_src) = of_ipath proof src in
+    let Proof.{ g_id; g_pregoal}, _, (sub_src, t_src) = of_ipath proof src in
+    let f_src = match t_src with `F f -> f | _ -> raise InvalidFormPath in
 
     let for_destination dst =
       let dst = ipath_of_gpath dst in
-      let Proof.{ g_id = g_id'; _}, _, (sub_dst, f_dst) = of_ipath proof dst in
+      let Proof.{ g_id = g_id'; _}, _, (sub_dst, t_dst) = of_ipath proof dst in
+      let f_dst = match t_dst with `F f -> f | _ -> raise InvalidFormPath in
   
       if not (Handle.eq g_id g_id') then [] else
       
