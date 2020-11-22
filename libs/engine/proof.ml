@@ -310,6 +310,7 @@ module CoreLogic : sig
   type path   = string
   type ipath  = { root : int; ctxt : int; sub : int list; }
   type gpath  = [`S of path | `P of ipath]
+  type item   = [`C of form | `H of Handle.t * Proof.hyp ]
   type term   = [`F of form | `E of expr]
   type pol    = Pos | Neg | Sup
 
@@ -336,13 +337,17 @@ module CoreLogic : sig
 
   val path_of_ipath : ipath -> path
 
+  type linkdata = [
+    | `PS of Form.Subst.subst * Form.Subst.subst
+  ]
+
   type action = Handle.t * [
-    | `Elim    of Handle.t
-    | `Intro   of int
-    | `Forward of Handle.t * Handle.t * (int list) * Form.Subst.subst 
+    | `Elim     of Handle.t
+    | `Intro    of int
+    | `Forward  of Handle.t * Handle.t * (int list) * Form.Subst.subst 
     | `DisjDrop of Handle.t * form list
     | `ConjDrop of Handle.t
-    | `Link of ipath * Form.Subst.subst * ipath * Form.Subst.subst
+    | `Link     of ipath * ipath * linkdata
   ]
 
   exception InvalidPath
@@ -361,6 +366,7 @@ end = struct
   type path   = string
   type ipath  = { root : int; ctxt : int; sub : int list; }
   type gpath  = [`S of path | `P of ipath]
+  type item   = [`C of form | `H of Handle.t * Proof.hyp ]
   type term   = [`F of form | `E of expr]
   type pol    = Pos | Neg | Sup
 
@@ -626,13 +632,18 @@ end = struct
     Proof.xprogress proof id (TMove (from, before))
       [{ goal with g_hyps = hyps }]
 
+  
+  type linkdata = [
+    | `PS of Form.Subst.subst * Form.Subst.subst
+  ]
+
   type action = Handle.t * [
     | `Elim     of Handle.t
     | `Intro    of int
     | `Forward  of Handle.t * Handle.t * (int list) * Form.Subst.subst 
     | `DisjDrop of Handle.t * form list
     | `ConjDrop of Handle.t
-    | `Link     of ipath * Form.Subst.subst * ipath * Form.Subst.subst
+    | `Link     of ipath * ipath * linkdata
   ]
 
   exception InvalidPath
@@ -720,8 +731,7 @@ end = struct
     { root; ctxt; sub; }
 
   let of_ipath (proof : Proof.proof) (p : ipath)
-    : Proof.goal * [> `C of form | `H of Handle.t * Proof.hyp ] * 
-      (uid list * [> `F of form | `E of expr ])
+    : Proof.goal * item * (uid list * term)
   =
     let { root; ctxt; sub; } = p in
 
@@ -729,7 +739,7 @@ end = struct
       try  Proof.byid proof (Handle.ofint root)
       with InvalidGoalId _ -> raise InvalidPath in
 
-    let top, topf =
+    let item, f_item =
       match ctxt with
       | ctxt when ctxt <= 0 ->
           let f = goal.Proof.g_goal in
@@ -745,10 +755,10 @@ end = struct
           with InvalidHyphId _ -> raise InvalidPath
         end
     in
-    let target = subterm (`F topf) sub in
+    let target = subterm (`F f_item) sub in
 
     let goal = Proof.{ g_id = Handle.ofint root; g_pregoal = goal } in
-    (goal, top, (sub, target))
+    (goal, item, (sub, target))
 
   let ipath_of_gpath (p : gpath) =
     match p with `S p -> ipath_of_path p | `P p -> p
@@ -796,13 +806,20 @@ end = struct
   let subform_pol = List.fold_left direct_subform_pol
 
 
+  (* [pol_of_item it] returns the polarity of the item [it] *)
+
+  let pol_of_item = function
+    | `H _ -> Neg
+    | `C _ -> Pos
+
+
   (* [pol_of_gpath proof p] returns the polarity of the subformula
      at path [p] in [proof] *)
 
   let pol_of_gpath (proof : Proof.proof) (p : gpath) : pol =
-    let _, target, (sub, _) = of_gpath proof p in
+    let _, item, (sub, _) = of_gpath proof p in
     let pol, form =
-      match target with
+      match item with
       | `H (_, { h_form = f; _ }) -> Neg, f
       | `C f -> Pos, f
     in
@@ -917,8 +934,8 @@ end = struct
     let s_dst = Form.Subst.aslist s_dst in
     
     let goal = Proof.byid proof hd in
-    let _, top_src, (sub_src, _) = of_ipath proof src in
-    let _, top_dst, (sub_dst, _) = of_ipath proof dst in
+    let _, item_src, (sub_src, _) = of_ipath proof src in
+    let _, item_dst, (sub_dst, _) = of_ipath proof dst in
 
     let rec pbp (goal, ogoals) tgt sub s tgt' sub' s' =
 
@@ -1186,7 +1203,7 @@ end = struct
         in pbp (goal, ogoals @ new_ogoals) tgt sub s tgt' sub' s'
     in
 
-    let subgoals = pbp (goal, []) top_src sub_src s_src top_dst sub_dst s_dst in
+    let subgoals = pbp (goal, []) item_src sub_src s_src item_dst sub_dst s_dst in
     Proof.xprogress proof hd TLink subgoals
 
   
@@ -1200,8 +1217,8 @@ end = struct
     let open Subst in
     let open Proof in
 
-    let { g_pregoal = goal; _ }, top_src, (sub_src, t_src) = of_ipath proof src in
-    let _, top_dst, (sub_dst, t_dst) = of_ipath proof dst in
+    let { g_pregoal = goal; _ }, item_src, (sub_src, t_src) = of_ipath proof src in
+    let _, item_dst, (sub_dst, t_dst) = of_ipath proof dst in
 
     begin match t_src, t_dst with
       | `F _, `F _ -> ()
@@ -1463,6 +1480,13 @@ end = struct
           forward (CConn (`Or, lfs, ctx, rfs)) s (h, (fi, sub))
         | _ -> failwith "empty disjunction"
         end
+      (* | (FConn (`Or, fs), i :: sub), (f, _ as h)
+        when not (invertible `Forward f) ->
+        begin match List.split_at i fs with
+        | lfs, fi :: rfs ->
+          forward (CConn (`Or, lfs, ctx, rfs)) (es2, es1) (h, (fi, sub))
+        | _ -> failwith "empty disjunction"
+        end *)
 
       (* F⇒₁ *)
       | (f, _ as h), (FConn (`Imp, [f1; f2]), 0 :: sub)
@@ -1532,7 +1556,7 @@ end = struct
       | h, h' -> forward ctx (es2, es1) (h', h)
     in
 
-    let subgoal = match (top_src, sub_src, s_src), (top_dst, sub_dst, s_dst) with
+    let subgoal = match (item_src, sub_src, s_src), (item_dst, sub_dst, s_dst) with
       | (`H (hid, { h_form = h; _ }), subh, sh), (`C c, subc, sc)
       | (`C c, subc, sc), (`H (hid, { h_form = h; _ }), subh, sh) ->
         [[Some hid, []], backward CHole ((LEnv.empty, sh), (LEnv.empty, sc)) ((h, subh), (c, subc)) |> elim_units]
@@ -1543,10 +1567,33 @@ end = struct
       | _ -> raise TacticNotApplicable
     in
 
-    sprogress ~clear:false proof g_id TLink subgoal
-    |>
-    fun pr -> close_with_unit (pr, List.hd (opened pr))
+    let pr = sprogress ~clear:false proof g_id TLink subgoal in
+    List.fold_left (uncurry close_with_unit) pr (opened pr)
+
   
+  (** [t_subs f] returns all the paths leading to a subterm in [t]. *)
+  
+  let t_subs (t : term) : (int list) list =
+
+    let rec aux sub = function
+      | `E EFun (_, es)
+      | `F FPred (_, es) ->
+        es |> List.mapi (fun i e ->
+                let sub = sub @ [i] in
+                sub :: aux sub (`E e))
+           |> List.concat
+      | `F FConn (_, fs) ->
+        fs |> List.mapi (fun i f ->
+                let sub = sub @ [i] in
+                sub :: aux sub (`F f))
+           |> List.concat
+      | `F FBind (_, _, _, f) ->
+        let sub = sub @ [0] in
+        sub :: aux sub (`F f)
+      | _ -> []
+
+    in [] :: aux [] t
+
 
   (** [f_subs f] returns all the paths leading to a subformula in [f]. *)
 
@@ -1566,7 +1613,7 @@ end = struct
     in [] :: (aux [] f)
 
 
-  (** [e_subs f] returns all the paths leading to a subterm in [f]. *)
+  (** [e_subs f] returns all the paths leading to a subexpression in [f]. *)
 
   let e_subs (f : form) : (int list) list =
 
@@ -1593,15 +1640,44 @@ end = struct
 
     in f_aux [] f
 
+  
+  type mpred = Proof.proof -> ipath -> ipath -> linkdata option
 
-  (** [search_match env (p1, f1) (p2, f2)] returns the list of pairs of paths that lead
-      to unifiable subformulas of [f1] and [f2] of opposite polarities, together with
-      the associated substitutions generated by unification. *)
+  (** [search_match mp proof src dst] returns all pairs of subpaths of [src] and [dst]
+      in [proof] that can interact according to the matching predicate [mp],
+      together with auxiliary data produced during matching. For example, the
+      matching of two subformulas corresponds to the well-formedness criterion of
+      subformula linkages, which produces a substitution through unification. *)
+  
+  let search_match
+    (mp : mpred) (proof : Proof.proof) (src : ipath) (dst : ipath) :
+    (ipath * ipath * 'a) list
+  =
+    let _, _, (_, t_src) = of_ipath proof src in
+    let _, _, (_, t_dst) = of_ipath proof dst in
 
-  let search_match env (p1, f1) (p2, f2)
-    : (int list * Form.Subst.subst * int list * Form.Subst.subst) list =
+    let open Monad.List in
 
+    t_subs t_src >>= fun sub_src ->
+    t_subs t_dst >>= fun sub_dst ->
+
+    let subpath p sub = { root = p.root; ctxt = p.ctxt; sub = p.sub @ sub } in
+    let subp_src = subpath src sub_src in
+    let subp_dst = subpath dst sub_dst in
+
+    match mp proof subp_src subp_dst with
+    | Some data -> return (subp_src, subp_dst, data)
+    | None -> zero
+
+
+  (** [wf_linkage proof src dst] checks if [src] and [dst] lead to unifiable
+      subformulas of opposite polarities, and returns the associated substitutions
+      if they do. *)
+
+  let wf_linkage : mpred =
     let open Form in
+
+    (* Auxiliary definitions *)
 
     let module Deps = struct
       include Graph.Persistent.Digraph.Concrete(Name)
@@ -1695,11 +1771,24 @@ end = struct
 
     let traverse = State.fold traverse in
 
-    let open Monad.List in
+    (* Body *)
 
-    let f_subs =
-      f_subs f1 >>= fun sub1 ->
-      f_subs f2 >>= fun sub2 ->
+    fun proof src dst ->
+
+    let Proof.{ g_pregoal; _ }, item_src, (sub_src, t_src) = of_ipath proof src in
+    let _, item_dst, (sub_dst, t_dst) = of_ipath proof dst in
+
+    match t_src, t_dst with
+    | `F _, `F _ ->
+
+      let f1 = form_of_item item_src in
+      let f2 = form_of_item item_dst in
+
+      let p1 = pol_of_item item_src in
+      let p2 = pol_of_item item_dst in
+
+      let sub1 = sub_src in
+      let sub2 = sub_dst in
 
       let deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2 =
         let open State in
@@ -1713,67 +1802,48 @@ end = struct
 
           return (deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2)
         end
-        (Deps.empty, [], env, Subst.empty)
+        (Deps.empty, [], Proof.(g_pregoal.g_env), Subst.empty)
       in
 
       let s1 = Subst.aslist s1 in
       let s2 = Subst.aslist s2 in
 
-      match sp1, sp2 with
+      begin match sp1, sp2 with
+
       | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
-        begin match Form.f_unify Fo.LEnv.empty (Subst.oflist (s1 @ s2)) [sf1, sf2] with
+
+        begin match f_unify LEnv.empty (Subst.oflist (s1 @ s2)) [sf1, sf2] with
+
         | Some s when acyclic (Deps.subst deps s) ->
+
           let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
           let rename rnm = List.map (fun (x, tag) ->
             Option.default x (List.assoc_opt x rnm), tag)
-          in return (
-            sub1, s1 |> rename rnm1 |> List.rev |> Subst.oflist,
-            sub2, s2 |> rename rnm2 |> List.rev |> Subst.oflist)
-        | _ -> zero
+          in Some (`PS (
+            s1 |> rename rnm1 |> List.rev |> Subst.oflist,
+            s2 |> rename rnm2 |> List.rev |> Subst.oflist))
+
+        | _ -> None
         end
-      | _ -> zero
-    in
-    
-    let e_subs =
-      e_subs f1 >>= fun e_sub1 ->
-      e_subs f2 >>= fun e_sub2 ->
-
-      (* let open Js_of_ocaml in
-
-      let p1 = mk_ipath ~sub:e_sub1 1 |> path_of_ipath in
-      let p2 = mk_ipath ~sub:e_sub2 2 |> path_of_ipath in
-      Firebug.console##log (Js.string (p1 ^ ", " ^ p2)); *)
-
-      return (e_sub1, Subst.empty, e_sub2, Subst.empty)
-    in
-
-    f_subs @ e_subs
+      | _ -> None
+      end
+    | _ -> None
 
 
   let dnd_actions src dsts (proof : Proof.proof) =
     let src = ipath_of_gpath src in
-    let Proof.{ g_id; g_pregoal}, _, (sub_src, t_src) = of_ipath proof src in
-    let f_src = match t_src with `F f -> f | _ -> raise InvalidFormPath in
+    let Proof.{ g_id; g_pregoal }, _, _ = of_ipath proof src in
 
     let for_destination dst =
       let dst = ipath_of_gpath dst in
-      let Proof.{ g_id = g_id'; _}, _, (sub_dst, t_dst) = of_ipath proof dst in
-      let f_dst = match t_dst with `F f -> f | _ -> raise InvalidFormPath in
-  
-      if not (Handle.eq g_id g_id') then [] else
-      
-      let pol_src = pol_of_gpath proof (`P src) in
-      let pol_dst = pol_of_gpath proof (`P dst) in
 
       let targets =
-        search_match g_pregoal.g_env (pol_src, f_src) (pol_dst, f_dst) |>
-        List.map (fun (sub1, s1, sub2, s2) ->
-          mk_ipath ~ctxt:src.ctxt ~sub:(sub_src @ sub1) src.root, s1,
-          mk_ipath ~ctxt:dst.ctxt ~sub:(sub_dst @ sub2) dst.root, s2)
+        let mp = wf_linkage in
+        search_match mp proof src dst
       in
 
-      List.map (fun (src, s_src, tgt, s_tgt) ->
-        "Link", [src; tgt], `DnD (src, tgt), (g_id, `Link (src, s_src, tgt, s_tgt)))
+      List.map (fun (src, dst, data) ->
+        "Link", [src; dst], `DnD (src, dst), (g_id, `Link (src, dst, data)))
         targets
     in
     match dsts with
@@ -1797,16 +1867,17 @@ end = struct
 
     | Some dst ->
       for_destination dst
+
       
   let actions (proof : Proof.proof) (p : asource)
       : (string * ipath list * osource * action) list
   =
     match p with
       | `Click p -> begin
-          let Proof.{ g_id = hd; g_pregoal = _goal}, target, (_fs, _subf) =
+          let Proof.{ g_id = hd; g_pregoal = _goal}, item, (_fs, _subf) =
             of_gpath proof p
           in
-          match target with
+          match item with
           | `C _ -> begin
               let iv = ivariants (proof, hd) in
               let bv = List.length iv <= 1 in
@@ -1842,6 +1913,8 @@ end = struct
         and_drop subhd (proof, hd)    
     | `Forward (src, dst, p, s) ->
         forward (src, dst, p, s) (proof, hd)
-    | `Link (src, s, dst, s') ->
-        dlink src s dst s' (proof, hd)
+    | `Link (src, dst, data) ->
+        match data with
+        | `PS (s, s') ->
+          dlink src s dst s' (proof, hd)
 end
