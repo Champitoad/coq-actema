@@ -1758,12 +1758,13 @@ end = struct
     let _, _, (_, t_src) = of_ipath proof src in
     let _, _, (_, t_dst) = of_ipath proof dst in
 
+    let subpath p sub = { root = p.root; ctxt = p.ctxt; sub = p.sub @ sub } in
+
     let open Monad.List in
 
     t_subs t_src >>= fun sub_src ->
     t_subs t_dst >>= fun sub_dst ->
 
-    let subpath p sub = { root = p.root; ctxt = p.ctxt; sub = p.sub @ sub } in
     let subp_src = subpath src sub_src in
     let subp_dst = subpath dst sub_dst in
 
@@ -1945,25 +1946,27 @@ end = struct
       let _, it, (sub, _) = of_ipath proof p in
       let f = form_of_item it in
       let n = neg_count f sub in
-      match pol_of_item it with
-      | Pos | Sup -> n
-      | Neg -> n+1
+      match it with
+      | `C _ -> n
+      | `H _ -> n+1
     in
     
-    match neg_count src, neg_count dst with
-    | m, n when m > 0 && n > 0
-             || m = 0 && n <= 1
-             || m <= 1 && n = 0 -> [`Nothing]
-    | _ -> []
-
+    try
+      match neg_count src, neg_count dst with
+      | m, n when m > 0 && n > 0
+               || m = 0 && n <= 1
+               || m <= 1 && n = 0 -> [`Nothing]
+      | _ -> []
+    with InvalidFormPath -> []
 
   (** [dnd_actions src dsts proof] searches for links whose source is a subterm
       of [src], and which yield at least one action. If [dsts] is [Some dst],
       it will restrict destinations to subterms of [dst], otherwise it will
       search everywhere in the proof.
-      
-      It then packages the links data to expose it to the frontend through the JS API.
-      Currently, it highlights only both ends of the links. *)
+
+      It then packages the links data to expose it through the JS API.
+      Currently, it instructs the frontend to highlight only both ends of the
+      links. *)
 
   let dnd_actions src dsts (proof : Proof.proof) =
     let src = ipath_of_gpath src in
