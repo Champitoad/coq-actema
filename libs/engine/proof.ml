@@ -307,9 +307,12 @@ exception TacticNotApplicable
 module CoreLogic : sig
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
+
   type path   = string
   type ipath  = { root : int; ctxt : int; sub : int list; }
   type gpath  = [`S of path | `P of ipath]
+  type link   = ipath * ipath
+
   type item   = [`C of form | `H of Handle.t * Proof.hyp ]
   type term   = [`F of form | `E of expr]
   type pol    = Pos | Neg | Sup
@@ -332,13 +335,15 @@ module CoreLogic : sig
 
   type osource = [
     | `Click of ipath
-    | `DnD   of ipath * ipath
+    | `DnD   of link
   ]
 
   val path_of_ipath : ipath -> path
 
-  type linkdata = [
-    | `PS of Form.Subst.subst * Form.Subst.subst
+  type linkaction = [
+    | `Nothing
+    | `Both of linkaction * linkaction
+    | `Subform of Form.Subst.subst * Form.Subst.subst
   ]
 
   type action = Handle.t * [
@@ -347,7 +352,7 @@ module CoreLogic : sig
     | `Forward  of Handle.t * Handle.t * (int list) * Form.Subst.subst 
     | `DisjDrop of Handle.t * form list
     | `ConjDrop of Handle.t
-    | `Link     of ipath * ipath * linkdata
+    | `Link     of link * linkaction list
   ]
 
   exception InvalidPath
@@ -363,12 +368,6 @@ module CoreLogic : sig
 end = struct
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
-  type path   = string
-  type ipath  = { root : int; ctxt : int; sub : int list; }
-  type gpath  = [`S of path | `P of ipath]
-  type item   = [`C of form | `H of Handle.t * Proof.hyp ]
-  type term   = [`F of form | `E of expr]
-  type pol    = Pos | Neg | Sup
 
   let prune_premisses =
     let rec doit acc = function
@@ -631,20 +630,40 @@ end = struct
 
     Proof.xprogress proof id (TMove (from, before))
       [{ goal with g_hyps = hyps }]
-
   
-  type linkdata = [
-    | `PS of Form.Subst.subst * Form.Subst.subst
-  ]
 
-  type action = Handle.t * [
-    | `Elim     of Handle.t
-    | `Intro    of int
-    | `Forward  of Handle.t * Handle.t * (int list) * Form.Subst.subst 
-    | `DisjDrop of Handle.t * form list
-    | `ConjDrop of Handle.t
-    | `Link     of ipath * ipath * linkdata
-  ]
+  (* The [close_with_unit] tactic tries to close the goal either with
+     the falsity elimination rule, or the truth introduction rule. *)
+
+  let close_with_unit : tactic =
+    fun (proof, g_id as targ) ->
+
+    let open Proof in
+
+    let goal = byid proof g_id in
+
+    (* Truth intro *)
+    if goal.g_goal = FTrue then intro targ else
+
+    (* Falsity elim *)
+    Hyps.to_list goal.g_hyps
+    |>
+    List.find_map_opt
+      (fun (hd, { h_form = f; _ }) ->
+       if f = FFalse then Some (elim hd targ) else None)
+    |>
+    Option.default proof
+
+
+  (* -------------------------------------------------------------------- *)
+  (** Paths *)
+
+
+  type path   = string
+  type ipath  = { root : int; ctxt : int; sub : int list; }
+  type gpath  = [`S of path | `P of ipath]
+  type item   = [`C of form | `H of Handle.t * Proof.hyp ]
+  type term   = [`F of form | `E of expr]
 
   exception InvalidPath
   exception InvalidFormPath
@@ -692,6 +711,23 @@ end = struct
     match subterm (`E e) p with
     | `E e -> e
     | _ -> raise InvalidExprPath
+    
+
+  let rebuild_path i =
+    let rec aux l = function
+      | 0 -> 0::l
+      | i -> aux (1::l) (i-1)
+    in List.rev (aux [] i)
+
+  let rebuild_pathd l i =
+    if i+1 = l then [1] else
+      
+    let rec aux = function
+      | 0 -> []
+      | i -> 0::(aux (i-1))
+    in
+    if i = 0 then (aux (l-1)) else
+      (aux (l - i - 1))@[1]
 
 
   let mk_ipath ?(ctxt : int = 0) ?(sub : int list = []) (root : int) =
@@ -766,8 +802,21 @@ end = struct
   let of_gpath (proof : Proof.proof) (p : gpath) =
     of_ipath proof (ipath_of_gpath p)
 
+
   (* -------------------------------------------------------------------- *)
-  (** Handling of polarities *)
+  (** Polarities *)
+
+
+  (* A subformula can either have a positive polarity [Pos], a negative polarity
+     [Neg], or a superposition [Sup] of both.
+
+     For example in the hypothesis (A ⇒ B) ∧ (C ⇔ D), A is positive, B is
+     negative, and C and D can be either, depending on the way the user chooses
+     to rewrite the equivalence. This coincides with the standard linear logic
+     reading of equivalence as the additive conjunction of both directions of an
+     implication. *)
+
+  type pol = Pos | Neg | Sup
 
 
   (** [opp p] returns the opposite polarity of [p] *)
@@ -825,107 +874,20 @@ end = struct
     in
     subform_pol (pol, form) sub |> fst
 
+
   (* -------------------------------------------------------------------- *)
-  type asource = [
-    | `Click of gpath
-    | `DnD   of adnd
-  ]
+  (** Linking *)
+  
 
-  and adnd = { source : gpath; destination : gpath option; }
-
-  type osource = [
-    | `Click of ipath
-    | `DnD   of ipath * ipath
-  ]
-
-  let rebuild_path i =
-    let rec aux l = function
-      | 0 -> 0::l
-      | i -> aux (1::l) (i-1)
-    in List.rev (aux [] i)
-
-  let rebuild_pathd l i =
-    if i+1 = l then [1] else
-      
-    let rec aux = function
-      | 0 -> []
-      | i -> 0::(aux (i-1))
-    in
-    if i = 0 then (aux (l-1)) else
-      (aux (l - i - 1))@[1]
+  type link = ipath * ipath
 
 
   type pnode += TLink
 
-
-  (* [elim_units f] eliminates all occurrences of units
-     in formula [f] using algebraic unit laws. *)
-
-  let rec elim_units : form -> form = function
-
-    (* Absorbing elements *)
-
-    | FConn (`And, [_; FFalse])
-    | FConn (`And, [FFalse; _])
-    | FConn (`Not, [FTrue])
-    | FBind (`Exist, _, _, FFalse) ->
-      Form.f_false
-
-    | FConn (`Or, [_; FTrue])
-    | FConn (`Or, [FTrue; _])
-    | FConn (`Imp, [_; FTrue])
-    | FConn (`Imp, [FFalse; _])
-    | FConn (`Not, [FFalse])
-    | FBind (`Forall, _, _, FTrue) ->
-      Form.f_true
-
-    (* Neutral elements *)
-
-    | FConn (`And, [f; FTrue])
-    | FConn (`And, [FTrue; f])
-    | FConn (`Or, [f; FFalse])
-    | FConn (`Or, [FFalse; f])
-    | FConn (`Imp, [FTrue; f])
-    | FConn (`Equiv, [FTrue; f])
-    | FConn (`Equiv, [f; FTrue]) ->
-      elim_units f
-    
-    | FTrue | FFalse | FPred _ as f -> f
-    | FConn (c, fs) as f ->
-      let fs' = List.map elim_units fs in
-      if fs = fs' then f else elim_units (FConn (c, fs'))
-    | FBind (b, x, ty, f1) as f ->
-      let f1' = elim_units f1 in
-      if f1 = f1' then f else elim_units (FBind (b, x, ty, f1'))
-  
-  
-  (* The [close_with_unit] tactic tries to close the goal either with
-     the falsity elimination rule, or the truth introduction rule. *)
-
-  let close_with_unit : tactic =
-    fun (proof, g_id as targ) ->
-
-    let open Proof in
-
-    let goal = byid proof g_id in
-
-    (* Truth intro *)
-    if goal.g_goal = FTrue then intro targ else
-
-    (* Falsity elim *)
-    Hyps.to_list goal.g_hyps
-    |>
-    List.find_map_opt
-      (fun (hd, { h_form = f; _ }) ->
-       if f = FFalse then Some (elim hd targ) else None)
-    |>
-    Option.default proof
-
-
   (** [link] is the equivalent of Proof by Pointing's [finger_tac], but using the
   interaction rules specific to subformula linking. *)
 
-  let link src (s_src : Form.Subst.subst) dst (s_dst : Form.Subst.subst) : tactic =
+  let link (src, dst : link) (s_src, s_dst : Form.Subst.subst * Form.Subst.subst) : tactic =
     fun (proof, hd) ->
 
     assert (src.ctxt <> dst.ctxt);
@@ -1206,11 +1168,52 @@ end = struct
     let subgoals = pbp (goal, []) item_src sub_src s_src item_dst sub_dst s_dst in
     Proof.xprogress proof hd TLink subgoals
 
+
+  (* [elim_units f] eliminates all occurrences of units
+     in formula [f] using algebraic unit laws. *)
+
+  let rec elim_units : form -> form = function
+
+    (* Absorbing elements *)
+
+    | FConn (`And, [_; FFalse])
+    | FConn (`And, [FFalse; _])
+    | FConn (`Not, [FTrue])
+    | FBind (`Exist, _, _, FFalse) ->
+      Form.f_false
+
+    | FConn (`Or, [_; FTrue])
+    | FConn (`Or, [FTrue; _])
+    | FConn (`Imp, [_; FTrue])
+    | FConn (`Imp, [FFalse; _])
+    | FConn (`Not, [FFalse])
+    | FBind (`Forall, _, _, FTrue) ->
+      Form.f_true
+
+    (* Neutral elements *)
+
+    | FConn (`And, [f; FTrue])
+    | FConn (`And, [FTrue; f])
+    | FConn (`Or, [f; FFalse])
+    | FConn (`Or, [FFalse; f])
+    | FConn (`Imp, [FTrue; f])
+    | FConn (`Equiv, [FTrue; f])
+    | FConn (`Equiv, [f; FTrue]) ->
+      elim_units f
+    
+    | FTrue | FFalse | FPred _ as f -> f
+    | FConn (c, fs) as f ->
+      let fs' = List.map elim_units fs in
+      if fs = fs' then f else elim_units (FConn (c, fs'))
+    | FBind (b, x, ty, f1) as f ->
+      let f1' = elim_units f1 in
+      if f1 = f1' then f else elim_units (FBind (b, x, ty, f1'))
   
-  (** [dlink] stands for _d_eep link, and implements the deep interaction phase
+  
+  (** [dlink] stands for _d_eep linking, and implements the deep interaction phase
       à la Chaudhuri for intuitionistic logic. *)
   
-  let dlink src s_src dst s_dst : tactic =
+  let dlink (src, dst : link) (s_src, s_dst : Form.Subst.subst * Form.Subst.subst) : tactic =
     fun (proof, g_id) ->
 
     let open Form in
@@ -1552,7 +1555,7 @@ end = struct
         | None -> assert false
         end
         
-      (* lnncomm *)
+      (* Fcomm *)
       | h, h' -> forward ctx (es2, es1) (h', h)
     in
 
@@ -1569,6 +1572,53 @@ end = struct
 
     let pr = sprogress ~clear:false proof g_id TLink subgoal in
     List.fold_left (uncurry close_with_unit) pr (opened pr)
+
+  
+  (* -------------------------------------------------------------------- *)
+  (** Logical actions *)
+
+  type linkaction = [
+    | `Nothing
+    | `Both of linkaction * linkaction
+    | `Subform of Form.Subst.subst * Form.Subst.subst
+  ]
+
+  let remove_nothing =
+    let rec doit = function
+      | [] -> []
+      | a :: l -> match a with
+        | `Nothing ->
+            doit l
+        | `Both (a, a') ->
+            begin match doit [a; a'] with
+            | [] -> doit l
+            | [a] -> a :: doit l
+            | [a; a'] -> `Both (a, a') :: doit l
+            | _ -> assert false
+            end
+        | _ ->
+            a :: doit l
+    in doit
+          
+  let string_of_linkaction =
+    let rec doit = function
+      | `Nothing -> "⊥"
+      | `Both (a, a') -> Printf.sprintf "(%s, %s)" (doit a) (doit a')
+      | `Subform _ -> "SFL"
+    in doit
+
+  type action = Handle.t * [
+    | `Elim     of Handle.t
+    | `Intro    of int
+    | `Forward  of Handle.t * Handle.t * (int list) * Form.Subst.subst 
+    | `DisjDrop of Handle.t * form list
+    | `ConjDrop of Handle.t
+    | `Link     of link * linkaction list
+  ]
+  
+  
+  (* -------------------------------------------------------------------- *)
+  (** Link search (for highlighting) *)
 
   
   (** [t_subs f] returns all the paths leading to a subterm in [t]. *)
@@ -1641,17 +1691,45 @@ end = struct
     in f_aux [] f
 
   
-  type mpred = Proof.proof -> ipath -> ipath -> linkdata option
+  (** The type of link predicates [linkpred] captures functions which
+      map a link in a proof to a list of possible link actions.
 
-  (** [search_match mp proof src dst] returns all pairs of subpaths of [src] and [dst]
-      in [proof] that can interact according to the matching predicate [mp],
-      together with auxiliary data produced during matching. For example, the
-      matching of two subformulas corresponds to the well-formedness criterion of
-      subformula linkages, which produces a substitution through unification. *)
+      One can emulate a traditional boolean predicate by returning the singleton
+      [`Nothing] to indicate membership, or the empty list to indicate absence
+      thereof. *)
+
+  type linkpred = Proof.proof -> link -> linkaction list
+
   
-  let search_match
-    (mp : mpred) (proof : Proof.proof) (src : ipath) (dst : ipath) :
-    (ipath * ipath * 'a) list
+  (** [linkpred_mult lps] returns a link predicate that denotes the cartesian
+      product of the actions denoted by the link predicates in [lps]. *)
+
+  let linkpred_mult : linkpred list -> linkpred =
+    let mult : linkpred -> linkpred -> linkpred =
+      fun lp1 lp2 -> fun pr lnk ->
+        List.cartesian_product (lp1 pr lnk) (lp2 pr lnk) |>
+        List.map (fun (a1, a2) -> `Both (a1, a2))
+    in
+    List.fold_left mult (fun _ _ -> [`Nothing])
+
+
+  (** [linkpred_add lps] returns a link predicate that denotes the disjoint
+      union of the actions denoted by the link predicates in [lps]. *)
+
+  let linkpred_add : linkpred list -> linkpred =
+    fun lps -> fun pr lnk ->
+      List.map (fun lp -> lp pr lnk) lps |> 
+      List.concat
+
+
+  (** [search_sublinks lp proof (src, dst)] returns all links between subterms
+      of [src] and [dst] in [proof] that can interact according to the link
+      predicate [lp], together with the lists of possible link actions
+      determined by the predicate. *)
+  
+  let search_sublinks
+    (lp : linkpred) proof (src, dst : link) :
+    (link * linkaction list) list
   =
     let _, _, (_, t_src) = of_ipath proof src in
     let _, _, (_, t_dst) = of_ipath proof dst in
@@ -1665,16 +1743,17 @@ end = struct
     let subp_src = subpath src sub_src in
     let subp_dst = subpath dst sub_dst in
 
-    match mp proof subp_src subp_dst with
-    | Some data -> return (subp_src, subp_dst, data)
-    | None -> zero
+    match lp proof (subp_src, subp_dst) with
+    | _ :: _ as actions -> return ((subp_src, subp_dst), actions)
+    | [] -> zero
 
 
-  (** [wf_linkage proof src dst] checks if [src] and [dst] lead to unifiable
-      subformulas of opposite polarities, and returns the associated substitutions
-      if they do. *)
+  (** [wf_subform_link proof (src, dst)] checks if [src] and [dst] lead to
+      unifiable subformulas of opposite polarities in the focused goal of
+      [proof], and returns the associated substitutions if they do inside a
+      [`Subform] link action. *)
 
-  let wf_linkage : mpred =
+  let wf_subform_link : linkpred =
     let open Form in
 
     (* Auxiliary definitions *)
@@ -1773,7 +1852,7 @@ end = struct
 
     (* Body *)
 
-    fun proof src dst ->
+    fun proof (src, dst) ->
 
     let Proof.{ g_pregoal; _ }, item_src, (sub_src, t_src) = of_ipath proof src in
     let _, item_dst, (sub_dst, t_dst) = of_ipath proof dst in
@@ -1807,6 +1886,8 @@ end = struct
 
       let s1 = Subst.aslist s1 in
       let s2 = Subst.aslist s2 in
+      
+      let open Monad.List in
 
       begin match sp1, sp2 with
 
@@ -1819,15 +1900,23 @@ end = struct
           let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
           let rename rnm = List.map (fun (x, tag) ->
             Option.default x (List.assoc_opt x rnm), tag)
-          in Some (`PS (
+          in return (`Subform (
             s1 |> rename rnm1 |> List.rev |> Subst.oflist,
             s2 |> rename rnm2 |> List.rev |> Subst.oflist))
 
-        | _ -> None
+        | _ -> []
         end
-      | _ -> None
+      | _ -> []
       end
-    | _ -> None
+    | _ -> []
+    
+  
+  (** [intuitionistic_link lnk] checks if [lnk] is an intuitionistic link,
+      and returns a [`Nothing] link action if so. *)
+  
+  let intuitionistic_link : linkpred =
+    fun proof (src, dst) ->
+    [`Nothing]
 
 
   let dnd_actions src dsts (proof : Proof.proof) =
@@ -1837,14 +1926,17 @@ end = struct
     let for_destination dst =
       let dst = ipath_of_gpath dst in
 
-      let targets =
-        let mp = wf_linkage in
-        search_match mp proof src dst
+      let links =
+        let mp = linkpred_add [
+          linkpred_mult [wf_subform_link; intuitionistic_link]
+        ] in
+        search_sublinks mp proof (src, dst)
       in
 
-      List.map (fun (src, dst, data) ->
-        "Link", [src; dst], `DnD (src, dst), (g_id, `Link (src, dst, data)))
-        targets
+      List.map (fun ((src, dst) as lnk, actions) ->
+        let actions = remove_nothing actions in
+        "Link", [src; dst], `DnD lnk, (g_id, `Link (lnk, actions)))
+        links
     in
     match dsts with
     | None ->
@@ -1867,6 +1959,23 @@ end = struct
 
     | Some dst ->
       for_destination dst
+
+      
+  (* -------------------------------------------------------------------- *)
+  (** Graphical actions *)
+
+
+  type asource = [
+    | `Click of gpath
+    | `DnD   of adnd
+  ]
+
+  and adnd = { source : gpath; destination : gpath option; }
+
+  type osource = [
+    | `Click of ipath
+    | `DnD   of link
+  ]
 
       
   let actions (proof : Proof.proof) (p : asource)
@@ -1913,8 +2022,10 @@ end = struct
         and_drop subhd (proof, hd)    
     | `Forward (src, dst, p, s) ->
         forward (src, dst, p, s) (proof, hd)
-    | `Link (src, dst, data) ->
-        match data with
-        | `PS (s, s') ->
-          dlink src s dst s' (proof, hd)
+    | `Link (lnk, actions) ->
+        match actions with
+        | [`Subform substs] ->
+          dlink lnk substs (proof, hd)
+        | _ :: _ -> failwith "Cannot handle multiple link actions yet"
+        | [] -> assert false
 end

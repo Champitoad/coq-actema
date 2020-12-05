@@ -202,3 +202,6 @@ let (/>) (x : 'a option) (f : 'a -> 'b) =
 
 let ueta (f : unit -> 'a) : 'b -> 'a =
   fun _ -> f ()
+
+let js_log s = 
+  Js_of_ocaml.(Firebug.console##log (Js.string s));

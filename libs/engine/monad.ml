@@ -12,6 +12,7 @@ module type Core = sig
   val return : 'a -> 'a t
   val bind : 'a t -> ('a -> 'b t) -> 'b t
   val ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t
+  val ( let* ) : 'a t -> ('a -> 'b t) -> 'b t
 end
 
 (** Basic monad with an additional monoid structure *)
@@ -42,6 +43,7 @@ end = struct
   let return x = fun _st -> x
   let bind m f = fun st -> f (m st) st
   let ( >>= ) = bind
+  let ( let* ) = bind
   let map f l = fun st ->
     List.map (fun x -> f x st) l
 end
@@ -66,6 +68,7 @@ end = struct
     let x, st' = m st in
     f x st'
   let ( >>= ) = bind
+  let ( let* ) = bind
   let fold f x l = fun st ->
     List.fold_left
       (fun (x, st) y -> f x y st)
@@ -85,6 +88,7 @@ struct
   let return x = [x]
   let bind m f =  List.concat (List.map f m)
   let ( >>= ) = bind
+  let ( let* ) = bind
   let zero = []
   let ( + ) = ( @ )
 end
