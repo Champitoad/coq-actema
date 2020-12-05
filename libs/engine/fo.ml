@@ -644,7 +644,7 @@ end = struct
 
       let unify_cond x t =
         Subst.flex_subst x s &&
-        (match t with EVar y when Subst.flex_subst y s -> false | _ -> true) &&
+        (* (match t with EVar y when Subst.flex_subst y s -> false | _ -> true) && *)
         not (occurs x t) && (* maybe unnecessary check? *)
         Map.for_all (fun n i -> 
           not (occurs_under (n, i) t))

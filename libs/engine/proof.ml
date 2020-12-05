@@ -1362,7 +1362,6 @@ end = struct
           (backward (c_imp_r f1 ctx) s (h, (f1, sub)))
           (forward (c_imp_l f2 ctx) s (h, (f1, sub)))
 
-      (* R∃ *)
       | (f, _ as h), (FBind (`Exist, x, ty, f1), 0 :: sub)
         when not (invertible `Left f) &&
         match get_tag (x, LEnv.get_index x (LEnv.enter x env2)) s2 with
@@ -1923,11 +1922,23 @@ end = struct
         | Some s when acyclic (Deps.subst deps s) ->
 
           let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
-          let rename rnm = List.map (fun (x, tag) ->
-            Option.default x (List.assoc_opt x rnm), tag)
+
+          let rename rnm1 rnm2 = List.map begin fun (x, tag) ->
+            let get_name x rnm = Option.default x (List.assoc_opt x rnm) in
+            let x = get_name x rnm1 in
+            let tag =
+              let rec rename = function
+                | EVar (x, i) -> EVar (get_name x rnm2, i)
+                | EFun (f, es) -> EFun (f, List.map rename es)
+              in match tag with
+              | Sbound e -> Sbound (rename e)
+              | _ -> tag
+            in x, tag
+          end
+
           in return (`Subform (
-            s1 |> rename rnm1 |> List.rev |> Subst.oflist,
-            s2 |> rename rnm2 |> List.rev |> Subst.oflist))
+            s1 |> rename rnm1 rnm2 |> List.rev |> Subst.oflist,
+            s2 |> rename rnm2 rnm1 |> List.rev |> Subst.oflist))
 
         | _ -> []
         end
