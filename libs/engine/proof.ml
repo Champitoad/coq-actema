@@ -855,6 +855,30 @@ end = struct
   let subform_pol = List.fold_left direct_subform_pol
 
 
+  (* [neg_count f sub] counts the number of negations in [f] along path [sub] *)
+  
+  let neg_count (f : form) (sub : int list) : int =
+    let aux (n, f) i =
+      match f with
+      | FConn (c, fs) ->
+          let n =
+            match c, i with
+            | `Imp, 0 | `Not, 0 -> n+1
+            | _ -> n
+          in
+          let subf =
+            try List.at fs i
+            with Invalid_argument _ -> raise InvalidFormPath
+          in
+          n, subf
+      | FBind (_, _, _, subf) ->
+          n, subf
+      | _ ->
+          raise InvalidFormPath
+    in
+    List.fold_left aux (0, f) sub |> fst
+
+
   (* [pol_of_item it] returns the polarity of the item [it] *)
 
   let pol_of_item = function
@@ -1916,8 +1940,30 @@ end = struct
   
   let intuitionistic_link : linkpred =
     fun proof (src, dst) ->
-    [`Nothing]
 
+    let neg_count (p : ipath) =
+      let _, it, (sub, _) = of_ipath proof p in
+      let f = form_of_item it in
+      let n = neg_count f sub in
+      match pol_of_item it with
+      | Pos | Sup -> n
+      | Neg -> n+1
+    in
+    
+    match neg_count src, neg_count dst with
+    | m, n when m > 0 && n > 0
+             || m = 0 && n <= 1
+             || m <= 1 && n = 0 -> [`Nothing]
+    | _ -> []
+
+
+  (** [dnd_actions src dsts proof] searches for links whose source is a subterm
+      of [src], and which yield at least one action. If [dsts] is [Some dst],
+      it will restrict destinations to subterms of [dst], otherwise it will
+      search everywhere in the proof.
+      
+      It then packages the links data to expose it to the frontend through the JS API.
+      Currently, it highlights only both ends of the links. *)
 
   let dnd_actions src dsts (proof : Proof.proof) =
     let src = ipath_of_gpath src in
