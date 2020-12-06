@@ -1244,9 +1244,6 @@ end = struct
     let open Subst in
     let open Proof in
     
-    js_log (Subst.to_string s_src);
-    js_log (Subst.to_string s_dst);
-
     let { g_pregoal = goal; _ }, item_src, (sub_src, t_src) = of_ipath proof src in
     let _, item_dst, (sub_dst, t_dst) = of_ipath proof dst in
 
@@ -1927,22 +1924,25 @@ end = struct
 
           let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
 
-          let rename rnm1 rnm2 = List.map begin fun (x, tag) ->
-            let get_name x rnm = Option.default x (List.assoc_opt x rnm) in
-            let x = get_name x rnm1 in
-            let tag =
-              let rec rename = function
-                | EVar (x, i) -> EVar (get_name x rnm2, i)
-                | EFun (f, es) -> EFun (f, List.map rename es)
-              in match tag with
-              | Sbound e -> Sbound (rename e)
-              | _ -> tag
-            in x, tag
-          end
+          let rename rnm1 rnm2 =
+            List.map begin fun (x, tag) ->
+              let get_name x rnm = Option.default x (List.assoc_opt x rnm) in
+              let x = get_name x rnm1 in
+              let tag =
+                let rec rename = function
+                  | EVar (x, i) -> EVar (get_name x rnm2, i)
+                  | EFun (f, es) -> EFun (f, List.map rename es)
+                in match tag with
+                | Sbound e -> Sbound (rename e)
+                | _ -> tag
+              in x, tag
+            end
+          in
 
-          in return (`Subform (
-            s1 |> rename rnm1 rnm2 |> List.rev |> Subst.oflist,
-            s2 |> rename rnm2 rnm1 |> List.rev |> Subst.oflist))
+          let s1 = s1 |> rename rnm1 rnm2 |> List.rev |> Subst.oflist in
+          let s2 = s2 |> rename rnm2 rnm1 |> List.rev |> Subst.oflist in
+
+          return (`Subform (s1, s2))
 
         | _ -> []
         end

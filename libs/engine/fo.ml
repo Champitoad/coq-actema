@@ -253,7 +253,7 @@ end = struct
 
   let evar_name_counter = ref (-1)
 
-  let fresh ?(basename = "x") () =
+  let fresh ?(basename = "") () =
     incr evar_name_counter;
     "?" ^ basename ^ string_of_int !evar_name_counter
 
@@ -389,8 +389,8 @@ module Form : sig
 
   val e_vars  : expr -> vname list
   val free_vars : form -> name list
-  val e_lift  : ?incr:int -> vname -> expr -> expr
-  val f_lift  : ?incr:int -> vname -> form -> form
+  val e_shift  : ?incr:int -> vname -> expr -> expr
+  val f_shift  : ?incr:int -> vname -> form -> form
 
   val c_is_bound : vname -> fctx -> bool
   val c_fill : form -> fctx -> form
@@ -532,22 +532,19 @@ end = struct
     | FBind (_, x, _, f) -> List.remove_all (free_vars f) x
   
 
-  let rec e_lift ?(incr = 1) (x, i : vname) = function
+  let rec e_shift ?(incr = 1) (x, i : vname) = function
     | EVar (y, j) when x = y && j >= i -> EVar (y, j + incr)
     | EVar _ as e -> e
-    | EFun (f1, l) -> EFun (f1, List.map (e_lift ~incr (x, i)) l)
+    | EFun (f, es) -> EFun (f, List.map (e_shift ~incr (x, i)) es)
  
-  (* [f_lift ~incr (x, i) f] increases by [incr] the index of every occurrence of [x]
-     in [f] that appears under at least [i] quantifiers that bind [x], and whose index
-     is at least [i]. *)
-  let rec f_lift ?(incr = 1) (x, i : vname) = function
-    | FConn (c, l) -> FConn (c, List.map (f_lift ~incr (x, i)) l)
-    | FPred (p, l) -> FPred (p, List.map (e_lift ~incr (x, i)) l)
-    | FBind (b, y, ty, f) ->
-      if x <> y
-      then FBind (b, y, ty, f_lift ~incr (x, i) f)
-      else FBind (b, y, ty, f_lift ~incr (x, i+1) f)
+  (* [f_shift ~incr (x, i) f] increases by [incr] the index of every occurrence of [x]
+     in [f] that appears under at least [i] quantifiers that bind [x]. *)
+
+  let rec f_shift ?(incr = 1) (x, i : vname) = function
     | FTrue | FFalse as f -> f	 
+    | FPred (p, es) -> FPred (p, List.map (e_shift ~incr (x, i)) es)
+    | FConn (c, fs) -> FConn (c, List.map (f_shift ~incr (x, i)) fs)
+    | FBind (b, y, ty, f) -> FBind (b, y, ty, f_shift ~incr (x, i + if x = y then 1 else 0) f)
 
 
   let rec c_is_bound (x, i) = function
@@ -839,45 +836,6 @@ end = struct
         (fun (expr : expr ) -> for_expr expr ),
         (fun (ty   : type_) -> for_type ty   ))
 
-  let rec eshift ((x, i) : name * int) (d : int) (e : expr) =
-    match e with
-    | EVar (y, j) when x = y && i <= j ->
-        EVar (y, j+d)
-
-    | EVar _ ->
-        e
-
-    | EFun (f, args) ->
-        EFun (f, List.map (eshift (x, i) d) args)
-
-  let rec esubst1 ((x, i) : name * int) (e : expr) (tg : expr) : expr =
-    match tg with
-    | EVar (y, j) when x = y && i = j ->
-        e
-
-    | EVar (y, j) when x = y && i < j ->
-        EVar (y, j-1)
-
-    | EVar _ ->
-        tg
-
-    | EFun (f, args) ->
-        EFun (f, List.map (esubst1 (x, i) e) args)
-
-  let rec subst1 ((x, i) : name * int) (e : expr) (f : form) : form =
-    match f with
-    | FTrue | FFalse ->
-        f
-
-    | FConn (lg, fs) ->
-        FConn (lg, List.map (subst1 (x, i) e) fs)
-
-    | FPred (name, args) ->
-        FPred (name, List.map (esubst1 (x, i) e) args)
-
-    | FBind (bd, x, xty, f) ->
-        FBind (bd, x, xty, subst1 (x, i+1) (eshift (x, i) 1 e) f)
-
   let f_tohtml, e_tohtml, t_tohtml =
     let open Tyxml in
 
@@ -1047,6 +1005,7 @@ end = struct
   module Subst = struct
     type subst = (name * sitem) list
 
+
     let empty = []
 
     let aslist (s : subst) : _ list =
@@ -1056,6 +1015,7 @@ end = struct
       s
 
     let fold = List.fold_left
+
 
     let rec get_tag ((n, i) as x : vname) (s : subst) =
       match s with
@@ -1072,6 +1032,7 @@ end = struct
     let bound (x : vname) (s : subst) =
       match get_tag x s with Some (Sbound _) -> true | _ -> false
   
+
     exception UnboundVariable of vname * subst
   
     let fetch (x : vname) (s : subst) =
@@ -1088,16 +1049,39 @@ end = struct
     
     let push m t s = (m, t) :: s
 
+
     let is_complete (s : subst) =
       List.for_all (fun (_, tag) -> tag <> Sflex) s
 
-    let rec e_apply1 (x, i) e = function 
-      | EFun (f, l) -> EFun (f, List.map (e_apply1 (x, i) e) l)
-      | EVar (y, j) when x = y ->
-        if i = j then e
-        else if j > i then EVar (y, j - 1)
-        else EVar (y, j)
-      | f -> f
+
+    let rec e_apply1 ((x, i) : name * int) (e : expr) (tg : expr) : expr =
+      match tg with
+      | EVar (y, j) when x = y && i = j ->
+          e
+
+      | EVar (y, j) when x = y && i < j ->
+          EVar (y, j-1)
+
+      | EVar _ ->
+          tg
+
+      | EFun (f, args) ->
+          EFun (f, List.map (e_apply1 (x, i) e) args)
+
+    let rec f_apply1 ((x, i) : name * int) (e : expr) (f : form) : form =
+      match f with
+      | FTrue | FFalse ->
+          f
+
+      | FConn (lg, fs) ->
+          FConn (lg, List.map (f_apply1 (x, i) e) fs)
+
+      | FPred (name, args) ->
+          FPred (name, List.map (e_apply1 (x, i) e) args)
+
+      | FBind (bd, y, ty, f) ->
+          FBind (bd, y, ty, f_apply1 (x, i + (if x = y then 1 else 0)) (e_shift (y, i) e) f)
+
 
     let rec e_iter s i e =
       if i = 0 then e else
@@ -1107,16 +1091,7 @@ end = struct
             e_iter s (i-1) (e_apply1 (x, 0) e e)
         | (_, _) :: s ->
             e_iter s (i-1) e
-
-    let e_apply s e =
-      e_iter s (List.length s) e
 	    
-    let rec f_apply1 (x, i) e = function
-      | FPred (p, l) -> FPred (p, List.map (e_apply1 (x, i) e) l)
-      | FConn (c, l) -> FConn (c, List.map (f_apply1 (x, i) e) l)
-      | FBind (b, y, t, g) -> FBind (b, y, t, f_apply1 (x, if x=y then i+1 else i) e g)
-      | FTrue | FFalse as g -> g
-
     let rec f_iter s i f =
       if i = 0 then f else
         match s with
@@ -1125,10 +1100,15 @@ end = struct
             f_iter s (i-1) (f_apply1 (x, 0) e f)
         | (_, _) :: s ->
             f_iter s (i-1) f
+            
+
+    let e_apply s e =
+      e_iter s (List.length s) e
 
     let f_apply s f =
       f_iter s (List.length s) f
       
+
     let rec e_close s = function
       | EVar x ->
           begin
@@ -1146,6 +1126,7 @@ end = struct
         in x, tag
       end
       
+
     let to_string =
       List.map begin fun (x, tag) ->
         match tag with
@@ -1274,7 +1255,7 @@ end = struct
       | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
         when b1 = b2 && ty1 = ty2 ->
 
-        let f2 = Subst.f_apply1 (x2, 0) (EVar (x1, 0)) (f_lift (x1, 0) f2) in
+        let f2 = Subst.f_apply1 (x2, 0) (EVar (x1, 0)) (f_shift (x1, 0) f2) in
         let lenv' = LEnv.enter x1 lenv in
         begin match f_unify lenv' s [f1, f2] with
         | Some s -> f_unify lenv s eqns
