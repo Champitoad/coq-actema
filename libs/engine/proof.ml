@@ -486,7 +486,7 @@ end = struct
     begin match Form.f_unify LEnv.empty s [(hy, gl.g_goal)] with
     | Some s when Form.Subst.is_complete s ->  
         let pres = List.map
-        (fun (i, x) -> [Some h, []], (Form.Subst.iter s i x)) pre in
+        (fun (i, x) -> [Some h, []], (Form.Subst.f_iter s i x)) pre in
         result :=  ((TElim id), pres)::!result
     | Some _ -> () (* "incomplete match" *)
     | _ -> ();
@@ -1252,11 +1252,12 @@ end = struct
       | _ -> raise TacticNotApplicable
     end;
 
-    (** [well_scoped t ctx] returns [true] if all variables in the term [t]
-        are bound either in the environment [goal.g_env], or by a quantifier
-        in [ctx]. *)
-    let well_scoped t ctx =
-      e_vars t |> List.for_all begin fun x ->
+    (** [well_scoped e ctx] returns [true] if all variables in the expression
+        [e] are bound either in the environment [goal.g_env], or by a
+        quantifier in [ctx]. *)
+
+    let well_scoped e ctx =
+      e_vars e |> List.for_all begin fun x ->
         Vars.exists goal.g_env x ||
         c_is_bound x ctx
       end
