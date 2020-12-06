@@ -1243,6 +1243,9 @@ end = struct
     let open Form in
     let open Subst in
     let open Proof in
+    
+    js_log (Subst.to_string s_src);
+    js_log (Subst.to_string s_dst);
 
     let { g_pregoal = goal; _ }, item_src, (sub_src, t_src) = of_ipath proof src in
     let _, item_dst, (sub_dst, t_dst) = of_ipath proof dst in

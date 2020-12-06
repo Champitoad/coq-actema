@@ -529,7 +529,7 @@ end = struct
     | FTrue | FFalse -> zero
     | FPred (_, es) -> (es >>= e_vars) |> List.map name_of_vname
     | FConn (_, fs) -> fs >>= free_vars
-    | FBind (_, x, _, f) -> List.remove (free_vars f) x
+    | FBind (_, x, _, f) -> List.remove_all (free_vars f) x
   
 
   let rec e_lift ?(incr = 1) (x, i : vname) = function
