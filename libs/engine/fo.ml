@@ -952,7 +952,7 @@ end = struct
 
         | FPred ("_EQ", [e1; e2]) ->
             [span (for_expr ?id (0 :: p) e1);
-             span [Xml.pcdata " = "];
+             span [Xml.entity "nbsp"; Xml.pcdata "="; Xml.entity "nbsp"];
              span (for_expr ?id (1 :: p) e2)]
 
         | FPred (name, []) ->
