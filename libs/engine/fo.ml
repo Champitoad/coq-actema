@@ -847,11 +847,14 @@ end = struct
     let open Tyxml in
 
     let pr doit c =
-      if doit then [Xml.node "span" [Xml.pcdata "("]] @ c @ [Xml.node "span" [Xml.pcdata ")"]] else c in
+      let l = [Xml.node "span" [Xml.pcdata "("]] in
+      let r = [Xml.node "span" [Xml.pcdata ")"]] in
+      if doit then l @ c @ r else c in
 
     let spaced ?(left = true) ?(right = true) c =
-      let c = if left  then [Xml.pcdata " "] @ c else c in
-      let c = if right then c @ [Xml.pcdata " "] else c in
+      let sp = [Xml.node "span" [Xml.entity "nbsp"]] in
+      let c = if left  then sp @ c else c in
+      let c = if right then c @ sp else c in
       c in
 
     let rec for_type (ty : type_) =
@@ -951,7 +954,7 @@ end = struct
 
         | FPred ("_EQ", [e1; e2]) ->
             [Xml.node "span" (for_expr ?id (0 :: p) e1);
-             Xml.pcdata " = ";
+             Xml.node "span" [Xml.pcdata " = "];
              Xml.node "span" (for_expr ?id (1 :: p) e2)]
 
         | FPred (name, []) ->
@@ -961,24 +964,22 @@ end = struct
             let args = List.mapi (fun i e -> for_expr ?id (i :: p) e) args in
             let aout =
                 [[Xml.node "span" [Xml.pcdata (UTF8.of_latin1 name)]]]
-              @ [  [Xml.pcdata "("]
-                 @ (List.flatten (List.join [Xml.pcdata ", "] args))
-                 @ [Xml.pcdata ")"] ]
+              @ [pr true (List.flatten (List.join [Xml.node "span" [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
 
-            in List.flatten (List.join [Xml.pcdata " "] aout)
+            in List.flatten (List.join [Xml.node "span" [Xml.entity "nbsp"]] aout)
 
         | FBind (bd, x, ty, f) ->
             let bd = match bd with `Forall -> "forall" | `Exist -> "exist" in
 
             let aout =
                 [[Xml.node "span" [Xml.pcdata (UTF8.of_latin1 bd)]]]
-              @ [[Xml.pcdata (UTF8.of_latin1 x)]]
-              @ [[Xml.pcdata ":"]]
-              @ [for_type ty]
-              @ [[Xml.pcdata "."]]
+              @ [[Xml.node "span" [Xml.pcdata (UTF8.of_latin1 x)]]]
+              @ [[Xml.node "span" [Xml.pcdata ":"]]]
+              @ [[Xml.node "span" (for_type ty)]]
+              @ [[Xml.node "span" [Xml.pcdata "."]]]
               @ [for_form (0 :: p) f]
  
-            in List.flatten (List.join [Xml.pcdata " "] aout)
+            in List.flatten (List.join [Xml.node "span" [Xml.entity "nbsp"]] aout)
 
       in
 
