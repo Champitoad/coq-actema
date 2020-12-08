@@ -730,6 +730,13 @@ end = struct
   and prio_Or    = 3
   and prio_Imp   = 2
   and prio_Equiv = 1
+  
+  let unicode_of_op = function
+    | `Not   -> 0x00AC
+    | `And   -> 0x2227
+    | `Or    -> 0x2228
+    | `Imp   -> 0x27F9
+    | `Equiv -> 0x27FA
 
   let f_tostring, e_tostring, t_tostring =
     let pr doit c =
@@ -840,7 +847,7 @@ end = struct
     let open Tyxml in
 
     let pr doit c =
-      if doit then [Xml.pcdata "("] @ c @ [Xml.pcdata ")"] else c in
+      if doit then [Xml.node "span" [Xml.pcdata "("]] @ c @ [Xml.node "span" [Xml.pcdata ")"]] else c in
 
     let spaced ?(left = true) ?(right = true) c =
       let c = if left  then [Xml.pcdata " "] @ c else c in
@@ -913,7 +920,7 @@ end = struct
       [Xml.node ~a:(List.of_option thisid) "span" data]
 
 
-    and for_form ?(id : string option option) (p : int list) (form : form) =
+    and for_form ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
       let for_form = for_form ?id in
 
       let data =
@@ -925,34 +932,22 @@ end = struct
             [Xml.node "span" [Xml.entity "#x22A5"]]
   
         | FConn (lg, fs) -> begin
-            let fs =
-              List.mapi
-                (fun i x -> (prio_of_form x, for_form (i :: p) x))
-                fs in
+            let xml_lg =
+              let hexcode = Printf.sprintf "#x%x" (unicode_of_op lg) in
+              [Xml.node "span" [Xml.entity hexcode]] in
+            
+            let xml_fs = fs |>
+              List.mapi (fun i f ->
+                for_form ~is_pr:(prio_of_form f < prio_of_op lg) (i :: p) f) in
   
-          match lg, fs with
-          | `And, [(p1, f1); (p2, f2)] ->
-                (pr (p1 < prio_And) f1)
-              @ (spaced [Xml.node "span" [Xml.entity "#x2227"]])
-              @ (pr (p2 <= prio_And) f2)
-          | `Or , [(p1, f1); (p2, f2)] ->
-                (pr (p1 < prio_Or) f1)
-              @ (spaced [Xml.node "span" [Xml.entity "#x2228"]])
-              @ (pr (p2 <= prio_Or) f2)
-          | `Imp, [(p1, f1); (p2, f2)] ->
-                (pr (p1 <= prio_Imp) f1)
-              @ (spaced [Xml.node "span" [Xml.entity "#x27F9"]])
-              @ (pr (p2 < prio_Imp) f2)
-          | `Equiv, [(p1, f1); (p2, f2)] ->
-                (pr (p1 <= prio_Equiv) f1)
-              @ (spaced [Xml.node "span" [Xml.entity "#x27FA"]])
-              @ (pr (p2 <= prio_Equiv) f2)
-          | `Not, [(p, f)] ->
-                (spaced ~left:false [Xml.node "span" [Xml.entity "#x00AC"]])
-              @ (pr (p < prio_Not) f)
-          | (`And | `Or | `Imp | `Not | `Equiv), _ ->
-              assert false
-        end
+            match lg, xml_fs with
+            | (`And | `Or | `Imp | `Equiv), [f1; f2] ->
+                f1 @ spaced xml_lg @ f2
+            | `Not, [f] ->
+                (spaced ~left:false xml_lg) @ f
+            | (`And | `Or | `Imp | `Not | `Equiv), _ ->
+                assert false
+          end
 
         | FPred ("_EQ", [e1; e2]) ->
             [Xml.node "span" (for_expr ?id (0 :: p) e1);
@@ -995,7 +990,7 @@ end = struct
             p prefix) in
       let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
 
-      [Xml.node ~a:(List.of_option thisid) "span" data] in
+      [Xml.node ~a:(List.of_option thisid) "span" (pr is_pr data)] in
 
     ((fun ?id (form : form ) -> Xml.node "span" (for_form ?id [] form)),
      (fun ?id (expr : expr ) -> Xml.node "span" (for_expr ?id [] expr)),
