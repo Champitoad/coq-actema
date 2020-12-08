@@ -845,50 +845,51 @@ end = struct
 
   let f_tohtml, e_tohtml, t_tohtml =
     let open Tyxml in
+    
+    let span ?(a = []) = Xml.node ~a "span" in
 
     let pr doit c =
-      let l = [Xml.node "span" [Xml.pcdata "("]] in
-      let r = [Xml.node "span" [Xml.pcdata ")"]] in
+      let l = [span [Xml.pcdata "("]] in
+      let r = [span [Xml.pcdata ")"]] in
       if doit then l @ c @ r else c in
 
     let spaced ?(left = true) ?(right = true) c =
-      let sp = [Xml.node "span" [Xml.entity "nbsp"]] in
+      let sp = [span [Xml.entity "nbsp"]] in
       let c = if left  then sp @ c else c in
       let c = if right then c @ sp else c in
       c in
 
-    let rec for_type (ty : type_) =
-      match ty with
-      | TUnit ->
-          [Xml.pcdata "()"]
+    let rec for_type ?(is_pr = false) (ty : type_) =
+      let data = match ty with
+        | TUnit ->
+            [span [Xml.pcdata "()"]]
 
-      | TVar (x, 0) ->
-          [Xml.pcdata (UTF8.of_latin1 x)]
+        | TVar (x, 0) ->
+            [span [Xml.pcdata (UTF8.of_latin1 x)]]
 
-      | TVar (x, i) ->
-          [Xml.pcdata (Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i)]
+        | TVar (x, i) ->
+            [span [Xml.pcdata (Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i)]]
 
-      | TProd (t1, t2) ->
-          let p1, t1 = prio_of_type t1, for_type t1 in
-          let p2, t2 = prio_of_type t2, for_type t2 in
-            (pr (p1 < prio_And) t1)
-          @ (spaced [Xml.pcdata (UTF8.of_char (UChar.of_char '*'))])
-          @ (pr (p2 <= prio_And) t2)
+        | TProd (t1, t2)
+        | TOr   (t1, t2) ->
+            let t1 = for_type ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
+            let t2 = for_type ~is_pr:(prio_of_type t2 < prio_of_type ty) t2 in
+            let tycon = match ty with
+              | TProd _ -> '*'
+              | TOr _   -> '+'
+              | _       -> assert false in
+            t1 @ (spaced [Xml.pcdata (UTF8.of_char (UChar.of_char tycon))]) @ t2
 
-      | TOr (t1, t2) ->
-          let p1, t1 = prio_of_type t1, for_type t1 in
-          let p2, t2 = prio_of_type t2, for_type t2 in
-            (pr (p1 < prio_And) t1)
-          @ (spaced [Xml.pcdata (UTF8.of_char (UChar.of_char '+'))])
-          @ (pr (p2 <= prio_And) t2)
+        | TRec (x, t) ->
+            let aout =
+                [[span [Xml.pcdata "rec"]]]
+              @ [[span [Xml.pcdata (UTF8.of_latin1 x)]]]
+              @ [[span [Xml.pcdata "."]]]
+              @ [[span (for_type t)]]
+            in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
+      in
 
-      | TRec (x, t) ->
-          let aout =
-              [[Xml.pcdata "rec"]]
-            @ [[Xml.pcdata (UTF8.of_latin1 x)]]
-            @ [[Xml.pcdata "."]]
-            @ [for_type t]
-          in List.flatten (List.join [Xml.pcdata " "] aout)
+      [span (pr is_pr data)]
 
     and for_expr ?(id : string option option) (p : int list) (expr : expr) =
       let for_expr = for_expr ?id in
@@ -896,20 +897,18 @@ end = struct
       let data =
         match expr with
         | EVar (x, 0) ->
-            [Xml.pcdata (UTF8.of_latin1 x)]
+            [span [Xml.pcdata (UTF8.of_latin1 x)]]
 
         | EVar (x, i) ->
-            [Xml.pcdata (Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i)]
+            [span [Xml.pcdata (Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i)]]
 
         | EFun (name, args) ->
             let args = List.mapi (fun i e -> for_expr (i :: p) e) args in
             let aout =
-                [[Xml.pcdata (UTF8.of_latin1 name)]]
-              @ [  [Xml.pcdata "("]
-                @ (List.flatten (List.join [Xml.pcdata ", "] args))
-                @ [Xml.pcdata ")"] ]
+                [[span [Xml.pcdata (UTF8.of_latin1 name)]]]
+              @ [pr true (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
 
-            in List.flatten (List.join [Xml.pcdata " "] aout)
+            in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
       in
 
       let thisid =
@@ -920,8 +919,7 @@ end = struct
             p prefix) in
       let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
 
-      [Xml.node ~a:(List.of_option thisid) "span" data]
-
+      [span ~a:(List.of_option thisid) data]
 
     and for_form ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
       let for_form = for_form ?id in
@@ -929,15 +927,15 @@ end = struct
       let data =
         match form with
         | FTrue ->
-            [Xml.node "span" [Xml.entity "#x22A4"]]
+            [span [Xml.entity "#x22A4"]]
   
         | FFalse ->
-            [Xml.node "span" [Xml.entity "#x22A5"]]
+            [span [Xml.entity "#x22A5"]]
   
         | FConn (lg, fs) -> begin
             let xml_lg =
               let hexcode = Printf.sprintf "#x%x" (unicode_of_op lg) in
-              [Xml.node "span" [Xml.entity hexcode]] in
+              [span [Xml.entity hexcode]] in
             
             let xml_fs = fs |>
               List.mapi (fun i f ->
@@ -953,33 +951,33 @@ end = struct
           end
 
         | FPred ("_EQ", [e1; e2]) ->
-            [Xml.node "span" (for_expr ?id (0 :: p) e1);
-             Xml.node "span" [Xml.pcdata " = "];
-             Xml.node "span" (for_expr ?id (1 :: p) e2)]
+            [span (for_expr ?id (0 :: p) e1);
+             span [Xml.pcdata " = "];
+             span (for_expr ?id (1 :: p) e2)]
 
         | FPred (name, []) ->
-            [Xml.node "span" [Xml.pcdata (UTF8.of_latin1 name)]]
+            [span [Xml.pcdata (UTF8.of_latin1 name)]]
 
         | FPred (name, args) ->
             let args = List.mapi (fun i e -> for_expr ?id (i :: p) e) args in
             let aout =
-                [[Xml.node "span" [Xml.pcdata (UTF8.of_latin1 name)]]]
-              @ [pr true (List.flatten (List.join [Xml.node "span" [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
+                [[span [Xml.pcdata (UTF8.of_latin1 name)]]]
+              @ [pr true (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
 
-            in List.flatten (List.join [Xml.node "span" [Xml.entity "nbsp"]] aout)
+            in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
 
         | FBind (bd, x, ty, f) ->
             let bd = match bd with `Forall -> "forall" | `Exist -> "exist" in
 
             let aout =
-                [[Xml.node "span" [Xml.pcdata (UTF8.of_latin1 bd)]]]
-              @ [[Xml.node "span" [Xml.pcdata (UTF8.of_latin1 x)]]]
-              @ [[Xml.node "span" [Xml.pcdata ":"]]]
-              @ [[Xml.node "span" (for_type ty)]]
-              @ [[Xml.node "span" [Xml.pcdata "."]]]
+                [[span [Xml.pcdata (UTF8.of_latin1 bd)]]]
+              @ [[span [Xml.pcdata (UTF8.of_latin1 x)]]]
+              @ [[span [Xml.pcdata ":"]]]
+              @ [[span (for_type ty)]]
+              @ [[span [Xml.pcdata "."]]]
               @ [for_form (0 :: p) f]
  
-            in List.flatten (List.join [Xml.node "span" [Xml.entity "nbsp"]] aout)
+            in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
 
       in
 
@@ -991,11 +989,11 @@ end = struct
             p prefix) in
       let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
 
-      [Xml.node ~a:(List.of_option thisid) "span" (pr is_pr data)] in
+      [span ~a:(List.of_option thisid) (pr is_pr data)] in
 
-    ((fun ?id (form : form ) -> Xml.node "span" (for_form ?id [] form)),
-     (fun ?id (expr : expr ) -> Xml.node "span" (for_expr ?id [] expr)),
-     (fun     (ty   : type_) -> Xml.node "span" (for_type ty)))
+    ((fun ?id (form : form ) -> span (for_form ?id [] form)),
+     (fun ?id (expr : expr ) -> span (for_expr ?id [] expr)),
+     (fun     (ty   : type_) -> span (for_type ty)))
 
 
   module Subst = struct
