@@ -101,13 +101,19 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
    *    Can be "click" or "dnd".
    *
    *  - path (string) [only for the kind "click"]
-   *    ID of the "clicked" formula / sub-formula
+   *    ID of the "clicked" item
    *
    *  - source (string) [only for the kind "dnd"]
-   *    ID of the formula that is being dropped
+   *    ID of the item that is being dropped
+   *
+   *  - selection (string) [both "click" and "dnd"]
+   *    List of IDs of subterms selected inside the clicked/source item
    *
    *  - destination (string) [only for the kind "dnd"]
-   *    ID of th formula that received the dropped element
+   *    ID of the subterm that received the dropped item
+   *
+   *  - destinationSelection (string) [only for the kind "dnd"]
+   *    List of IDs of selected subterms in the destination's containing item
    *
    * An output action is an object with the following properties:
    *
@@ -119,25 +125,39 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
   method actions asource =
     let actions =
       let asource =
+
+        let path_of obj = `S (Js.as_string InvalidASource obj) in
+        let path_list_of obj = obj |> Js.to_array |> Array.to_list |> List.map path_of in
+        let path_option_of obj = obj |> Js.Opt.to_option |> Option.map path_of in
+
         match Js.to_string (Js.typeof asource) with
         | "string" ->
-          [`Click (`S (Js.to_string asource))]
+          [`Click CoreLogic.{ path = path_of asource; selection = []}]
         | "object" -> begin
           let asource = Js.Unsafe.coerce asource in
           match Js.as_string InvalidASource asource##.kind with
             | "click" ->
-                [`Click (`S (Js.to_string asource##.path))]
+                let path = path_of asource##.path in
+                let selection = path_list_of asource##.selection in
+                [`Click CoreLogic.{ path; selection }]
             | "dnd" ->
-                let source =
-                  `S (Js.as_string InvalidASource asource##.source) in
-                let destination =
-                  Option.map
-                    (fun x -> `S (Js.as_string InvalidASource x))
-                    (Js.Opt.to_option asource##.destination) in
-                [`DnD CoreLogic.{ source; destination; }]
+                let source = path_of asource##.source in
+                let source_selection = path_list_of asource##.selection in
+                let destination = path_option_of asource##.destination in
+                let destination_selection =
+                  begin match destination with
+                  | Some _ -> path_list_of asource##.destinationSelection
+                  | None -> []
+                  end in
+                [`DnD CoreLogic.{
+                  source; source_selection;
+                  destination; destination_selection }]
             | "any" ->
-                let path = `S (Js.to_string asource##.path) in
-                [`Click path; `DnD CoreLogic.{ source = path; destination = None; }]
+                let path = path_of asource##.path in
+                [`Click { path; selection = [] };
+                 `DnD CoreLogic.{
+                    source = path; source_selection = [];
+                    destination = None; destination_selection = [] }]
             | _ -> raise InvalidASource
           end
         | _ -> raise InvalidASource

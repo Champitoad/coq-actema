@@ -327,11 +327,21 @@ module CoreLogic : sig
   val forward    : (Handle.t * Handle.t * int list * Form.Subst.subst) -> tactic
 
   type asource = [
-    | `Click of gpath
+    | `Click of aclick
     | `DnD   of adnd
   ]
+  
+  and aclick = {
+    path : gpath;
+    selection : gpath list
+  }
 
-  and adnd = { source : gpath; destination : gpath option; }
+  and adnd = {
+    source : gpath;
+    source_selection : gpath list;
+    destination : gpath option;
+    destination_selection : gpath list;
+  }
 
   type osource = [
     | `Click of ipath
@@ -2030,11 +2040,21 @@ end = struct
 
 
   type asource = [
-    | `Click of gpath
+    | `Click of aclick
     | `DnD   of adnd
   ]
+  
+  and aclick = {
+    path : gpath;
+    selection : gpath list
+  }
 
-  and adnd = { source : gpath; destination : gpath option; }
+  and adnd = {
+    source : gpath;
+    source_selection : gpath list;
+    destination : gpath option;
+    destination_selection : gpath list;
+  }
 
   type osource = [
     | `Click of ipath
@@ -2046,7 +2066,7 @@ end = struct
       : (string * ipath list * osource * action) list
   =
     match p with
-      | `Click p -> begin
+      | `Click { path = p; _ } -> begin
           let Proof.{ g_id = hd; g_pregoal = _goal}, item, (_fs, _subf) =
             of_gpath proof p
           in
@@ -2070,7 +2090,7 @@ end = struct
             ["Elim", [hg], `Click hg, (hd, `Elim rp)]
         end
 
-      | `DnD { source = src; destination = dsts; } ->
+      | `DnD { source = src; destination = dsts; _ } ->
         dnd_actions src dsts proof 
 
   
