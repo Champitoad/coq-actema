@@ -731,6 +731,17 @@ end = struct
   and prio_Imp   = 2
   and prio_Equiv = 1
   
+  let left_assoc  = [(<); (<=)]
+  let right_assoc = [(<=); (<)]
+  let no_assoc    = [(<=); (<=)]
+  
+  let assoc_of_op = function
+    | `Not   -> [(<)]
+    | `And
+    | `Or    -> left_assoc
+    | `Imp   -> right_assoc
+    | `Equiv -> no_assoc
+  
   let unicode_of_op = function
     | `Not   -> 0x00AC
     | `And   -> 0x2227
@@ -873,7 +884,7 @@ end = struct
         | TProd (t1, t2)
         | TOr   (t1, t2) ->
             let t1 = for_type ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
-            let t2 = for_type ~is_pr:(prio_of_type t2 < prio_of_type ty) t2 in
+            let t2 = for_type ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
             let tycon = match ty with
               | TProd _ -> '*'
               | TOr _   -> '+'
@@ -937,9 +948,10 @@ end = struct
               let hexcode = Printf.sprintf "#x%x" (unicode_of_op lg) in
               [span [Xml.entity hexcode]] in
             
-            let xml_fs = fs |>
-              List.mapi (fun i f ->
-                for_form ~is_pr:(prio_of_form f < prio_of_op lg) (i :: p) f) in
+            let xml_fs =
+              List.combine fs (assoc_of_op lg) |>
+              List.mapi (fun i (f, cmp) ->
+                for_form ~is_pr:(cmp (prio_of_form f) (prio_of_op lg)) (i :: p) f) in
   
             match lg, xml_fs with
             | (`And | `Or | `Imp | `Equiv), [f1; f2] ->
