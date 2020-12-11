@@ -142,12 +142,11 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
                 [`Click CoreLogic.{ path; selection }]
             | "dnd" ->
                 let source = path_of asource##.source in
-                let source_selection = path_list_of asource##.selection in
                 let destination = path_option_of asource##.destination in
-                let destination_selection =
+                let source_selection, destination_selection =
                   begin match destination with
-                  | Some _ -> path_list_of asource##.destinationSelection
-                  | None -> []
+                  | Some _ -> path_list_of asource##.sourceSelection, path_list_of asource##.destinationSelection
+                  | None -> path_list_of asource##.selection, []
                   end in
                 [`DnD CoreLogic.{
                   source; source_selection;
