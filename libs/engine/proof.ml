@@ -308,10 +308,11 @@ module CoreLogic : sig
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
 
-  type path   = string
-  type ipath  = { root : int; ctxt : int; sub : int list; }
-  type gpath  = [`S of path | `P of ipath]
-  type link   = ipath * ipath
+  type path        = string
+  type ipath       = { root : int; ctxt : int; sub : int list; }
+  type gpath       = [`S of path | `P of ipath]
+  type link        = ipath * ipath
+  type hyperlink   = ipath list * ipath list
 
   type item   = [`C of form | `H of Handle.t * Proof.hyp ]
   type term   = [`F of form | `E of expr]
@@ -357,15 +358,18 @@ module CoreLogic : sig
   ]
 
   type action = Handle.t * [
-    | `Elim     of Handle.t
-    | `Intro    of int
-    | `Forward  of Handle.t * Handle.t * (int list) * Form.Subst.subst 
-    | `DisjDrop of Handle.t * form list
-    | `ConjDrop of Handle.t
-    | `Link     of link * linkaction list
+    | `Elim      of Handle.t
+    | `Intro     of int
+    | `Forward   of Handle.t * Handle.t * (int list) * Form.Subst.subst 
+    | `DisjDrop  of Handle.t * form list
+    | `ConjDrop  of Handle.t
+    | `Hyperlink of hyperlink * linkaction list
   ]
 
-  exception InvalidPath
+  exception InvalidPath of path
+  exception InvalidSubPath of int list
+  exception InvalidSubFormPath of int list
+  exception InvalidSubExprPath of int list
 
   val actions : Proof.proof -> asource ->
                   (string * ipath list * osource * action) list
@@ -675,9 +679,10 @@ end = struct
   type item   = [`C of form | `H of Handle.t * Proof.hyp ]
   type term   = [`F of form | `E of expr]
 
-  exception InvalidPath
-  exception InvalidFormPath
-  exception InvalidExprPath
+  exception InvalidPath of path
+  exception InvalidSubPath of int list
+  exception InvalidSubFormPath of int list
+  exception InvalidSubExprPath of int list
 
 
   let form_of_item = function
@@ -692,17 +697,17 @@ end = struct
       | `F FPred (_, es) ->
           let sube =
             try  List.nth es i
-            with Failure _ -> raise InvalidExprPath
+            with Failure _ -> raise (InvalidSubExprPath p)
           in (`E sube)
       | `F FConn (_, fs) ->
           let subf =
             try  List.nth fs i
-            with Failure _ -> raise InvalidFormPath
+            with Failure _ -> raise (InvalidSubFormPath p)
           in (`F subf)
       | `F FBind (_, _, _, subf) ->
           (`F subf)
       | _ ->
-          raise InvalidPath
+          raise (InvalidSubPath p)
     in
 
     subterm subt subp
@@ -710,17 +715,17 @@ end = struct
   let subform (f : form) (p : int list) =
     match subterm (`F f) p with
     | `F f -> f
-    | _ -> raise InvalidFormPath
+    | _ -> raise (InvalidSubFormPath p)
 
   let f_subexpr (f : form) (p : int list) =
     match subterm (`F f) p with
     | `E e -> e
-    | _ -> raise InvalidExprPath
+    | _ -> raise (InvalidSubExprPath p)
 
   let e_subexpr (e : expr) (p : int list) =
     match subterm (`E e) p with
     | `E e -> e
-    | _ -> raise InvalidExprPath
+    | _ -> raise (InvalidSubExprPath p)
     
 
   let rebuild_path i =
@@ -742,6 +747,11 @@ end = struct
 
   let mk_ipath ?(ctxt : int = 0) ?(sub : int list = []) (root : int) =
     { root; ctxt; sub; }
+    
+  
+  let item_ipath { root; ctxt; _ } =
+    { root; ctxt; sub = [] }
+
 
   let path_of_ipath (p : ipath) =
     let pp_sub =
@@ -758,21 +768,21 @@ end = struct
       with
       | Scanf.Scan_failure _
       | End_of_file ->
-          raise InvalidPath in
+          raise (InvalidPath p) in
 
     if root < 0 || ctxt < 0 then
-      raise InvalidPath;
+      raise (InvalidPath p);
 
     let sub =
       let sub = if sub = "" then [] else String.split_on_char '/' sub in
 
       try  List.map int_of_string sub
-      with Failure _ -> raise InvalidPath
+      with Failure _ -> raise (InvalidPath p)
 
     in
 
     if List.exists (fun x -> x < 0) sub then
-      raise InvalidPath;
+      raise (InvalidPath p);
 
     { root; ctxt; sub; }
 
@@ -783,7 +793,7 @@ end = struct
 
     let goal =
       try  Proof.byid proof (Handle.ofint root)
-      with InvalidGoalId _ -> raise InvalidPath in
+      with InvalidGoalId _ -> raise (InvalidPath (path_of_ipath p)) in
 
     let item, f_item =
       match ctxt with
@@ -798,7 +808,7 @@ end = struct
               Proof.Hyps.byid goal.Proof.g_hyps rp
             in
             (`H (rp, hyd), hf)
-          with InvalidHyphId _ -> raise InvalidPath
+          with InvalidHyphId _ -> raise (InvalidPath (path_of_ipath p))
         end
     in
     let target = subterm (`F f_item) sub in
@@ -851,18 +861,20 @@ end = struct
       in
       let subf =
         try List.at fs i
-        with Invalid_argument _ -> raise InvalidFormPath
+        with Invalid_argument _ -> raise (InvalidSubFormPath [i])
       in
       subp, subf
     | FBind (_, _, _, subf) ->
       p, subf
-    | _ -> raise InvalidFormPath
+    | _ -> raise (InvalidSubFormPath [i])
   
 
   (* [subform_pol (p, f) sub] returns the subformula of [f] at path [sub] together
      with its polarity, given that [f]'s polarity is [p] *)
 
-  let subform_pol = List.fold_left direct_subform_pol
+  let subform_pol (p, f) sub =
+    try List.fold_left direct_subform_pol (p, f) sub
+    with InvalidSubFormPath _ -> raise (InvalidSubFormPath sub)
 
 
   (* [neg_count f sub] counts the number of negations in [f] along path [sub] *)
@@ -878,13 +890,13 @@ end = struct
           in
           let subf =
             try List.at fs i
-            with Invalid_argument _ -> raise InvalidFormPath
+            with Invalid_argument _ -> raise (InvalidSubFormPath sub)
           in
           n, subf
       | FBind (_, _, _, subf) ->
           n, subf
       | _ ->
-          raise InvalidFormPath
+          raise (InvalidSubFormPath sub)
     in
     List.fold_left aux (0, f) sub |> fst
 
@@ -914,7 +926,11 @@ end = struct
   
 
   type link = ipath * ipath
-
+  type hyperlink = (ipath list) * (ipath list)
+  
+  let hyperlink_of_link : link -> hyperlink =
+    fun (src, dst) -> [src], [dst]
+  
 
   type pnode += TLink
 
@@ -1642,17 +1658,17 @@ end = struct
     in doit
 
   type action = Handle.t * [
-    | `Elim     of Handle.t
-    | `Intro    of int
-    | `Forward  of Handle.t * Handle.t * (int list) * Form.Subst.subst 
-    | `DisjDrop of Handle.t * form list
-    | `ConjDrop of Handle.t
-    | `Link     of link * linkaction list
+    | `Elim      of Handle.t
+    | `Intro     of int
+    | `Forward   of Handle.t * Handle.t * (int list) * Form.Subst.subst 
+    | `DisjDrop  of Handle.t * form list
+    | `ConjDrop  of Handle.t
+    | `Hyperlink of hyperlink * linkaction list
   ]
   
   
   (* -------------------------------------------------------------------- *)
-  (** Link search (for highlighting) *)
+  (** (Hyper)link search (for highlighting) *)
 
   
   (** [t_subs f] returns all the paths leading to a subterm in [t]. *)
@@ -1725,62 +1741,87 @@ end = struct
     in f_aux [] f
 
   
-  (** The type of link predicates [linkpred] captures functions which
-      map a link in a proof to a list of possible link actions.
+  (** The type of hyperlink predicates [hlpred] captures functions which
+      map a hyperlink in a proof to a list of possible link actions.
 
       One can emulate a traditional boolean predicate by returning the singleton
       [`Nothing] to indicate membership, or the empty list to indicate absence
       thereof. *)
 
-  type linkpred = Proof.proof -> link -> linkaction list
+  type lpred = Proof.proof -> link -> linkaction list
+  type hlpred = Proof.proof -> hyperlink -> linkaction list
+  
+  let hlpred_of_lpred : lpred -> hlpred =
+    fun p pr -> function
+      | [src], [dst] -> p pr (src, dst)
+      | _ -> []
 
   
-  (** [linkpred_mult lps] returns a link predicate that denotes the cartesian
-      product of the actions denoted by the link predicates in [lps]. *)
+  (** [hlpred_mult lps] returns a hyperlink predicate that denotes the cartesian
+      product of the actions denoted by the hyperlink predicates in [lps]. *)
 
-  let linkpred_mult : linkpred list -> linkpred =
-    let mult : linkpred -> linkpred -> linkpred =
-      fun lp1 lp2 -> fun pr lnk ->
-        List.cartesian_product (lp1 pr lnk) (lp2 pr lnk) |>
+  let hlpred_mult : hlpred list -> hlpred =
+    let mult : hlpred -> hlpred -> hlpred =
+      fun p1 p2 -> fun pr lnk ->
+        List.cartesian_product (p1 pr lnk) (p2 pr lnk) |>
         List.map (fun (a1, a2) -> `Both (a1, a2))
     in
     List.fold_left mult (fun _ _ -> [`Nothing])
 
 
-  (** [linkpred_add lps] returns a link predicate that denotes the disjoint
-      union of the actions denoted by the link predicates in [lps]. *)
+  (** [hlpred_add lps] returns a hyperlink predicate that denotes the disjoint
+      union of the actions denoted by the hyperlink predicates in [lps]. *)
 
-  let linkpred_add : linkpred list -> linkpred =
-    fun lps -> fun pr lnk ->
-      List.map (fun lp -> lp pr lnk) lps |> 
+  let hlpred_add : hlpred list -> hlpred =
+    fun ps -> fun pr lnk ->
+      List.map (fun p -> p pr lnk) ps |> 
       List.concat
 
 
-  (** [search_sublinks lp proof (src, dst)] returns all links between subterms
-      of [src] and [dst] in [proof] that can interact according to the link
-      predicate [lp], together with the lists of possible link actions
-      determined by the predicate. *)
+  (** [search_linkactions hlp proof (src, dst)] returns all links between
+      subterms of [src] and [dst] in [proof] that can interact according to
+      the hyperlink predicate [hlp], together with the lists of possible link
+      actions determined by the predicate.
+
+      If [fixed_srcs] (resp. [fixed_dsts]) is set, the function returns only
+      hyperlinks with sources [fixed_srcs] (resp. destinations [fixed_dsts]),
+      and whose destinations (resp. sources) are subterms of [dst] (resp.
+      [src]). *)
   
-  let search_sublinks
-    (lp : linkpred) proof (src, dst : link) :
-    (link * linkaction list) list
+  let search_linkactions
+    ?(fixed_srcs : ipath list option) ?(fixed_dsts : ipath list option)
+    (hlp : hlpred) proof (src, dst : link) :
+    (hyperlink * linkaction list) list
   =
     let _, _, (_, t_src) = of_ipath proof src in
     let _, _, (_, t_dst) = of_ipath proof dst in
-
+    
     let subpath p sub = { root = p.root; ctxt = p.ctxt; sub = p.sub @ sub } in
+    
+    let query_actions lnk =
+      match hlp proof lnk with
+      | _ :: _ as actions -> [lnk, actions]
+      | [] -> []
+    in
 
     let open Monad.List in
 
-    t_subs t_src >>= fun sub_src ->
-    t_subs t_dst >>= fun sub_dst ->
+    match fixed_srcs, fixed_dsts with
+    | Some srcs, Some dsts ->
+        query_actions (srcs, dsts)
+    
+    | Some srcs, None ->
+        t_subs t_dst >>= fun sub_dst ->
+        query_actions (srcs, [subpath dst sub_dst])
 
-    let subp_src = subpath src sub_src in
-    let subp_dst = subpath dst sub_dst in
+    | None, Some dsts ->
+        t_subs t_src >>= fun sub_src ->
+        query_actions ([subpath src sub_src], dsts)
 
-    match lp proof (subp_src, subp_dst) with
-    | _ :: _ as actions -> return ((subp_src, subp_dst), actions)
-    | [] -> zero
+    | None, None ->
+        t_subs t_src >>= fun sub_src ->
+        t_subs t_dst >>= fun sub_dst ->
+        query_actions ([subpath src sub_src], [subpath dst sub_dst])
 
 
   (** [wf_subform_link proof (src, dst)] checks if [src] and [dst] lead to
@@ -1788,7 +1829,7 @@ end = struct
       [proof], and returns the associated substitutions if they do inside a
       [`Subform] link action. *)
 
-  let wf_subform_link : linkpred =
+  let wf_subform_link : lpred =
     let open Form in
 
     (* Auxiliary definitions *)
@@ -1964,7 +2005,7 @@ end = struct
   (** [intuitionistic_link lnk] checks if [lnk] is an intuitionistic link,
       and returns a [`Nothing] link action if so. *)
   
-  let intuitionistic_link : linkpred =
+  let intuitionistic_link : lpred =
     fun proof (src, dst) ->
 
     let neg_count (p : ipath) =
@@ -1982,58 +2023,8 @@ end = struct
                || m = 0 && n <= 1
                || m <= 1 && n = 0 -> [`Nothing]
       | _ -> []
-    with InvalidFormPath -> []
-
-  (** [dnd_actions src dsts proof] searches for links whose source is a subterm
-      of [src], and which yield at least one action. If [dsts] is [Some dst],
-      it will restrict destinations to subterms of [dst], otherwise it will
-      search everywhere in the proof.
-
-      It then packages the links data to expose it through the JS API.
-      Currently, it instructs the frontend to highlight only both ends of the
-      links. *)
-
-  let dnd_actions src dsts (proof : Proof.proof) =
-    let src = ipath_of_gpath src in
-    let Proof.{ g_id; g_pregoal }, _, _ = of_ipath proof src in
-
-    let for_destination dst =
-      let dst = ipath_of_gpath dst in
-
-      let links =
-        let mp = linkpred_add [
-          linkpred_mult [wf_subform_link; intuitionistic_link]
-        ] in
-        search_sublinks mp proof (src, dst)
-      in
-
-      List.map (fun ((src, dst) as lnk, actions) ->
-        let actions = remove_nothing actions in
-        "Link", [src; dst], `DnD lnk, (g_id, `Link (lnk, actions)))
-        links
-    in
-    match dsts with
-    | None ->
-      (* Get the list of hypotheses handles *)
-      let dsts = Proof.Hyps.ids g_pregoal.Proof.g_hyps in
-      (* Create a list of paths to each hypothesis *)
-      let dsts =
-        List.map
-          (fun id -> mk_ipath (Handle.toint g_id) ~ctxt:(Handle.toint id))
-          dsts
-      in
-      (* Add a path to the conclusion *)
-      let dsts = mk_ipath (Handle.toint g_id) :: dsts in
-      let dsts = List.map (fun p -> `P p) dsts in
-      (* Remove [src] from the list of paths *)
-      let dsts = List.remove dsts (`P src) in
-      (* Get the possible actions for each formula in the goal,
-         that is the hypotheses and the conclusion *)
-      List.flatten (List.map for_destination dsts)
-
-    | Some dst ->
-      for_destination dst
-
+    with InvalidSubFormPath _ -> []
+    
       
   (* -------------------------------------------------------------------- *)
   (** Graphical actions *)
@@ -2060,6 +2051,80 @@ end = struct
     | `Click of ipath
     | `DnD   of link
   ]
+
+
+  (** [dnd_actions dnd] computes all possible proof actions associated with the
+      DnD action [dnd], and packages them as an array of output actions as
+      specified in the JS API.
+
+      More specifically, it will try to query actions for hyperlinks whose
+      sources (resp. destinations) are those of [dnd.source_selection] (resp.
+      [dnd.destination_selection]), and which yield at least one action.
+
+      If [dnd.source_selection] (resp. [dnd.destination_selection]) is empty, it
+      will search for hyperlinks with only one source (resp. destination) which
+      is a subterm of [dnd.source] (resp. [dnd.destination]). If
+      [dnd.destination] is [None], it will search for destinations everywhere in
+      the current goal.
+ *)
+
+  let dnd_actions (dnd : adnd) (proof : Proof.proof) =
+    let Proof.{ g_id; g_pregoal }, _, _ = of_gpath proof dnd.source in
+
+    let hlp = hlpred_add [
+      hlpred_mult (List.map hlpred_of_lpred [wf_subform_link; intuitionistic_link])
+    ] in
+    
+    let dummy_path = mk_ipath 0 in
+
+    let srcs, fixed_srcs = begin match dnd.source_selection with
+      | [] -> [ipath_of_gpath dnd.source], None
+      | srcs -> [dummy_path], Some (List.map ipath_of_gpath srcs)
+      end in
+
+    let dsts, fixed_dsts = begin match dnd.destination_selection with
+      | [] ->
+          let dsts = begin match dnd.destination with
+            | None ->
+                let src = ipath_of_gpath dnd.source in
+                (* Get the list of hypotheses handles *)
+                Proof.Hyps.ids g_pregoal.Proof.g_hyps |>
+                (* Create a list of paths to each hypothesis *)
+                List.map begin fun id ->
+                  mk_ipath (Handle.toint g_id) ~ctxt:(Handle.toint id)
+                end |>
+                (* Add a path to the conclusion *)
+                fun hyps -> mk_ipath (Handle.toint g_id) :: hyps |>
+                (* Remove the source from the list of paths *)
+                fun dsts -> List.remove dsts src
+                
+            | Some dst ->
+                [ipath_of_gpath dst]
+            end in
+          dsts, None
+
+      | dsts ->
+          [dummy_path], Some (List.map ipath_of_gpath dsts)
+      end in
+
+    let open Monad.List in
+
+    srcs >>= fun src ->
+    dsts >>= fun dst ->
+
+    let linkactions = search_linkactions hlp proof
+      ?fixed_srcs ?fixed_dsts (src, dst) in
+
+    linkactions |> List.map begin fun ((srcs, dsts) as lnk, actions) ->
+      let actions = remove_nothing actions in
+      let item_lnk =
+        item_ipath (List.hd srcs),
+        item_ipath (List.hd dsts) in
+      let tgts_lnk =
+        List.hd srcs,
+        List.hd dsts in
+      "Hyperlink", srcs @ dsts, `DnD item_lnk, (g_id, `Hyperlink (lnk, actions))
+    end
 
       
   let actions (proof : Proof.proof) (p : asource)
@@ -2090,8 +2155,8 @@ end = struct
             ["Elim", [hg], `Click hg, (hd, `Elim rp)]
         end
 
-      | `DnD { source = src; destination = dsts; _ } ->
-        dnd_actions src dsts proof 
+      | `DnD dnd ->
+        dnd_actions dnd proof
 
   
   let apply (proof : Proof.proof) ((hd, a) : action) =
@@ -2103,13 +2168,13 @@ end = struct
     | `DisjDrop (subhd, fl) ->
         or_drop subhd (proof, hd) (List.map (fun x -> [Some hd, []],x) fl)
     | `ConjDrop subhd ->
-        and_drop subhd (proof, hd)    
+        and_drop subhd (proof, hd)
     | `Forward (src, dst, p, s) ->
         forward (src, dst, p, s) (proof, hd)
-    | `Link (lnk, actions) ->
-        match actions with
-        | [`Subform substs] ->
-          dlink lnk substs (proof, hd)
-        | _ :: _ -> failwith "Cannot handle multiple link actions yet"
-        | [] -> assert false
+    | `Hyperlink (lnk, actions) ->
+        match lnk, actions with
+        | ([src], [dst]), [`Subform substs] ->
+          dlink (src, dst) substs (proof, hd)
+        | _, _ :: _ -> failwith "Cannot handle multiple link actions yet"
+        | _, [] -> assert false
 end

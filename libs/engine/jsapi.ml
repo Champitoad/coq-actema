@@ -106,11 +106,14 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
    *  - source (string) [only for the kind "dnd"]
    *    ID of the item that is being dropped
    *
-   *  - selection (string) [both "click" and "dnd"]
-   *    List of IDs of subterms selected inside the clicked/source item
-   *
-   *  - destination (string) [only for the kind "dnd"]
+   *  - destination (string option) [only for the kind "dnd"]
    *    ID of the subterm that received the dropped item
+   *
+   *  - selection (string list) [both "click" and "dnd" when destination is undefined]
+   *    List of IDs of subterms selected inside the clicked/source item
+   *    
+   *  - sourceSelection (string list) [only for the kind "dnd" when destination is defined]
+   *    List of IDs of subterms selected inside the source item
    *
    *  - destinationSelection (string) [only for the kind "dnd"]
    *    List of IDs of selected subterms in the destination's containing item
