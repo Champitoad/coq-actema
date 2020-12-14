@@ -355,6 +355,7 @@ module CoreLogic : sig
     | `Nothing
     | `Both of linkaction * linkaction
     | `Subform of Form.Subst.subst * Form.Subst.subst
+    | `Rewrite of expr * expr * ipath list
   ]
 
   type action = Handle.t * [
@@ -367,7 +368,6 @@ module CoreLogic : sig
   ]
 
   exception InvalidPath of path
-  exception InvalidSubPath of int list
   exception InvalidSubFormPath of int list
   exception InvalidSubExprPath of int list
 
@@ -382,6 +382,20 @@ module CoreLogic : sig
 end = struct
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
+  
+  let id_tac : tactic =
+    fst
+  
+  let then_tac (t1 : tactic) (t2 : tactic) : tactic =
+    fun targ ->
+      let pr = t1 targ in
+      let hd = List.hd (Proof.opened pr) in
+      t2 (pr, hd)
+
+  let thenl_tac (t1 : tactic) (t2 : tactic) : tactic =
+    fun targ ->
+      let pr = t1 targ in
+      List.fold_left (uncurry t2) pr (Proof.opened pr)
 
   let prune_premisses =
     let rec doit acc = function
@@ -646,8 +660,8 @@ end = struct
       [{ goal with g_hyps = hyps }]
   
 
-  (* The [close_with_unit] tactic tries to close the goal either with
-     the falsity elimination rule, or the truth introduction rule. *)
+  (** The [close_with_unit] tactic tries to close the goal either with
+      the falsity elimination rule, or the truth introduction rule. *)
 
   let close_with_unit : tactic =
     fun (proof, g_id as targ) ->
@@ -667,6 +681,108 @@ end = struct
        if f = FFalse then Some (elim hd targ) else None)
     |>
     Option.default proof
+    
+
+  (* -------------------------------------------------------------------- *)
+  (** Terms *)
+
+
+  type term   = [`F of form | `E of expr]
+
+
+  let term_of_expr e : term = `E e
+  let term_of_form f : term = `F f
+  
+  let expr_of_term (t : term) =
+    match t with
+    | `E e -> e
+    | _ -> raise (Invalid_argument "Expected an expression")
+
+  let form_of_term (t : term) =
+    match t with
+    | `F f -> f
+    | _ -> raise (Invalid_argument "Expected a formula")
+
+  
+  let term_equal (t1 : term) (t2 : term) : bool =
+    match t1, t2 with
+    | `F f1, `F f2 -> Form.f_equal f1 f2
+    | `E e1, `E e2 -> Form.e_equal e1 e2
+    | _ -> false
+  
+
+  let direct_subforms = function
+    | FTrue | FFalse | FPred _ -> []
+    | FConn (_, fs) -> fs
+    | FBind (_, _, _, f) -> [f]
+  
+  let direct_subexprs = function
+    | EVar _ -> []
+    | EFun (_, es) -> es
+    
+  let direct_subterms : term -> term list = function
+    | `F FPred (_, es) -> List.map term_of_expr es
+    | `F f -> List.map term_of_form (direct_subforms f)
+    | `E e -> List.map term_of_expr (direct_subexprs e)
+    
+  
+  let modify_subforms f fs =
+    match f, fs with
+    | (FTrue | FFalse | FPred _), _ ->
+        f
+
+    | FConn (c, fs), fs' when List.length fs = List.length fs' ->
+        FConn (c, fs')
+
+    | FBind (b, x, ty, _), [f] ->
+        FBind (b, x, ty, f)
+
+    | _ ->
+        failwith "Wrong arity for new subformulas"
+  
+  let modify_subexprs e es =
+    match e, es with
+    | EVar _, _ ->
+        e
+
+    | EFun (f, es), es' when List.length es = List.length es' ->
+        EFun (f, es')
+    
+    | _ -> 
+        failwith "Wrong arity for new subexpressions"
+  
+  let modify_direct_subterms (t : term) (ts : term list) =
+    match t with
+    | `F FPred (p, es) when List.length es = List.length ts ->
+        `F (FPred (p, (List.map expr_of_term ts)))
+    
+    | `F f ->
+        ts |> List.map form_of_term |> modify_subforms f |> term_of_form 
+
+    | `E e ->
+        ts |> List.map expr_of_term |> modify_subexprs e |> term_of_expr
+
+  
+  (* -------------------------------------------------------------------- *)
+  (** Items *)
+
+
+  type item   = [`C of form | `H of Handle.t * Proof.hyp ]
+  
+
+  let form_of_item = function
+    | `C f | `H (_, Proof.{ h_form = f; _ }) -> f
+    | _ -> raise (Invalid_argument "Expected a formula item")
+    
+  let expr_of_item = function
+    | _ -> raise (Invalid_argument "Expected an expression item")
+  
+  let term_of_item it =
+    try `F (form_of_item it)
+    with Invalid_argument _ ->
+      try `E (expr_of_item it)
+      with Invalid_argument _ ->
+        raise (Invalid_argument "Expected an expression or formula item")      
 
 
   (* -------------------------------------------------------------------- *)
@@ -676,41 +792,33 @@ end = struct
   type path   = string
   type ipath  = { root : int; ctxt : int; sub : int list; }
   type gpath  = [`S of path | `P of ipath]
-  type item   = [`C of form | `H of Handle.t * Proof.hyp ]
-  type term   = [`F of form | `E of expr]
 
   exception InvalidPath of path
-  exception InvalidSubPath of int list
   exception InvalidSubFormPath of int list
   exception InvalidSubExprPath of int list
 
-
-  let form_of_item = function
-  | `C f | `H (_, Proof.{ h_form = f; _ }) -> f
+  
+  let direct_subterm (t : term) (i : int) : term =
+    try List.at (direct_subterms t) i
+    with Invalid_argument _ ->
+      match t with
+      | `F FPred _ | `E _ -> raise (InvalidSubExprPath [i])
+      | `F _ -> raise (InvalidSubFormPath [i])
+      
+  let modify_direct_subterm (t : term) (u : term) (i : int) : term =
+    try
+      List.modify_at i (fun _ -> u) (direct_subterms t) |>
+      modify_direct_subterms t
+    with Invalid_argument _ ->
+      match t with
+      | `F FPred _ | `E _ -> raise (InvalidSubExprPath [i])
+      | `F _ -> raise (InvalidSubFormPath [i])
 
 
   let rec subterm (t : term) (p : int list) =
-    match p with [] -> t | i :: subp ->
-
-    let subt = match t with
-      | `E EFun (_, es)
-      | `F FPred (_, es) ->
-          let sube =
-            try  List.nth es i
-            with Failure _ -> raise (InvalidSubExprPath p)
-          in (`E sube)
-      | `F FConn (_, fs) ->
-          let subf =
-            try  List.nth fs i
-            with Failure _ -> raise (InvalidSubFormPath p)
-          in (`F subf)
-      | `F FBind (_, _, _, subf) ->
-          (`F subf)
-      | _ ->
-          raise (InvalidSubPath p)
-    in
-
-    subterm subt subp
+    try List.fold_left direct_subterm t p
+    with InvalidSubFormPath _ -> raise (InvalidSubFormPath p)
+       | InvalidSubExprPath _ -> raise (InvalidSubExprPath p)
 
   let subform (f : form) (p : int list) =
     match subterm (`F f) p with
@@ -823,18 +931,75 @@ end = struct
     of_ipath proof (ipath_of_gpath p)
 
 
+  (** [rewrite red res tgt targ] rewrites every occurrence of the reducible
+      expression [red] in the subterm at path [tgt] into the residual
+      expression [res]. It automatically shifts variables in [red] and [res]
+      to avoid capture by binders in [tgt]. *)
+
+  type pnode += TRewrite of expr * expr * ipath
+
+  let rewrite (red : expr) (res : expr) (tgt : ipath) : tactic =
+    fun (proof, hd) ->
+      
+    let tgt = { tgt with root = Handle.toint hd } in
+      
+    let shift e = function
+      | `F FBind (_, x, _, _) -> Form.e_shift (x, 0) e
+      | _ -> e
+    in
+
+    let rec doit red res (t : term) =
+      if term_equal (`E red) t then
+        (`E res)
+      else
+        direct_subterms t |>
+        List.map (doit (shift red t) (shift res t)) |>
+        modify_direct_subterms t
+    in
+    
+    let rec shift_then_doit red res (t : term) = function
+      | [] -> doit red res t
+      | i :: sub ->
+          let u = direct_subterm t i in
+          let u = shift_then_doit (shift red t) (shift res t) u sub in
+          modify_direct_subterm t u i
+    in
+
+    let _, it, (sub, _) = of_ipath proof tgt in 
+    let goal = Proof.byid proof hd in
+    
+    let subgoal = match it with
+      | `H (src, { h_form = f; _ }) ->
+          let new_hyp = shift_then_doit red res (`F f) sub |> form_of_term in
+          [Some src, [new_hyp]], goal.Proof.g_goal
+
+      | `C f ->
+          let new_concl = shift_then_doit red res (`F f) sub |> form_of_term in
+          [], new_concl
+    in
+    
+    let pnode = TRewrite (red, res, tgt) in
+    Proof.sprogress ~clear:true proof hd pnode [subgoal]
+    
+
+    let rewrite_in (red : expr) (res : expr) (tgts : ipath list) : tactic =
+      List.fold_left
+        (fun tac tgt -> then_tac tac (rewrite red res tgt))
+        id_tac tgts
+
+
   (* -------------------------------------------------------------------- *)
   (** Polarities *)
 
 
-  (* A subformula can either have a positive polarity [Pos], a negative polarity
-     [Neg], or a superposition [Sup] of both.
+  (** A subformula can either have a positive polarity [Pos], a negative polarity
+      [Neg], or a superposition [Sup] of both.
 
-     For example in the hypothesis (A ⇒ B) ∧ (C ⇔ D), A is positive, B is
-     negative, and C and D can be either, depending on the way the user chooses
-     to rewrite the equivalence. This coincides with the standard linear logic
-     reading of equivalence as the additive conjunction of both directions of an
-     implication. *)
+      For example in the hypothesis (A ⇒ B) ∧ (C ⇔ D), A is positive, B is
+      negative, and C and D can be either, depending on the way the user chooses
+      to rewrite the equivalence. This coincides with the standard linear logic
+      reading of equivalence as the additive conjunction of both directions of an
+      implication. *)
 
   type pol = Pos | Neg | Sup
 
@@ -869,15 +1034,15 @@ end = struct
     | _ -> raise (InvalidSubFormPath [i])
   
 
-  (* [subform_pol (p, f) sub] returns the subformula of [f] at path [sub] together
-     with its polarity, given that [f]'s polarity is [p] *)
+  (** [subform_pol (p, f) sub] returns the subformula of [f] at path [sub] together
+      with its polarity, given that [f]'s polarity is [p] *)
 
   let subform_pol (p, f) sub =
     try List.fold_left direct_subform_pol (p, f) sub
     with InvalidSubFormPath _ -> raise (InvalidSubFormPath sub)
 
 
-  (* [neg_count f sub] counts the number of negations in [f] along path [sub] *)
+  (** [neg_count f sub] counts the number of negations in [f] along path [sub] *)
   
   let neg_count (f : form) (sub : int list) : int =
     let aux (n, f) i =
@@ -901,15 +1066,15 @@ end = struct
     List.fold_left aux (0, f) sub |> fst
 
 
-  (* [pol_of_item it] returns the polarity of the item [it] *)
+  (** [pol_of_item it] returns the polarity of the item [it] *)
 
   let pol_of_item = function
     | `H _ -> Neg
     | `C _ -> Pos
 
 
-  (* [pol_of_gpath proof p] returns the polarity of the subformula
-     at path [p] in [proof] *)
+  (** [pol_of_gpath proof p] returns the polarity of the subformula
+      at path [p] in [proof] *)
 
   let pol_of_gpath (proof : Proof.proof) (p : gpath) : pol =
     let _, item, (sub, _) = of_gpath proof p in
@@ -1219,8 +1384,8 @@ end = struct
     Proof.xprogress proof hd TLink subgoals
 
 
-  (* [elim_units f] eliminates all occurrences of units
-     in formula [f] using algebraic unit laws. *)
+  (** [elim_units f] eliminates all occurrences of units
+      in formula [f] using algebraic unit laws. *)
 
   let rec elim_units : form -> form = function
 
@@ -1631,6 +1796,7 @@ end = struct
     | `Nothing
     | `Both of linkaction * linkaction
     | `Subform of Form.Subst.subst * Form.Subst.subst
+    | `Rewrite of expr * expr * ipath list
   ]
 
   let remove_nothing =
@@ -1793,9 +1959,6 @@ end = struct
     (hlp : hlpred) proof (src, dst : link) :
     (hyperlink * linkaction list) list
   =
-    let _, _, (_, t_src) = of_ipath proof src in
-    let _, _, (_, t_dst) = of_ipath proof dst in
-    
     let subpath p sub = { root = p.root; ctxt = p.ctxt; sub = p.sub @ sub } in
     
     let query_actions lnk =
@@ -1811,14 +1974,18 @@ end = struct
         query_actions (srcs, dsts)
     
     | Some srcs, None ->
+        let _, _, (_, t_dst) = of_ipath proof dst in
         t_subs t_dst >>= fun sub_dst ->
         query_actions (srcs, [subpath dst sub_dst])
 
     | None, Some dsts ->
+        let _, _, (_, t_src) = of_ipath proof src in
         t_subs t_src >>= fun sub_src ->
         query_actions ([subpath src sub_src], dsts)
 
     | None, None ->
+        let _, _, (_, t_src) = of_ipath proof src in
+        let _, _, (_, t_dst) = of_ipath proof dst in
         t_subs t_src >>= fun sub_src ->
         t_subs t_dst >>= fun sub_dst ->
         query_actions ([subpath src sub_src], [subpath dst sub_dst])
@@ -2024,6 +2191,44 @@ end = struct
                || m <= 1 && n = 0 -> [`Nothing]
       | _ -> []
     with InvalidSubFormPath _ -> []
+  
+
+  (** [rewrite_link lnk] checks if [lnk] is a rewrite hyperlink. That is, one
+      end of the link is the left or right-hand side expression [e] of an
+      equality hypothesis, and the other end a non-empty set of arbitrary
+      subterms where all occurrences of [e] are to be rewritten.
+
+      If the check succeeds, it returns a [`Rewrite (red, res, tgts)] link
+      action, where [red] and [res] are respectively the reduced ([e]) and
+      residual expressions, and [tgts] are the targeted subterms. *)
+  
+  let rewrite_link : hlpred =
+    fun proof lnk ->
+    
+    let rewrite_data (p : ipath) =
+      if p.ctxt > 0 then
+        let _, it, _ = of_ipath proof p in
+        match p.sub, form_of_item it with
+        | [0], FPred ("_EQ", [red; res])
+        | [1], FPred ("_EQ", [res; red]) -> Some (red, res)
+        | _ -> None
+      else None
+    in
+    
+    try
+      match lnk, pair_map (List.hd |>> rewrite_data) lnk with
+      (* If it is a simple link where both ends are sides of equalities,
+         disambiguate by rewriting into the destination *)
+      | ([_], [dst]), (Some (red, res), Some _) ->
+          [`Rewrite (red, res, [dst])]
+
+      | (_, tgts), (Some (red, res), _)
+      | (tgts, _), (_, Some (red, res)) ->
+          [`Rewrite (red, res, tgts)]
+          
+      | _ -> []
+    (* Empty link end *)
+    with Failure _ -> []
     
       
   (* -------------------------------------------------------------------- *)
@@ -2072,7 +2277,8 @@ end = struct
     let Proof.{ g_id; g_pregoal }, _, _ = of_gpath proof dnd.source in
 
     let hlp = hlpred_add [
-      hlpred_mult (List.map hlpred_of_lpred [wf_subform_link; intuitionistic_link])
+      hlpred_mult (List.map hlpred_of_lpred [wf_subform_link; intuitionistic_link]);
+      rewrite_link
     ] in
     
     let dummy_path = mk_ipath 0 in
@@ -2174,7 +2380,9 @@ end = struct
     | `Hyperlink (lnk, actions) ->
         match lnk, actions with
         | ([src], [dst]), [`Subform substs] ->
-          dlink (src, dst) substs (proof, hd)
-        | _, _ :: _ -> failwith "Cannot handle multiple link actions yet"
-        | _, [] -> assert false
+            dlink (src, dst) substs (proof, hd)
+        | _, [`Rewrite (red, res, tgts)] ->
+            rewrite_in red res tgts (proof, hd)
+        | _, _ :: _ :: _ -> failwith "Cannot handle multiple link actions yet"
+        | _, _ -> raise TacticNotApplicable
 end

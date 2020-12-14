@@ -188,6 +188,8 @@ end
 let fst_map f (x, y) = (f x, y)
 let snd_map f (x, y) = (x, f y)
 
+let pair_map f (x, y) = (f x, f y)
+
 (* -------------------------------------------------------------------- *)
 let curry   f (x, y) = f x y
 let uncurry f x y = f (x, y)

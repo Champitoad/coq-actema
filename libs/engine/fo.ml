@@ -248,8 +248,7 @@ end = struct
       This ensures freshness by avoiding clashes with variables names input
       by the user, by the definition of identifiers in the lexer. This also
       means that every new existential variable must be instanciated through
-      this function.
-  *)
+      this function. *)
 
   let evar_name_counter = ref (-1)
 
@@ -1143,6 +1142,7 @@ end = struct
       fun s -> "{" ^ s ^ "}"
   end
 
+
   let rec occurs (x : vname) : expr -> bool = function
     | EVar y when x = y -> true
     | EFun (_, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
@@ -1153,57 +1153,59 @@ end = struct
     | EFun (_, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
     | _ -> false
 
+
   (** [e_unify env s eqns] implements a variant of Martelli and Montanari's
       unification algorithm on a list of term equations [eqns], with additional
       handling of a substitution [s] holding the list of bindings and unifiable (or
       "flex") variables, and a local environment [lenv] holding a context of locally
-      bound variables.
-  *)
+      bound variables. *)
+
   let rec e_unify (lenv : LEnv.lenv) (s : Subst.subst) = function
 
     (* success *)
-    | [] -> Some (Subst.close s)
+    | [] ->
+        Some (Subst.close s)
 
     | (t, u) :: eqns ->
 
-      let unify_cond x t =
-        Subst.flex x s &&
-        not (occurs x t) && (* maybe unnecessary check? *)
-        Map.for_all (fun n i -> 
-          not (occurs_under (n, i) t))
-          (LEnv.indices lenv)
-      in
-      let unify_body x t =
-        e_unify lenv (Subst.add x t s) eqns
-      in
+        let unify_cond x t =
+          Subst.flex x s &&
+          not (occurs x t) && (* maybe unnecessary check? *)
+          Map.for_all (fun n i -> 
+            not (occurs_under (n, i) t))
+            (LEnv.indices lenv)
+        in
+        let unify_body x t =
+          e_unify lenv (Subst.add x t s) eqns
+        in
 
-      let substitute_cond x = Subst.bound x s in
-      let substitute_body x t =
-        e_unify lenv s (((Subst.fetch x s), t) :: eqns)
-      in
-    
-      match t, u with
+        let substitute_cond x = Subst.bound x s in
+        let substitute_body x t =
+          e_unify lenv s (((Subst.fetch x s), t) :: eqns)
+        in
+      
+        match t, u with
 
-      (* (eliminate) is decomposed into the 2 following mutually exclusive cases: *)
+        (* (eliminate) is decomposed into the 2 following mutually exclusive cases: *)
 
-      (* (unify) *)
-      | EVar x, t when unify_cond x t -> unify_body x t
-      | t, EVar x when unify_cond x t -> unify_body x t
+        (* (unify) *)
+        | EVar x, t when unify_cond x t -> unify_body x t
+        | t, EVar x when unify_cond x t -> unify_body x t
 
-      (* (substitute) *)
-      | EVar x, t when substitute_cond x -> substitute_body x t
-      | t, EVar x when substitute_cond x -> substitute_body x t
+        (* (substitute) *)
+        | EVar x, t when substitute_cond x -> substitute_body x t
+        | t, EVar x when substitute_cond x -> substitute_body x t
 
-      (* (delete) *)
-      | EVar x, EVar y when x = y ->
-        e_unify lenv s eqns
+        (* (delete) *)
+        | EVar x, EVar y when x = y ->
+            e_unify lenv s eqns
 
-      (* (decompose) *)
-      | EFun (f, ts), EFun (g, us) when f = g ->
-        e_unify lenv s ((List.combine ts us) @ eqns)
+        (* (decompose) *)
+        | EFun (f, ts), EFun (g, us) when f = g ->
+            e_unify lenv s ((List.combine ts us) @ eqns)
 
-      (* (fail) *)
-      | _ -> None
+        (* (fail) *)
+        | _ -> None
 	
 
   let f_equal =
@@ -1230,6 +1232,7 @@ end = struct
 
     in fun ?(bds = VName.Map.empty) f1 f2 -> aux bds f1 f2
 
+
   (** [f_unify env s eqns] does unification of a list of equations [eqns] between
       formulas, updating along the way a substitution [s] and a local environment [lenv]
       holding a context of locally bound variables.
@@ -1240,38 +1243,41 @@ end = struct
 
     | (f1, f2) :: eqns -> match f1, f2 with
 
-      | FTrue, FTrue | FFalse, FFalse ->
-        
-        f_unify lenv s eqns
+        | FTrue, FTrue | FFalse, FFalse ->
+          
+            f_unify lenv s eqns
 
-      | FPred (p1, l1), FPred (p2, l2)
-        when p1 = p2 && List.length l1 = List.length l2 ->       
+        | FPred (p1, l1), FPred (p2, l2)
+          when p1 = p2 && List.length l1 = List.length l2 ->       
 
-        begin match e_unify lenv s (List.combine l1 l2) with
-        | Some s -> f_unify lenv s eqns
-        | None -> None
-        end
+            begin match e_unify lenv s (List.combine l1 l2) with
+            | Some s -> f_unify lenv s eqns
+            | None -> None
+            end
 
-      | FConn (c1, l1), FConn (c2, l2)
-        when c1 = c2 && List.length l1 = List.length l2 ->
+        | FConn (c1, l1), FConn (c2, l2)
+          when c1 = c2 && List.length l1 = List.length l2 ->
 
-        let subeqns = List.combine l1 l2 in
-        f_unify lenv s (subeqns @ eqns)
+            let subeqns = List.combine l1 l2 in
+            f_unify lenv s (subeqns @ eqns)
 
-      | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
-        when b1 = b2 && ty1 = ty2 ->
+        | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
+          when b1 = b2 && ty1 = ty2 ->
 
-        let f2 = Subst.f_apply1 (x2, 0) (EVar (x1, 0)) (f_shift (x1, 0) f2) in
-        let lenv' = LEnv.enter x1 lenv in
-        begin match f_unify lenv' s [f1, f2] with
-        | Some s -> f_unify lenv s eqns
-        | None -> None
-        end
+            let f2 = Subst.f_apply1 (x2, 0) (EVar (x1, 0)) (f_shift (x1, 0) f2) in
+            let lenv' = LEnv.enter x1 lenv in
+            begin match f_unify lenv' s [f1, f2] with
+            | Some s -> f_unify lenv s eqns
+            | None -> None
+            end
 
-      | _ -> None
+        | _ -> None
 end
 
+
 (* -------------------------------------------------------------------- *)
+
+
 module Goal : sig
   val check : pgoal -> env * form
 end = struct
