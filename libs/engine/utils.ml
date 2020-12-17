@@ -52,6 +52,8 @@ module List : sig
   val topo : ('a -> int) -> ('a -> int list) -> 'a list -> 'a list
 
   val find_map_opt : ('a -> 'b option) -> 'a list -> 'b option
+
+  val is_prefix : 'a list -> 'a list -> bool
 end = struct
   include BatList
 
@@ -137,6 +139,12 @@ end = struct
           | None   -> doit xs
           | Some v -> Some v
     in fun xs -> doit xs
+
+  let rec is_prefix (xs : 'a list) (pr : 'a list) =
+    match xs, pr with
+    | _, [] -> true
+    | x :: xs, y :: pr -> (x = y) && is_prefix xs pr
+    | _, _ -> false
 end
 
 (* -------------------------------------------------------------------- *)

@@ -310,9 +310,10 @@ module CoreLogic : sig
 
   type path        = string
   type ipath       = { root : int; ctxt : int; sub : int list; }
-  type gpath       = [`S of path | `P of ipath]
   type link        = ipath * ipath
   type hyperlink   = ipath list * ipath list
+
+  val ipath_of_path : path -> ipath
 
   type item   = [`C of form | `H of Handle.t * Proof.hyp ]
   type term   = [`F of form | `E of expr]
@@ -327,22 +328,20 @@ module CoreLogic : sig
   val ivariants  : targ -> string list
   val forward    : (Handle.t * Handle.t * int list * Form.Subst.subst) -> tactic
 
-  type asource = [
-    | `Click of aclick
+  type asource =
+    { kind : asource_kind; selection : selection; }
+
+  and asource_kind = [
+    | `Click of ipath
     | `DnD   of adnd
   ]
-  
-  and aclick = {
-    path : gpath;
-    selection : gpath list
-  }
 
   and adnd = {
-    source : gpath;
-    source_selection : gpath list;
-    destination : gpath option;
-    destination_selection : gpath list;
+    source      : ipath;
+    destination : ipath option;
   }
+
+  and selection = ipath list
 
   type osource = [
     | `Click of ipath
@@ -791,13 +790,11 @@ end = struct
 
   type path   = string
   type ipath  = { root : int; ctxt : int; sub : int list; }
-  type gpath  = [`S of path | `P of ipath]
 
   exception InvalidPath of path
   exception InvalidSubFormPath of int list
   exception InvalidSubExprPath of int list
 
-  
   let direct_subterm (t : term) (i : int) : term =
     try List.at (direct_subterms t) i
     with Invalid_argument _ ->
@@ -815,7 +812,7 @@ end = struct
       | `F _ -> raise (InvalidSubFormPath [i])
 
 
-  let rec subterm (t : term) (p : int list) =
+  let subterm (t : term) (p : int list) =
     try List.fold_left direct_subterm t p
     with InvalidSubFormPath _ -> raise (InvalidSubFormPath p)
        | InvalidSubExprPath _ -> raise (InvalidSubExprPath p)
@@ -924,12 +921,10 @@ end = struct
     let goal = Proof.{ g_id = Handle.ofint root; g_pregoal = goal } in
     (goal, item, (sub, target))
 
-  let ipath_of_gpath (p : gpath) =
-    match p with `S p -> ipath_of_path p | `P p -> p
-
-  let of_gpath (proof : Proof.proof) (p : gpath) =
-    of_ipath proof (ipath_of_gpath p)
-
+  let is_sub_path (p : ipath) (sp : ipath) =
+       p.root = sp.root
+    && p.ctxt = sp.ctxt
+    && List.is_prefix p.sub sp.sub
 
   (** [rewrite red res tgt targ] rewrites every occurrence of the reducible
       expression [red] in the subterm at path [tgt] into the residual
@@ -1073,11 +1068,11 @@ end = struct
     | `C _ -> Pos
 
 
-  (** [pol_of_gpath proof p] returns the polarity of the subformula
+  (** [pol_of_ipath proof p] returns the polarity of the subformula
       at path [p] in [proof] *)
 
-  let pol_of_gpath (proof : Proof.proof) (p : gpath) : pol =
-    let _, item, (sub, _) = of_gpath proof p in
+  let pol_of_ipath (proof : Proof.proof) (p : ipath) : pol =
+    let _, item, (sub, _) = of_ipath proof p in
     let pol, form =
       match item with
       | `H (_, { h_form = f; _ }) -> Neg, f
@@ -2234,29 +2229,25 @@ end = struct
   (* -------------------------------------------------------------------- *)
   (** Graphical actions *)
 
+  type asource =
+    { kind : asource_kind; selection : selection; }
 
-  type asource = [
-    | `Click of aclick
+  and asource_kind = [
+    | `Click of ipath
     | `DnD   of adnd
   ]
-  
-  and aclick = {
-    path : gpath;
-    selection : gpath list
-  }
 
   and adnd = {
-    source : gpath;
-    source_selection : gpath list;
-    destination : gpath option;
-    destination_selection : gpath list;
+    source      : ipath;
+    destination : ipath option;
   }
+
+  and selection = ipath list
 
   type osource = [
     | `Click of ipath
     | `DnD   of link
   ]
-
 
   (** [dnd_actions dnd] computes all possible proof actions associated with the
       DnD action [dnd], and packages them as an array of output actions as
@@ -2273,8 +2264,16 @@ end = struct
       the current goal.
  *)
 
-  let dnd_actions (dnd : adnd) (proof : Proof.proof) =
-    let Proof.{ g_id; g_pregoal }, _, _ = of_gpath proof dnd.source in
+  let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) =
+    let Proof.{ g_id; g_pregoal }, _, _ = of_ipath proof dnd.source in
+
+    let srcsel : selection =
+      List.filter (is_sub_path dnd.source) selection in
+
+    let dstsel : selection =
+      dnd.destination
+        |> Option.map (fun dst -> List.filter (is_sub_path dst) selection)
+        |> Option.default [] in
 
     let hlp = hlpred_add [
       hlpred_mult (List.map hlpred_of_lpred [wf_subform_link; intuitionistic_link]);
@@ -2283,16 +2282,16 @@ end = struct
     
     let dummy_path = mk_ipath 0 in
 
-    let srcs, fixed_srcs = begin match dnd.source_selection with
-      | [] -> [ipath_of_gpath dnd.source], None
-      | srcs -> [dummy_path], Some (List.map ipath_of_gpath srcs)
+    let srcs, fixed_srcs = begin match srcsel with
+      | [] -> [dnd.source], None
+      | srcs -> [dummy_path], Some srcs
       end in
 
-    let dsts, fixed_dsts = begin match dnd.destination_selection with
+    let dsts, fixed_dsts = begin match dstsel with
       | [] ->
           let dsts = begin match dnd.destination with
             | None ->
-                let src = ipath_of_gpath dnd.source in
+                let src = dnd.source in
                 (* Get the list of hypotheses handles *)
                 Proof.Hyps.ids g_pregoal.Proof.g_hyps |>
                 (* Create a list of paths to each hypothesis *)
@@ -2305,12 +2304,12 @@ end = struct
                 fun dsts -> List.remove dsts src
                 
             | Some dst ->
-                [ipath_of_gpath dst]
+                [dst]
             end in
           dsts, None
 
       | dsts ->
-          [dummy_path], Some (List.map ipath_of_gpath dsts)
+          [dummy_path], Some dsts
       end in
 
     let open Monad.List in
@@ -2336,10 +2335,10 @@ end = struct
   let actions (proof : Proof.proof) (p : asource)
       : (string * ipath list * osource * action) list
   =
-    match p with
-      | `Click { path = p; _ } -> begin
+    match p.kind with
+      | `Click path -> begin
           let Proof.{ g_id = hd; g_pregoal = _goal}, item, (_fs, _subf) =
-            of_gpath proof p
+            of_ipath proof path
           in
           match item with
           | `C _ -> begin
@@ -2362,7 +2361,7 @@ end = struct
         end
 
       | `DnD dnd ->
-        dnd_actions dnd proof
+        dnd_actions (dnd, p.selection) proof
 
   
   let apply (proof : Proof.proof) ((hd, a) : action) =
