@@ -462,8 +462,10 @@ end = struct
 
     | (0, None), FBind (`Forall, x, xty, body) ->
         let goal = Proof.byid pr id in
+        let y = Vars.fresh ~basename:x goal.g_env () in
+        let body = Form.Subst.f_apply1 (x, 0) (EVar (y, 0)) body in
         let goal = { goal with
-          g_env  = Vars.push goal.g_env (x, xty, None);
+          g_env  = Vars.push goal.g_env (y, xty, None);
           g_goal = body;
         }
         in Proof.xprogress pr id pterm [goal]
