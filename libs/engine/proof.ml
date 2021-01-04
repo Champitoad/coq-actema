@@ -726,7 +726,7 @@ end = struct
     | `E e -> List.map term_of_expr (direct_subexprs e)
     
   
-  let modify_subforms f fs =
+  let modify_direct_subforms f fs =
     match f, fs with
     | (FTrue | FFalse | FPred _), _ ->
         f
@@ -738,9 +738,9 @@ end = struct
         FBind (b, x, ty, f)
 
     | _ ->
-        failwith "Wrong arity for new subformulas"
+        raise (Invalid_argument "Wrong arity for new subformulas")
   
-  let modify_subexprs e es =
+  let modify_direct_subexprs e es =
     match e, es with
     | EVar _, _ ->
         e
@@ -749,7 +749,7 @@ end = struct
         EFun (f, es')
     
     | _ -> 
-        failwith "Wrong arity for new subexpressions"
+        raise (Invalid_argument "Wrong arity for new subexpressions")
   
   let modify_direct_subterms (t : term) (ts : term list) =
     match t with
@@ -757,10 +757,10 @@ end = struct
         `F (FPred (p, (List.map expr_of_term ts)))
     
     | `F f ->
-        ts |> List.map form_of_term |> modify_subforms f |> term_of_form 
+        ts |> List.map form_of_term |> modify_direct_subforms f |> term_of_form 
 
     | `E e ->
-        ts |> List.map expr_of_term |> modify_subexprs e |> term_of_expr
+        ts |> List.map expr_of_term |> modify_direct_subexprs e |> term_of_expr
 
   
   (* -------------------------------------------------------------------- *)
@@ -1319,7 +1319,7 @@ end = struct
                 let f = Form.Subst.f_apply1 (x, 0) t f in
                 let tgt = `C f in
                 tgt, gen_subgoals tgt ([], f) []
-              | Sflex -> failwith "cannot go through uninstanciated quantifiers"
+              | Sflex -> failwith "cannot go through uninstantiated quantifiers"
             in
             tgt, subgoals, s
           
@@ -1495,7 +1495,7 @@ end = struct
         let f = begin match h, c with
 
           (* Bid *)
-          | _ when h = c -> f_true
+          | _ when f_equal h c -> f_true
           | FPred (c1, ts1), FPred (c2, ts2) when c1 = c2 ->
             List.fold_left2
               (fun f t1 t2 -> f_and f (FPred ("_EQ", [t1; t2])))
@@ -1554,7 +1554,7 @@ end = struct
           (backward (c_imp_r f1 ctx) s (h, (f1, sub)))
           (forward (c_imp_l f2 ctx) s (h, (f1, sub)))
 
-      | (f, _ as h), (FBind (`Exist, x, ty, f1), 0 :: sub)
+      | (f, subh as h), (FBind (`Exist, x, ty, f1), 0 :: sub)
         when not (invertible `Left f) &&
         match get_tag (x, LEnv.get_index x (LEnv.enter x env2)) s2 with
         | Some Sbound e -> well_scoped e ctx
@@ -1570,27 +1570,17 @@ end = struct
           backward ctx s (h, (f1, sub))
         (* R∃s *)
         | Some Sflex ->
-          let y, f1 =
-            let fvf = free_vars f in
-            if List.mem x fvf then
-              let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
-              y, Subst.f_apply1 (x, 0) (EVar (y, 0)) f1
-            else x, f1
-          in
-          backward (CBind (`Exist, y, ty, ctx)) s (h, (f1, sub))
+          let h = (f_shift (x, 0) f, subh) in
+          backward (CBind (`Exist, x, ty, ctx)) s (h, (f1, sub))
         | None -> assert false
         end
 
       (* R∀s *)
-      | h, (FBind (`Forall, x, ty, f1), 0 :: sub) ->
+      | (f, subh), (FBind (`Forall, x, ty, f1), 0 :: sub) ->
         let env2 = LEnv.enter x env2 in
         let s = es1, (env2, s2) in
-        begin match fetch (x, LEnv.get_index x env2) s2 with
-        | EVar (y, _) ->
-          let f1 = Subst.f_apply1 (x, 0) (EVar (y, 0)) f1 in
-          backward (CBind (`Forall, y, ty, ctx)) s (h, (f1, sub))
-        | _ -> assert false
-        end
+        let h = f_shift (x, 0) f, subh in
+        backward (CBind (`Forall, x, ty, ctx)) s (h, (f1, sub))
 
       (** Left interaction rules *)
 
@@ -1625,17 +1615,13 @@ end = struct
         backward (c_and_r f1 ctx) s ((f2, sub), c)
       
       (* L∃s *)
-      | (FBind (`Exist, x, ty, f1), 0 :: sub), c ->
+      | (FBind (`Exist, x, ty, f1), 0 :: sub), (c, subc) ->
         let env1 = LEnv.enter x env1 in 
         let s = (env1, s1), es2 in
-        begin match fetch (x, LEnv.get_index x env1) s1 with
-        | EVar (y, _) ->
-          let f1 = f_apply1 (x, 0) (EVar (y, 0)) f1 in
-          backward (CBind (`Forall, y, ty, ctx)) s ((f1, sub), c)
-        | _ -> assert false
-        end
+        let c = f_shift (x, 0) c, subc in
+        backward (CBind (`Forall, x, ty, ctx)) s ((f1, sub), c)
 
-      | (FBind (`Forall, x, ty, f1), 0 :: sub), (f, _ as c)
+      | (FBind (`Forall, x, ty, f1), 0 :: sub), (f, subc as c)
         when not (invertible `Right f) &&
         match get_tag (x, LEnv.get_index x (LEnv.enter x env1)) s1 with
         | Some Sbound e -> well_scoped e ctx
@@ -1651,14 +1637,8 @@ end = struct
           backward ctx s ((f1, sub), c)
         (* L∀s *)
         | Some Sflex ->
-          let y, f1 =
-            let fvf = free_vars f in
-            if List.mem x fvf then
-              let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
-              y, f_apply1 (x, 0) (EVar (y, 0)) f1
-            else x, f1
-          in
-          backward (CBind (`Exist, y, ty, ctx)) s ((f1, sub), c)
+          let c = f_shift (x, 0) f, subc in
+          backward (CBind (`Exist, x, ty, ctx)) s ((f1, sub), c)
         | None -> assert false
         end
       
@@ -1672,13 +1652,16 @@ end = struct
 
       | (h, []), (h', []) ->
 
-        if h = h'
-        
-        (* Fid *)
-        then h
+        let f =
+          if f_equal h h'
+          
+          (* Fid *)
+          then h
 
-        (* Frel *)
-        else f_and h h'
+          (* Frel *)
+          else f_and h h'
+        in
+        c_fill f (c_rev ctx)
 
       (** Interaction rules *)
 
@@ -1732,18 +1715,13 @@ end = struct
         backward (c_imp_l f1 ctx) s (h, (f2, sub))
       
       (* F∃s *)
-      | (f, _ as h), (FBind (`Exist, x, ty, f1), 0 :: sub) ->
-        let s = es1, (LEnv.enter x env2, s2) in
-        let y, f1 =
-          let fvf = free_vars f in
-          if List.mem x fvf then
-            let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
-            y, Subst.f_apply1 (x, 0) (EVar (y, 0)) f1
-          else x, f1
-        in
-        forward (CBind (`Exist, y, ty, ctx)) s (h, (f1, sub))
+      | (f, subh as h), (FBind (`Exist, x, ty, f1), 0 :: sub) ->
+        let env2 = LEnv.enter x env2 in
+        let s = es1, (env2, s2) in
+        let h = f_shift (x, 0) f, subh in
+        forward (CBind (`Exist, x, ty, ctx)) s (h, (f1, sub))
       
-      | (f, _ as h), (FBind (`Forall, x, ty, f1), 0 :: sub)
+      | (f, subh as h), (FBind (`Forall, x, ty, f1), 0 :: sub)
         when not (invertible `Forward f) &&
         match get_tag (x, LEnv.get_index x (LEnv.enter x env2)) s2 with
         | Some Sbound e -> well_scoped e ctx
@@ -1759,14 +1737,8 @@ end = struct
           forward ctx s (h, (f1, sub))
         (* F∀s *)
         | Some Sflex ->
-          let y, f1 =
-            let fvf = free_vars f in
-            if List.mem x fvf then
-              let y = fresh_var ~basename:x (free_vars f1 @ fvf) in
-              y, Subst.f_apply1 (x, 0) (EVar (y, 0)) f1
-            else x, f1
-          in
-          forward (CBind (`Forall, y, ty, ctx)) s (h, (f1, sub))
+          let h = f_shift (x, 0) f, subh in
+          forward (CBind (`Forall, x, ty, ctx)) s (h, (f1, sub))
         | None -> assert false
         end
         
