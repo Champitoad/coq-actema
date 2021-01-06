@@ -504,12 +504,12 @@ end = struct
 
   let core_elim ?clear (h : Handle.t) ((pr, id) : targ) =
     let _ = clear in            (* FIXME *)
-    let result = ref ([])  in 
+    let result = ref ([]) in 
     let gl = Proof.byid pr id in
     let hyp = (Proof.Hyps.byid gl.g_hyps h).h_form in
 
     if Form.f_equal hyp gl.g_goal
-    then  result := [(TElim id), [] ] 
+    then result := [(TElim id), `S []] 
     else ();
 
     let pre, hy, s = prune_premisses_fa hyp in
@@ -517,27 +517,39 @@ end = struct
     | Some s when Form.Subst.is_complete s ->  
         let pres = List.map
         (fun (i, x) -> [Some h, []], (Form.Subst.f_iter s i x)) pre in
-        result :=  ((TElim id), pres)::!result
+        result :=  ((TElim id), `S pres)::!result
     | Some _ -> () (* "incomplete match" *)
     | _ -> ();
     end;
     let subs = List.map (fun (_, f) -> [Some h, []], f) pre in
     begin match hy with
     | FConn (`And, [f1; f2]) ->
-        result := ((TElim id), subs@ [[Some h, [f1; f2]], gl.g_goal]) :: !result
+        result := ((TElim id), `S (subs @ [[Some h, [f1; f2]], gl.g_goal])) :: !result
     (* clear *) 
     | FConn (`Or, [f1; f2]) ->
         result := ((TElim id), 
-                   subs @ [[Some h, [f1]], gl.g_goal;
-                           [Some h, [f2]], gl.g_goal]) :: !result
+                   `S (subs @ [[Some h, [f1]], gl.g_goal;
+                           [Some h, [f2]], gl.g_goal])) :: !result
     | FConn (`Equiv, [f1; f2]) ->
         result := ((TElim id),
-                   (subs @ [[Some h, [Form.f_imp f1 f2;
+                   `S (subs @ [[Some h, [Form.f_imp f1 f2;
                                       Form.f_imp f2 f1]], gl.g_goal])) :: !result
     | FConn (`Not, [f]) ->
         result := ((TElim id), 
-                  (subs @ [[Some h, []], f])) :: !result
-    | FFalse -> result := ((TElim id), subs) :: !result
+                   `S (subs @ [[Some h, []], f])) :: !result
+    | FFalse -> result := ((TElim id), `S subs) :: !result
+    | FBind (`Exist, x, ty, f) ->
+        let y = Vars.fresh ~basename:x gl.g_env () in
+        let hyp = Form.Subst.f_apply1 (x, 0) (EVar (y, 0)) f in
+        
+        let g_hyps = Proof.Hyps.remove gl.g_hyps h in
+        let g_hyps = Proof.(Hyps.add g_hyps h (mk_hyp hyp)) in
+        let goal = Proof.{ gl with
+          g_env = Vars.push gl.g_env (y, ty, None);
+          g_hyps
+        }
+
+        in result := ((TElim id), `X [goal]) :: !result
     | _ -> ()
     end;
     let _ , goal, s = prune_premisses_ex gl.g_goal in
@@ -545,7 +557,7 @@ end = struct
     let pre = List.map (fun x -> [(Some h), []],x) pre in
     begin match Form.f_unify LEnv.empty s [(hy, goal)] with
     | Some s when Form.Subst.is_complete s ->
-        result := ((TElim id), pre) :: !result
+        result := ((TElim id), `S pre) :: !result
     | Some _ -> () (* failwith "incomplete ex match" *)
     | None ->
         match goal with
@@ -559,7 +571,7 @@ end = struct
               end
           in 
           if aux gll 
-          then result := ((TElim id), []) :: !result
+          then result := ((TElim id), `S []) :: !result
           else ()
         | _ -> ()
     end;
@@ -567,7 +579,8 @@ end = struct
 
   let perform l pr id =
     match l with
-      | (t, l)::_ -> Proof.sprogress pr id t l
+      | (t, `S l)::_ -> Proof.sprogress pr id t l
+      | (t, `X l)::_ -> Proof.xprogress pr id t l
       | _ -> raise TacticNotApplicable
   
   let elim ?clear (h : Handle.t) ((pr, id) : targ) =
@@ -611,7 +624,7 @@ end = struct
     in
     let nf = build_dest (dst, p, s) in
 
-    [ (TForward (hsrc, hdst)), [[Some hdst, [nf]], gl.g_goal] ]
+    [ (TForward (hsrc, hdst)), `S [[Some hdst, [nf]], gl.g_goal] ]
 
   let forward (hsrc, hdst, p, s) ((pr, id) : targ) =
     perform (core_forward (hsrc, hdst, p, Form.Subst.aslist s) (pr, id)) pr id 
