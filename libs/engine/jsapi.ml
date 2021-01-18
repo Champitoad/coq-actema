@@ -69,14 +69,14 @@ let (!!) f = fun x ->
     in Js.raise_js_error (new%js Js.error_constr (Js.string msg))
 
 (* -------------------------------------------------------------------- *)
-let rec js_proof_engine (proof : Proof.proof) = object%js (self)
+let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   val proof  = proof
   val handle = Handle.fresh ()
 
   (* Return a [js_subgoal] array of all the opened subgoals *)
   method subgoals =
     let subgoals = Proof.opened proof in
-    let subgoals = List.map (js_subgoal self) subgoals in
+    let subgoals = List.map (js_subgoal _self) subgoals in
     Js.array (Array.of_list subgoals)
 
   (* Return true when there are no opened subgoals left *)
@@ -85,11 +85,11 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
 
   (* Get the meta-data attached to this proof engine *)
   method getmeta =
-    Js.Opt.option (Proof.get_meta proof self##.handle)
+    Js.Opt.option (Proof.get_meta proof _self##.handle)
 
   (* Attach meta-data to the proof engine *)
   method setmeta meta =
-    Proof.set_meta proof self##.handle (Js.Opt.to_option meta)
+    Proof.set_meta proof _self##.handle (Js.Opt.to_option meta)
 
   (* Get all the proof actions that can be applied to the
    * goal targetted by [asource] as an array of actions.
@@ -109,14 +109,8 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
    *  - destination (string option) [only for the kind "dnd"]
    *    ID of the subterm that received the dropped item
    *
-   *  - selection (string list) [both "click" and "dnd" when destination is undefined]
-   *    List of IDs of subterms selected inside the clicked/source item
-   *    
-   *  - sourceSelection (string list) [only for the kind "dnd" when destination is defined]
-   *    List of IDs of subterms selected inside the source item
-   *
-   *  - destinationSelection (string) [only for the kind "dnd"]
-   *    List of IDs of selected subterms in the destination's containing item
+   *  - selection (string list) [all actions]
+   *    List of IDs of subterms selected
    *
    * An output action is an object with the following properties:
    *
@@ -127,44 +121,37 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
    *)
   method actions asource =
     let actions =
-      let asource =
+      let path_of obj = CoreLogic.ipath_of_path (Js.as_string InvalidASource obj) in
+      let path_list_of obj = obj |> Js.to_array |> Array.to_list |> List.map path_of in
+      let path_option_of obj = obj |> Js.Opt.to_option |> Option.map path_of in
 
-        let path_of obj = `S (Js.as_string InvalidASource obj) in
-        let path_list_of obj = obj |> Js.to_array |> Array.to_list |> List.map path_of in
-        let path_option_of obj = obj |> Js.Opt.to_option |> Option.map path_of in
-
+      let kinds =
         match Js.to_string (Js.typeof asource) with
         | "string" ->
-          [`Click CoreLogic.{ path = path_of asource; selection = []}]
+          [`Click (path_of asource)]
         | "object" -> begin
           let asource = Js.Unsafe.coerce asource in
           match Js.as_string InvalidASource asource##.kind with
             | "click" ->
                 let path = path_of asource##.path in
-                let selection = path_list_of asource##.selection in
-                [`Click CoreLogic.{ path; selection }]
+                [`Click path]
             | "dnd" ->
                 let source = path_of asource##.source in
                 let destination = path_option_of asource##.destination in
-                let source_selection, destination_selection =
-                  begin match destination with
-                  | Some _ -> path_list_of asource##.sourceSelection, path_list_of asource##.destinationSelection
-                  | None -> path_list_of asource##.selection, []
-                  end in
-                [`DnD CoreLogic.{
-                  source; source_selection;
-                  destination; destination_selection }]
+                [`DnD CoreLogic.{ source; destination; }]
             | "any" ->
                 let path = path_of asource##.path in
-                [`Click { path; selection = [] };
-                 `DnD CoreLogic.{
-                    source = path; source_selection = [];
-                    destination = None; destination_selection = [] }]
+                [`Click path; `DnD CoreLogic.{ source = path; destination = None; }]
             | _ -> raise InvalidASource
           end
         | _ -> raise InvalidASource
-      in List.flatten
-           (List.map (!!(CoreLogic.actions self##.proof)) asource)
+
+      and selection = path_list_of asource##.selection in
+
+      let asource =
+        List.map (fun kind -> CoreLogic.{ kind; selection; }) kinds in
+
+      List.flatten (List.map (!!(CoreLogic.actions _self##.proof)) asource)
     in
 
     Js.array (
@@ -197,16 +184,16 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (self)
 
   (* Same as [actions], but in async mode. TO BE TESTED *)
   method pactions path =
-    let%lwt _ = Lwt.return () in Lwt.return (self##actions path)
+    let%lwt _ = Lwt.return () in Lwt.return (_self##actions path)
 
   (* Apply the action [action] (as returned by [actions]) *)
   method apply action =
-    js_proof_engine (!! (uc CoreLogic.apply) (self##.proof, action))
+    js_proof_engine (!! (uc CoreLogic.apply) (_self##.proof, action))
 end
 
 (* -------------------------------------------------------------------- *)
 (* JS wrapper for subgoals                                              *)
-and js_subgoal parent (handle : Handle.t) = object%js (self)
+and js_subgoal parent (handle : Handle.t) = object%js (_self)
   (* back-link to the [js_proof_engine] this subgoal belongs to *)
   val parent = parent
 
@@ -215,29 +202,29 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
 
   (* Return all the propositional variables as a [string array] *)
   method vars =
-    let goal = Proof.byid parent##.proof self##.handle in
+    let goal = Proof.byid parent##.proof _self##.handle in
     let vars = List.fst (Map.bindings (Fo.Prps.all goal.g_env)) in
     Js.array (Array.of_list (List.map Js.string vars))
 
   (* Return all the local variables as a [js_tvar array] *)
   method tvars =
-    let goal  = Proof.byid parent##.proof self##.handle in
+    let goal  = Proof.byid parent##.proof _self##.handle in
     let tvars = Map.bindings (Fo.Vars.all goal.g_env) in
     let tvars = List.map (snd_map List.hd) tvars in
-    let aout  = List.mapi (fun i (x, (ty, body)) -> js_tvar self (i, (x, ty, body))) tvars in
+    let aout  = List.mapi (fun i (x, (ty, body)) -> js_tvar _self (i, (x, ty, body))) tvars in
     Js.array (Array.of_list aout)
 
   (* Return all the local hypotheses (context) as a [js_hyps array] *)
   method context =
-    let goal = Proof.byid parent##.proof self##.handle in
+    let goal = Proof.byid parent##.proof _self##.handle in
     let hyps = List.rev (Proof.Hyps.to_list goal.g_hyps) in
 
-    Js.array (Array.of_list (List.mapi (fun i x -> js_hyps self (i, x)) hyps))
+    Js.array (Array.of_list (List.mapi (fun i x -> js_hyps _self (i, x)) hyps))
 
   (* Return the subgoal conclusion as a [js_form] *)
   method conclusion =
-    let goal  = Proof.byid parent##.proof self##.handle in
-    js_form (self##.handle, `C) goal.g_goal
+    let goal  = Proof.byid parent##.proof _self##.handle in
+    js_form (_self##.handle, `C) goal.g_goal
 
   (* [this#intro [variant : int]] applies the relevant introduction
    * rule to the conclusion of the subgoal [this]. The parameter
@@ -270,22 +257,22 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
    * cut it. *)
   method cut form =
     let doit () =
-      let goal = Proof.byid parent##.proof self##.handle in
+      let goal = Proof.byid parent##.proof _self##.handle in
       let form = String.trim (Js.to_string form) in
       let form = Io.parse_form (Io.from_string form) in
       let form = Fo.Form.check goal.g_env form in
-      CoreLogic.cut form (parent##.proof, self##.handle)
+      CoreLogic.cut form (parent##.proof, _self##.handle)
     in js_proof_engine (!!doit ())
 
   (* [this#add_local (name : string) (expr : string) parses [expr] in the goal
    * [context] and add it to the local [context] under the name [name]. *)
   method addlocal name expr =
     let doit () =
-      let goal = Proof.byid parent##.proof self##.handle in
+      let goal = Proof.byid parent##.proof _self##.handle in
       let expr = String.trim (Js.to_string expr) in
       let expr = Io.parse_expr (Io.from_string expr) in
       let expr, ty = Fo.Form.echeck goal.g_env expr in
-      CoreLogic.add_local (Js.to_string name, ty, expr) (parent##.proof, self##.handle)
+      CoreLogic.add_local (Js.to_string name, ty, expr) (parent##.proof, _self##.handle)
 
     in js_proof_engine (!!doit ())
 
@@ -293,11 +280,11 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
    * in the goal [context] and add it to the local [context]. *)
   method addalias expr =
     let doit () =
-      let goal = Proof.byid parent##.proof self##.handle in
+      let goal = Proof.byid parent##.proof _self##.handle in
       let expr = String.trim (Js.to_string expr) in
       let name, expr = Io.parse_nexpr (Io.from_string expr) in
       let expr, ty = Fo.Form.echeck goal.g_env expr in
-      CoreLogic.add_local (Location.unloc name, ty, expr) (parent##.proof, self##.handle)
+      CoreLogic.add_local (Location.unloc name, ty, expr) (parent##.proof, _self##.handle)
 
     in js_proof_engine (!!doit ())
 
@@ -308,26 +295,26 @@ and js_subgoal parent (handle : Handle.t) = object%js (self)
     let doit () =
       CoreLogic.move
         from (Js.Opt.to_option before)
-        (parent##.proof, self##.handle)
+        (parent##.proof, _self##.handle)
     in js_proof_engine (!!doit ())
 
   (* [this#generalize (h : handle<js_hyps>) generalizes the hypothesis [h] *)
   method generalize hid =
     let doit () =
-      CoreLogic.generalize hid (parent##.proof, self##.handle)
+      CoreLogic.generalize hid (parent##.proof, _self##.handle)
     in js_proof_engine (!!doit ())
 
   method getmeta =
-    Js.Opt.option (Proof.get_meta parent##.proof self##.handle)
+    Js.Opt.option (Proof.get_meta parent##.proof _self##.handle)
 
   method setmeta meta =
-    Proof.set_meta parent##.proof self##.handle (Js.Opt.to_option meta)
+    Proof.set_meta parent##.proof _self##.handle (Js.Opt.to_option meta)
 end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for a context hypothesis                                  *)
 and js_hyps parent (i, (handle, hyp) : int * (Handle.t * Proof.hyp)) =
-object%js (self)
+object%js (_self)
   (* back-link to the [js_subgoal] this hypothesis belongs to *)
   val parent = parent
 
@@ -351,23 +338,23 @@ object%js (self)
 
   (* Return the [html] of the enclosed formula *)  
   method html =
-    self##.form##html
+    _self##.form##html
 
   (* Return an UTF8 string representation of the enclosed formula *)
   method tostring =
-    self##.form##tostring
+    _self##.form##tostring
 
   method getmeta =
-    Js.Opt.option (Proof.get_meta self##.proof##.proof self##.handle)
+    Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
 
   method setmeta meta =
-    Proof.set_meta self##.proof##.proof self##.handle (Js.Opt.to_option meta)
+    Proof.set_meta _self##.proof##.proof _self##.handle (Js.Opt.to_option meta)
 end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for a local variable                                      *)
 and js_tvar parent ((i, (x, ty, body)) : int * (Fo.name * Fo.type_ * Fo.expr option)) =
-object%js (self)
+object%js (_self)
   (* back-link to the [js_subgoal] this local variable belongs to *)
   val parent = parent
 
@@ -399,27 +386,27 @@ object%js (self)
       Xml.node ~a:[Xml.string_attrib "id" id] "span" [
         Xml.node "span" [Xml.pcdata (UTF8.of_latin1 x)];
         Xml.node "span" [Xml.pcdata " : "];
-        self##.type_##rawhtml;
+        _self##.type_##rawhtml;
       ]
     in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
 
   (* Return an UTF8 string representation of the enclosed formula *)
   method tostring =
-    Js.string (Format.sprintf "%s : %s" x self##.type_##rawstring)
+    Js.string (Format.sprintf "%s : %s" x _self##.type_##rawstring)
 
   method getmeta =
-    Js.Opt.option (Proof.get_meta self##.proof##.proof self##.handle)
+    Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
 
   method setmeta meta =
-    Proof.set_meta self##.proof##.proof self##.handle (Js.Opt.to_option meta)
+    Proof.set_meta _self##.proof##.proof _self##.handle (Js.Opt.to_option meta)
 end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
-and js_form (source : source) (form : Fo.form) = object%js (self)
+and js_form (source : source) (form : Fo.form) = object%js (_self)
   (* Return the [html] of the formula *)  
   method html =
-    self##htmltag true
+    _self##htmltag true
 
   (* Return the [html] of the formula *)  
   method htmltag (id : bool) =
@@ -441,10 +428,10 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for expressions                                           *)
-and js_expr (expr : Fo.expr) = object%js (self)
+and js_expr (expr : Fo.expr) = object%js (_self)
   (* Return the [html] of the formula *)  
   method html =
-    self##htmltag
+    _self##htmltag
 
   (* Return the [html] of the formula *)  
   method htmltag =
@@ -459,7 +446,7 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
-and js_type (ty : Fo.type_) = object%js (self)
+and js_type (ty : Fo.type_) = object%js (_self)
   (* Return the raw [html] fo the type *)
   method rawhtml =
     Fo.Form.t_tohtml ty
@@ -470,11 +457,11 @@ and js_type (ty : Fo.type_) = object%js (self)
 
   (* Return the [html] of the type *)  
   method html =
-    Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) self##rawhtml)
+    Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) _self##rawhtml)
 
   (* Return an UTF8 string representation of the formula *)
   method tostring =
-    Js.string self##rawstring
+    Js.string _self##rawstring
 end
 
 (* -------------------------------------------------------------------- *)
