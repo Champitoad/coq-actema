@@ -1478,7 +1478,7 @@ end = struct
       (* Left invertible *)
       | `Left -> begin match f with
         | FConn (c, _) -> begin match c with
-          | `And | `Or -> true
+          | `Or -> true
           | _ -> false
           end
         | FBind (`Exist, _, _, _) -> true
