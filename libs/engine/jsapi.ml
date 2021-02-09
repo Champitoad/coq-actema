@@ -110,7 +110,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
    *    ID of the subterm that received the dropped item
    *
    *  - selection (string list) [all actions]
-   *    List of IDs of subterms selected
+   *    List of IDs of selected subterms
    *
    * An output action is an object with the following properties:
    *

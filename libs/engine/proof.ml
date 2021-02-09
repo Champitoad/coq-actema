@@ -1725,7 +1725,7 @@ end = struct
         backward (c_imp_l f1 ctx) s (h, (f2, sub))
       
       (* F∃s *)
-      | (f, subh as h), (FBind (`Exist, x, ty, f1), 0 :: sub) ->
+      | (f, subh), (FBind (`Exist, x, ty, f1), 0 :: sub) ->
         let env2 = LEnv.enter x env2 in
         let s = es1, (env2, s2) in
         let h = f_shift (x, 0) f, subh in
@@ -2307,16 +2307,11 @@ end = struct
     let linkactions = search_linkactions hlp proof
       ?fixed_srcs ?fixed_dsts (src, dst) in
 
-    linkactions |> List.map begin fun ((srcs, dsts) as lnk, actions) ->
-      let actions = remove_nothing actions in
-      let item_lnk =
-        item_ipath (List.hd srcs),
-        item_ipath (List.hd dsts) in
-      let tgts_lnk =
-        List.hd srcs,
-        List.hd dsts in
-      "Hyperlink", srcs @ dsts, `DnD item_lnk, (g_id, `Hyperlink (lnk, actions))
-    end
+    linkactions >>= fun ((srcs, dsts) as lnk, actions) ->
+    let actions = remove_nothing actions in
+    srcs >>= fun src ->
+    dsts >>= fun dst ->
+    return ("Hyperlink", srcs @ dsts, `DnD (src, dst), (g_id, `Hyperlink (lnk, actions)))
 
       
   let actions (proof : Proof.proof) (p : asource)
