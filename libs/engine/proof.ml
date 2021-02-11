@@ -939,7 +939,7 @@ end = struct
   let is_sub_path (p : ipath) (sp : ipath) =
        p.root = sp.root
     && p.ctxt = sp.ctxt
-    && List.is_prefix p.sub sp.sub
+    && List.is_prefix sp.sub p.sub
 
   (** [rewrite red res tgt targ] rewrites every occurrence of the reducible
       expression [red] in the subterm at path [tgt] into the residual

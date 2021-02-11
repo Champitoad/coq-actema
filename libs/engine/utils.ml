@@ -11,6 +11,31 @@ module String = BatString
 include BatPervasives
 
 (* -------------------------------------------------------------------- *)
+let js_log s = 
+  Js_of_ocaml.(Firebug.console##log (Js.string s))
+
+(* -------------------------------------------------------------------- *)
+let fst_map f (x, y) = (f x, y)
+let snd_map f (x, y) = (x, f y)
+
+let pair_map f (x, y) = (f x, f y)
+
+(* -------------------------------------------------------------------- *)
+let (|>>) f g = fun x -> g (f x)
+let (<<|) f g = fun x -> f (g x)
+
+let curry   f (x, y) = f x y
+let uncurry f x y = f (x, y)
+
+let (^~) f = fun x y -> f y x
+
+let (/>) (x : 'a option) (f : 'a -> 'b) =
+  Option.map f x
+
+let ueta (f : unit -> 'a) : 'b -> 'a =
+  fun _ -> f ()
+
+(* -------------------------------------------------------------------- *)
 module Option : sig
   include module type of BatOption
 
@@ -22,9 +47,6 @@ end = struct
     | None   -> acc
     | Some v -> f acc v
 end
-
-(* -------------------------------------------------------------------- *)
-let uc f (x, y) = f x y
 
 (* -------------------------------------------------------------------- *)
 module List : sig
@@ -54,6 +76,10 @@ module List : sig
   val find_map_opt : ('a -> 'b option) -> 'a list -> 'b option
 
   val is_prefix : 'a list -> 'a list -> bool
+  
+  val to_string :
+    ?sep : string -> ?left : string -> ?right : string ->
+    ('a -> string) -> 'a list -> string 
 end = struct
   include BatList
 
@@ -145,6 +171,9 @@ end = struct
     | _, [] -> true
     | x :: xs, y :: pr -> (x = y) && is_prefix xs pr
     | _, _ -> false
+    
+  let to_string ?(sep = "; ") ?(left = "[") ?(right = "]") print =
+    List.map print |>> String.join sep |>> fun s -> left ^ s ^ right
 end
 
 (* -------------------------------------------------------------------- *)
@@ -191,27 +220,3 @@ end = struct
     let r = ref (Some (cb, x)) in
     Gc.finalise (fun r -> dispose r) r; r
 end
-
-(* -------------------------------------------------------------------- *)
-let fst_map f (x, y) = (f x, y)
-let snd_map f (x, y) = (x, f y)
-
-let pair_map f (x, y) = (f x, f y)
-
-(* -------------------------------------------------------------------- *)
-let curry   f (x, y) = f x y
-let uncurry f x y = f (x, y)
-
-let (|>>) f g = fun x -> g (f x)
-let (<<|) f g = fun x -> f (g x)
-
-let (^~) f = fun x y -> f y x
-
-let (/>) (x : 'a option) (f : 'a -> 'b) =
-  Option.map f x
-
-let ueta (f : unit -> 'a) : 'b -> 'a =
-  fun _ -> f ()
-
-let js_log s = 
-  Js_of_ocaml.(Firebug.console##log (Js.string s));

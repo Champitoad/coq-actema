@@ -1133,13 +1133,11 @@ end = struct
       
 
     let to_string =
-      List.map begin fun (x, tag) ->
-        match tag with
-        | Sflex -> "?" ^ x
-        | Sbound e -> x ^ " := " ^ (e_tostring e)
-      end |>>
-      String.join ", " |>>
-      fun s -> "{" ^ s ^ "}"
+      List.to_string ~sep:", " ~left:"{" ~right:"}"
+        (fun (x, tag) ->
+          match tag with
+          | Sflex -> "?" ^ x
+          | Sbound e -> x ^ " := " ^ (e_tostring e))
   end
 
 

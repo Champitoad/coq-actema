@@ -188,7 +188,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
 
   (* Apply the action [action] (as returned by [actions]) *)
   method apply action =
-    js_proof_engine (!! (uc CoreLogic.apply) (_self##.proof, action))
+    js_proof_engine (!! (curry CoreLogic.apply) (_self##.proof, action))
 end
 
 (* -------------------------------------------------------------------- *)
@@ -241,7 +241,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
    * Raise an exception if [target] does not belong to [this] *)
   method elim target =
     let data = (target, (parent##.proof, handle)) in
-    js_proof_engine (!!(uc CoreLogic.elim) data)
+    js_proof_engine (!!(curry CoreLogic.elim) data)
 
   (* [this#ivariants] Return the available introduction rules that can
    * be applied to the conclusion of [this] as a string array. The strings
