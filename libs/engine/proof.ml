@@ -2241,14 +2241,13 @@ end = struct
       specified in the JS API.
 
       More specifically, it will try to query actions for hyperlinks whose
-      sources (resp. destinations) are those of [dnd.source_selection] (resp.
-      [dnd.destination_selection]), and which yield at least one action.
+      sources (resp. destinations) are those of [selection] occuring in
+      [dnd.source] (resp. elsewhere), and which yield at least one action.
 
-      If [dnd.source_selection] (resp. [dnd.destination_selection]) is empty, it
-      will search for hyperlinks with only one source (resp. destination) which
-      is a subterm of [dnd.source] (resp. [dnd.destination]). If
-      [dnd.destination] is [None], it will search for destinations everywhere in
-      the current goal.
+      If the source (resp. destination) selection is empty, it will search for
+      hyperlinks with only one source (resp. destination) which is a subterm of
+      [dnd.source] (resp. [dnd.destination]). If [dnd.destination] is [None], it
+      will search for destinations everywhere in the current goal.
  *)
 
   let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) =
@@ -2258,9 +2257,7 @@ end = struct
       List.filter (is_sub_path dnd.source) selection in
 
     let dstsel : selection =
-      dnd.destination
-        |> Option.map (fun dst -> List.filter (is_sub_path dst) selection)
-        |> Option.default [] in
+      List.remove_if (fun p -> p.ctxt = dnd.source.ctxt) selection in
 
     let hlp = hlpred_add [
       hlpred_mult (List.map hlpred_of_lpred [wf_subform_link; intuitionistic_link]);
