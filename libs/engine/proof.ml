@@ -777,6 +777,11 @@ end = struct
         ts |> List.map expr_of_term |> modify_direct_subexprs e |> term_of_expr
 
   
+  let string_of_term : term -> string = function
+    | `F f -> Form.f_tostring f
+    | `E e -> Form.e_tostring e
+  
+
   (* -------------------------------------------------------------------- *)
   (** Items *)
 
@@ -1798,11 +1803,17 @@ end = struct
             a :: doit l
     in doit
           
-  let string_of_linkaction =
+  let string_of_linkaction proof =
     let rec doit = function
       | `Nothing -> "⊥"
       | `Both (a, a') -> Printf.sprintf "(%s, %s)" (doit a) (doit a')
       | `Subform _ -> "SFL"
+      | `Rewrite (red, res, tgts) ->
+          Printf.sprintf "%s[%s ~> %s]"
+            (List.to_string ~sep:", " ~left:"{" ~right:"}"
+              (fun p -> let _, _, (_, t) = of_ipath proof p in string_of_term t)
+              tgts)
+            red res
     in doit
 
   type action = Handle.t * [
