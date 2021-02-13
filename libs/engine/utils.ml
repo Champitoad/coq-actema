@@ -57,6 +57,7 @@ module List : sig
   val fst : ('a * 'b) list -> 'a list
   val snd : ('a * 'b) list -> 'b list
 
+  val pop_at : int -> 'a list -> 'a * 'a list
   val pop_assoc : 'a -> ('a * 'b) list -> ('a * 'b) list * 'b
 
   val findex : ('a -> bool) -> 'a list -> int option
@@ -87,11 +88,19 @@ end = struct
 
   let fst xs = List.map fst xs
   let snd xs = List.map snd xs
+  
+  let pop_at i l =
+    let rec aux acc i l =
+      match i, l with
+      | 0, x :: l -> x, List.rev_append acc l
+      | _, x :: l -> aux (x :: acc) (i-1) l
+      | _ -> raise Not_found
+    in aux [] i l
 
   let pop_assoc a l =
     let rec aux acc a = function
       | [] -> raise Not_found
-      | (b, x) :: l when a = b -> (List.rev acc) @ l, x
+      | (b, x) :: l when a = b -> List.rev_append acc l, x
       | i :: l -> aux (i :: acc) a l
     in aux [] a l
 

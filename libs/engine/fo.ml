@@ -4,12 +4,13 @@ open Location
 open Syntax
 
 (* -------------------------------------------------------------------- *)
+(** Names *)
+
 type name  = string
 type vname = name * int
 
 let name_of_vname : vname -> name = fst
 
-(* -------------------------------------------------------------------- *)
 module Name = struct
   type t = name
 
@@ -19,6 +20,8 @@ module Name = struct
 end
 
 (* -------------------------------------------------------------------- *)
+(** Types *)
+
 type type_ =
   | TVar  of vname
   | TUnit
@@ -26,9 +29,21 @@ type type_ =
   | TOr   of type_ * type_
   | TRec  of name * type_
 
+type arity = type_ list
+ and sig_  = arity * type_
+
+(* -------------------------------------------------------------------- *)
+(** Expressions *)
+
 type expr  =
   | EVar of vname
   | EFun of name * expr list
+  
+(* -------------------------------------------------------------------- *)
+(** Formulas *)
+
+type logcon = [ `And | `Or | `Imp | `Equiv | `Not ]
+type bkind  = [ `Forall | `Exist ]
 
 type form =
   | FTrue
@@ -37,16 +52,49 @@ type form =
   | FConn of logcon * form list
   | FBind of bkind * name * type_ * form
 
-and fctx =
-  | CHole
-  | CConn of logcon * form list * fctx * form list
-  | CBind of bkind * name * type_ * fctx
+(* -------------------------------------------------------------------- *)
+(** Terms = Formulas + Expressions *)
 
-and logcon = [ `And | `Or | `Imp | `Equiv | `Not ]
-and bkind  = [ `Forall | `Exist ]
+type term   = [`F of form | `E of expr]
 
-type arity = type_ list
- and sig_  = arity * type_
+let term_of_expr e : term = `E e
+let term_of_form f : term = `F f
+
+let expr_of_term (t : term) =
+  match t with
+  | `E e -> e
+  | _ -> raise (Invalid_argument "Expected an expression")
+
+let form_of_term (t : term) =
+  match t with
+  | `F f -> f
+  | _ -> raise (Invalid_argument "Expected a formula")
+
+(* -------------------------------------------------------------------- *)
+(** Contexts *)
+
+(* Immediate Formula ConTeXt *)
+type ifctx =
+  | CConn of logcon * form list * int
+  | CBind of bkind * name * type_
+  
+(* Immediate Expression ConTexT *)
+type iectx =
+  | CFun of name * expr list * int
+
+(* Contexts are just lists of immediate contexts *)
+type fctx = ifctx list
+type ectx = iectx list
+
+(* A subterm is either a subformula, a subexpression in isolation,
+   or a subexpression occurring in a predicate argument *)
+type ctx =
+  | CForm of fctx
+  | CExpr of ectx
+  | CExprPred of fctx * name * expr list * int * ectx
+
+(* -------------------------------------------------------------------- *)
+(** Unification *)
 
 type sitem = 
   | Sbound of expr
@@ -55,6 +103,8 @@ type sitem =
 type 'a eqns = ('a * 'a) list
 
 (* -------------------------------------------------------------------- *)
+(** Environments *)
+
 type env = {
   env_prp  : (name, arity     ) Map.t;
   env_fun  : (name, sig_      ) Map.t;
@@ -89,10 +139,11 @@ module LEnv : sig
 
   val empty : lenv
   val indices : lenv -> (name, int) Map.t
-  val get_index : name -> lenv -> int
-  val enter : name -> lenv -> lenv
+  val get_index : lenv -> name -> int
+  val exists : lenv -> vname -> bool
+  val enter : lenv -> name -> lenv
   val exit  : lenv -> lenv
-  val fold  : name -> lenv -> 'a -> (lenv -> 'a -> 'b) -> 'b
+  val fold  : lenv -> name -> 'a -> (lenv -> 'a -> 'b) -> 'b
 end = struct
   type lenv = {
     le_indices  : (name, int) Map.t;
@@ -106,10 +157,13 @@ end = struct
 
   let indices lenv = lenv.le_indices
 
-  let get_index (name : name) (lenv : lenv) =
+  let get_index (lenv : lenv) (name : name) =
     Map.find name lenv.le_indices
+  
+  let exists (lenv : lenv) (x : vname) =
+    List.mem x (Map.bindings lenv.le_indices)
 
-  let enter (name : name) (lenv : lenv) =
+  let enter (lenv : lenv) (name : name) =
     { le_indices  = Map.modify_def (-1) name ((+) 1) lenv.le_indices;
       le_bindings = name :: lenv.le_bindings; }
 
@@ -126,8 +180,8 @@ end = struct
         { le_bindings = names;
           le_indices  = Map.modify_opt name update lenv.le_indices; }
 
-   let fold (name : name) (lenv : lenv) (x : 'a) (f : lenv -> 'a -> 'b) =
-     f (enter name lenv) x
+   let fold (lenv : lenv) (name : name) (x : 'a) (f : lenv -> 'a -> 'b) =
+     f (enter lenv name) x
 end
 
 (* -------------------------------------------------------------------- *)
@@ -348,16 +402,6 @@ module Form : sig
   val f_equiv : form -> form -> form
   val f_not   : form -> form
 
-  val c_and_l : form -> fctx -> fctx
-  val c_and_r : form -> fctx -> fctx
-  val c_or_l : form -> fctx -> fctx
-  val c_or_r : form -> fctx -> fctx
-  val c_imp_l : form -> fctx -> fctx
-  val c_imp_r : form -> fctx -> fctx
-  val c_equiv_l : form -> fctx -> fctx
-  val c_equiv_r : form -> fctx -> fctx
-  val c_not : fctx -> fctx
-
   val f_ands : form list -> form
   val f_ors  : form list -> form
   val f_imps : form list -> form -> form
@@ -381,19 +425,44 @@ module Form : sig
 
   val f_tostring : form -> string
   val f_tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
+  
+  val term_tostring : term -> string
+  val term_tohtml : ?id:string option -> term -> Tyxml.Xml.elt
 
   val t_equal : ?bds:VName.bds -> type_ -> type_ -> bool
   val e_equal : ?bds:VName.bds -> expr  -> expr  -> bool
   val f_equal : ?bds:VName.bds -> form  -> form  -> bool
+  val term_equal : ?bds:VName.bds -> term -> term -> bool
 
   val e_vars  : expr -> vname list
   val free_vars : form -> name list
   val e_shift  : ?incr:int -> vname -> expr -> expr
   val f_shift  : ?incr:int -> vname -> form -> form
+  
+  val direct_subexprs : expr -> expr list
+  val direct_subforms : form -> form list
+  val direct_subterms : term -> term list
+  
+  val modify_direct_subexprs : expr -> expr list -> expr
+  val modify_direct_subforms : form -> form list -> form
+  val modify_direct_subterms : term -> term list -> term
 
-  val c_is_bound : vname -> fctx -> bool
-  val c_fill : form -> fctx -> form
-  val c_rev : fctx -> fctx
+  val ec_fill : expr -> ectx -> expr
+  val ec_concat : ectx -> ectx -> ectx
+  val ec_rev : ectx -> ectx
+
+  val fc_is_bound : vname -> fctx -> bool
+  val fc_fill : form -> fctx -> form
+  val fc_concat : fctx -> fctx -> fctx
+  val fc_rev : fctx -> fctx
+  
+  exception InvalidContextFill of term * ctx
+
+  val c_is_bound : vname -> ctx -> bool
+  val c_fill : term -> ctx -> term
+  val c_rev : ctx -> ctx
+  val c_push_f : ifctx -> ctx -> ctx
+  val c_push_e : iectx -> ctx -> ctx
 
   val fresh_var : ?basename:name -> name list -> name
 
@@ -435,16 +504,6 @@ end = struct
   let f_imp   = fun f1 f2 -> FConn (`Imp  , [f1; f2])
   let f_equiv = fun f1 f2 -> FConn (`Equiv, [f1; f2])
   let f_not   = fun f     -> FConn (`Not  , [f])
-
-  let c_and_l = fun f c -> CConn (`And, [], c, [f])
-  let c_and_r = fun f c -> CConn (`And, [f], c, [])
-  let c_or_l = fun f c -> CConn (`Or, [], c, [f])
-  let c_or_r = fun f c -> CConn (`And, [f], c, [])
-  let c_imp_l = fun f c -> CConn (`Imp, [], c, [f])
-  let c_imp_r = fun f c -> CConn (`Imp, [f], c, [])
-  let c_equiv_l = fun f c -> CConn (`Equiv, [], c, [f])
-  let c_equiv_r = fun f c -> CConn (`Equiv, [f], c, [])
-  let c_not = fun c -> CConn (`Not, [], c, [])
 	
   let f_false : form = FFalse
   let f_true  : form = FTrue
@@ -517,6 +576,37 @@ end = struct
     in
     fun ?(bds = VName.Map.empty) e1 e2 -> aux bds e1 e2
 
+  let f_equal =
+    let rec aux bds f1 f2 =
+      match f1, f2 with
+      | FTrue , FTrue
+      | FFalse, FFalse -> true
+
+      | FPred (p1, es1), FPred (p2, es2)
+        when List.length es1 = List.length es2
+        -> (p1 = p2)  && List.for_all2 (e_equal ~bds) es1 es2 
+
+      | FConn (c1, fs1), FConn (c2, fs2)
+        when List.length fs1 = List.length fs2 
+        -> (c1 = c2) && List.for_all2 (aux bds) fs1 fs2
+
+      | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
+        when b1 = b2 ->
+            t_equal ty1 ty2
+         && aux (VName.Map.push bds x1 x2) f1 f2
+
+      | _, _ ->
+          false
+
+    in fun ?(bds = VName.Map.empty) f1 f2 -> aux bds f1 f2
+    
+  let term_equal ?bds (t1 : term) (t2 : term) : bool =
+    match t1, t2 with
+    | `F f1, `F f2 -> f_equal ?bds f1 f2
+    | `E e1, `E e2 -> e_equal ?bds e1 e2
+    | _ -> false
+    
+
   let rec e_vars =
     let open Monad.List in function
     | EVar x -> return x
@@ -546,28 +636,122 @@ end = struct
     | FBind (b, y, ty, f) -> FBind (b, y, ty, f_shift ~incr (x, i + if x = y then 1 else 0) f)
 
 
-  let rec c_is_bound (x, i) = function
-    | CHole -> false
-    | CBind (_, y, _, c) ->
+  let direct_subforms = function
+    | FTrue | FFalse | FPred _ -> []
+    | FConn (_, fs) -> fs
+    | FBind (_, _, _, f) -> [f]
+  
+  let direct_subexprs = function
+    | EVar _ -> []
+    | EFun (_, es) -> es
+    
+  let direct_subterms : term -> term list = function
+    | `F FPred (_, es) -> List.map term_of_expr es
+    | `F f -> List.map term_of_form (direct_subforms f)
+    | `E e -> List.map term_of_expr (direct_subexprs e)
+    
+  
+  let modify_direct_subforms f fs =
+    match f, fs with
+    | (FTrue | FFalse | FPred _), _ ->
+        f
+
+    | FConn (c, fs), fs' when List.length fs = List.length fs' ->
+        FConn (c, fs')
+
+    | FBind (b, x, ty, _), [f] ->
+        FBind (b, x, ty, f)
+
+    | _ ->
+        raise (Invalid_argument "Wrong arity for new subformulas")
+  
+  let modify_direct_subexprs e es =
+    match e, es with
+    | EVar _, _ ->
+        e
+
+    | EFun (f, es), es' when List.length es = List.length es' ->
+        EFun (f, es')
+    
+    | _ -> 
+        raise (Invalid_argument "Wrong arity for new subexpressions")
+  
+  let modify_direct_subterms (t : term) (ts : term list) =
+    match t with
+    | `F FPred (p, es) when List.length es = List.length ts ->
+        `F (FPred (p, (List.map expr_of_term ts)))
+    
+    | `F f ->
+        ts |> List.map form_of_term |> modify_direct_subforms f |> term_of_form 
+
+    | `E e ->
+        ts |> List.map expr_of_term |> modify_direct_subexprs e |> term_of_expr
+
+
+  let rec ec_fill e = function
+    | [] -> e
+    | CFun (name, args, i) :: c ->
+        let ls, rs = List.split_at i args in
+        EFun (name, ls @ [ec_fill e c] @ rs)
+  
+  let ec_concat = (@)
+
+  let ec_rev = List.rev
+
+
+  let rec fc_is_bound (x, i) = function
+    | [] -> false
+    | CBind (_, y, _) :: c ->
       if x = y then
         if i = 0 then true
-        else c_is_bound (x, i-1) c
-      else c_is_bound (x, i) c
-    | CConn (_, _, c, _) ->
-      c_is_bound (x, i) c
+        else fc_is_bound (x, i-1) c
+      else fc_is_bound (x, i) c
+    | _ :: c ->
+      fc_is_bound (x, i) c
 
-  let rec c_fill f = function
-    | CHole -> f
-    | CConn (conn, ls, c, rs) -> FConn (conn, ls @ [c_fill f c] @ rs)
-    | CBind (b, x, ty, c) -> FBind (b, x, ty, c_fill f c)
+  let rec fc_fill f = function
+    | [] -> f
+    | CConn (conn, fs, i) :: c ->
+        let ls, rs = List.split_at i fs in
+        FConn (conn, ls @ [fc_fill f c] @ rs)
+    | CBind (b, x, ty) :: c ->
+        FBind (b, x, ty, fc_fill f c)
+    
+  let rec fc_concat = (@)
 
-  let c_rev =
-    let rec aux acc = function
-      | CHole -> acc
-      | CConn (conn, ls, c, rs) -> aux (CConn (conn, ls, acc, rs)) c
-      | CBind (b, x, ty, c) -> aux (CBind (b, x, ty, acc)) c
-    in aux CHole
+  let fc_rev = List.rev
+    
+    
+  let c_is_bound x = function
+    | CForm c | CExprPred (c, _, _, _, _) -> fc_is_bound x c
+    | CExpr _ -> false
+
+  exception InvalidContextFill of term * ctx
+
+  let c_fill t c = match t, c with
+    | `F f, CForm c -> `F (fc_fill f c)
+    | `E e, CExpr c -> `E (ec_fill e c)
+    | `E e, CExprPred (fc, name, args, i, ec) ->
+        let ls, rs = List.split_at i args in
+        `F (fc_fill (FPred (name, ls @ [ec_fill e ec] @ rs)) fc)
+    | _ -> raise (InvalidContextFill (t, c))
+
+  let c_rev = function
+    | CForm c -> CForm (fc_rev c)
+    | CExpr c -> CExpr (ec_rev c)
+    | CExprPred (fc, name, args, i, ec) ->
+        CExprPred (fc_rev fc, name, args, i, ec_rev ec)
   
+  let c_push_f ic = function
+    | CForm c -> CForm (ic :: c)
+    | _ -> raise (Invalid_argument "cannot push formula to expression context")
+    
+  let c_push_e ic = function
+    | CExpr c -> CExpr (ic :: c)
+    | CExprPred (fc, name, args, i, ec) ->
+        CExprPred (fc, name, args, i, ic :: ec)
+    | _ -> raise (Invalid_argument "cannot push expression to formula context")
+
 
   (* [fresh_var ~basename names] generates a fresh name for a
      variable relative to the ones in [names], based on an optional [basename]. *)
@@ -852,6 +1036,10 @@ end = struct
     in ((fun (form : form ) -> for_form form ),
         (fun (expr : expr ) -> for_expr expr ),
         (fun (ty   : type_) -> for_type ty   ))
+  
+  let term_tostring = function
+    | `E e -> e_tostring e
+    | `F f -> f_tostring f
 
   let f_tohtml, e_tohtml, t_tohtml =
     let open Tyxml in
@@ -1006,6 +1194,9 @@ end = struct
      (fun ?id (expr : expr ) -> span (for_expr ?id [] expr)),
      (fun     (ty   : type_) -> span (for_type ty)))
 
+  let term_tohtml ?id = function
+    | `E e -> e_tohtml ?id e
+    | `F f -> f_tohtml ?id f
 
   module Subst = struct
     type subst = (name * sitem) list
@@ -1206,31 +1397,6 @@ end = struct
         | _ -> None
 	
 
-  let f_equal =
-    let rec aux bds f1 f2 =
-      match f1, f2 with
-      | FTrue , FTrue
-      | FFalse, FFalse -> true
-
-      | FPred (p1, es1), FPred (p2, es2)
-        when List.length es1 = List.length es2
-        -> (p1 = p2)  && List.for_all2 (e_equal ~bds) es1 es2 
-
-      | FConn (c1, fs1), FConn (c2, fs2)
-        when List.length fs1 = List.length fs2 
-        -> (c1 = c2) && List.for_all2 (aux bds) fs1 fs2
-
-      | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
-        when b1 = b2 ->
-            t_equal ty1 ty2
-         && aux (VName.Map.push bds x1 x2) f1 f2
-
-      | _, _ ->
-          false
-
-    in fun ?(bds = VName.Map.empty) f1 f2 -> aux bds f1 f2
-
-
   (** [f_unify env s eqns] does unification of a list of equations [eqns] between
       formulas, updating along the way a substitution [s] and a local environment [lenv]
       holding a context of locally bound variables.
@@ -1263,7 +1429,7 @@ end = struct
           when b1 = b2 && ty1 = ty2 ->
 
             let f2 = Subst.f_apply1 (x2, 0) (EVar (x1, 0)) (f_shift (x1, 0) f2) in
-            let lenv' = LEnv.enter x1 lenv in
+            let lenv' = LEnv.enter lenv x1 in
             begin match f_unify lenv' s [f1, f2] with
             | Some s -> f_unify lenv s eqns
             | None -> None
