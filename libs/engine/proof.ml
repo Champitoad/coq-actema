@@ -875,25 +875,11 @@ end = struct
       
     let tgt = { tgt with root = Handle.toint hd } in
       
-    let shift e = function
-      | `F FBind (_, x, _, _) -> Form.e_shift (x, 0) e
-      | _ -> e
-    in
-
-    let rec doit red res (t : term) =
-      if term_equal (`E red) t then
-        (`E res)
-      else
-        direct_subterms t |>
-        List.map (doit (shift red t) (shift res t)) |>
-        modify_direct_subterms t
-    in
-    
     let rec shift_then_doit red res (t : term) = function
-      | [] -> doit red res t
+      | [] -> rewrite red res t
       | i :: sub ->
           let u = direct_subterm t i in
-          let u = shift_then_doit (shift red t) (shift res t) u sub in
+          let u = shift_then_doit (shift_under t red) (shift_under t res) u sub in
           modify_direct_subterm t u i
     in
 
@@ -902,11 +888,11 @@ end = struct
     
     let subgoal = match it with
       | `H (src, { h_form = f; _ }) ->
-          let new_hyp = shift_then_doit red res (`F f) sub |> form_of_term in
+          let new_hyp = shift_then_doit (`E red) (`E res) (`F f) sub |> form_of_term in
           [Some src, [new_hyp]], goal.Proof.g_goal
 
       | `C f ->
-          let new_concl = shift_then_doit red res (`F f) sub |> form_of_term in
+          let new_concl = shift_then_doit (`E red) (`E res) (`F f) sub |> form_of_term in
           [], new_concl
     in
     
@@ -1792,7 +1778,7 @@ end = struct
       | `Rewrite (red, res, tgts) ->
           Printf.sprintf "%s[%s ~> %s]"
             (List.to_string ~sep:", " ~left:"{" ~right:"}"
-              (fun p -> let _, _, (_, t) = of_ipath proof p in Form.term_tostring t)
+              (fun p -> let _, _, (_, t) = of_ipath proof p in Form.tostring t)
              tgts)
             red res
     in doit

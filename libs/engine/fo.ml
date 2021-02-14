@@ -426,18 +426,20 @@ module Form : sig
   val f_tostring : form -> string
   val f_tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
   
-  val term_tostring : term -> string
-  val term_tohtml : ?id:string option -> term -> Tyxml.Xml.elt
+  val tostring : term -> string
+  val tohtml   : ?id:string option -> term -> Tyxml.Xml.elt
 
   val t_equal : ?bds:VName.bds -> type_ -> type_ -> bool
   val e_equal : ?bds:VName.bds -> expr  -> expr  -> bool
   val f_equal : ?bds:VName.bds -> form  -> form  -> bool
-  val term_equal : ?bds:VName.bds -> term -> term -> bool
+  val equal   : ?bds:VName.bds -> term -> term -> bool
 
-  val e_vars  : expr -> vname list
-  val free_vars : form -> name list
-  val e_shift  : ?incr:int -> vname -> expr -> expr
-  val f_shift  : ?incr:int -> vname -> form -> form
+  val e_vars      : expr -> vname list
+  val free_vars   : form -> name list
+  val e_shift     : ?incr:int -> vname -> expr -> expr
+  val f_shift     : ?incr:int -> vname -> form -> form
+  val shift       : ?incr:int -> vname -> term -> term
+  val shift_under : term -> term -> term
   
   val direct_subexprs : expr -> expr list
   val direct_subforms : form -> form list
@@ -446,23 +448,25 @@ module Form : sig
   val modify_direct_subexprs : expr -> expr list -> expr
   val modify_direct_subforms : form -> form list -> form
   val modify_direct_subterms : term -> term list -> term
+  
+  val rewrite : ?bds:VName.bds -> term -> term -> term -> term
 
-  val ec_fill : expr -> ectx -> expr
+  val ec_fill   : expr -> ectx -> expr
   val ec_concat : ectx -> ectx -> ectx
-  val ec_rev : ectx -> ectx
+  val ec_rev    : ectx -> ectx
 
   val fc_is_bound : vname -> fctx -> bool
-  val fc_fill : form -> fctx -> form
-  val fc_concat : fctx -> fctx -> fctx
-  val fc_rev : fctx -> fctx
+  val fc_fill     : form -> fctx -> form
+  val fc_concat   : fctx -> fctx -> fctx
+  val fc_rev      : fctx -> fctx
   
   exception InvalidContextFill of term * ctx
 
   val c_is_bound : vname -> ctx -> bool
-  val c_fill : term -> ctx -> term
-  val c_rev : ctx -> ctx
-  val c_push_f : ifctx -> ctx -> ctx
-  val c_push_e : iectx -> ctx -> ctx
+  val c_fill     : term -> ctx -> term
+  val c_rev      : ctx -> ctx
+  val c_push_f   : ifctx -> ctx -> ctx
+  val c_push_e   : iectx -> ctx -> ctx
 
   val fresh_var : ?basename:name -> name list -> name
 
@@ -600,7 +604,7 @@ end = struct
 
     in fun ?(bds = VName.Map.empty) f1 f2 -> aux bds f1 f2
     
-  let term_equal ?bds (t1 : term) (t2 : term) : bool =
+  let equal ?bds (t1 : term) (t2 : term) : bool =
     match t1, t2 with
     | `F f1, `F f2 -> f_equal ?bds f1 f2
     | `E e1, `E e2 -> e_equal ?bds e1 e2
@@ -634,6 +638,18 @@ end = struct
     | FPred (p, es) -> FPred (p, List.map (e_shift ~incr (x, i)) es)
     | FConn (c, fs) -> FConn (c, List.map (f_shift ~incr (x, i)) fs)
     | FBind (b, y, ty, f) -> FBind (b, y, ty, f_shift ~incr (x, i + if x = y then 1 else 0) f)
+  
+  let shift ?incr x = function
+    | `E e -> `E (e_shift ?incr x e)
+    | `F f -> `F (f_shift ?incr x f)
+  
+  (* [shift_under t u] will shift by 1 the variable x in [u] if [t] starts with
+     a binder for x. *)
+
+  let shift_under t u =
+    match t with
+    | `F FBind (_, x, _, _) -> shift (x, 0) u
+    | _ -> u
 
 
   let direct_subforms = function
@@ -686,6 +702,15 @@ end = struct
 
     | `E e ->
         ts |> List.map expr_of_term |> modify_direct_subexprs e |> term_of_expr
+  
+
+    let rec rewrite ?bds red res (t : term) =
+      if equal ?bds red t then
+        res
+      else
+        direct_subterms t |>
+        List.map (rewrite (shift_under t red) (shift_under t res)) |>
+        modify_direct_subterms t
 
 
   let rec ec_fill e = function
@@ -717,7 +742,7 @@ end = struct
     | CBind (b, x, ty) :: c ->
         FBind (b, x, ty, fc_fill f c)
     
-  let rec fc_concat = (@)
+  let fc_concat = (@)
 
   let fc_rev = List.rev
     
@@ -1037,7 +1062,7 @@ end = struct
         (fun (expr : expr ) -> for_expr expr ),
         (fun (ty   : type_) -> for_type ty   ))
   
-  let term_tostring = function
+  let tostring = function
     | `E e -> e_tostring e
     | `F f -> f_tostring f
 
@@ -1194,7 +1219,7 @@ end = struct
      (fun ?id (expr : expr ) -> span (for_expr ?id [] expr)),
      (fun     (ty   : type_) -> span (for_type ty)))
 
-  let term_tohtml ?id = function
+  let tohtml ?id = function
     | `E e -> e_tohtml ?id e
     | `F f -> f_tohtml ?id f
 
