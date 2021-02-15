@@ -82,7 +82,15 @@ type ifctx =
 type iectx =
   | CFun of name * expr list * int
 
-(* Contexts are just lists of immediate contexts *)
+(* Immediate term ConTexT *)
+type ictx = [
+  | `F of ifctx
+  | `P of name * expr list * int
+  | `E of iectx
+  | `None
+]
+
+(* Uniform contexts are just lists *)
 type fctx = ifctx list
 type ectx = iectx list
 
@@ -465,8 +473,7 @@ module Form : sig
   val c_is_bound : vname -> ctx -> bool
   val c_fill     : term -> ctx -> term
   val c_rev      : ctx -> ctx
-  val c_push_f   : ifctx -> ctx -> ctx
-  val c_push_e   : iectx -> ctx -> ctx
+  val c_push     : ictx -> ctx -> ctx
 
   val fresh_var : ?basename:name -> name list -> name
 
@@ -766,16 +773,27 @@ end = struct
     | CExpr c -> CExpr (ec_rev c)
     | CExprPred (fc, name, args, i, ec) ->
         CExprPred (fc_rev fc, name, args, i, ec_rev ec)
-  
-  let c_push_f ic = function
-    | CForm c -> CForm (ic :: c)
-    | _ -> raise (Invalid_argument "cannot push formula to expression context")
     
   let c_push_e ic = function
     | CExpr c -> CExpr (ic :: c)
     | CExprPred (fc, name, args, i, ec) ->
         CExprPred (fc, name, args, i, ic :: ec)
     | _ -> raise (Invalid_argument "cannot push expression to formula context")
+    
+  let c_push_p (p, args, i) = function
+    | CForm fc -> CExprPred (fc, p, args, i, [])
+    | _ -> raise (Invalid_argument "cannot push predicate to expression context")
+  
+  let c_push_f ic = function
+    | CForm c -> CForm (ic :: c)
+    | _ -> raise (Invalid_argument "cannot push formula to expression context")
+  
+  let c_push ic c =
+    match ic with
+    | `E e -> c_push_e e c
+    | `P p -> c_push_p p c
+    | `F f -> c_push_f f c
+    | `None -> c
 
 
   (* [fresh_var ~basename names] generates a fresh name for a
