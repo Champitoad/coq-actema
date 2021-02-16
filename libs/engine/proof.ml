@@ -1627,7 +1627,9 @@ end = struct
 
           (* RPᵢ *)
           | _, (`F FPred (p, args), i :: sub)
-            when p <> "_EQ" ->
+            when p <> "_EQ" ||
+            begin match l with `F FPred ("_EQ", _) -> true | _ -> false end
+            ->
             begin try
               let ei, es = List.pop_at i args in
               `P (p, es, i), (h, (`E ei, sub))
@@ -1646,7 +1648,9 @@ end = struct
 
           (* LPᵢ *)
           | (`F FPred (p, args), i :: sub), _
-            when p <> "_EQ" ->
+            when p <> "_EQ" ||
+            begin match r with `F FPred ("_EQ", _) -> true | _ -> false end
+            ->
             begin try
               let ei, es = List.pop_at i args in
               `P (p, es, i), ((`E ei, sub), c)
@@ -1798,7 +1802,9 @@ end = struct
 
           (* FPᵢ *)
           | _, (`F FPred (p, args), i :: sub)
-            when p <> "_EQ" ->
+            when p <> "_EQ" ||
+            begin match l with `F FPred ("_EQ", _) -> true | _ -> false end
+            ->
             begin try
               let ei, es = List.pop_at i args in
               `P (p, es, i), (h, (`E ei, sub))
