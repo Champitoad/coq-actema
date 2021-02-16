@@ -1072,9 +1072,11 @@ end = struct
           UTF8.of_latin1 name ^ (pr true args)
 
       | FBind (bd, x, ty, f) ->
-          let bd = match bd with `Forall -> "forall" | `Exist -> "exist" in
-          Format.sprintf "%s %s : %s . %s"
-            (UTF8.of_latin1 bd) (UTF8.of_latin1 x) (for_type ty) (for_form f)
+          let bd = match bd with
+            | `Forall -> UTF8.of_char (UChar.chr 0x2200)
+            | `Exist -> UTF8.of_char (UChar.chr 0x2203) in
+          Format.sprintf "%s%s : %s . %s"
+            (bd) (UTF8.of_latin1 x) (for_type ty) (for_form f)
 
     in ((fun (form : form ) -> for_form form ),
         (fun (expr : expr ) -> for_expr expr ),
@@ -1209,10 +1211,12 @@ end = struct
             in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
 
         | FBind (bd, x, ty, f) ->
-            let bd = match bd with `Forall -> "forall" | `Exist -> "exist" in
+            let bd = match bd with
+              | `Forall -> UTF8.of_char (UChar.chr 0x2200)
+              | `Exist -> UTF8.of_char (UChar.chr 0x2203) in
 
             let aout =
-                [[span [Xml.pcdata (UTF8.of_latin1 bd)]]]
+                [[span [Xml.pcdata (bd)]]]
               @ [[span [Xml.pcdata (UTF8.of_latin1 x)]]]
               @ [[span [Xml.pcdata ":"]]]
               @ [[span (for_type ty)]]
