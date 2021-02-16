@@ -1352,6 +1352,12 @@ end = struct
       let f1' = elim_units f1 in
       if f1 = f1' then f else elim_units (FBind (b, x, ty, f1'))
   
+
+  let print_linkage (mode : [`Backward | `Forward]) ((l, _), (r, _)) =
+    let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
+    Printf.sprintf "%s %s %s"
+      (Form.tostring l) op (Form.tostring r)
+
   
   (** [dlink] stands for _d_eep linking, and implements the deep interaction phase
       à la Chaudhuri for intuitionistic logic. *)
@@ -1419,18 +1425,12 @@ end = struct
         | _ -> false in
       not inv || List.is_empty sub
     in
-    
-    let print_linkage (mode : [`Backward | `Forward]) ((l, _), (r, _)) =
-      let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
-      Printf.sprintf "%s %s %s"
-        (tostring l) op (tostring r)
-    in
 
     let rec backward (ctx : ctx)
       ((env1, s1 as es1), (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       (((l, lsub as h), (r, rsub as c)) as linkage : (term * int list) * (term * int list)) : form =
       
-      js_log (print_linkage `Backward linkage);
+      (* js_log (print_linkage `Backward linkage); *)
       
       match linkage with
 
@@ -1666,7 +1666,7 @@ end = struct
       (es1, (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       (((l, lsub as h), (r, _)) as linkage : (term * int list) * (term * int list)) : form =
 
-      js_log (print_linkage `Forward linkage);
+      (* js_log (print_linkage `Forward linkage); *)
       
       match linkage with
 
