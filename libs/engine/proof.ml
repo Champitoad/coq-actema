@@ -1367,7 +1367,7 @@ end = struct
     let _, item_dst, (sub_dst, t_dst) = of_ipath proof dst in
 
     begin match t_src, t_dst with
-      | `E _, `E _ -> raise TacticNotApplicable
+      | `F _, `E _ | `E _, `F _ -> raise TacticNotApplicable
       | _ -> ()
     end;
 
@@ -1413,9 +1413,24 @@ end = struct
         end
     in
 
+    let no_prio kind (t, sub : term * int list) =
+      let inv = match t with
+        | `F f -> invertible kind f        
+        | _ -> false in
+      not inv || List.is_empty sub
+    in
+    
+    let print_linkage (mode : [`Backward | `Forward]) ((l, _), (r, _)) =
+      let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
+      Printf.sprintf "%s %s %s"
+        (tostring l) op (tostring r)
+    in
+
     let rec backward (ctx : ctx)
       ((env1, s1 as es1), (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       (((l, lsub as h), (r, rsub as c)) as linkage : (term * int list) * (term * int list)) : form =
+      
+      js_log (print_linkage `Backward linkage);
       
       match linkage with
 
@@ -1469,28 +1484,10 @@ end = struct
           begin match linkage with
             
           (** Right rules *)
-          
-          (* Rfᵢ *)
-          | _, (`E EFun (f, args), i :: sub) ->
-            begin try
-              let ei, es = List.pop_at i args in
-              `E (CFun (f, es, i)), (h, (`E ei, sub))
-            with Invalid_argument _ ->
-              failwith "0-ary function"
-            end
-
-          (* RPᵢ *)
-          | _, (`F FPred (p, args), i :: sub) ->
-            begin try
-              let ei, es = List.pop_at i args in
-              `P (p, es, i), (h, (`E ei, sub))
-            with Invalid_argument _ ->
-              failwith "0-ary predicate"
-            end
 
           (* R∧ *)
-          | (`F l, _), (`F FConn (`And, fs), i :: sub)
-            when not (invertible `Left l) || List.is_empty lsub ->
+          | _, (`F FConn (`And, fs), i :: sub)
+            when no_prio `Left h ->
             begin try
               let fi, fs = List.pop_at i fs in
               `F (CConn (`And, fs, i)), (h, (`F fi, sub))
@@ -1499,8 +1496,8 @@ end = struct
             end
 
           (* R∨ *)
-          | (`F l, _), (`F FConn (`Or, fs), i :: sub)
-            when not (invertible `Left l) || List.is_empty lsub ->
+          | _, (`F FConn (`Or, fs), i :: sub)
+            when no_prio `Left h ->
             begin try
               let fi, fs = List.pop_at i fs in
               `F (CConn (`Or, fs, i)), (h, (`F fi, sub))
@@ -1525,8 +1522,8 @@ end = struct
           | _, (`F FConn (`Equiv, [_; _]), _) ->
             failwith "DnD on positive equivalence currently unsupported"
 
-          | (`F l, _), (`F FBind (`Exist, x, ty, f1), 0 :: sub)
-            when (not (invertible `Left l) || List.is_empty lsub) &&
+          | _, (`F FBind (`Exist, x, ty, f1), 0 :: sub)
+            when no_prio `Left h &&
             match get_tag (x, LEnv.get_index (LEnv.enter env2 x) x) s2 with
             | Some Sbound e -> well_scoped e ctx 
             | Some Sflex -> true
@@ -1541,40 +1538,23 @@ end = struct
               `None, (h, (`F f1, sub))
             (* R∃s *)
             | Some Sflex ->
-              let h = (`F (f_shift (x, 0) l), lsub) in
+              let h = (shift (x, 0) l), lsub in
               `F (CBind (`Exist, x, ty)), (h, (`F f1, sub))
             | None -> assert false
             end
 
           (* R∀s *)
-          | (`F l, _), (`F FBind (`Forall, x, ty, f1), 0 :: sub) ->
+          | _, (`F FBind (`Forall, x, ty, f1), 0 :: sub) ->
             let env2 = LEnv.enter env2 x in
             s := es1, (env2, s2);
-            let h = `F (f_shift (x, 0) l), lsub in
+            let h = (shift (x, 0) l), lsub in
             `F (CBind (`Forall, x, ty)), (h, (`F f1, sub))
 
           (** Left rules *)
 
-          (* Lfᵢ *)
-          | (`E EFun (f, args), i :: sub), _ ->
-            begin try
-              let ei, es = List.pop_at i args in
-              `E (CFun (f, es, i)), ((`E ei, sub), c)
-            with Invalid_argument _ ->
-              failwith "0-ary function"
-            end
-
-          (* LPᵢ *)
-          | (`F FPred (p, args), i :: sub), _ ->
-            begin try
-              let ei, es = List.pop_at i args in
-              `P (p, es, i), ((`E ei, sub), c)
-            with Invalid_argument _ ->
-              failwith "0-ary predicate"
-            end
-
           (* L∧ *)
-          | (`F FConn (`And, fs), i :: sub), _ ->
+          | (`F FConn (`And, fs), i :: sub), _
+            when no_prio `Right c ->
             begin try
               `None, ((`F (List.at fs i), sub), c)
             with Invalid_argument _ ->
@@ -1592,29 +1572,29 @@ end = struct
             end
           
           (* L⇒₂ *)
-          | (`F FConn (`Imp, [f1; f2]), 1 :: sub), (`F r, _)
-            when not (invertible `Right r) || List.is_empty rsub ->
+          | (`F FConn (`Imp, [f1; f2]), 1 :: sub), _
+            when no_prio `Right c ->
             `F (CConn (`And, [f1], 1)), ((`F f2, sub), c)
 
           (* L⇔₁ *)
-          | (`F FConn (`Equiv, [f1; f2]), 0 :: sub), (`F r, _)
-            when not (invertible `Right r) || List.is_empty rsub ->
+          | (`F FConn (`Equiv, [f1; f2]), 0 :: sub), _
+            when no_prio `Right c ->
             `F (CConn (`And, [f2], 0)), ((`F f1, sub), c)
 
           (* L⇔₂ *)
-          | (`F FConn (`Equiv, [f1; f2]), 1 :: sub), (`F r, _)
-            when not (invertible `Right r) || List.is_empty rsub ->
+          | (`F FConn (`Equiv, [f1; f2]), 1 :: sub), _
+            when no_prio `Right c ->
             `F (CConn (`And, [f1], 1)), ((`F f2, sub), c)
           
           (* L∃s *)
-          | (`F FBind (`Exist, x, ty, f1), 0 :: sub), (`F r, _) ->
+          | (`F FBind (`Exist, x, ty, f1), 0 :: sub), _ ->
             let env1 = LEnv.enter env1 x in 
             s := (env1, s1), es2;
-            let c = `F (f_shift (x, 0) r), rsub in
+            let c = (shift (x, 0) r), rsub in
             `F (CBind (`Forall, x, ty)), ((`F f1, sub), c)
 
-          | (`F FBind (`Forall, x, ty, f1), 0 :: sub), (`F r, _)
-            when (not (invertible `Right r) || List.is_empty rsub) &&
+          | (`F FBind (`Forall, x, ty, f1), 0 :: sub), _
+            when no_prio `Right c &&
             match get_tag (x, LEnv.get_index (LEnv.enter env1 x) x) s1 with
             | Some Sbound e -> well_scoped e ctx
             | Some Sflex -> true
@@ -1629,11 +1609,51 @@ end = struct
               `None, ((`F f1, sub), c)
             (* L∀s *)
             | Some Sflex ->
-              let c = `F (f_shift (x, 0) r), rsub in
+              let c = (shift (x, 0) r), rsub in
               `F (CBind (`Exist, x, ty)), ((`F f1, sub), c)
             | None -> assert false
             end
           
+          (** Expression rules *)
+
+          (* Rfᵢ *)
+          | _, (`E EFun (f, args), i :: sub) ->
+            begin try
+              let ei, es = List.pop_at i args in
+              `E (CFun (f, es, i)), (h, (`E ei, sub))
+            with Invalid_argument _ ->
+              failwith "0-ary function"
+            end
+
+          (* RPᵢ *)
+          | _, (`F FPred (p, args), i :: sub)
+            when p <> "_EQ" ->
+            begin try
+              let ei, es = List.pop_at i args in
+              `P (p, es, i), (h, (`E ei, sub))
+            with Invalid_argument _ ->
+              failwith "0-ary predicate"
+            end
+
+          (* Lfᵢ *)
+          | (`E EFun (f, args), i :: sub), _ ->
+            begin try
+              let ei, es = List.pop_at i args in
+              `E (CFun (f, es, i)), ((`E ei, sub), c)
+            with Invalid_argument _ ->
+              failwith "0-ary function"
+            end
+
+          (* LPᵢ *)
+          | (`F FPred (p, args), i :: sub), _
+            when p <> "_EQ" ->
+            begin try
+              let ei, es = List.pop_at i args in
+              `P (p, es, i), ((`E ei, sub), c)
+            with Invalid_argument _ ->
+              failwith "0-ary predicate"
+            end
+
           | _ -> raise TacticNotApplicable
           end
         in
@@ -1645,6 +1665,8 @@ end = struct
     and forward (ctx : ctx)
       (es1, (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       (((l, lsub as h), (r, _)) as linkage : (term * int list) * (term * int list)) : form =
+
+      js_log (print_linkage `Forward linkage);
       
       match linkage with
 
@@ -1689,24 +1711,6 @@ end = struct
           
           begin match linkage with
 
-          (* Ffᵢ *)
-          | _, (`E EFun (f, args), i :: sub) ->
-            begin try
-              let ei, es = List.pop_at i args in
-              `E (CFun (f, es, i)), (h, (`E ei, sub))
-            with Invalid_argument _ ->
-              failwith "0-ary function"
-            end
-
-          (* FPᵢ *)
-          | _, (`F FPred (p, args), i :: sub) ->
-            begin try
-              let ei, es = List.pop_at i args in
-              `P (p, es, i), (h, (`E ei, sub))
-            with Invalid_argument _ ->
-              failwith "0-ary predicate"
-            end
-
           (* F∧ *)
           | _, (`F FConn (`And, fs), i :: sub) ->
             begin try
@@ -1717,8 +1721,8 @@ end = struct
             end
 
           (* F∨ *)
-          | (`F l, _), (`F FConn (`Or, fs), i :: sub)
-            when not (invertible `Forward l) || List.is_empty lsub ->
+          | _, (`F FConn (`Or, fs), i :: sub)
+            when no_prio `Forward h ->
             begin try
               let fi, fs = List.pop_at i fs in
               `F (CConn (`Or, fs, i)), (h, (`F fi, sub))
@@ -1727,43 +1731,43 @@ end = struct
             end
 
           (* F⇒₁ *)
-          | (`F l, _), (`F FConn (`Imp, [f1; f2]), 0 :: sub)
-            when not (invertible `Forward l) || List.is_empty lsub ->
+          | _, (`F FConn (`Imp, [f1; f2]), 0 :: sub)
+            when no_prio `Forward h ->
             switch_pol := true;
             `F (CConn (`Imp, [f2], 0)), (h, (`F f1, sub))
 
           (* F⇒₂ *)
-          | (`F l, _), (`F FConn (`Imp, [f1; f2]), 1 :: sub)
-            when not (invertible `Forward l) || List.is_empty lsub ->
+          | _, (`F FConn (`Imp, [f1; f2]), 1 :: sub)
+            when no_prio `Forward h ->
             `F (CConn (`Imp, [f1], 1)), (h, (`F f2, sub))
 
           (* F¬ *)
-          | (`F l, _), (`F FConn (`Not, [f1]), 0 :: sub)
-            when not (invertible `Forward l) || List.is_empty lsub ->
+          | _, (`F FConn (`Not, [f1]), 0 :: sub)
+            when no_prio `Forward h ->
             switch_pol := true;
             `F (CConn (`Not, [], 0)), (h, (`F f1, sub))
 
           (* F⇔₁ *)
-          | (`F l, _), (`F FConn (`Equiv, [f1; f2]), 0 :: sub)
-            when not (invertible `Forward l) || List.is_empty lsub ->
+          | _, (`F FConn (`Equiv, [f1; f2]), 0 :: sub)
+            when no_prio `Forward h ->
             switch_pol := true;
             `F (CConn (`Imp, [f2], 0)), (h, (`F f1, sub))
 
           (* F⇔₂ *)
-          | (`F l, _), (`F FConn (`Equiv, [f1; f2]), 1 :: sub)
-            when not (invertible `Forward l) || List.is_empty lsub ->
+          | _, (`F FConn (`Equiv, [f1; f2]), 1 :: sub)
+            when no_prio `Forward h ->
             switch_pol := true;
             `F (CConn (`Imp, [f1], 0)), (h, (`F f2, sub))
           
           (* F∃s *)
-          | (`F l, _), (`F FBind (`Exist, x, ty, f1), 0 :: sub) ->
+          | _, (`F FBind (`Exist, x, ty, f1), 0 :: sub) ->
             let env2 = LEnv.enter env2 x in
             s := es1, (env2, s2);
-            let h = `F (f_shift (x, 0) l), lsub in
+            let h = (shift (x, 0) l), lsub in
             `F (CBind (`Exist, x, ty)), (h, (`F f1, sub))
           
-          | (`F l, _), (`F FBind (`Forall, x, ty, f1), 0 :: sub)
-            when (not (invertible `Forward l) || List.is_empty lsub) &&
+          | _, (`F FBind (`Forall, x, ty, f1), 0 :: sub)
+            when no_prio `Forward h &&
             match get_tag (x, LEnv.get_index (LEnv.enter env2 x) x) s2 with
             | Some Sbound e -> well_scoped e ctx
             | Some Sflex -> true
@@ -1778,9 +1782,28 @@ end = struct
               `None, (h, (`F f1, sub))
             (* F∀s *)
             | Some Sflex ->
-              let h = `F (f_shift (x, 0) l), lsub in
+              let h = (shift (x, 0) l), lsub in
               `F (CBind (`Forall, x, ty)), (h, (`F f1, sub))
             | None -> assert false
+            end
+            
+          (* Ffᵢ *)
+          | _, (`E EFun (f, args), i :: sub) ->
+            begin try
+              let ei, es = List.pop_at i args in
+              `E (CFun (f, es, i)), (h, (`E ei, sub))
+            with Invalid_argument _ ->
+              failwith "0-ary function"
+            end
+
+          (* FPᵢ *)
+          | _, (`F FPred (p, args), i :: sub)
+            when p <> "_EQ" ->
+            begin try
+              let ei, es = List.pop_at i args in
+              `P (p, es, i), (h, (`E ei, sub))
+            with Invalid_argument _ ->
+              failwith "0-ary predicate"
             end
             
           (* Fcomm *)
