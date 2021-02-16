@@ -862,6 +862,7 @@ end = struct
     && p.ctxt = sp.ctxt
     && List.is_prefix sp.sub p.sub
 
+
   (** [rewrite red res tgt targ] rewrites every occurrence of the reducible
       expression [red] in the subterm at path [tgt] into the residual
       expression [res]. It automatically shifts variables in [red] and [res]
@@ -952,6 +953,14 @@ end = struct
     | _ -> raise (InvalidSubFormPath [i])
   
 
+  let direct_subterm_pol (p, t : pol * term) (i : int) =
+    match t, direct_subterm t i with
+    | `F f, `F _ ->
+        let p, f = direct_subform_pol (p, f) i in
+        (p, `F f)
+    | _, t -> (p, t)
+  
+
   (** [subform_pol (p, f) sub] returns the subformula of [f] at path [sub] together
       with its polarity, given that [f]'s polarity is [p] *)
 
@@ -963,8 +972,9 @@ end = struct
   (** [neg_count f sub] counts the number of negations in [f] along path [sub] *)
   
   let neg_count (f : form) (sub : int list) : int =
-    let aux (n, f) i =
-      match f with
+    let rec aux (n, f) =
+      function [] -> n | i :: sub ->
+      begin match f with
       | FConn (c, fs) ->
           let n =
             match c, i with
@@ -975,13 +985,13 @@ end = struct
             try List.at fs i
             with Invalid_argument _ -> raise (InvalidSubFormPath sub)
           in
-          n, subf
+          aux (n, subf) sub 
       | FBind (_, _, _, subf) ->
-          n, subf
+          aux (n, subf) sub
       | _ ->
-          raise (InvalidSubFormPath sub)
-    in
-    List.fold_left aux (0, f) sub |> fst
+          n
+      end
+    in aux (0, f) sub
 
 
   (** [pol_of_item it] returns the polarity of the item [it] *)
@@ -2010,7 +2020,11 @@ end = struct
   (** [wf_subform_link proof (src, dst)] checks if [src] and [dst] lead to
       unifiable subformulas of opposite polarities in the focused goal of
       [proof], and returns the associated substitutions if they do inside a
-      [`Subform] link action. *)
+      [`Subform] link action.
+      
+      It also checks for deep rewrite links, that is links where one side is a
+      negative equality operand, and the other side an arbitrary unifiable
+      subexpression. *)
 
   let wf_subform_link : lpred =
     let open Form in
@@ -2071,117 +2085,135 @@ end = struct
     end in
     let module State = Monad.State(Env) in
 
-    let traverse (p, f) i : (pol * form) State.t =
+    let traverse (p, t) i : (pol * term) State.t =
       let open State in
-      match p, f with
+      match p, t with
 
-      | Pos, FBind (`Forall, x, ty, f)
-      | Neg, FBind (`Exist, x, ty, f) ->
+      | Pos, `F FBind (`Forall, x, ty, f)
+      | Neg, `F FBind (`Exist, x, ty, f) ->
+          get >>= fun (deps, rnm, env, s) ->
+          let y, env = Vars.bind env (x, ty) in
+          let exs = Subst.fold
+            (fun acc (x, t) -> if t = Sflex then x :: acc else acc)
+            [] s
+          in
+          let deps = List.fold_left
+            (fun deps x -> Deps.add_edge deps x y)
+            deps exs
+          in
+          let z = EVars.fresh () in
+          let rnm = (z, x) :: rnm in
+          let s = Subst.push z (Sbound (EVar (y, 0))) s in
+          put (deps, rnm, env, s) >>= fun _ ->
+          let f = Form.Subst.f_apply1 (x, 0) (EVar (y, 0)) f in
+          return (p, `F f)
 
-        get >>= fun (deps, rnm, env, s) ->
-        let y, env = Vars.bind env (x, ty) in
-        let exs = Subst.fold
-          (fun acc (x, t) -> if t = Sflex then x :: acc else acc)
-          [] s
-        in
-        let deps = List.fold_left
-          (fun deps x -> Deps.add_edge deps x y)
-          deps exs
-        in
-        let z = EVars.fresh () in
-        let rnm = (z, x) :: rnm in
-        let s = Subst.push z (Sbound (EVar (y, 0))) s in
-        put (deps, rnm, env, s) >>= fun _ ->
-        return (p, Form.Subst.f_apply1 (x, 0) (EVar (y, 0)) f)
+      | Neg, `F FBind (`Forall, x, _, f)
+      | Pos, `F FBind (`Exist, x, _, f) ->
+          get >>= fun (deps, rnm, env, s) ->
+          let z = EVars.fresh () in
+          let rnm = (z, x) :: rnm in
+          let s = Subst.push z Sflex s in
+          put (deps, rnm, env, s) >>= fun _ ->
+          let f = Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f in
+          return (p, `F f)
 
-      | Neg, FBind (`Forall, x, _, f)
-      | Pos, FBind (`Exist, x, _, f) ->
-
-        get >>= fun (deps, rnm, env, s) ->
-        let z = EVars.fresh () in
-        let rnm = (z, x) :: rnm in
-        let s = Subst.push z Sflex s in
-        put (deps, rnm, env, s) >>= fun _ ->
-        return (p, Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f)
-
-      | _ -> return (direct_subform_pol (p, f) i)
+      | _ ->
+          return (direct_subterm_pol (p, t) i)
     in
 
     let traverse = State.fold traverse in
+    
+    let is_eq_operand proof (p : ipath) =
+      try
+        let eq_sub = List.(remove_at (length p.sub - 1) p.sub) in
+        let eq_path = { p with sub = eq_sub } in
+        let _, _, (_, t) = of_ipath proof eq_path in
+        match t with
+        | `F FPred ("_EQ", _) -> true
+        | _ -> false
+      with Invalid_argument _ -> false
+    in
 
     (* Body *)
 
     fun proof (src, dst) ->
 
-    let Proof.{ g_pregoal; _ }, item_src, (sub_src, t_src) = of_ipath proof src in
-    let _, item_dst, (sub_dst, t_dst) = of_ipath proof dst in
+    let Proof.{ g_pregoal; _ }, item_src, (sub_src, _) = of_ipath proof src in
+    let _, item_dst, (sub_dst, _) = of_ipath proof dst in
 
-    match t_src, t_dst with
-    | `F _, `F _ ->
+    let f1 = form_of_item item_src in
+    let f2 = form_of_item item_dst in
 
-      let f1 = form_of_item item_src in
-      let f2 = form_of_item item_dst in
+    let p1 = pol_of_item item_src in
+    let p2 = pol_of_item item_dst in
 
-      let p1 = pol_of_item item_src in
-      let p2 = pol_of_item item_dst in
+    let sub1 = sub_src in
+    let sub2 = sub_dst in
 
-      let sub1 = sub_src in
-      let sub2 = sub_dst in
+    let deps, sp1, st1, rnm1, s1, sp2, st2, rnm2, s2 =
+      let open State in
+      run begin
+        traverse (p1, `F f1) sub1 >>= fun (sp1, sf1) ->
+        get >>= fun (deps, rnm1, env, s1) ->
+        put (deps, [], env, Subst.empty) >>= fun _ ->
 
-      let deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2 =
-        let open State in
-        run begin
-          traverse (p1, f1) sub1 >>= fun (sp1, sf1) ->
-          get >>= fun (deps, rnm1, env, s1) ->
-          put (deps, [], env, Subst.empty) >>= fun _ ->
+        traverse (p2, `F f2) sub2 >>= fun (sp2, sf2) ->
+        get >>= fun (deps, rnm2, _, s2) ->
 
-          traverse (p2, f2) sub2 >>= fun (sp2, sf2) ->
-          get >>= fun (deps, rnm2, _, s2) ->
+        return (deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2)
+      end
+      (Deps.empty, [], Proof.(g_pregoal.g_env), Subst.empty)
+    in
 
-          return (deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2)
+    let s1 = Subst.aslist s1 in
+    let s2 = Subst.aslist s2 in
+    let s = Subst.oflist (s1 @ s2) in
+    
+    let s = begin match st1, st2 with
+      (* Subformula linking *)
+      | `F f1, `F f2 ->
+          begin match sp1, sp2 with
+          | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
+              f_unify LEnv.empty s [f1, f2]
+          | _ -> None
+          end
+      (* Deep rewrite *)
+      | `E e1, `E e2 ->
+          let eq1, eq2 = pair_map (is_eq_operand proof) (src, dst) in
+          begin match (sp1, eq1), (sp2, eq2) with
+          | (Neg, true), _ | _, (Neg, true) ->
+              e_unify LEnv.empty s [e1, e2]
+          | _ -> None
+          end
+      | _ -> None
+      end in
+
+    match s with
+    | Some s when acyclic (Deps.subst deps s) ->
+
+      let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
+
+      let rename rnm1 rnm2 =
+        List.map begin fun (x, tag) ->
+          let get_name x rnm = Option.default x (List.assoc_opt x rnm) in
+          let x = get_name x rnm1 in
+          let tag =
+            let rec rename = function
+              | EVar (x, i) -> EVar (get_name x rnm2, i)
+              | EFun (f, es) -> EFun (f, List.map rename es)
+            in match tag with
+            | Sbound e -> Sbound (rename e)
+            | _ -> tag
+          in x, tag
         end
-        (Deps.empty, [], Proof.(g_pregoal.g_env), Subst.empty)
       in
 
-      let s1 = Subst.aslist s1 in
-      let s2 = Subst.aslist s2 in
-      
-      let open Monad.List in
+      let s1 = s1 |> rename rnm1 rnm2 |> List.rev |> Subst.oflist in
+      let s2 = s2 |> rename rnm2 rnm1 |> List.rev |> Subst.oflist in
 
-      begin match sp1, sp2 with
+      [`Subform (s1, s2)]
 
-      | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
-
-        begin match f_unify LEnv.empty (Subst.oflist (s1 @ s2)) [sf1, sf2] with
-
-        | Some s when acyclic (Deps.subst deps s) ->
-
-          let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
-
-          let rename rnm1 rnm2 =
-            List.map begin fun (x, tag) ->
-              let get_name x rnm = Option.default x (List.assoc_opt x rnm) in
-              let x = get_name x rnm1 in
-              let tag =
-                let rec rename = function
-                  | EVar (x, i) -> EVar (get_name x rnm2, i)
-                  | EFun (f, es) -> EFun (f, List.map rename es)
-                in match tag with
-                | Sbound e -> Sbound (rename e)
-                | _ -> tag
-              in x, tag
-            end
-          in
-
-          let s1 = s1 |> rename rnm1 rnm2 |> List.rev |> Subst.oflist in
-          let s2 = s2 |> rename rnm2 rnm1 |> List.rev |> Subst.oflist in
-
-          return (`Subform (s1, s2))
-
-        | _ -> []
-        end
-      | _ -> []
-      end
     | _ -> []
     
   
@@ -2295,7 +2327,7 @@ end = struct
 
     let hlp = hlpred_add [
       hlpred_mult (List.map hlpred_of_lpred [wf_subform_link; intuitionistic_link]);
-      rewrite_link
+      (* rewrite_link *)
     ] in
     
     let dummy_path = mk_ipath 0 in
