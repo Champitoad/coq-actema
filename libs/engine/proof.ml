@@ -1718,8 +1718,7 @@ end = struct
           (* F∧ *)
           | _, (`F FConn (`And, fs), i :: sub) ->
             begin try
-              let fi, fs = List.pop_at i fs in
-              `F (CConn (`And, fs, i)), (h, (`F fi, sub))
+              `None, (h, (`F (List.at fs i), sub))
             with Not_found ->
               failwith "empty conjunction"
             end
