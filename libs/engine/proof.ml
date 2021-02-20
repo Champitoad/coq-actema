@@ -1437,29 +1437,29 @@ end = struct
       (** End rules *)
 
       | (_, []), (_, []) ->
-        let f = begin match l, r with
+        let t = begin match l, r with
 
           (* Bid *)
-          | `F l, `F r when f_equal l r -> f_true
+          | `F l, `F r when f_equal l r -> `F f_true
           | `F FPred (c1, ts1), `F FPred (c2, ts2) when c1 = c2 ->
             List.fold_left2
               (fun f t1 t2 -> f_and f (FPred ("_EQ", [t1; t2])))
               f_true ts1 ts2
             |> flatten_conjunctions
-            |> fun l -> FConn (`And, l)
+            |> fun l -> `F (FConn (`And, l))
         
           (* Brel *)
-          | `F l, `F r -> f_imp l r
+          | `F l, `F r -> `F (f_imp l r)
           
           (* Ltrel *)
-          | `E _, `F f
+          | `E e, `F _
           (* Rtrel *)
-          | `F f, `E _ -> f
+          | `F _, `E e -> `E e
           
           | _ -> raise TacticNotApplicable
 
           end
-        in c_fill (`F f) (c_rev ctx) |> form_of_term
+        in c_fill t (c_rev ctx) |> form_of_term
       
       | (`F FPred ("_EQ", [e1; e2]), [i]), (_, []) ->
         let red, res = begin match i with 
