@@ -863,6 +863,19 @@ end = struct
     && List.is_prefix sp.sub p.sub
 
 
+  (** [rewrite_subterm red res t sub] rewrites all occurrences of [red] in the
+      subterm of [t] at subpath [sub] into [res], shifting variables in [red]
+      and [res] whenever a binder is encountered along the path. *)
+  
+  let rec rewrite_subterm red res (t : term) =
+    let open Form in function
+    | [] -> rewrite red res t
+    | i :: sub ->
+        let u = direct_subterm t i in
+        let u = rewrite_subterm (shift_under t red) (shift_under t res) u sub in
+        modify_direct_subterm t u i
+
+
   (** [rewrite red res tgt targ] rewrites every occurrence of the reducible
       expression [red] in the subterm at path [tgt] into the residual
       expression [res]. It automatically shifts variables in [red] and [res]
@@ -871,29 +884,20 @@ end = struct
   type pnode += TRewrite of expr * expr * ipath
 
   let rewrite (red : expr) (res : expr) (tgt : ipath) : tactic =
-    let open Form in
     fun (proof, hd) ->
       
     let tgt = { tgt with root = Handle.toint hd } in
       
-    let rec shift_then_doit red res (t : term) = function
-      | [] -> rewrite red res t
-      | i :: sub ->
-          let u = direct_subterm t i in
-          let u = shift_then_doit (shift_under t red) (shift_under t res) u sub in
-          modify_direct_subterm t u i
-    in
-
     let _, it, (sub, _) = of_ipath proof tgt in 
     let goal = Proof.byid proof hd in
     
     let subgoal = match it with
       | `H (src, { h_form = f; _ }) ->
-          let new_hyp = shift_then_doit (`E red) (`E res) (`F f) sub |> form_of_term in
+          let new_hyp = rewrite_subterm (`E red) (`E res) (`F f) sub |> form_of_term in
           [Some src, [new_hyp]], goal.Proof.g_goal
 
       | `C f ->
-          let new_concl = shift_then_doit (`E red) (`E res) (`F f) sub |> form_of_term in
+          let new_concl = rewrite_subterm (`E red) (`E res) (`F f) sub |> form_of_term in
           [], new_concl
     in
     
@@ -1450,18 +1454,14 @@ end = struct
         
           (* Brel *)
           | `F l, `F r -> `F (f_imp l r)
-          
-          (* Ltrel *)
-          | `E e, `F _
-          (* Rtrel *)
-          | `F _, `E e -> `E e
-          
+
           | _ -> raise TacticNotApplicable
 
           end
         in c_fill t (c_rev ctx) |> form_of_term
       
-      | (`F FPred ("_EQ", [e1; e2]), [i]), (_, []) ->
+      | (`F FPred ("_EQ", [e1; e2]), [i]), _
+        when subterm r rsub = `E (if i = 0 then e1 else e2) ->
         let red, res = begin match i with 
           (* L=₁ *)
           | 0 -> e1, e2
@@ -1469,7 +1469,7 @@ end = struct
           | 1 -> e2, e1
           | _ -> assert false
         end in
-        let f = rewrite (`E red) (`E res) r in
+        let f = rewrite_subterm (`E red) (`E res) r rsub in
         c_fill f (c_rev ctx) |> form_of_term
       
       (** Commuting rules *)
@@ -1613,50 +1613,6 @@ end = struct
               `F (CBind (`Exist, x, ty)), ((`F f1, sub), c)
             | None -> assert false
             end
-          
-          (** Expression rules *)
-
-          (* Rfᵢ *)
-          | _, (`E EFun (f, args), i :: sub) ->
-            begin try
-              let ei, es = List.pop_at i args in
-              `E (CFun (f, es, i)), (h, (`E ei, sub))
-            with Invalid_argument _ ->
-              failwith "0-ary function"
-            end
-
-          (* RPᵢ *)
-          | _, (`F FPred (p, args), i :: sub)
-            when p <> "_EQ" ||
-            begin match l with `F FPred ("_EQ", _) -> true | _ -> false end
-            ->
-            begin try
-              let ei, es = List.pop_at i args in
-              `P (p, es, i), (h, (`E ei, sub))
-            with Invalid_argument _ ->
-              failwith "0-ary predicate"
-            end
-
-          (* Lfᵢ *)
-          | (`E EFun (f, args), i :: sub), _ ->
-            begin try
-              let ei, es = List.pop_at i args in
-              `E (CFun (f, es, i)), ((`E ei, sub), c)
-            with Invalid_argument _ ->
-              failwith "0-ary function"
-            end
-
-          (* LPᵢ *)
-          | (`F FPred (p, args), i :: sub), _
-            when p <> "_EQ" ||
-            begin match r with `F FPred ("_EQ", _) -> true | _ -> false end
-            ->
-            begin try
-              let ei, es = List.pop_at i args in
-              `P (p, es, i), ((`E ei, sub), c)
-            with Invalid_argument _ ->
-              failwith "0-ary predicate"
-            end
 
           | _ -> raise TacticNotApplicable
           end
@@ -1668,7 +1624,7 @@ end = struct
 
     and forward (ctx : ctx)
       (es1, (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
-      (((l, lsub as h), (r, _)) as linkage : (term * int list) * (term * int list)) : form =
+      (((l, lsub as h), (r, rsub)) as linkage : (term * int list) * (term * int list)) : form =
 
       (* js_log (print_linkage `Forward linkage); *)
       
@@ -1685,15 +1641,12 @@ end = struct
           (* Frel *)
           | `F l, `F r -> f_and l r
           
-          (* Ftrel *)
-          | `E _, `F f
-          | `F f, `E _ -> f
-          
           | _ -> raise TacticNotApplicable
         end in
         c_fill (`F f) (c_rev ctx) |> form_of_term
 
-      | (`F FPred ("_EQ", [e1; e2]), [i]), (_, []) ->
+      | (`F FPred ("_EQ", [e1; e2]), [i]), _
+        when subterm r rsub = `E (if i = 0 then e1 else e2) ->
         let red, res = begin match i with 
           (* F=₁ *)
           | 0 -> e1, e2
@@ -1701,7 +1654,7 @@ end = struct
           | 1 -> e2, e1
           | _ -> assert false
         end in
-        let f = rewrite (`E red) (`E res) r in
+        let f = rewrite_subterm (`E red) (`E res) r rsub in
         c_fill f (c_rev ctx) |> form_of_term
 
       (** Commuting rules *)
@@ -1788,27 +1741,6 @@ end = struct
               let h = (shift (x, 0) l), lsub in
               `F (CBind (`Forall, x, ty)), (h, (`F f1, sub))
             | None -> assert false
-            end
-            
-          (* Ffᵢ *)
-          | _, (`E EFun (f, args), i :: sub) ->
-            begin try
-              let ei, es = List.pop_at i args in
-              `E (CFun (f, es, i)), (h, (`E ei, sub))
-            with Invalid_argument _ ->
-              failwith "0-ary function"
-            end
-
-          (* FPᵢ *)
-          | _, (`F FPred (p, args), i :: sub)
-            when p <> "_EQ" ||
-            begin match l with `F FPred ("_EQ", _) -> true | _ -> false end
-            ->
-            begin try
-              let ei, es = List.pop_at i args in
-              `P (p, es, i), (h, (`E ei, sub))
-            with Invalid_argument _ ->
-              failwith "0-ary predicate"
             end
             
           (* Fcomm *)
