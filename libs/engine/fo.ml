@@ -427,15 +427,19 @@ module Form : sig
 
   val t_tostring : type_ -> string
   val t_tohtml   : type_ -> Tyxml.Xml.elt
+  val t_tomathml : type_ -> Tyxml.Xml.elt
 
   val e_tostring : expr -> string
   val e_tohtml   : ?id:string option -> expr -> Tyxml.Xml.elt
+  val e_tomathml : ?id:string option -> expr -> Tyxml.Xml.elt
 
   val f_tostring : form -> string
   val f_tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
+  val f_tomathml : ?id:string option -> form -> Tyxml.Xml.elt
   
   val tostring : term -> string
   val tohtml   : ?id:string option -> term -> Tyxml.Xml.elt
+  val tomathml : ?id:string option -> term -> Tyxml.Xml.elt
 
   val t_equal : ?bds:VName.bds -> type_ -> type_ -> bool
   val e_equal : ?bds:VName.bds -> expr  -> expr  -> bool
@@ -1245,6 +1249,147 @@ end = struct
     | `E e -> e_tohtml ?id e
     | `F f -> f_tohtml ?id f
 
+  let f_tomathml, e_tomathml, t_tomathml =
+    let open Tyxml in
+    
+    let span ?(a = []) = Xml.node ~a "span" in
+
+    let pr doit c =
+      if doit then Xml.node "mfenced" [c] else c in
+
+    let mn x = Xml.node "mn" [Xml.pcdata x] in
+    let mo x = Xml.node "mo" [Xml.pcdata x] in
+
+    let rec for_type ?(is_pr = false) (ty : type_) =
+      let data = match ty with
+        | TUnit ->
+            [mn (UTF8.of_char (UChar.of_int 0x2022))]
+
+        | TVar (x, 0) ->
+            [mn (UTF8.of_latin1 x)]
+
+        | TVar (x, i) ->
+            let x = Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i in
+            [mn (UTF8.of_latin1 x)]
+
+        | TProd (t1, t2)
+        | TOr   (t1, t2) ->
+            let t1 = for_type ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
+            let t2 = for_type ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
+            let tycon = match ty with
+              | TProd _ -> UChar.of_int 0x00D7
+              | TOr _   -> UChar.of_int 0x002B
+              | _       -> assert false in
+            t1 @ [mo (UTF8.of_char tycon)] @ t2
+
+        | TRec (x, t) ->
+            [mn (UTF8.of_char (UChar.of_int 0x039C));
+             mn (UTF8.of_latin1 x);
+             mo (UTF8.of_latin1 ".")] @ for_type t
+      in
+
+      [pr is_pr (Xml.node "row" data)]
+
+    and for_expr ?(id : string option option) (p : int list) (expr : expr) =
+      let for_expr = for_expr ?id in
+
+      let data =
+        match expr with
+        | EVar (x, 0) ->
+            [mn (UTF8.of_latin1 x)]
+
+        | EVar (x, i) ->
+            let x = Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i in
+            [mn (UTF8.of_latin1 x)]
+
+        | EFun (name, args) ->
+            let args = List.mapi (fun i e -> for_expr (i :: p) e) args in
+                [mn (UTF8.of_latin1 name)]
+              @ [pr true (Xml.node "row" (List.flatten (List.join [mo ","] args)))]
+      in
+
+      let thisid =
+        id |> Option.map (fun prefix ->
+          let p = String.concat "/" (List.rev_map string_of_int p) in
+          Option.fold
+            (fun p prefix -> Format.sprintf "%s:%s" prefix p)
+            p prefix) in
+      let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
+
+      [Xml.node "row" ~a:(List.of_option thisid) data]
+
+    and for_form ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
+      let for_form = for_form ?id in
+
+      let data =
+        match form with
+        | FTrue ->
+            [mn (UTF8.of_char (UChar.of_int 0x22A4))]
+  
+        | FFalse ->
+            [mn (UTF8.of_char (UChar.of_int 0x22A5))]
+  
+        | FConn (lg, fs) -> begin
+            let xml_lg =
+              [mo (UTF8.of_char (UChar.of_int (unicode_of_op lg)))] in
+            
+            let xml_fs =
+              List.combine fs (assoc_of_op lg) |>
+              List.mapi (fun i (f, cmp) ->
+                for_form ~is_pr:(cmp (prio_of_form f) (prio_of_op lg)) (i :: p) f) in
+  
+            match lg, xml_fs with
+            | (`And | `Or | `Imp | `Equiv), [f1; f2] ->
+                f1 @ xml_lg @ f2
+            | `Not, [f] ->
+                xml_lg @ f
+            | (`And | `Or | `Imp | `Not | `Equiv), _ ->
+                assert false
+          end
+
+        | FPred ("_EQ", [e1; e2]) ->
+              (for_expr ?id (0 :: p) e1)
+            @ [mo (UTF8.of_latin1 "=")]
+            @ (for_expr ?id (1 :: p) e2)
+
+        | FPred (name, []) ->
+            [mn (UTF8.of_latin1 name)]
+
+        | FPred (name, args) ->
+            let args = List.mapi (fun i e -> for_expr ?id (i :: p) e) args in
+               [mn (UTF8.of_latin1 name)]
+             @ [pr true (Xml.node "row" (List.flatten (List.join [mo ","] args)))]
+
+        | FBind (bd, x, ty, f) ->
+            let bd = match bd with
+              | `Forall -> UTF8.of_char (UChar.chr 0x2200)
+              | `Exist  -> UTF8.of_char (UChar.chr 0x2203) in
+
+            [mo bd; mn (UTF8.of_latin1 x); mo ":"]
+          @ (for_type ty)
+          @ [mo (UTF8.of_latin1 ".")]
+          @ (for_form (0 :: p) f)
+
+      in
+
+      let thisid =
+        id |> Option.map (fun prefix ->
+          let p = String.concat "/" (List.rev_map string_of_int p) in
+          Option.fold
+            (fun p prefix -> Format.sprintf "%s:%s" prefix p)
+            p prefix) in
+      let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
+
+      [pr is_pr (Xml.node "row" ~a:(List.of_option thisid) data)] in
+
+    ((fun ?id (form : form ) -> span (for_form ?id [] form)),
+     (fun ?id (expr : expr ) -> span (for_expr ?id [] expr)),
+     (fun     (ty   : type_) -> span (for_type ty)))
+
+  let tomathml ?id = function
+    | `E e -> e_tomathml ?id e
+    | `F f -> f_tomathml ?id f
+
   module Subst = struct
     type subst = (name * sitem) list
 
@@ -1485,10 +1630,7 @@ end = struct
         | _ -> None
 end
 
-
 (* -------------------------------------------------------------------- *)
-
-
 module Goal : sig
   val check : pgoal -> env * form
 end = struct
