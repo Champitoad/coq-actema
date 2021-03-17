@@ -1360,7 +1360,7 @@ end = struct
   let print_linkage (mode : [`Backward | `Forward]) ((l, _), (r, _)) =
     let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
     Printf.sprintf "%s %s %s"
-      (Form.tostring l) op (Form.tostring r)
+      (Form.f_tostring l) op (Form.f_tostring r)
 
   
   (** [dlink] stands for _d_eep linking, and implements the deep interaction phase
@@ -1415,6 +1415,7 @@ end = struct
       (* Forward invertible *)
       | `Forward -> begin match f with
         | FConn (c, _) -> begin match c with
+          | `Not -> true
           | _ -> false
           end
         | FBind (`Exist, _, _, _) -> true
@@ -1431,7 +1432,7 @@ end = struct
       ((env1, s1 as es1), (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       (((l, lsub as h), (r, rsub as c)) as linkage : (form * int list) * (form * int list)) : form =
       
-      (* js_log (print_linkage `Backward linkage); *)
+      js_log (print_linkage `Backward linkage);
       
       match linkage with
 
@@ -1622,7 +1623,7 @@ end = struct
       (es1, (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       (((l, lsub as h), (r, rsub)) as linkage : (form * int list) * (form * int list)) : form =
 
-      (* js_log (print_linkage `Forward linkage); *)
+      js_log (print_linkage `Forward linkage);
       
       match linkage with
 
