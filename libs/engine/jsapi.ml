@@ -340,7 +340,7 @@ object%js (_self)
   method html =
     _self##.form##html
 
-  (* Return the [html] of the enclosed formula *)  
+  (* Return the [mathml] of the enclosed formula *)  
   method mathml =
     _self##.form##mathml
 
@@ -394,7 +394,7 @@ object%js (_self)
       ]
     in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
 
-  (* Return the [html] of the enclosed formula *)  
+  (* Return the [mathml] of the enclosed formula *)  
   method mathml =
     let open Tyxml in
 
@@ -491,15 +491,15 @@ end
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
 and js_type (ty : Fo.type_) = object%js (_self)
-  (* Return the raw [mathml] fo the type *)
+  (* Return the raw [mathml] of the type *)
   method rawmathml =
     Fo.Form.t_tomathml ty
 
-  (* Return the raw [html] fo the type *)
+  (* Return the raw [html] of the type *)
   method rawhtml =
     Fo.Form.t_tohtml ty
 
-  (* Return the raw string representation fo the type *)
+  (* Return the raw string representation of the type *)
   method rawstring =
     Fo.Form.t_tostring ty
 
