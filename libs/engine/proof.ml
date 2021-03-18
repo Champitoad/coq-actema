@@ -1411,7 +1411,6 @@ end = struct
       (* Forward invertible *)
       | `Forward -> begin match f with
         | FConn (c, _) -> begin match c with
-          | `And -> true
           | _ -> false
           end
         | FBind (`Exist, _, _, _) -> true
