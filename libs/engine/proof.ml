@@ -1739,7 +1739,7 @@ end = struct
             
           (* Fcomm *)
           | h, h' ->
-            s := (es1, es2);
+            s := (es2, es1);
             None, (h', h)
           end
         in
