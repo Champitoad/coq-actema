@@ -265,7 +265,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
     in js_proof_engine (!!doit ())
 
   (* [this#add_local (name : string) (expr : string) parses [expr] in the goal
-   * [context] and add it to the local [context] under the name [name]. *)
+   * [context] and adds it to the local [context] under the name [name]. *)
   method addlocal name expr =
     let doit () =
       let goal = Proof.byid parent##.proof _self##.handle in
@@ -363,7 +363,7 @@ object%js (_self)
   val parent = parent
 
   (* the handle (UID) of the hypothesis *)
-  val handle = Handle.ofint (-(Hashtbl.hash x)) (* FIXME *)
+  val handle = Handle.ofint (-i-1)
 
   (* the handle position in its context *)
   val position = i
@@ -384,32 +384,64 @@ object%js (_self)
   (* Return the [html] of the enclosed formula *)  
   method html =
     let open Tyxml in
+    let open Utils.Xml in
 
-    let id = Format.sprintf "#[%d]" 3 in
+    let id =
+      Format.sprintf "%d/%d"
+        (Handle.toint _self##.parent##.handle)
+        (Handle.toint _self##.handle)
+    in
     let dt =
-      Xml.node ~a:[Xml.string_attrib "id" id] "span" [
-        Xml.node "span" [Xml.pcdata (UTF8.of_latin1 x)];
-        Xml.node "span" [Xml.pcdata " : "];
-        _self##.type_##rawhtml;
+      span [
+        span ~a:[Xml.string_attrib "id" (id ^ ":")] begin
+            [span [Xml.pcdata (UTF8.of_latin1 x)]] @
+            spaced_span [Xml.pcdata ":"] @
+            [Fo.Form.t_tohtml ty]
+          @
+          match body with
+          | Some b ->
+              spaced_span [Xml.pcdata ":="] @
+              [Fo.Form.e_tohtml ~id:(Some id) b]
+          | None -> []
+        end
       ]
     in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
 
   (* Return the [mathml] of the enclosed formula *)  
   method mathml =
     let open Tyxml in
+    let open Utils.Xml in
 
-    let id = Format.sprintf "#[%d]" 3 in
+    let id =
+      Format.sprintf "%d/%d"
+        (Handle.toint _self##.parent##.handle)
+        (Handle.toint _self##.handle)
+    in
     let dt =
-      Xml.node ~a:[Xml.string_attrib "id" id] "row" [
-        Xml.node "mn" [Xml.pcdata (UTF8.of_latin1 x)];
-        Xml.node "mo" [Xml.pcdata " : "];
-        _self##.type_##rawmathml;
+      span [
+        span ~a:[Xml.string_attrib "id" (id ^ ":")] begin
+            [span [Xml.pcdata (UTF8.of_latin1 x)]] @
+            spaced_span [Xml.pcdata ":"] @
+            [Fo.Form.t_tomathml ty]
+          @
+          match body with
+          | Some b ->
+              spaced_span [Xml.pcdata ":="] @
+              [Fo.Form.e_tomathml ~id:(Some id) b]
+          | None -> []
+        end
       ]
     in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
 
   (* Return an UTF8 string representation of the enclosed formula *)
   method tostring =
-    Js.string (Format.sprintf "%s : %s" x _self##.type_##rawstring)
+    match body with
+    | Some b ->
+        Js.string (Format.sprintf "%s : %s := %s"
+          x (Fo.Form.t_tostring ty) (Fo.Form.e_tostring b))
+    | None ->
+        Js.string (Format.sprintf "%s : %s"
+          x (Fo.Form.t_tostring ty))
 
   method getmeta =
     Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)

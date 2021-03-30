@@ -1092,19 +1092,14 @@ end = struct
 
   let f_tohtml, e_tohtml, t_tohtml =
     let open Tyxml in
+    let open Utils.Xml in
     
-    let span ?(a = []) = Xml.node ~a "span" in
-
     let pr doit c =
       let l = [span [Xml.pcdata "("]] in
       let r = [span [Xml.pcdata ")"]] in
       if doit then l @ c @ r else c in
 
-    let spaced ?(left = true) ?(right = true) c =
-      let sp = [span [Xml.entity "nbsp"]] in
-      let c = if left  then sp @ c else c in
-      let c = if right then c @ sp else c in
-      c in
+    let spaced = spaced_span in
 
     let rec for_type ?(is_pr = false) (ty : type_) =
       let data = match ty with

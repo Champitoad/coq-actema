@@ -315,7 +315,11 @@ module CoreLogic : sig
 
   val ipath_of_path : path -> ipath
 
-  type item   = [`C of form | `H of Handle.t * Proof.hyp ]
+  type item = [
+    | `C of form
+    | `H of Handle.t * Proof.hyp
+    | `D of name * bvar]
+
   type pol    = Pos | Neg | Sup
 
   val cut        : Fo.form -> tactic
@@ -700,7 +704,10 @@ end = struct
   (** Items *)
 
 
-  type item   = [`C of form | `H of Handle.t * Proof.hyp ]
+  type item = [
+    | `C of form
+    | `H of Handle.t * Proof.hyp
+    | `D of name * bvar]
   
 
   let form_of_item = function
@@ -811,7 +818,7 @@ end = struct
       | End_of_file ->
           raise (InvalidPath p) in
 
-    if root < 0 || ctxt < 0 then
+    if root < 0 then
       raise (InvalidPath p);
 
     let sub =
@@ -836,23 +843,41 @@ end = struct
       try  Proof.byid proof (Handle.ofint root)
       with InvalidGoalId _ -> raise (InvalidPath (path_of_ipath p)) in
 
-    let item, f_item =
+    let item, t_item =
       match ctxt with
-      | ctxt when ctxt <= 0 ->
+      | _ when ctxt = 0 ->
           let f = goal.Proof.g_goal in
-          (`C f, f)
+          (`C f, `F f)
 
-      | _ -> begin
-          try
+      | _ when ctxt > 0 ->
+          begin try
             let rp = Handle.ofint ctxt in
             let { Proof.h_form = hf; _ } as hyd =
               Proof.Hyps.byid goal.Proof.g_hyps rp
             in
-            (`H (rp, hyd), hf)
-          with InvalidHyphId _ -> raise (InvalidPath (path_of_ipath p))
-        end
+            (`H (rp, hyd), `F hf)
+          with InvalidHyphId _ ->
+            raise (InvalidPath (path_of_ipath p))
+          end
+
+      | _ ->
+          let x, bs = begin try
+              goal.g_env.env_var |>
+              Map.enum |>
+              Enum.skip (-ctxt-1) |>
+              Enum.peek |>
+              Option.get
+            with _ ->
+              raise (InvalidPath (path_of_ipath p))
+            end in
+          match bs with
+          | [ty, b] ->
+              (`D (x, (ty, b)), `E (Option.default (EVar (x, 0)) b))
+          | _ ->
+              failwith "Cannot have multiple definitions with the same name in
+              the global environment"
     in
-    let target = subterm (`F f_item) sub in
+    let target = subterm t_item sub in
 
     let goal = Proof.{ g_id = Handle.ofint root; g_pregoal = goal } in
     (goal, item, (sub, target))
@@ -891,18 +916,29 @@ end = struct
     let _, it, (sub, _) = of_ipath proof tgt in 
     let goal = Proof.byid proof hd in
     
-    let subgoal = match it with
-      | `H (src, { h_form = f; _ }) ->
-          let new_hyp = rewrite_subterm (`E red) (`E res) (`F f) sub |> form_of_term in
-          [Some src, [new_hyp]], goal.Proof.g_goal
-
-      | `C f ->
-          let new_concl = rewrite_subterm (`E red) (`E res) (`F f) sub |> form_of_term in
-          [], new_concl
-    in
-    
     let pnode = TRewrite (red, res, tgt) in
-    Proof.sprogress ~clear:true proof hd pnode [subgoal]
+
+    match it with
+    | `H (src, { h_form = f; _ }) ->
+        let new_hyp = rewrite_subterm (`E red) (`E res) (`F f) sub |> form_of_term in
+        let subgoal = [Some src, [new_hyp]], goal.Proof.g_goal in
+        Proof.sprogress ~clear:true proof hd pnode [subgoal]
+
+    | `C f ->
+        let new_concl = rewrite_subterm (`E red) (`E res) (`F f) sub |> form_of_term in
+        let subgoal = [], new_concl in
+        Proof.sprogress ~clear:true proof hd pnode [subgoal]
+    
+    | `D (x, (ty, b)) ->
+        begin match b with
+        | Some b ->
+            let new_body = rewrite_subterm (`E red) (`E res) (`E b) sub |> expr_of_term in
+            let env_var = Map.add x [(ty, Some new_body)] goal.g_env.env_var in
+            let g_env = { goal.g_env with env_var } in
+            Proof.xprogress proof hd pnode [{ goal with g_env }]
+        | None ->
+            failwith "Cannot rewrite in abstract definition"
+        end
     
 
     let rewrite_in (red : expr) (res : expr) (tgts : ipath list) : tactic =
@@ -1003,6 +1039,7 @@ end = struct
   let pol_of_item = function
     | `H _ -> Neg
     | `C _ -> Pos
+    | `D _ -> Neg
 
 
   (** [pol_of_ipath proof p] returns the polarity of the subformula
@@ -1014,6 +1051,7 @@ end = struct
       match item with
       | `H (_, { h_form = f; _ }) -> Neg, f
       | `C f -> Pos, f
+      | `D _ -> raise (InvalidSubFormPath sub)
     in
     subform_pol (pol, form) sub |> fst
 
@@ -1031,8 +1069,8 @@ end = struct
 
   type pnode += TLink
 
-  (** [link] is the equivalent of Proof by Pointing's [finger_tac], but using the
-  interaction rules specific to subformula linking. *)
+  (** [link] is the equivalent of Proof by Pointing's [finger_tac], but using
+      the interaction rules specific to subformula linking. *)
 
   let link (src, dst : link) (s_src, s_dst : Form.Subst.subst * Form.Subst.subst) : tactic =
     fun (proof, hd) ->
@@ -1046,7 +1084,7 @@ end = struct
     let _, item_src, (sub_src, _) = of_ipath proof src in
     let _, item_dst, (sub_dst, _) = of_ipath proof dst in
 
-    let rec pbp (goal, ogoals) tgt sub s tgt' sub' s' =
+    let rec pbp (goal, ogoals) (tgt : item) sub s tgt' sub' s' =
 
       let gen_subgoals target sub_goal sub_ogoals =
         let ogoals = Proof.sgprogress goal sub_ogoals in
@@ -1308,8 +1346,12 @@ end = struct
             | _ -> raise TacticNotApplicable
 
             end
+          | _ -> raise TacticNotApplicable
           end
+        
         in pbp (goal, ogoals @ new_ogoals) tgt sub s tgt' sub' s'
+
+      | _ -> raise TacticNotApplicable
     in
 
     let subgoals = pbp (goal, []) item_src sub_src s_src item_dst sub_dst s_dst in
@@ -1327,7 +1369,7 @@ end = struct
     | FConn (`And, [FFalse; _])
     | FConn (`Not, [FTrue])
     | FBind (`Exist, _, _, FFalse) ->
-      Form.f_false
+        Form.f_false
 
     | FConn (`Or, [_; FTrue])
     | FConn (`Or, [FTrue; _])
@@ -1335,7 +1377,7 @@ end = struct
     | FConn (`Imp, [FFalse; _])
     | FConn (`Not, [FFalse])
     | FBind (`Forall, _, _, FTrue) ->
-      Form.f_true
+        Form.f_true
 
     (* Neutral elements *)
 
@@ -1346,15 +1388,15 @@ end = struct
     | FConn (`Imp, [FTrue; f])
     | FConn (`Equiv, [FTrue; f])
     | FConn (`Equiv, [f; FTrue]) ->
-      elim_units f
+        elim_units f
     
     | FTrue | FFalse | FPred _ as f -> f
     | FConn (c, fs) as f ->
-      let fs' = List.map elim_units fs in
-      if fs = fs' then f else elim_units (FConn (c, fs'))
+        let fs' = List.map elim_units fs in
+        if fs = fs' then f else elim_units (FConn (c, fs'))
     | FBind (b, x, ty, f1) as f ->
-      let f1' = elim_units f1 in
-      if f1 = f1' then f else elim_units (FBind (b, x, ty, f1'))
+        let f1' = elim_units f1 in
+        if f1 = f1' then f else elim_units (FBind (b, x, ty, f1'))
   
 
   let print_linkage (mode : [`Backward | `Forward]) ((l, _), (r, _)) =
@@ -2098,79 +2140,80 @@ end = struct
     let Proof.{ g_pregoal; _ }, item_src, (sub_src, _) = of_ipath proof src in
     let _, item_dst, (sub_dst, _) = of_ipath proof dst in
 
-    let f1 = form_of_item item_src in
-    let f2 = form_of_item item_dst in
+    try
+      let f1, f2 = pair_map form_of_item (item_src, item_dst) in
 
-    let p1 = pol_of_item item_src in
-    let p2 = pol_of_item item_dst in
+      let p1 = pol_of_item item_src in
+      let p2 = pol_of_item item_dst in
 
-    let sub1 = sub_src in
-    let sub2 = sub_dst in
+      let sub1 = sub_src in
+      let sub2 = sub_dst in
 
-    let deps, sp1, st1, rnm1, s1, sp2, st2, rnm2, s2 =
-      let open State in
-      run begin
-        traverse (p1, `F f1) sub1 >>= fun (sp1, sf1) ->
-        get >>= fun (deps, rnm1, env, s1) ->
-        put (deps, [], env, Subst.empty) >>= fun _ ->
+      let deps, sp1, st1, rnm1, s1, sp2, st2, rnm2, s2 =
+        let open State in
+        run begin
+          traverse (p1, `F f1) sub1 >>= fun (sp1, sf1) ->
+          get >>= fun (deps, rnm1, env, s1) ->
+          put (deps, [], env, Subst.empty) >>= fun _ ->
 
-        traverse (p2, `F f2) sub2 >>= fun (sp2, sf2) ->
-        get >>= fun (deps, rnm2, _, s2) ->
+          traverse (p2, `F f2) sub2 >>= fun (sp2, sf2) ->
+          get >>= fun (deps, rnm2, _, s2) ->
 
-        return (deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2)
-      end
-      (Deps.empty, [], Proof.(g_pregoal.g_env), Subst.empty)
-    in
-
-    let s1 = Subst.aslist s1 in
-    let s2 = Subst.aslist s2 in
-    let s = Subst.oflist (s1 @ s2) in
-    
-    let s = begin match st1, st2 with
-      (* Subformula linking *)
-      | `F f1, `F f2 ->
-          begin match sp1, sp2 with
-          | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
-              f_unify LEnv.empty s [f1, f2]
-          | _ -> None
-          end
-      (* Deep rewrite *)
-      | `E e1, `E e2 ->
-          let eq1, eq2 = pair_map (is_eq_operand proof) (src, dst) in
-          begin match (sp1, eq1), (sp2, eq2) with
-          | (Neg, true), _ | _, (Neg, true) ->
-              e_unify LEnv.empty s [e1, e2]
-          | _ -> None
-          end
-      | _ -> None
-      end in
-
-    match s with
-    | Some s when acyclic (Deps.subst deps s) ->
-
-      let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
-
-      let rename rnm1 rnm2 =
-        List.map begin fun (x, tag) ->
-          let get_name x rnm = Option.default x (List.assoc_opt x rnm) in
-          let x = get_name x rnm1 in
-          let tag =
-            let rec rename = function
-              | EVar (x, i) -> EVar (get_name x rnm2, i)
-              | EFun (f, es) -> EFun (f, List.map rename es)
-            in match tag with
-            | Sbound e -> Sbound (rename e)
-            | _ -> tag
-          in x, tag
+          return (deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2)
         end
+        (Deps.empty, [], Proof.(g_pregoal.g_env), Subst.empty)
       in
 
-      let s1 = s1 |> rename rnm1 rnm2 |> List.rev |> Subst.oflist in
-      let s2 = s2 |> rename rnm2 rnm1 |> List.rev |> Subst.oflist in
+      let s1 = Subst.aslist s1 in
+      let s2 = Subst.aslist s2 in
+      let s = Subst.oflist (s1 @ s2) in
+      
+      let s = begin match st1, st2 with
+        (* Subformula linking *)
+        | `F f1, `F f2 ->
+            begin match sp1, sp2 with
+            | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
+                f_unify LEnv.empty s [f1, f2]
+            | _ -> None
+            end
+        (* Deep rewrite *)
+        | `E e1, `E e2 ->
+            let eq1, eq2 = pair_map (is_eq_operand proof) (src, dst) in
+            begin match (sp1, eq1), (sp2, eq2) with
+            | (Neg, true), _ | _, (Neg, true) ->
+                e_unify LEnv.empty s [e1, e2]
+            | _ -> None
+            end
+        | _ -> None
+        end in
 
-      [`Subform (s1, s2)]
+      match s with
+      | Some s when acyclic (Deps.subst deps s) ->
 
-    | _ -> []
+        let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
+
+        let rename rnm1 rnm2 =
+          List.map begin fun (x, tag) ->
+            let get_name x rnm = Option.default x (List.assoc_opt x rnm) in
+            let x = get_name x rnm1 in
+            let tag =
+              let rec rename = function
+                | EVar (x, i) -> EVar (get_name x rnm2, i)
+                | EFun (f, es) -> EFun (f, List.map rename es)
+              in match tag with
+              | Sbound e -> Sbound (rename e)
+              | _ -> tag
+            in x, tag
+          end
+        in
+
+        let s1 = s1 |> rename rnm1 rnm2 |> List.rev |> Subst.oflist in
+        let s2 = s2 |> rename rnm2 rnm1 |> List.rev |> Subst.oflist in
+
+        [`Subform (s1, s2)]
+
+      | _ -> []
+    with Invalid_argument _ -> []
     
   
   (** [intuitionistic_link lnk] checks if [lnk] is an intuitionistic link,
@@ -2186,6 +2229,7 @@ end = struct
       match it with
       | `C _ -> n
       | `H _ -> n+1
+      | `D _ -> raise (Invalid_argument "Expected a formula item")
     in
     
     try
@@ -2194,7 +2238,7 @@ end = struct
                || m = 0 && n <= 1
                || m <= 1 && n = 0 -> [`Nothing]
       | _ -> []
-    with InvalidSubFormPath _ -> []
+    with InvalidSubFormPath _ | Invalid_argument _ -> []
   
 
   (** [rewrite_link lnk] checks if [lnk] is a rewrite hyperlink. That is, one
@@ -2357,8 +2401,11 @@ end = struct
             end 
 
           | `H (rp, _) ->
-            let hg = mk_ipath (Handle.toint hd) ~ctxt:(Handle.toint rp) in
-            ["Elim", [hg], `Click hg, (hd, `Elim rp)]
+              let hg = mk_ipath (Handle.toint hd) ~ctxt:(Handle.toint rp) in
+              ["Elim", [hg], `Click hg, (hd, `Elim rp)]
+          
+          | `D _ ->
+              []
         end
 
       | `DnD dnd ->

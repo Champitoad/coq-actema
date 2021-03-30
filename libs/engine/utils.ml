@@ -229,3 +229,18 @@ end = struct
     let r = ref (Some (cb, x)) in
     Gc.finalise (fun r -> dispose r) r; r
 end
+
+(* -------------------------------------------------------------------- *)
+open Tyxml
+module Xml : sig
+  val span : ?a:Xml.attrib list -> Xml.elt list -> Xml.elt
+  val spaced_span : ?left:bool -> ?right:bool -> Xml.elt list -> Xml.elt list
+end = struct
+  let span ?(a = []) = Xml.node ~a "span"
+
+  let spaced_span ?(left = true) ?(right = true) c =
+    let sp = [span [Xml.entity "nbsp"]] in
+    let c = if left  then sp @ c else c in
+    let c = if right then c @ sp else c in
+    c
+end
