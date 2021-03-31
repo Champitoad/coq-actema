@@ -243,6 +243,7 @@ module Vars : sig
   val push   : env -> name * type_ * expr option -> env
   val exists : env -> vname -> bool
   val get    : env -> vname -> (type_ * expr option) option
+  val map    : env -> (expr option -> expr option) -> env
   val all    : env -> (name, (type_ * expr option) list) Map.t
 end = struct
   let name_counters : (env, int ref) Map.t ref = ref Map.empty
@@ -285,9 +286,9 @@ end = struct
 
   let exists (env : env) (x : vname) =
     Option.is_some (get env x)
-
-  let depth env name =
-    List.length (Map.find_default [] name env.env_var)
+  
+  let map (env : env) (f : expr option -> expr option) =
+    { env with env_var = Map.map (List.map (snd_map f)) env.env_var }
 
   let all (env : env) =
     env.env_var
@@ -881,10 +882,10 @@ end = struct
 
   let rec echeck (env : env) (e : pexpr) =
     match unloc e with
-    | PEVar x -> begin
-        match Vars.get env (unloc x, 0) with
+    | PEVar (x, i) -> begin
+        match Vars.get env (unloc x, i) with
         | None          -> raise TypingError
-        | Some (xty, _) -> EVar (unloc x, 0), xty
+        | Some (xty, _) -> EVar (unloc x, i), xty
       end
 
     | PEApp (f, args) -> begin

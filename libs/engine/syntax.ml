@@ -22,7 +22,7 @@ type ptyident = psymbol * ptype
 
 (* -------------------------------------------------------------------- *)
 type pexpr_r =
-  | PEVar of psymbol
+  | PEVar of psymbol * int
   | PEApp of psymbol * pexpr list
 
 and pexpr  = pexpr_r loced

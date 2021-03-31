@@ -210,7 +210,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
   method tvars =
     let goal  = Proof.byid parent##.proof _self##.handle in
     let tvars = Map.bindings (Fo.Vars.all goal.g_env) in
-    let tvars = List.map (snd_map List.hd) tvars in
+    let tvars = List.concat_map (fun (x, bs) -> List.mapi (fun i b -> ((x, i), b)) bs) tvars in
     let aout  = List.mapi (fun i (x, (ty, body)) -> js_tvar _self (i, (x, ty, body))) tvars in
     Js.array (Array.of_list aout)
 
@@ -272,7 +272,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       let expr = String.trim (Js.to_string expr) in
       let expr = Io.parse_expr (Io.from_string expr) in
       let expr, ty = Fo.Form.echeck goal.g_env expr in
-      CoreLogic.add_local (Js.to_string name, ty, expr) (parent##.proof, _self##.handle)
+      CoreLogic.add_local (Js.to_string name, ty, Some expr) (parent##.proof, _self##.handle)
 
     in js_proof_engine (!!doit ())
 
@@ -284,7 +284,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       let expr = String.trim (Js.to_string expr) in
       let name, expr = Io.parse_nexpr (Io.from_string expr) in
       let expr, ty = Fo.Form.echeck goal.g_env expr in
-      CoreLogic.add_local (Location.unloc name, ty, expr) (parent##.proof, _self##.handle)
+      CoreLogic.add_local (Location.unloc name, ty, Some expr) (parent##.proof, _self##.handle)
 
     in js_proof_engine (!!doit ())
 
@@ -357,7 +357,7 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for a local variable                                      *)
-and js_tvar parent ((i, (x, ty, body)) : int * (Fo.name * Fo.type_ * Fo.expr option)) =
+and js_tvar parent ((i, (x, ty, body)) : int * (Fo.vname * Fo.type_ * Fo.expr option)) =
 object%js (_self)
   (* back-link to the [js_subgoal] this local variable belongs to *)
   val parent = parent
@@ -369,7 +369,7 @@ object%js (_self)
   val position = i
 
   (* the local variable name *)
-  val name = Js.string x
+  val name = Js.string (Fo.Form.e_tostring (EVar x))
 
   (* the local variable type as a [js_type] *)
   val type_ = js_type ty
@@ -394,7 +394,7 @@ object%js (_self)
     let dt =
       span [
         span ~a:[Xml.string_attrib "id" (id ^ ":")] begin
-            [span [Xml.pcdata (UTF8.of_latin1 x)]] @
+            [span [Xml.pcdata (UTF8.of_latin1 (Fo.Form.e_tostring (EVar x)))]] @
             spaced_span [Xml.pcdata ":"] @
             [Fo.Form.t_tohtml ty]
           @
@@ -420,7 +420,7 @@ object%js (_self)
     let dt =
       span [
         span ~a:[Xml.string_attrib "id" (id ^ ":")] begin
-            [span [Xml.pcdata (UTF8.of_latin1 x)]] @
+            [span [Xml.pcdata (UTF8.of_latin1 (Fo.Form.e_tostring (EVar x)))]] @
             spaced_span [Xml.pcdata ":"] @
             [Fo.Form.t_tomathml ty]
           @
@@ -438,10 +438,10 @@ object%js (_self)
     match body with
     | Some b ->
         Js.string (Format.sprintf "%s : %s := %s"
-          x (Fo.Form.t_tostring ty) (Fo.Form.e_tostring b))
+          (Fo.Form.e_tostring (EVar x)) (Fo.Form.t_tostring ty) (Fo.Form.e_tostring b))
     | None ->
         Js.string (Format.sprintf "%s : %s"
-          x (Fo.Form.t_tostring ty))
+          (Fo.Form.e_tostring (EVar x)) (Fo.Form.t_tostring ty))
 
   method getmeta =
     Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)

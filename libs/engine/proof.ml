@@ -53,6 +53,7 @@ module Proof : sig
     val move    : hyps -> Handle.t -> Handle.t option -> hyps
     val bump    : hyps -> hyps
     val ids     : hyps -> Handle.t list
+    val map     : (hyp -> hyp) -> hyps -> hyps
     val to_list : hyps -> (Handle.t * hyp) list
   end
 
@@ -108,6 +109,7 @@ end = struct
     val move    : hyps -> Handle.t -> Handle.t option -> hyps
     val bump    : hyps -> hyps
     val ids     : hyps -> Handle.t list
+    val map     : (hyp -> hyp) -> hyps -> hyps
     val to_list : hyps -> (Handle.t * hyp) list
   end = struct
     type hyps = (Handle.t * hyp) list
@@ -150,6 +152,9 @@ end = struct
 
     let ids (hyps : hyps) =
       List.fst hyps
+    
+    let map f (hyps : hyps) =
+      List.map (snd_map f) hyps
 
     let to_list (hyps : hyps) =
       hyps
@@ -323,7 +328,7 @@ module CoreLogic : sig
   type pol    = Pos | Neg | Sup
 
   val cut        : Fo.form -> tactic
-  val add_local  : string * Fo.type_ * Fo.expr -> tactic
+  val add_local  : string * Fo.type_ * Fo.expr option -> tactic
   val generalize : Handle.t -> tactic
   val move       : Handle.t -> Handle.t option -> tactic
   val intro      : ?variant:(int * (expr * type_) option) -> tactic
@@ -430,6 +435,28 @@ end = struct
       | [] -> raise TacticNotApplicable
       | g::l when Form.f_equal g f -> l
       | g::l -> g::(remove_form f l)
+  
+  
+  type pnode += TDef of (Fo.type_ * Fo.expr option) * Handle.t
+
+  let add_local ((name, ty, body) : string * Fo.type_ * Fo.expr option) ((proof, hd) : targ) =
+    let goal = Proof.byid proof hd in
+
+    Option.map_default (Fo.Form.erecheck goal.g_env ty) () body;
+
+    let g_env = Fo.Vars.push goal.g_env (name, ty, body) in
+    let g_env = Fo.Vars.map g_env (Option.map (Fo.Form.e_shift (name, 0))) in
+
+    let g_hyps =
+      Proof.Hyps.(map (fun h ->
+        { h with h_form = Form.f_shift (name, 0) h.h_form })
+        goal.g_hyps) in
+    
+    let g_goal = Form.f_shift (name, 0) goal.g_goal in
+    
+    Proof.xprogress proof hd (TDef ((ty, body), hd))
+      [{ g_env; g_hyps; g_goal }]
+
 
   type pnode += TIntro of (int * (expr * type_) option)
 
@@ -463,14 +490,8 @@ end = struct
         Proof.progress pr id pterm []
 
     | (0, None), FBind (`Forall, x, xty, body) ->
-        let goal = Proof.byid pr id in
-        let y = Vars.fresh ~basename:x goal.g_env () in
-        let body = Form.Subst.f_apply1 (x, 0) (EVar (y, 0)) body in
-        let goal = { goal with
-          g_env  = Vars.push goal.g_env (y, xty, None);
-          g_goal = body;
-        }
-        in Proof.xprogress pr id pterm [goal]
+        let pr = add_local (x, xty, None) (pr, id) in
+        Proof.progress pr (List.hd (Proof.opened pr)) pterm [body]
 
     | (0, Some (e, ety)), FBind (`Exist, x, xty, body) -> begin
         let goal = Proof.byid pr id in
@@ -642,17 +663,6 @@ end = struct
     
     Proof.sprogress proof hd (TCut (form, hd))
       (subs @ [[None, [form]], goal.g_goal])
-
-  type pnode += TDef of (Fo.type_ * Fo.expr) * Handle.t
-
-  let add_local ((name, ty, body) : string * Fo.type_ * Fo.expr) ((proof, hd) : targ) =
-    let goal = Proof.byid proof hd in
-
-    Fo.Form.erecheck goal.g_env ty body;
-
-    let env = Fo.Vars.push goal.g_env (name, ty, Some body) in
-    
-    Proof.xprogress proof hd (TDef ((ty, body), hd)) [{ goal with g_env = env }]
 
   type pnode += TGeneralize of Handle.t
 

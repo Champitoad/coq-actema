@@ -4,8 +4,10 @@
 %}
 
 %token <Syntax.symbol> IDENT
+%token <int> NAT
 
 %token LPAREN RPAREN
+%token LBRACE RBRACE
 %token TRUE
 %token EXISTS
 %token FALSE
@@ -106,7 +108,10 @@ type_:
 (* -------------------------------------------------------------------- *)
 unparens_expr_r:
 | x=ident
-    { PEVar x }
+    { PEVar (x, 0) }
+
+| x=ident LBRACE i=NAT RBRACE
+    { PEVar (x, i) }
 
 | f=ident args=parens(plist1(expr, COMMA))
     { PEApp (f, args) }

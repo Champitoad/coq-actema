@@ -35,15 +35,19 @@ let uint    = digit+
 
 let ichar = (letter | digit | '_' | '\'')
 let ident = letter ichar*
+let nat   = digit+
 
 (* -------------------------------------------------------------------- *)
 rule main = parse
   | newline     { Lexing.new_line lexbuf; main lexbuf }
   | blank+      { main lexbuf }
   | ident as id { try Hashtbl.find keywords id with Not_found -> IDENT id }
+  | nat as n    { NAT (int_of_string n) }
 
   | "("   { LPAREN  }
   | ")"   { RPAREN  }
+  | "{"   { LBRACE  }
+  | "}"   { RBRACE  }
   | "&&"  { LAND    }
   | "||"  { LOR     }
   | "~"   { LNEG    }
