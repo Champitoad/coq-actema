@@ -67,10 +67,11 @@ module Proof : sig
 
   type pregoals = pregoal list
 
-  val init   : env -> form -> proof
-  val closed : proof -> bool
-  val opened : proof -> Handle.t list
-  val byid   : proof -> Handle.t -> pregoal
+  val init    : env -> form -> proof
+  val closed  : proof -> bool
+  val opened  : proof -> Handle.t list
+  val focused : proof -> Handle.t
+  val byid    : proof -> Handle.t -> pregoal
 
   type meta = < > Js_of_ocaml.Js.t
 
@@ -213,6 +214,9 @@ end = struct
 
   let opened (proof : proof) =
     proof.p_crts
+  
+  let focused =
+    List.hd <<| opened
 
   let byid (proof : proof) (id : Handle.t) : pregoal =
     let goal =
@@ -396,7 +400,7 @@ end = struct
   let then_tac (t1 : tactic) (t2 : tactic) : tactic =
     fun targ ->
       let pr = t1 targ in
-      let hd = List.hd (Proof.opened pr) in
+      let hd = Proof.focused pr in
       t2 (pr, hd)
 
   let thenl_tac (t1 : tactic) (t2 : tactic) : tactic =
@@ -491,7 +495,7 @@ end = struct
 
     | (0, None), FBind (`Forall, x, xty, body) ->
         let pr = add_local (x, xty, None) (pr, id) in
-        Proof.progress pr (List.hd (Proof.opened pr)) pterm [body]
+        Proof.progress pr (Proof.focused pr) pterm [body]
 
     | (0, Some (e, ety)), FBind (`Exist, x, xty, body) -> begin
         let goal = Proof.byid pr id in
@@ -562,17 +566,16 @@ end = struct
                    `S (subs @ [[Some h, []], f])) :: !result
     | FFalse -> result := ((TElim id), `S subs) :: !result
     | FBind (`Exist, x, ty, f) ->
-        let y = Vars.fresh ~basename:x gl.g_env () in
-        let hyp = Form.Subst.f_apply1 (x, 0) (EVar (y, 0)) f in
-        
-        let g_hyps = Proof.Hyps.remove gl.g_hyps h in
-        let g_hyps = Proof.(Hyps.add g_hyps h (mk_hyp hyp)) in
-        let goal = Proof.{ gl with
-          g_env = Vars.push gl.g_env (y, ty, None);
-          g_hyps
-        }
+        let pr = add_local (x, ty, None) (pr, id) in
 
-        in result := ((TElim id), `X [goal]) :: !result
+        let goal = Proof.(byid pr (focused pr)) in
+
+        let g_hyps = Proof.Hyps.remove goal.g_hyps h in
+        let g_hyps = Proof.(Hyps.add g_hyps h (mk_hyp f)) in
+
+        let goal = Proof.{ goal with g_hyps } in
+        
+        result := ((TElim id), `X [goal]) :: !result
     | _ -> ()
     end;
     let _ , goal, s = prune_premisses_ex gl.g_goal in
