@@ -327,7 +327,7 @@ module CoreLogic : sig
   type item = [
     | `C of form
     | `H of Handle.t * Proof.hyp
-    | `D of name * bvar]
+    | `D of vname * bvar]
 
   type pol    = Pos | Neg | Sup
 
@@ -448,7 +448,7 @@ end = struct
 
     Option.map_default (Fo.Form.erecheck goal.g_env ty) () body;
 
-    let g_env = Fo.Vars.push goal.g_env (name, ty, body) in
+    let g_env = Fo.Vars.push goal.g_env (name, (ty, body)) in
     let g_env = Fo.Vars.map g_env (Option.map (Fo.Form.e_shift (name, 0))) in
 
     let g_hyps =
@@ -720,7 +720,7 @@ end = struct
   type item = [
     | `C of form
     | `H of Handle.t * Proof.hyp
-    | `D of name * bvar]
+    | `D of vname * bvar]
   
 
   let form_of_item = function
@@ -850,11 +850,13 @@ end = struct
   let of_ipath (proof : Proof.proof) (p : ipath)
     : Proof.goal * item * (uid list * term)
   =
+    let exn = InvalidPath (path_of_ipath p) in
+
     let { root; ctxt; sub; } = p in
 
     let goal =
       try  Proof.byid proof (Handle.ofint root)
-      with InvalidGoalId _ -> raise (InvalidPath (path_of_ipath p)) in
+      with InvalidGoalId _ -> raise exn in
 
     let item, t_item =
       match ctxt with
@@ -870,25 +872,14 @@ end = struct
             in
             (`H (rp, hyd), `F hf)
           with InvalidHyphId _ ->
-            raise (InvalidPath (path_of_ipath p))
+            raise exn
           end
 
       | _ ->
-          let x, bs = begin try
-              goal.g_env.env_var |>
-              Map.enum |>
-              Enum.skip (-ctxt-1) |>
-              Enum.peek |>
-              Option.get
-            with _ ->
-              raise (InvalidPath (path_of_ipath p))
-            end in
-          match bs with
-          | [ty, b] ->
-              (`D (x, (ty, b)), `E (Option.default (EVar (x, 0)) b))
-          | _ ->
-              failwith "Cannot have multiple definitions with the same name in
-              the global environment"
+          let (x, (_, body)) as def = Option.get_exn
+            (Vars.byid goal.g_env ctxt) exn in
+          let expr = Option.default (EVar x) body in
+          `D def, `E expr
     in
     let target = subterm t_item sub in
 
@@ -942,12 +933,11 @@ end = struct
         let subgoal = [], new_concl in
         Proof.sprogress ~clear:true proof hd pnode [subgoal]
     
-    | `D (x, (ty, b)) ->
+    | `D ((x, _), (ty, b)) ->
         begin match b with
         | Some b ->
             let new_body = rewrite_subterm (`E red) (`E res) (`E b) sub |> expr_of_term in
-            let env_var = Map.add x [(ty, Some new_body)] goal.g_env.env_var in
-            let g_env = { goal.g_env with env_var } in
+            let g_env = Vars.push goal.g_env (x, (ty, Some new_body)) in
             Proof.xprogress proof hd pnode [{ goal with g_env }]
         | None ->
             failwith "Cannot rewrite in abstract definition"
@@ -1176,7 +1166,7 @@ end = struct
               let f = Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f in
               let tgt = `C f in
               let goal, ogoals = gen_subgoals tgt ([], f) [] in
-              let goal = { goal with g_env = Vars.push goal.g_env (z, ty, None) } in
+              let goal = { goal with g_env = Vars.push goal.g_env (z, (ty, None)) } in
               tgt, (goal, ogoals), s
             | _ -> raise TacticNotApplicable
             end
@@ -1236,7 +1226,7 @@ end = struct
               let f = Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f in
               let tgt = `H (Handle.fresh (), Proof.mk_hyp f ~src) in
               let goal, ogoals = gen_subgoals tgt ([], goal.g_goal) [] in
-              let goal = { goal with g_env = Vars.push goal.g_env (z, ty, None) } in
+              let goal = { goal with g_env = Vars.push goal.g_env (z, (ty, None)) } in
               tgt, (goal, ogoals), s
             | _ -> raise TacticNotApplicable
             end
@@ -1415,7 +1405,7 @@ end = struct
   let print_linkage (mode : [`Backward | `Forward]) ((l, _), (r, _)) =
     let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
     Printf.sprintf "%s %s %s"
-      (Form.f_tostring l) op (Form.f_tostring r)
+      (f_tostring l) op (f_tostring r)
 
   
   (** [dlink] stands for _d_eep linking, and implements the deep interaction phase
@@ -1855,7 +1845,7 @@ end = struct
       | `Rewrite (red, res, tgts) ->
           Printf.sprintf "%s[%s ~> %s]"
             (List.to_string ~sep:", " ~left:"{" ~right:"}"
-              (fun p -> let _, _, (_, t) = of_ipath proof p in Form.tostring t)
+              (fun p -> let _, _, (_, t) = of_ipath proof p in tostring t)
              tgts)
             red res
     in doit

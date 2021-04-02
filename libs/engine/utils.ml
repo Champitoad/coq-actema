@@ -1,12 +1,12 @@
 (* -------------------------------------------------------------------- *)
-module Enum   = BatEnum
-module Map    = BatMap
-module Set    = BatSet
-module UChar  = BatUChar
-module UTF8   = BatUTF8
-module BIO    = BatIO
-module Lexing = BatLexing
-module String = BatString
+module Enum    = BatEnum
+module Map     = BatMap
+module Set     = BatSet
+module UChar   = BatUChar
+module UTF8    = BatUTF8
+module BIO     = BatIO
+module Lexing  = BatLexing
+module String  = BatString
 
 include BatPervasives
 
@@ -40,12 +40,16 @@ module Option : sig
   include module type of BatOption
 
   val fold : ('a -> 'b -> 'a) -> 'a -> 'b option -> 'a
+  val to_string : ('a -> string) -> 'a option -> string
 end = struct
   include BatOption
 
   let fold f acc = function
     | None   -> acc
     | Some v -> f acc v
+  
+  let to_string pp =
+    map_default pp "None"
 end
 
 (* -------------------------------------------------------------------- *)
@@ -183,6 +187,40 @@ end = struct
     
   let to_string ?(sep = "; ") ?(left = "[") ?(right = "]") print =
     List.map print |>> String.join sep |>> fun s -> left ^ s ^ right
+end
+
+(* -------------------------------------------------------------------- *)
+module BiMap : sig
+  type ('a, 'b) t
+
+  val empty   : ('a, 'b) t
+
+  val add         : 'a -> 'b -> ('a, 'b) t -> ('a, 'b) t
+  val remove      : 'a -> ('a, 'b) t -> ('a, 'b) t
+  val find        : 'a -> ('a, 'b) t -> 'b
+  val find_opt    : 'a -> ('a, 'b) t -> 'b option
+  val inverse     : ('a, 'b) t -> ('b, 'a) t
+end = struct
+  type ('a, 'b) t = ('a, 'b) Map.t * ('b, 'a) Map.t
+  
+  let empty =
+    Map.empty, Map.empty
+  
+  let add k v (r, l) =
+    Map.add k v r, Map.add v k l
+  
+  let remove k (r, l) =
+    let v = Map.find k r in
+    Map.remove k r, Map.remove v l
+  
+  let find k (r, _) =
+    Map.find k r
+
+  let find_opt k (r, _) =
+    Map.find_opt k r
+  
+  let inverse (r, l) =
+    (l, r)
 end
 
 (* -------------------------------------------------------------------- *)

@@ -209,9 +209,9 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
   (* Return all the local variables as a [js_tvar array] *)
   method tvars =
     let goal  = Proof.byid parent##.proof _self##.handle in
-    let tvars = Map.bindings (Fo.Vars.all goal.g_env) in
-    let tvars = List.concat_map (fun (x, bs) -> List.mapi (fun i b -> ((x, i), b)) bs) tvars in
-    let aout  = List.mapi (fun i (x, (ty, body)) -> js_tvar _self (i, (x, ty, body))) tvars in
+    let tvars = Fo.Vars.to_list goal.g_env in
+    let aout  = List.mapi (fun i (id, x, b) ->
+      js_tvar _self (i, (Handle.ofint id, x, b))) tvars in
     Js.array (Array.of_list aout)
 
   (* Return all the local hypotheses (context) as a [js_hyps array] *)
@@ -357,19 +357,19 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for a local variable                                      *)
-and js_tvar parent ((i, (x, ty, body)) : int * (Fo.vname * Fo.type_ * Fo.expr option)) =
+and js_tvar parent ((i, (handle, x, (ty, body))) : int * (Handle.t * Fo.vname * Fo.bvar)) =
 object%js (_self)
   (* back-link to the [js_subgoal] this local variable belongs to *)
   val parent = parent
 
-  (* the handle (UID) of the hypothesis *)
-  val handle = Handle.ofint (-i-1)
+  (* the handle of the local variable *)
+  val handle = handle
 
   (* the handle position in its context *)
   val position = i
 
   (* the local variable name *)
-  val name = Js.string (Fo.Form.e_tostring (EVar x))
+  val name = Js.string (Fo.e_tostring (EVar x))
 
   (* the local variable type as a [js_type] *)
   val type_ = js_type ty
@@ -394,14 +394,14 @@ object%js (_self)
     let dt =
       span [
         span ~a:[Xml.string_attrib "id" (id ^ ":")] begin
-            [span [Xml.pcdata (UTF8.of_latin1 (Fo.Form.e_tostring (EVar x)))]] @
+            [span [Xml.pcdata (UTF8.of_latin1 (Fo.e_tostring (EVar x)))]] @
             spaced_span [Xml.pcdata ":"] @
-            [Fo.Form.t_tohtml ty]
+            [Fo.t_tohtml ty]
           @
           match body with
           | Some b ->
               spaced_span [Xml.pcdata ":="] @
-              [Fo.Form.e_tohtml ~id:(Some id) b]
+              [Fo.e_tohtml ~id:(Some id) b]
           | None -> []
         end
       ]
@@ -420,14 +420,14 @@ object%js (_self)
     let dt =
       span [
         span ~a:[Xml.string_attrib "id" (id ^ ":")] begin
-            [span [Xml.pcdata (UTF8.of_latin1 (Fo.Form.e_tostring (EVar x)))]] @
+            [span [Xml.pcdata (UTF8.of_latin1 (Fo.e_tostring (EVar x)))]] @
             spaced_span [Xml.pcdata ":"] @
-            [Fo.Form.t_tomathml ty]
+            [Fo.t_tomathml ty]
           @
           match body with
           | Some b ->
               spaced_span [Xml.pcdata ":="] @
-              [Fo.Form.e_tomathml ~id:(Some id) b]
+              [Fo.e_tomathml ~id:(Some id) b]
           | None -> []
         end
       ]
@@ -438,10 +438,10 @@ object%js (_self)
     match body with
     | Some b ->
         Js.string (Format.sprintf "%s : %s := %s"
-          (Fo.Form.e_tostring (EVar x)) (Fo.Form.t_tostring ty) (Fo.Form.e_tostring b))
+          (Fo.e_tostring (EVar x)) (Fo.t_tostring ty) (Fo.e_tostring b))
     | None ->
         Js.string (Format.sprintf "%s : %s"
-          (Fo.Form.e_tostring (EVar x)) (Fo.Form.t_tostring ty))
+          (Fo.e_tostring (EVar x)) (Fo.t_tostring ty))
 
   method getmeta =
     Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
@@ -472,7 +472,7 @@ and js_form (source : source) (form : Fo.form) = object%js (_self)
     in
       Js.string
         (Format.asprintf "%a" (Tyxml.Xml.pp ())
-        (Fo.Form.f_tomathml ?id:prefix form))
+        (Fo.f_tomathml ?id:prefix form))
 
   (* Return the [html] of the formula *)  
   method htmltag (id : bool) =
@@ -485,11 +485,11 @@ and js_form (source : source) (form : Fo.form) = object%js (_self)
     in
       Js.string
         (Format.asprintf "%a" (Tyxml.Xml.pp ())
-        (Fo.Form.f_tohtml ?id:prefix form))
+        (Fo.f_tohtml ?id:prefix form))
 
   (* Return an UTF8 string representation of the formula *)
   method tostring =
-    Js.string (Fo.Form.f_tostring form)
+    Js.string (Fo.f_tostring form)
 end
 
 (* -------------------------------------------------------------------- *)
@@ -507,17 +507,17 @@ and js_expr (expr : Fo.expr) = object%js (_self)
   method mathmltag =
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Fo.Form.e_tomathml expr))
+      (Fo.e_tomathml expr))
 
   (* Return the [html] of the formula *)  
   method htmltag =
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Fo.Form.e_tohtml expr))
+      (Fo.e_tohtml expr))
 
   (* Return an UTF8 string representation of the expression *)
   method tostring =
-    Js.string (Fo.Form.e_tostring expr)
+    Js.string (Fo.e_tostring expr)
 end
 
 (* -------------------------------------------------------------------- *)
@@ -525,15 +525,15 @@ end
 and js_type (ty : Fo.type_) = object%js (_self)
   (* Return the raw [mathml] of the type *)
   method rawmathml =
-    Fo.Form.t_tomathml ty
+    Fo.t_tomathml ty
 
   (* Return the raw [html] of the type *)
   method rawhtml =
-    Fo.Form.t_tohtml ty
+    Fo.t_tohtml ty
 
   (* Return the raw string representation of the type *)
   method rawstring =
-    Fo.Form.t_tostring ty
+    Fo.t_tostring ty
 
   (* Return the [mathml] of the type *)  
   method mathml =

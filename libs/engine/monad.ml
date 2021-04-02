@@ -92,3 +92,36 @@ struct
   let zero = []
   let ( + ) = ( @ )
 end
+
+module Option : sig
+  include Core with type 'a t = 'a option
+
+  val fold       : ('a -> 'b -> 'a) -> 'a -> 'b t -> 'a
+  val concat     : 'a t t -> 'a t
+  val concat_map : ('a -> 'b t) -> 'a t -> 'b t
+end = struct
+  type 'a t = 'a option
+
+  let fold f acc = function
+    | None   -> acc
+    | Some v -> f acc v
+  
+  let concat = function
+    | Some (Some x) -> Some x
+    | _ -> None
+  
+  let concat_map f x =
+    Option.(concat (map f x))
+  
+  let return x =
+    Some x
+  
+  let bind x f =
+    concat_map f x
+
+  let ( >>= ) =
+    bind
+  
+  let ( let* ) =
+    bind
+end
