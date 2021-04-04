@@ -318,7 +318,9 @@ module CoreLogic : sig
   type tactic = targ -> Proof.proof
 
   type path        = string
-  type ipath       = { root : int; ctxt : int; sub : int list; }
+  type pkind       = [`Hyp | `Concl | `Var of [`Head | `Body]]
+  type ctxt        = { kind : pkind; handle : int }
+  type ipath       = { root : int; ctxt : ctxt; sub : int list; }
   type link        = ipath * ipath
   type hyperlink   = ipath list * ipath list
 
@@ -327,9 +329,10 @@ module CoreLogic : sig
   type item = [
     | `C of form
     | `H of Handle.t * Proof.hyp
-    | `D of vname * bvar]
+    | `V of vname * bvar
+  ]
 
-  type pol    = Pos | Neg | Sup
+  type pol = Pos | Neg | Sup
 
   val cut        : Fo.form -> tactic
   val add_local  : string * Fo.type_ * Fo.expr option -> tactic
@@ -720,14 +723,16 @@ end = struct
   type item = [
     | `C of form
     | `H of Handle.t * Proof.hyp
-    | `D of vname * bvar]
+    | `V of vname * bvar
+  ]
   
 
-  let form_of_item = function
+  let form_of_item : item -> form = function
     | `C f | `H (_, Proof.{ h_form = f; _ }) -> f
     | _ -> raise (Invalid_argument "Expected a formula item")
     
-  let expr_of_item = function
+  let expr_of_item : item -> expr = function
+    | `V (_, (_, Some b)) -> b
     | _ -> raise (Invalid_argument "Expected an expression item")
   
   let term_of_item it =
@@ -743,7 +748,9 @@ end = struct
 
 
   type path   = string
-  type ipath  = { root : int; ctxt : int; sub : int list; }
+  type pkind  = [`Hyp | `Concl | `Var of [`Head | `Body]]
+  type ctxt   = { kind : pkind; handle : int }
+  type ipath  = { root : int; ctxt : ctxt; sub : int list; }
 
   exception InvalidPath of path
   exception InvalidSubFormPath of int list
@@ -806,12 +813,28 @@ end = struct
       (aux (l - i - 1))@[1]
 
 
-  let mk_ipath ?(ctxt : int = 0) ?(sub : int list = []) (root : int) =
+  let mk_ipath ?(ctxt : ctxt = { kind = `Concl; handle = 0 })
+               ?(sub : int list = []) (root : int) =
     { root; ctxt; sub; }
     
   
   let item_ipath { root; ctxt; _ } =
     { root; ctxt; sub = [] }
+
+
+  let pkind_codes : (pkind, string) BiMap.t =
+    List.fold_left (fun m (a, b) -> BiMap.add a b m) BiMap.empty [
+      `Hyp,  "H";
+      `Concl, "C";
+      (`Var `Head), "Vh";
+      (`Var `Body), "Vb";
+    ]
+
+  let string_of_pkind : pkind -> string =
+    BiMap.find^~ pkind_codes
+  
+  let pkind_of_string : string -> pkind =
+    BiMap.find^~ (BiMap.inverse pkind_codes)
 
 
   let path_of_ipath (p : ipath) =
@@ -820,18 +843,23 @@ end = struct
         ~pp_sep:(fun fmt () -> Format.fprintf fmt "/")
         Format.pp_print_int
     in
-    Format.asprintf "%d/%d:%a" p.root p.ctxt pp_sub p.sub
+    Format.asprintf "%d/%s#%d:%a"
+      p.root (string_of_pkind p.ctxt.kind) p.ctxt.handle pp_sub p.sub
+
 
   let ipath_of_path (p : path) =
-    let root, ctxt, sub =
+    let root, ({ handle; _ } as ctxt), sub =
       try
-        Scanf.sscanf p "%d/%d:%s" (fun x1 x2 x3 -> (x1, x2, x3))
+        Scanf.sscanf p "%d/%s@#%d:%s"
+          (fun x1 x2 x3 x4 ->
+            (x1, { kind = pkind_of_string x2; handle = x3 }, x4))
       with
-      | Scanf.Scan_failure _
+      (* | Scanf.Scan_failure _ -> raise (Invalid_argument "pouet")
+      | Not_found -> raise (Invalid_argument "prout") *)
       | End_of_file ->
-          raise (InvalidPath p) in
+          raise (Invalid_argument p) in
 
-    if root < 0 then
+    if root < 0 || handle < 0 then
       raise (InvalidPath p);
 
     let sub =
@@ -847,6 +875,7 @@ end = struct
 
     { root; ctxt; sub; }
 
+
   let of_ipath (proof : Proof.proof) (p : ipath)
     : Proof.goal * item * (uid list * term)
   =
@@ -859,14 +888,14 @@ end = struct
       with InvalidGoalId _ -> raise exn in
 
     let item, t_item =
-      match ctxt with
-      | _ when ctxt = 0 ->
+      match ctxt.kind, ctxt.handle with
+      | `Concl, 0 ->
           let f = goal.Proof.g_goal in
           (`C f, `F f)
 
-      | _ when ctxt > 0 ->
+      | `Hyp, hd ->
           begin try
-            let rp = Handle.ofint ctxt in
+            let rp = Handle.ofint hd in
             let { Proof.h_form = hf; _ } as hyd =
               Proof.Hyps.byid goal.Proof.g_hyps rp
             in
@@ -875,16 +904,21 @@ end = struct
             raise exn
           end
 
-      | _ ->
+      | `Var part, hd ->
           let (x, (_, body)) as def = Option.get_exn
-            (Vars.byid goal.g_env ctxt) exn in
-          let expr = Option.default (EVar x) body in
-          `D def, `E expr
+            (Vars.byid goal.g_env hd) exn in
+          let expr = match part with
+            | `Head -> EVar x
+            | `Body -> Option.get_exn body exn in
+          `V def, `E expr
+      
+      | _ -> raise exn
     in
     let target = subterm t_item sub in
 
     let goal = Proof.{ g_id = Handle.ofint root; g_pregoal = goal } in
     (goal, item, (sub, target))
+
 
   let is_sub_path (p : ipath) (sp : ipath) =
        p.root = sp.root
@@ -933,7 +967,7 @@ end = struct
         let subgoal = [], new_concl in
         Proof.sprogress ~clear:true proof hd pnode [subgoal]
     
-    | `D ((x, _), (ty, b)) ->
+    | `V ((x, _), (ty, b)) ->
         begin match b with
         | Some b ->
             let new_body = rewrite_subterm (`E red) (`E res) (`E b) sub |> expr_of_term in
@@ -1042,7 +1076,7 @@ end = struct
   let pol_of_item = function
     | `H _ -> Neg
     | `C _ -> Pos
-    | `D _ -> Neg
+    | `V _ -> Neg
 
 
   (** [pol_of_ipath proof p] returns the polarity of the subformula
@@ -1054,7 +1088,7 @@ end = struct
       match item with
       | `H (_, { h_form = f; _ }) -> Neg, f
       | `C f -> Pos, f
-      | `D _ -> raise (InvalidSubFormPath sub)
+      | `V _ -> raise (InvalidSubFormPath sub)
     in
     subform_pol (pol, form) sub |> fst
 
@@ -1405,7 +1439,7 @@ end = struct
   let print_linkage (mode : [`Backward | `Forward]) ((l, _), (r, _)) =
     let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
     Printf.sprintf "%s %s %s"
-      (f_tostring l) op (f_tostring r)
+      (Print.f_tostring l) op (Print.f_tostring r)
 
   
   (** [dlink] stands for _d_eep linking, and implements the deep interaction phase
@@ -1845,7 +1879,7 @@ end = struct
       | `Rewrite (red, res, tgts) ->
           Printf.sprintf "%s[%s ~> %s]"
             (List.to_string ~sep:", " ~left:"{" ~right:"}"
-              (fun p -> let _, _, (_, t) = of_ipath proof p in tostring t)
+              (fun p -> let _, _, (_, t) = of_ipath proof p in Print.tostring t)
              tgts)
             red res
     in doit
@@ -2232,7 +2266,7 @@ end = struct
       match it with
       | `C _ -> n
       | `H _ -> n+1
-      | `D _ -> raise (Invalid_argument "Expected a formula item")
+      | `V _ -> raise (Invalid_argument "Expected a formula item")
     in
     
     try
@@ -2257,7 +2291,7 @@ end = struct
     fun proof lnk ->
     
     let rewrite_data (p : ipath) =
-      if p.ctxt > 0 then
+      if p.ctxt.handle > 0 then
         let _, it, _ = of_ipath proof p in
         match p.sub, form_of_item it with
         | [0], FPred ("_EQ", [red; res])
@@ -2348,8 +2382,9 @@ end = struct
                 (* Get the list of hypotheses handles *)
                 Proof.Hyps.ids g_pregoal.Proof.g_hyps |>
                 (* Create a list of paths to each hypothesis *)
-                List.map begin fun id ->
-                  mk_ipath (Handle.toint g_id) ~ctxt:(Handle.toint id)
+                List.map begin fun hd ->
+                  mk_ipath (Handle.toint g_id)
+                    ~ctxt:{ kind = `Hyp; handle = Handle.toint hd }
                 end |>
                 (* Add a path to the conclusion *)
                 fun hyps -> mk_ipath (Handle.toint g_id) :: hyps |>
@@ -2404,10 +2439,11 @@ end = struct
             end 
 
           | `H (rp, _) ->
-              let hg = mk_ipath (Handle.toint hd) ~ctxt:(Handle.toint rp) in
+              let hg = mk_ipath (Handle.toint hd)
+                ~ctxt:{ kind = `Hyp; handle = Handle.toint rp } in
               ["Elim", [hg], `Click hg, (hd, `Elim rp)]
           
-          | `D _ ->
+          | `V _ ->
               []
         end
 

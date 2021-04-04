@@ -357,7 +357,7 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for a local variable                                      *)
-and js_tvar parent ((i, (handle, x, (ty, body))) : int * (Handle.t * Fo.vname * Fo.bvar)) =
+and js_tvar parent ((i, (handle, x, (ty, b))) : int * (Handle.t * Fo.vname * Fo.bvar)) =
 object%js (_self)
   (* back-link to the [js_subgoal] this local variable belongs to *)
   val parent = parent
@@ -369,79 +369,86 @@ object%js (_self)
   val position = i
 
   (* the local variable name *)
-  val name = Js.string (Fo.e_tostring (EVar x))
+  val name = Js.string (Fo.Print.e_tostring (EVar x))
 
   (* the local variable type as a [js_type] *)
   val type_ = js_type ty
 
   (* the local definition - return an optional expression *)
   val body =
-    Js.Opt.option (Option.map js_expr body)
+    Js.Opt.option (Option.map js_expr b)
 
-  (* The enclosing proof engine *)
+  (* the enclosing proof engine *)
   val proof = parent##.parent
 
-  (* Return the [html] of the enclosed formula *)  
+  method prefix (b : bool) =
+    Format.sprintf "%d/V%s#%d%s"
+      (Handle.toint _self##.parent##.handle)
+      (if b then "b" else "h")
+      (Handle.toint _self##.handle)
+      (if b then "" else ":")
+  
+  (* the path to the local variable's head *)
+  method idhead = _self##prefix false
+
+  (* the path to the local variable's body *)
+  method idbody = _self##prefix true
+
+  (* Return the [html] of the enclosed local variable *)  
   method html =
     let open Tyxml in
     let open Utils.Xml in
 
-    let id =
-      Format.sprintf "%d/%d"
-        (Handle.toint _self##.parent##.handle)
-        (Handle.toint _self##.handle)
-    in
     let dt =
       span [
-        span ~a:[Xml.string_attrib "id" (id ^ ":")] begin
-            [span [Xml.pcdata (UTF8.of_latin1 (Fo.e_tostring (EVar x)))]] @
-            spaced_span [Xml.pcdata ":"] @
-            [Fo.t_tohtml ty]
+        span ~a:[Xml.string_attrib "id" _self##idhead] begin
+          [span begin
+            [span
+              [Xml.pcdata (UTF8.of_latin1 (Fo.Print.e_tostring (EVar x)))]] @
+            spaced [span [Xml.pcdata ":"]] @
+            [Fo.Print.t_tohtml ty]
+          end]
           @
-          match body with
+          match b with
           | Some b ->
-              spaced_span [Xml.pcdata ":="] @
-              [Fo.e_tohtml ~id:(Some id) b]
+              spaced [span [Xml.pcdata ":="]] @
+              [Fo.Print.e_tohtml ~id:(Some _self##idbody) b]
           | None -> []
-        end
-      ]
+        end]
     in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
 
-  (* Return the [mathml] of the enclosed formula *)  
+  (* Return the [mathml] of the enclosed local variable *)  
   method mathml =
     let open Tyxml in
     let open Utils.Xml in
 
-    let id =
-      Format.sprintf "%d/%d"
-        (Handle.toint _self##.parent##.handle)
-        (Handle.toint _self##.handle)
-    in
     let dt =
       span [
-        span ~a:[Xml.string_attrib "id" (id ^ ":")] begin
-            [span [Xml.pcdata (UTF8.of_latin1 (Fo.e_tostring (EVar x)))]] @
-            spaced_span [Xml.pcdata ":"] @
-            [Fo.t_tomathml ty]
+        span ~a:[Xml.string_attrib "id" _self##idhead] begin
+          [span begin
+            [span
+              [Xml.pcdata (UTF8.of_latin1 (Fo.Print.e_tostring (EVar x)))]] @
+            spaced [span [Xml.pcdata ":"]] @
+            [Fo.Print.t_tomathml ty]
+          end]
           @
-          match body with
+          match b with
           | Some b ->
-              spaced_span [Xml.pcdata ":="] @
-              [Fo.e_tomathml ~id:(Some id) b]
+              spaced [span [Xml.pcdata ":="]] @
+              [Fo.Print.e_tomathml ~id:(Some _self##idbody) b]
           | None -> []
-        end
-      ]
+        end]
     in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
 
-  (* Return an UTF8 string representation of the enclosed formula *)
+  (* Return an UTF8 string representation of the enclosed local variable *)
   method tostring =
-    match body with
+    match b with
     | Some b ->
         Js.string (Format.sprintf "%s : %s := %s"
-          (Fo.e_tostring (EVar x)) (Fo.t_tostring ty) (Fo.e_tostring b))
+          (Fo.Print.e_tostring (EVar x)) (Fo.Print.t_tostring ty) (Fo.Print.e_tostring b))
     | None ->
         Js.string (Format.sprintf "%s : %s"
-          (Fo.e_tostring (EVar x)) (Fo.t_tostring ty))
+          (Fo.Print.e_tostring (EVar x)) (Fo.Print.t_tostring ty))
 
   method getmeta =
     Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
@@ -453,6 +460,12 @@ end
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
 and js_form (source : source) (form : Fo.form) = object%js (_self)
+  (* The prefix for all subpaths of the formula *)
+  val prefix =
+    match source with
+    | h, `H i -> Format.sprintf "%d/H#%d" (Handle.toint h) (Handle.toint i)
+    | h, `C   -> Format.sprintf "%d/C#0" (Handle.toint h)
+  
   (* Return the [mathml] of the formula *)  
   method mathml =
     _self##mathmltag true
@@ -464,32 +477,22 @@ and js_form (source : source) (form : Fo.form) = object%js (_self)
   (* Return the [mathml] of the formula *)  
   method mathmltag (id : bool) =
     let prefix =
-      if not id then None else Some (Some (
-        match source with
-        | h, `H i -> Format.sprintf "%d/%d" (Handle.toint h) (Handle.toint i)
-        | h, `C   -> Format.sprintf "%d/0" (Handle.toint h)
-      ))
-    in
-      Js.string
-        (Format.asprintf "%a" (Tyxml.Xml.pp ())
-        (Fo.f_tomathml ?id:prefix form))
+      if not id then None else Some _self##.prefix in
+    Js.string
+      (Format.asprintf "%a" (Tyxml.Xml.pp ())
+      (Fo.Print.f_tomathml ~id:prefix form))
 
   (* Return the [html] of the formula *)  
   method htmltag (id : bool) =
     let prefix =
-      if not id then None else Some (Some (
-        match source with
-        | h, `H i -> Format.sprintf "%d/%d" (Handle.toint h) (Handle.toint i)
-        | h, `C   -> Format.sprintf "%d/0" (Handle.toint h)
-      ))
-    in
-      Js.string
-        (Format.asprintf "%a" (Tyxml.Xml.pp ())
-        (Fo.f_tohtml ?id:prefix form))
+      if not id then None else Some _self##.prefix in
+    Js.string
+      (Format.asprintf "%a" (Tyxml.Xml.pp ())
+      (Fo.Print.f_tohtml ~id:prefix form))
 
   (* Return an UTF8 string representation of the formula *)
   method tostring =
-    Js.string (Fo.f_tostring form)
+    Js.string (Fo.Print.f_tostring form)
 end
 
 (* -------------------------------------------------------------------- *)
@@ -507,33 +510,33 @@ and js_expr (expr : Fo.expr) = object%js (_self)
   method mathmltag =
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Fo.e_tomathml expr))
+      (Fo.Print.e_tomathml expr))
 
   (* Return the [html] of the formula *)  
   method htmltag =
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Fo.e_tohtml expr))
+      (Fo.Print.e_tohtml expr))
 
   (* Return an UTF8 string representation of the expression *)
   method tostring =
-    Js.string (Fo.e_tostring expr)
+    Js.string (Fo.Print.e_tostring expr)
 end
 
 (* -------------------------------------------------------------------- *)
-(* JS Wrapper for formulas                                              *)
+(* JS Wrapper for types                                                 *)
 and js_type (ty : Fo.type_) = object%js (_self)
   (* Return the raw [mathml] of the type *)
   method rawmathml =
-    Fo.t_tomathml ty
+    Fo.Print.t_tomathml ty
 
   (* Return the raw [html] of the type *)
   method rawhtml =
-    Fo.t_tohtml ty
+    Fo.Print.t_tohtml ty
 
   (* Return the raw string representation of the type *)
   method rawstring =
-    Fo.t_tostring ty
+    Fo.Print.t_tostring ty
 
   (* Return the [mathml] of the type *)  
   method mathml =
