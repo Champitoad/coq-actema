@@ -1460,15 +1460,26 @@ end = struct
       | _ -> ()
     end;
 
-    (** [well_scoped e ctx] returns [true] if all variables in the expression
-        [e] are bound either in the environment [goal.g_env], or by a
-        quantifier in [ctx]. *)
+    (** [well_scoped lenv e] returns [true] if all variables in the
+        expression [e] are bound either in the global environment [goal.g_env],
+        or in the local environment [lenv]. *)
 
-    let well_scoped e ctx =
-      e_vars e |> List.for_all begin fun x ->
-        Vars.exists goal.g_env x ||
-        fc_is_bound x ctx
+    let well_scoped lenv e =
+      e_vars e |> List.for_all begin fun (x, i) ->
+        LEnv.exists lenv (x, i) ||
+        Vars.exists goal.g_env (x, i - (LEnv.get_index lenv x + 1))
       end
+    in
+
+    (** [instantiable lenv s x] returns [true] if the variable [x] is
+        bound in substitution [s] to an expression [e] which is well-scoped. *)
+    
+    let instantiable lenv s x =
+      let lenv = LEnv.enter lenv x in
+      match get_tag (x, LEnv.get_index lenv x) s with
+      | Some Sbound e -> well_scoped lenv e
+      | Some Sflex -> true
+      | None -> false
     in
 
     let invertible (kind : [`Left | `Right | `Forward]) (f : form) : bool =
@@ -1597,10 +1608,7 @@ end = struct
 
           | _, (FBind (`Exist, x, ty, f1), 0 :: sub)
             when no_prio `Left h &&
-            match get_tag (x, LEnv.get_index (LEnv.enter env2 x) x) s2 with
-            | Some Sbound e -> well_scoped e ctx 
-            | Some Sflex -> true
-            | None -> false
+            instantiable env2 s2 x
             ->
             let env2 = LEnv.enter env2 x in
             s := es1, (env2, s2);
@@ -1611,6 +1619,7 @@ end = struct
               None, (h, (f1, sub))
             (* R∃s *)
             | Some Sflex ->
+              s := es1, (env2, Subst.shift (x, 0) s2);
               let h = (f_shift (x, 0) l), lsub in
               Some (CBind (`Exist, x, ty)), (h, (f1, sub))
             | None -> assert false
@@ -1618,8 +1627,7 @@ end = struct
 
           (* R∀s *)
           | _, (FBind (`Forall, x, ty, f1), 0 :: sub) ->
-            let env2 = LEnv.enter env2 x in
-            s := es1, (env2, s2);
+            s := es1, (LEnv.enter env2 x, Subst.shift (x, 0) s2);
             let h = (f_shift (x, 0) l), lsub in
             Some (CBind (`Forall, x, ty)), (h, (f1, sub))
 
@@ -1661,17 +1669,13 @@ end = struct
           
           (* L∃s *)
           | (FBind (`Exist, x, ty, f1), 0 :: sub), _ ->
-            let env1 = LEnv.enter env1 x in 
-            s := (env1, s1), es2;
+            s := (LEnv.enter env1 x, Subst.shift (x, 0) s1), es2;
             let c = (f_shift (x, 0) r), rsub in
             Some (CBind (`Forall, x, ty)), ((f1, sub), c)
 
           | (FBind (`Forall, x, ty, f1), 0 :: sub), _
             when no_prio `Right c &&
-            match get_tag (x, LEnv.get_index (LEnv.enter env1 x) x) s1 with
-            | Some Sbound e -> well_scoped e ctx
-            | Some Sflex -> true
-            | None -> false
+            instantiable env1 s1 x
             ->
             let env1 = LEnv.enter env1 x in
             s := (env1, s1), es2;
@@ -1682,6 +1686,7 @@ end = struct
               None, ((f1, sub), c)
             (* L∀s *)
             | Some Sflex ->
+              s := (env1, Subst.shift (x, 0) s1), es2;
               let c = (f_shift (x, 0) r), rsub in
               Some (CBind (`Exist, x, ty)), ((f1, sub), c)
             | None -> assert false
@@ -1790,17 +1795,13 @@ end = struct
           
           (* F∃s *)
           | _, (FBind (`Exist, x, ty, f1), 0 :: sub) ->
-            let env2 = LEnv.enter env2 x in
-            s := es1, (env2, s2);
+            s := es1, (LEnv.enter env2 x, Subst.shift (x, 0) s2);
             let h = (f_shift (x, 0) l), lsub in
             Some (CBind (`Exist, x, ty)), (h, (f1, sub))
           
           | _, (FBind (`Forall, x, ty, f1), 0 :: sub)
             when no_prio `Forward h &&
-            match get_tag (x, LEnv.get_index (LEnv.enter env2 x) x) s2 with
-            | Some Sbound e -> well_scoped e ctx
-            | Some Sflex -> true
-            | None -> false
+            instantiable env2 s2 x
             ->
             let env2 = LEnv.enter env2 x in
             s := es1, (env2, s2);
@@ -1811,6 +1812,7 @@ end = struct
               None, (h, (f1, sub))
             (* F∀s *)
             | Some Sflex ->
+              s := es1, (LEnv.enter env2 x, Subst.shift (x, 0) s2);
               let h = (f_shift (x, 0) l), lsub in
               Some (CBind (`Forall, x, ty)), (h, (f1, sub))
             | None -> assert false
@@ -2050,23 +2052,12 @@ end = struct
         t_subs t_src >>= fun sub_src ->
         t_subs t_dst >>= fun sub_dst ->
         query_actions ([subpath src sub_src], [subpath dst sub_dst])
+  
 
+  module PreUnif = struct
+    open Form
 
-  (** [wf_subform_link proof (src, dst)] checks if [src] and [dst] lead to
-      unifiable subformulas of opposite polarities in the focused goal of
-      [proof], and returns the associated substitutions if they do inside a
-      [`Subform] link action.
-      
-      It also checks for deep rewrite links, that is links where one side is a
-      negative equality operand, and the other side an arbitrary unifiable
-      subexpression. *)
-
-  let wf_subform_link : lpred =
-    let open Form in
-
-    (* Auxiliary definitions *)
-
-    let module Deps = struct
+    module Deps = struct
       include Graph.Persistent.Digraph.Concrete(Name)
 
       let subst (deps : t) (s : Subst.subst) : t =
@@ -2086,16 +2077,18 @@ end = struct
             end deps x deps
           with Invalid_argument _ -> deps
         end deps s
-    end in
-    let module TraverseDeps = Graph.Traverse.Dfs(Deps) in
-    let acyclic = not <<| TraverseDeps.has_cycle in
+    end
 
-    let module Env = struct
+    module TraverseDeps = Graph.Traverse.Dfs(Deps)
+
+    let acyclic = not <<| TraverseDeps.has_cycle
+
+    module Env = struct
       (* While traversing formulas in search for targets to unify, we need to
          record and update multiple informations handling the first-order content
-         of the proof. We do so with a tuple of the form
+         of the proof. We do so with a record of the form
            
-           [(deps, rnm, env, s)]
+           [{deps; rnm; env; subst}]
            
          where:
 
@@ -2112,13 +2105,18 @@ end = struct
          - [env] is (a copy of) the goal's environment, used to compute fresh
            names for eigenvariables that will be introduced by the [link] tactic.
           
-         - [s] is the substitution that will be fed to unification, in which we
+         - [subst] is the substitution that will be fed to unification, in which we
            record existential variables in [Sflex] entries, as well as the fresh
            eigenvariables in [Sbound] entries together with their original names.
       *)
-      type t = Deps.t * (name * name) list * env * Subst.subst
-    end in
-    let module State = Monad.State(Env) in
+      type t =
+        { deps : Deps.t;
+          rnm : (name * name) list;
+          env : env;
+          subst : Subst.subst }
+    end
+
+    module State = Monad.State(Env)
 
     let traverse (p, t) i : (pol * term) State.t =
       let open State in
@@ -2126,11 +2124,11 @@ end = struct
 
       | Pos, `F FBind (`Forall, x, ty, f)
       | Neg, `F FBind (`Exist, x, ty, f) ->
-          get >>= fun (deps, rnm, env, s) ->
+          get >>= fun { deps; rnm; env; subst } ->
           let y, env = Vars.bind env (x, ty) in
           let exs = Subst.fold
             (fun acc (x, t) -> if t = Sflex then x :: acc else acc)
-            [] s
+            [] subst
           in
           let deps = List.fold_left
             (fun deps x -> Deps.add_edge deps x y)
@@ -2138,27 +2136,41 @@ end = struct
           in
           let z = EVars.fresh () in
           let rnm = (z, x) :: rnm in
-          let s = Subst.push z (Sbound (EVar (y, 0))) s in
-          put (deps, rnm, env, s) >>= fun _ ->
+          let subst = Subst.push z (Sbound (EVar (y, 0))) subst in
+          put { deps; rnm; env; subst } >>= fun _ ->
           let f = Form.Subst.f_apply1 (x, 0) (EVar (y, 0)) f in
           return (p, `F f)
 
       | Neg, `F FBind (`Forall, x, _, f)
       | Pos, `F FBind (`Exist, x, _, f) ->
-          get >>= fun (deps, rnm, env, s) ->
+          get >>= fun ({ rnm; subst; _ } as st) ->
           let z = EVars.fresh () in
           let rnm = (z, x) :: rnm in
-          let s = Subst.push z Sflex s in
-          put (deps, rnm, env, s) >>= fun _ ->
+          let subst = Subst.push z Sflex subst in
+          put { st with rnm; subst } >>= fun _ ->
           let f = Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f in
           return (p, `F f)
 
       | _ ->
           return (direct_subterm_pol (p, t) i)
-    in
 
-    let traverse = State.fold traverse in
-    
+    let traverse = State.fold traverse
+  end
+
+
+  (** [wf_subform_link proof (src, dst)] checks if [src] and [dst] lead to
+      unifiable subformulas of opposite polarities in the focused goal of
+      [proof], and returns the associated substitutions if they do inside a
+      [`Subform] link action.
+      
+      It also checks for deep rewrite links, that is links where one side is a
+      negative equality operand, and the other side an arbitrary unifiable
+      subexpression. *)
+
+  let wf_subform_link : lpred =
+    let open Form in
+    let open PreUnif in
+
     let is_eq_operand proof (p : ipath) =
       try
         let eq_sub = List.(remove_at (length p.sub - 1) p.sub) in
@@ -2169,8 +2181,6 @@ end = struct
         | _ -> false
       with Invalid_argument _ -> false
     in
-
-    (* Body *)
 
     fun proof (src, dst) ->
 
@@ -2190,15 +2200,21 @@ end = struct
         let open State in
         run begin
           traverse (p1, `F f1) sub1 >>= fun (sp1, sf1) ->
-          get >>= fun (deps, rnm1, env, s1) ->
-          put (deps, [], env, Subst.empty) >>= fun _ ->
+          get >>= fun st1 ->
+          put { st1 with rnm = []; subst = Subst.empty } >>= fun _ ->
 
           traverse (p2, `F f2) sub2 >>= fun (sp2, sf2) ->
-          get >>= fun (deps, rnm2, _, s2) ->
+          get >>= fun st2 ->
 
-          return (deps, sp1, sf1, rnm1, s1, sp2, sf2, rnm2, s2)
+          return (
+            st2.deps,
+            sp1, sf1, st1.rnm, st1.subst,
+            sp2, sf2, st2.rnm, st2.subst)
         end
-        (Deps.empty, [], Proof.(g_pregoal.g_env), Subst.empty)
+        { deps = Deps.empty;
+          rnm = [];
+          env = Proof.(g_pregoal.g_env);
+          subst = Subst.empty }
       in
 
       let s1 = Subst.aslist s1 in

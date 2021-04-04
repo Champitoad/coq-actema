@@ -988,6 +988,7 @@ module Form : sig
     val push        : name -> sitem -> subst -> subst
     val fetch       : vname -> subst -> expr
     val get_tag     : vname -> subst -> sitem option
+    val shift       : ?incr:int -> vname -> subst -> subst
 
     val is_complete : subst -> bool
     
@@ -1455,6 +1456,13 @@ end = struct
   	            
     let bound (x : vname) (s : subst) =
       match get_tag x s with Some (Sbound _) -> true | _ -> false
+    
+
+    let shift ?incr (x : vname) : subst -> subst =
+      List.map (fun (n, tag) ->
+        match tag with
+        | Sbound e -> n, Sbound (e_shift ?incr x e)
+        | _ -> n, tag)
   
 
     exception UnboundVariable of vname * subst
