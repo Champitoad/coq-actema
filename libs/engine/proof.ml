@@ -538,72 +538,73 @@ end = struct
     let gl = Proof.byid pr id in
     let hyp = (Proof.Hyps.byid gl.g_hyps h).h_form in
 
-    if Form.f_equal hyp gl.g_goal
-    then result := [(TElim id), `S []] 
-    else ();
+    begin
+      if Form.f_equal hyp gl.g_goal
+      then result := [(TElim id), `S []]
+      else
+        let pre, hy, s = prune_premisses_fa hyp in
+        begin match Form.f_unify LEnv.empty s [(hy, gl.g_goal)] with
+        | Some s when Form.Subst.is_complete s ->  
+            let pres = List.map
+            (fun (i, x) -> [Some h, []], (Form.Subst.f_iter s i x)) pre in
+            result :=  ((TElim id), `S pres)::!result
+        | Some _ -> () (* "incomplete match" *)
+        | _ -> ();
+        end;
+        let subs = List.map (fun (_, f) -> [Some h, []], f) pre in
+        begin match hy with
+        | FConn (`And, [f1; f2]) ->
+            result := ((TElim id), `S (subs @ [[Some h, [f1; f2]], gl.g_goal])) :: !result
+        (* clear *) 
+        | FConn (`Or, [f1; f2]) ->
+            result := ((TElim id), 
+                       `S (subs @ [[Some h, [f1]], gl.g_goal;
+                               [Some h, [f2]], gl.g_goal])) :: !result
+        | FConn (`Equiv, [f1; f2]) ->
+            result := ((TElim id),
+                       `S (subs @ [[Some h, [Form.f_imp f1 f2;
+                                          Form.f_imp f2 f1]], gl.g_goal])) :: !result
+        | FConn (`Not, [f]) ->
+            result := ((TElim id), 
+                       `S (subs @ [[Some h, []], f])) :: !result
+        | FFalse -> result := ((TElim id), `S subs) :: !result
+        | FBind (`Exist, x, ty, f) ->
+            let pr = add_local (x, ty, None) (pr, id) in
 
-    let pre, hy, s = prune_premisses_fa hyp in
-    begin match Form.f_unify LEnv.empty s [(hy, gl.g_goal)] with
-    | Some s when Form.Subst.is_complete s ->  
-        let pres = List.map
-        (fun (i, x) -> [Some h, []], (Form.Subst.f_iter s i x)) pre in
-        result :=  ((TElim id), `S pres)::!result
-    | Some _ -> () (* "incomplete match" *)
-    | _ -> ();
-    end;
-    let subs = List.map (fun (_, f) -> [Some h, []], f) pre in
-    begin match hy with
-    | FConn (`And, [f1; f2]) ->
-        result := ((TElim id), `S (subs @ [[Some h, [f1; f2]], gl.g_goal])) :: !result
-    (* clear *) 
-    | FConn (`Or, [f1; f2]) ->
-        result := ((TElim id), 
-                   `S (subs @ [[Some h, [f1]], gl.g_goal;
-                           [Some h, [f2]], gl.g_goal])) :: !result
-    | FConn (`Equiv, [f1; f2]) ->
-        result := ((TElim id),
-                   `S (subs @ [[Some h, [Form.f_imp f1 f2;
-                                      Form.f_imp f2 f1]], gl.g_goal])) :: !result
-    | FConn (`Not, [f]) ->
-        result := ((TElim id), 
-                   `S (subs @ [[Some h, []], f])) :: !result
-    | FFalse -> result := ((TElim id), `S subs) :: !result
-    | FBind (`Exist, x, ty, f) ->
-        let pr = add_local (x, ty, None) (pr, id) in
+            let goal = Proof.(byid pr (focused pr)) in
 
-        let goal = Proof.(byid pr (focused pr)) in
+            let g_hyps = Proof.Hyps.remove goal.g_hyps h in
+            let g_hyps = Proof.(Hyps.add g_hyps h (mk_hyp f)) in
 
-        let g_hyps = Proof.Hyps.remove goal.g_hyps h in
-        let g_hyps = Proof.(Hyps.add g_hyps h (mk_hyp f)) in
-
-        let goal = Proof.{ goal with g_hyps } in
-        
-        result := ((TElim id), `X [goal]) :: !result
-    | _ -> ()
-    end;
-    let _ , goal, s = prune_premisses_ex gl.g_goal in
-    let pre, hy = prune_premisses hyp in
-    let pre = List.map (fun x -> [(Some h), []],x) pre in
-    begin match Form.f_unify LEnv.empty s [(hy, goal)] with
-    | Some s when Form.Subst.is_complete s ->
-        result := ((TElim id), `S pre) :: !result
-    | Some _ -> () (* failwith "incomplete ex match" *)
-    | None ->
-        match goal with
-        | FConn (`Or , _) ->
-          let gll = Form.flatten_disjunctions goal in
-          let rec aux = function
-            | [] -> false
-            | g::l -> begin match Form.f_unify LEnv.empty s [(hyp, g)] with
-                | Some s when Form.Subst.is_complete s -> true
-                | _ -> aux l
-              end
-          in 
-          if aux gll 
-          then result := ((TElim id), `S []) :: !result
-          else ()
+            let goal = Proof.{ goal with g_hyps } in
+            
+            result := ((TElim id), `X [goal]) :: !result
         | _ -> ()
-    end;
+        end;
+        let _ , goal, s = prune_premisses_ex gl.g_goal in
+        let pre, hy = prune_premisses hyp in
+        let pre = List.map (fun x -> [(Some h), []],x) pre in
+        begin match Form.f_unify LEnv.empty s [(hy, goal)] with
+        | Some s when Form.Subst.is_complete s ->
+            result := ((TElim id), `S pre) :: !result
+        | Some _ -> () (* failwith "incomplete ex match" *)
+        | None ->
+            match goal with
+            | FConn (`Or , _) ->
+              let gll = Form.flatten_disjunctions goal in
+              let rec aux = function
+                | [] -> false
+                | g::l -> begin match Form.f_unify LEnv.empty s [(hyp, g)] with
+                    | Some s when Form.Subst.is_complete s -> true
+                    | _ -> aux l
+                  end
+              in 
+              if aux gll 
+              then result := ((TElim id), `S []) :: !result
+              else ()
+            | _ -> ()
+        end;
+      end;
     !result
 
   let perform l pr id =
