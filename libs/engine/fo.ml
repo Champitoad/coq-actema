@@ -1586,9 +1586,9 @@ end = struct
     | EFun (_, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
     | _ -> false
   
-  let occurs_under ((n, i) as x : vname) : expr -> bool = function
+  let rec occurs_under ((n, i) as x : vname) : expr -> bool = function
     | EVar (m, j) when n = m && j <= i -> true
-    | EFun (_, ts) -> List.fold_left (fun b t -> b || occurs x t) false ts
+    | EFun (_, ts) -> List.fold_left (fun b t -> b || occurs_under x t) false ts
     | _ -> false
 
 
@@ -1650,7 +1650,8 @@ end = struct
       formulas, updating along the way a substitution [s] and a local environment [lenv]
       holding a context of locally bound variables.
   *)
-  let rec f_unify (lenv : LEnv.lenv) (s : Subst.subst) = function
+  let rec f_unify (lenv : LEnv.lenv) (s : Subst.subst) =
+    let open Monad.Option in function
 
     | [] -> Some s
 
@@ -1663,10 +1664,8 @@ end = struct
         | FPred (p1, l1), FPred (p2, l2)
           when p1 = p2 && List.length l1 = List.length l2 ->       
 
-            begin match e_unify lenv s (List.combine l1 l2) with
-            | Some s -> f_unify lenv s eqns
-            | None -> None
-            end
+            e_unify lenv s (List.combine l1 l2) >>= fun s ->
+            f_unify lenv s eqns
 
         | FConn (c1, l1), FConn (c2, l2)
           when c1 = c2 && List.length l1 = List.length l2 ->
@@ -1678,11 +1677,8 @@ end = struct
           when b1 = b2 && ty1 = ty2 ->
 
             let f2 = Subst.f_apply1 (x2, 0) (EVar (x1, 0)) (f_shift (x1, 0) f2) in
-            let lenv' = LEnv.enter lenv x1 in
-            begin match f_unify lenv' s [f1, f2] with
-            | Some s -> f_unify lenv s eqns
-            | None -> None
-            end
+            f_unify (LEnv.enter lenv x1) s [f1, f2] >>= fun s ->
+            f_unify lenv s eqns
 
         | _ -> None
 end
