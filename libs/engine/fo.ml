@@ -960,6 +960,7 @@ module Form : sig
   val ec_rev    : ectx -> ectx
 
   val fc_is_bound : vname -> fctx -> bool
+  val fc_exit     : vname -> fctx -> vname
   val fc_fill     : form -> fctx -> form
   val fc_concat   : fctx -> fctx -> fctx
   val fc_rev      : fctx -> fctx
@@ -967,6 +968,7 @@ module Form : sig
   exception InvalidContextFill of term * ctx
 
   val c_is_bound : vname -> ctx -> bool
+  val c_exit     : vname -> ctx -> vname
   val c_fill     : term -> ctx -> term
   val c_rev      : ctx -> ctx
   val c_push     : ictx -> ctx -> ctx
@@ -1231,12 +1233,19 @@ end = struct
   let rec fc_is_bound (x, i) = function
     | [] -> false
     | CBind (_, y, _) :: c ->
-      if x = y then
-        if i = 0 then true
-        else fc_is_bound (x, i-1) c
-      else fc_is_bound (x, i) c
+        if x = y then
+          if i = 0 then true
+          else fc_is_bound (x, i-1) c
+        else fc_is_bound (x, i) c
     | _ :: c ->
-      fc_is_bound (x, i) c
+        fc_is_bound (x, i) c
+
+  let fc_exit (x, i) =
+    let rec aux i = function
+      | [] -> i
+      | CBind (_, y, _) :: c when x = y -> aux (i-1) c
+      | _ :: c -> aux i c
+    in fun c -> (x, aux i c)
 
   let rec fc_fill f = function
     | [] -> f
@@ -1254,6 +1263,10 @@ end = struct
   let c_is_bound x = function
     | CForm c | CExprPred (c, _, _, _, _) -> fc_is_bound x c
     | CExpr _ -> false
+    
+  let c_exit x = function
+    | CForm c | CExprPred (c, _, _, _, _) -> fc_exit x c
+    | CExpr _ -> x
 
   exception InvalidContextFill of term * ctx
 

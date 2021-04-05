@@ -1464,20 +1464,20 @@ end = struct
         expression [e] are bound either in the global environment [goal.g_env],
         or in the local environment [lenv]. *)
 
-    let well_scoped lenv e =
-      e_vars e |> List.for_all begin fun (x, i) ->
-        LEnv.exists lenv (x, i) ||
-        Vars.exists goal.g_env (x, i - (LEnv.get_index lenv x + 1))
+    let well_scoped ctx e =
+      e_vars e |> List.for_all begin fun x ->
+        fc_is_bound x ctx ||
+        Vars.exists goal.g_env (fc_exit x ctx)
       end
     in
 
-    (** [instantiable lenv s x] returns [true] if the variable [x] is
+    (** [instantiable lenv ctx s x] returns [true] if the variable [x] is
         bound in substitution [s] to an expression [e] which is well-scoped. *)
     
-    let instantiable lenv s x =
+    let instantiable lenv ctx s x =
       let lenv = LEnv.enter lenv x in
       match get_tag (x, LEnv.get_index lenv x) s with
-      | Some Sbound e -> well_scoped lenv e
+      | Some Sbound e -> well_scoped ctx e
       | Some Sflex -> true
       | None -> false
     in
@@ -1608,7 +1608,7 @@ end = struct
 
           | _, (FBind (`Exist, x, ty, f1), 0 :: sub)
             when no_prio `Left h &&
-            instantiable env2 s2 x
+            instantiable env2 ctx s2 x
             ->
             let env2 = LEnv.enter env2 x in
             s := es1, (env2, s2);
@@ -1675,7 +1675,7 @@ end = struct
 
           | (FBind (`Forall, x, ty, f1), 0 :: sub), _
             when no_prio `Right c &&
-            instantiable env1 s1 x
+            instantiable env1 ctx s1 x
             ->
             let env1 = LEnv.enter env1 x in
             s := (env1, s1), es2;
@@ -1801,7 +1801,7 @@ end = struct
           
           | _, (FBind (`Forall, x, ty, f1), 0 :: sub)
             when no_prio `Forward h &&
-            instantiable env2 s2 x
+            instantiable env2 ctx s2 x
             ->
             let env2 = LEnv.enter env2 x in
             s := es1, (env2, s2);
@@ -2088,7 +2088,7 @@ end = struct
          record and update multiple informations handling the first-order content
          of the proof. We do so with a record of the form
            
-           [{deps; rnm; env; subst}]
+           [{deps; rnm; subst}]
            
          where:
 
@@ -2102,9 +2102,6 @@ end = struct
            fresh names, which are reverted to the original names with [rnm] when
            producing the final substitution for each formula.
           
-         - [env] is (a copy of) the goal's environment, used to compute fresh
-           names for eigenvariables that will be introduced by the [link] tactic.
-          
          - [subst] is the substitution that will be fed to unification, in which we
            record existential variables in [Sflex] entries, as well as the fresh
            eigenvariables in [Sbound] entries together with their original names.
@@ -2112,7 +2109,6 @@ end = struct
       type t =
         { deps : Deps.t;
           rnm : (name * name) list;
-          env : env;
           subst : Subst.subst }
     end
 
@@ -2122,23 +2118,21 @@ end = struct
       let open State in
       match p, t with
 
-      | Pos, `F FBind (`Forall, x, ty, f)
-      | Neg, `F FBind (`Exist, x, ty, f) ->
-          get >>= fun { deps; rnm; env; subst } ->
-          let y, env = Vars.bind env (x, ty) in
+      | Pos, `F FBind (`Forall, x, _, f)
+      | Neg, `F FBind (`Exist, x, _, f) ->
+          get >>= fun { deps; rnm; subst } ->
           let exs = Subst.fold
             (fun acc (x, t) -> if t = Sflex then x :: acc else acc)
             [] subst
           in
           let deps = List.fold_left
-            (fun deps x -> Deps.add_edge deps x y)
+            (fun deps y -> Deps.add_edge deps y x)
             deps exs
           in
           let z = EVars.fresh () in
           let rnm = (z, x) :: rnm in
-          let subst = Subst.push z (Sbound (EVar (y, 0))) subst in
-          put { deps; rnm; env; subst } >>= fun _ ->
-          let f = Form.Subst.f_apply1 (x, 0) (EVar (y, 0)) f in
+          put { deps; rnm; subst } >>= fun _ ->
+          let f = Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f in
           return (p, `F f)
 
       | Neg, `F FBind (`Forall, x, _, f)
@@ -2184,7 +2178,7 @@ end = struct
 
     fun proof (src, dst) ->
 
-    let Proof.{ g_pregoal; _ }, item_src, (sub_src, _) = of_ipath proof src in
+    let _, item_src, (sub_src, _) = of_ipath proof src in
     let _, item_dst, (sub_dst, _) = of_ipath proof dst in
 
     try
@@ -2213,7 +2207,6 @@ end = struct
         end
         { deps = Deps.empty;
           rnm = [];
-          env = Proof.(g_pregoal.g_env);
           subst = Subst.empty }
       in
 
