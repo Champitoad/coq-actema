@@ -193,18 +193,23 @@ end
 module BiMap : sig
   type ('a, 'b) t
 
-  val empty   : ('a, 'b) t
+  val empty       : ('a, 'b) t
+
+  val inverse     : ('a, 'b) t -> ('b, 'a) t
 
   val add         : 'a -> 'b -> ('a, 'b) t -> ('a, 'b) t
   val remove      : 'a -> ('a, 'b) t -> ('a, 'b) t
+
   val find        : 'a -> ('a, 'b) t -> 'b
   val find_opt    : 'a -> ('a, 'b) t -> 'b option
-  val inverse     : ('a, 'b) t -> ('b, 'a) t
 end = struct
   type ('a, 'b) t = ('a, 'b) Map.t * ('b, 'a) Map.t
   
   let empty =
     Map.empty, Map.empty
+
+  let inverse (r, l) =
+    (l, r)
   
   let add k v (r, l) =
     Map.add k v r, Map.add v k l
@@ -218,9 +223,6 @@ end = struct
 
   let find_opt k (r, _) =
     Map.find_opt k r
-  
-  let inverse (r, l) =
-    (l, r)
 end
 
 (* -------------------------------------------------------------------- *)

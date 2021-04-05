@@ -887,17 +887,20 @@ exception TypingError
 module VName : sig
   type bds
 
-  val equal : bds -> vname -> vname -> bool
-
   module Map : sig
     val empty : bds
     val push  : bds -> name -> name -> bds
   end
+
+  val lindex : bds -> name -> int
+  val rindex : bds -> name -> int
+
+  val lfind : bds -> vname -> name
+  val rfind : bds -> vname -> name
+
+  val equal : bds -> vname -> vname -> bool
 end = struct
   type bds = (name * name) list
-
-  let equal (_ : bds) ((x, i) : vname) ((y, j) : vname) =
-    i = j && x = y
 
   module Map = struct
     let empty : bds =
@@ -906,6 +909,38 @@ end = struct
     let push (bds : bds) (x : name) (y : name) =
       (x, y) :: bds
   end
+  
+  let lindex (bds : bds) (x : name) : int =
+    let rec aux i = function 
+      | [] -> i
+      | (y, _) :: bds -> aux (i + if x = y then 1 else 0) bds
+    in aux 0 bds
+
+  let rindex (bds : bds) (x : name) : int =
+    let rec aux i = function 
+      | [] -> i
+      | (_, y) :: bds -> aux (i + if x = y then 1 else 0) bds
+    in aux 0 bds
+
+  let lfind (bds : bds) ((x, i) : vname) =
+    let rec aux j = function
+      | [] -> raise Not_found
+      | (y, z) :: _   when x = y && j = 0 -> z
+      | (y, _) :: bds when x = y && j > 0 -> aux (j-1) bds
+      | _ :: bds -> aux j bds
+    in aux i bds
+  
+  let rfind (bds : bds) ((x, i) : vname) =
+    let rec aux j = function
+      | [] -> raise Not_found
+      | (y, z) :: _   when x = z && j = 0 -> y
+      | (_, z) :: bds when x = z && j > 0 -> aux (j-1) bds
+      | _ :: bds -> aux j bds
+    in aux i bds
+
+  let equal (bds : bds) ((n, i) as x : vname) ((m, j) as y : vname) =
+    (n = m && i - lindex bds n = j - rindex bds m) ||
+    (i = j && (lfind bds x = m || rfind bds y = n))
 end
 
 (* -------------------------------------------------------------------- *)
