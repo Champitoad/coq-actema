@@ -19,7 +19,7 @@
 %token PROOF
 
 %token LAND LOR LNEG PLUS STAR
-%token AMP DCOLON COLON EQ COLONEQ COMMA DOT
+%token AMP DCOLON COLON EQ COLONEQ COMMA DOT SEMICOLON
 
 %nonassoc BINDING_prec
 %right    LARROW LRARROW
@@ -201,8 +201,8 @@ entry:
 
 (* -------------------------------------------------------------------- *)
 goal:
-| ps=plist0(entry, COMMA) PROOF f=form
-    { (ps, f) }
+| ps=plist0(entry, COMMA) hs=option(preceded(SEMICOLON, plist0(form, COMMA))) PROOF f=form
+    { (ps, BatOption.default [] hs, f) }
 
 (* -------------------------------------------------------------------- *)
 %inline loc(X):

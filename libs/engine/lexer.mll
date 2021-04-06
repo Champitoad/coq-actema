@@ -44,25 +44,26 @@ rule main = parse
   | ident as id { try Hashtbl.find keywords id with Not_found -> IDENT id }
   | nat as n    { NAT (int_of_string n) }
 
-  | "("   { LPAREN  }
-  | ")"   { RPAREN  }
-  | "{"   { LBRACE  }
-  | "}"   { RBRACE  }
-  | "&&"  { LAND    }
-  | "||"  { LOR     }
-  | "~"   { LNEG    }
-  | "->"  { LARROW  }
-  | "<->" { LRARROW }
-  | "|-"  { PROOF   }
-  | ","   { COMMA   }
-  | "."   { DOT     }
-  | ":"   { COLON   }
-  | "::"  { DCOLON  }
-  | "="   { EQ      }
-  | ":="  { COLONEQ }
-  | "&"   { AMP     }
-  | "+"   { PLUS    }
-  | "*"   { STAR    }
+  | "("   { LPAREN    }
+  | ")"   { RPAREN    }
+  | "{"   { LBRACE    }
+  | "}"   { RBRACE    }
+  | "&&"  { LAND      }
+  | "||"  { LOR       }
+  | "~"   { LNEG      }
+  | "->"  { LARROW    }
+  | "<->" { LRARROW   }
+  | "|-"  { PROOF     }
+  | ","   { COMMA     }
+  | "."   { DOT       }
+  | ";"   { SEMICOLON }
+  | ":"   { COLON     }
+  | "::"  { DCOLON    }
+  | "="   { EQ        }
+  | ":="  { COLONEQ   }
+  | "&"   { AMP       }
+  | "+"   { PLUS      }
+  | "*"   { STAR      }
 
   | eof { EOF }
 

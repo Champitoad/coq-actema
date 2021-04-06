@@ -559,9 +559,9 @@ let export (name : string) : unit =
      *
      * Raise an exception if [input] is invalid *)
     method parse x =
-      let env, goal = !!(fun () ->
+      let env, hyps, goal = !!(fun () ->
         let goal = String.trim (Js.to_string x) in
         let goal = Io.parse_goal (Io.from_string goal) in
         Fo.Goal.check goal
-      ) () in js_proof_engine (Proof.init env goal)
+      ) () in js_proof_engine (Proof.init env hyps goal)
   end)

@@ -51,5 +51,5 @@ type pvar =
   | PFun  of psymbol * psignature
   | PVar  of psymbol * ptype
 
-type pgoal = pvar list * pform
+type pgoal = pvar list * pform list * pform
 

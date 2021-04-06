@@ -67,7 +67,7 @@ module Proof : sig
 
   type pregoals = pregoal list
 
-  val init    : env -> form -> proof
+  val init    : env -> form list -> form -> proof
   val closed  : proof -> bool
   val opened  : proof -> Handle.t list
   val focused : proof -> Handle.t
@@ -191,13 +191,16 @@ end = struct
   let mk_hyp ?(src : Handle.t option) ?(gen : int = 0) form =
     { h_src = src; h_gen = gen; h_form = form; }
 
-  let init (env : env) (goal : form) =
+  let init (env : env) (hyps : form list) (goal : form) =
     Form.recheck env goal;
 
     let uid  = Handle.fresh () in
+    let g_hyps = List.fold
+      (fun hs f ->  Hyps.add hs (Handle.fresh ()) (mk_hyp f))
+      Hyps.empty hyps in
     let root = { g_id = uid; g_pregoal = {
         g_env  = env;
-        g_hyps = Hyps.empty;
+        g_hyps;
         g_goal = goal;
       }
     } in

@@ -1714,18 +1714,19 @@ end
 
 (* -------------------------------------------------------------------- *)
 module Goal : sig
-  val check : pgoal -> env * form
+  val check : pgoal -> env * form list * form
 end = struct
-  let check ((ps, f) : pgoal) =
+  let check ((ps, hs, f) : pgoal) =
     let env =
-      let for_type ty = Form.tcheck Env.empty ty in
+      let for_type = Form.tcheck Env.empty in
       let for_entry = function
         | PProp (name, ar) ->
             EPVar (unloc name, List.map for_type ar)
         | PFun (name, (ar, ty)) ->
             ETFun (unloc name, (List.map for_type ar, for_type ty))
         | PVar (name, ty) ->
-            ETVar (unloc name, (for_type ty, None))
-      in env_of_entries (List.map for_entry ps) in
-    (env, Form.check env f)
+            ETVar (unloc name, (for_type ty, None)) in
+      env_of_entries (List.map for_entry ps) in
+    let for_form = Form.check env in
+    (env, List.map for_form hs, for_form f)
 end
