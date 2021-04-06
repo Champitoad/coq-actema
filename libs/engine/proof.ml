@@ -1537,8 +1537,6 @@ end = struct
             List.fold_left2
               (fun f t1 t2 -> f_and f (FPred ("_EQ", [t1; t2])))
               f_true ts1 ts2
-            |> flatten_conjunctions
-            |> fun l -> FConn (`And, l)
         
           (* Brel *)
           | _ -> f_imp l r
@@ -1620,7 +1618,7 @@ end = struct
               None, (h, (f1, sub))
             (* R∃s *)
             | Some Sflex ->
-              s := es1, (env2, Subst.shift (x, 0) s2);
+              s := es1, (env2, s2);
               let h = (f_shift (x, 0) l), lsub in
               Some (CBind (`Exist, x, ty)), (h, (f1, sub))
             | None -> assert false
@@ -1628,7 +1626,7 @@ end = struct
 
           (* R∀s *)
           | _, (FBind (`Forall, x, ty, f1), 0 :: sub) ->
-            s := es1, (LEnv.enter env2 x, Subst.shift (x, 0) s2);
+            s := es1, (LEnv.enter env2 x, s2);
             let h = (f_shift (x, 0) l), lsub in
             Some (CBind (`Forall, x, ty)), (h, (f1, sub))
 
@@ -1670,7 +1668,7 @@ end = struct
           
           (* L∃s *)
           | (FBind (`Exist, x, ty, f1), 0 :: sub), _ ->
-            s := (LEnv.enter env1 x, Subst.shift (x, 0) s1), es2;
+            s := (LEnv.enter env1 x, s1), es2;
             let c = (f_shift (x, 0) r), rsub in
             Some (CBind (`Forall, x, ty)), ((f1, sub), c)
 
@@ -1687,7 +1685,7 @@ end = struct
               None, ((f1, sub), c)
             (* L∀s *)
             | Some Sflex ->
-              s := (env1, Subst.shift (x, 0) s1), es2;
+              s := (env1, s1), es2;
               let c = (f_shift (x, 0) r), rsub in
               Some (CBind (`Exist, x, ty)), ((f1, sub), c)
             | None -> assert false
@@ -1796,7 +1794,7 @@ end = struct
           
           (* F∃s *)
           | _, (FBind (`Exist, x, ty, f1), 0 :: sub) ->
-            s := es1, (LEnv.enter env2 x, Subst.shift (x, 0) s2);
+            s := es1, (LEnv.enter env2 x, s2);
             let h = (f_shift (x, 0) l), lsub in
             Some (CBind (`Exist, x, ty)), (h, (f1, sub))
           
@@ -1813,7 +1811,7 @@ end = struct
               None, (h, (f1, sub))
             (* F∀s *)
             | Some Sflex ->
-              s := es1, (LEnv.enter env2 x, Subst.shift (x, 0) s2);
+              s := es1, (LEnv.enter env2 x, s2);
               let h = (f_shift (x, 0) l), lsub in
               Some (CBind (`Forall, x, ty)), (h, (f1, sub))
             | None -> assert false
