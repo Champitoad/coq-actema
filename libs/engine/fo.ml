@@ -938,9 +938,11 @@ end = struct
       | _ :: bds -> aux j bds
     in aux i bds
 
-  let equal (bds : bds) ((n, i) as x : vname) ((m, j) as y : vname) =
+  let equal (bds : bds) ((n, i) : vname) ((m, j) : vname) =
     (n = m && i - lindex bds n = j - rindex bds m) ||
-    (i = j && (lfind bds x = m || rfind bds y = n))
+    (i = j &&
+      try lfind bds (n, i) = m
+      with Not_found -> false)
 end
 
 (* -------------------------------------------------------------------- *)
