@@ -372,6 +372,7 @@ module CoreLogic : sig
     | `Nothing
     | `Both of linkaction * linkaction
     | `Subform of Form.Subst.subst * Form.Subst.subst
+    | `Instantiate of expr * ipath
     | `Rewrite of expr * expr * ipath list
   ]
 
@@ -735,14 +736,18 @@ end = struct
     | `C f | `H (_, Proof.{ h_form = f; _ }) -> f
     | _ -> raise (Invalid_argument "Expected a formula item")
     
-  let expr_of_item : item -> expr = function
-    | `V (_, (_, Some b)) -> b
+  let expr_of_item ?(where = `Body) : item -> expr = function
+    | `V (x, (_, Some b)) ->
+        begin match where with
+        | `Head -> EVar x
+        | `Body -> b
+        end
     | _ -> raise (Invalid_argument "Expected an expression item")
   
-  let term_of_item it =
+  let term_of_item ?where it =
     try `F (form_of_item it)
     with Invalid_argument _ ->
-      try `E (expr_of_item it)
+      try `E (expr_of_item ?where it)
       with Invalid_argument _ ->
         raise (Invalid_argument "Expected an expression or formula item")      
 
@@ -858,8 +863,8 @@ end = struct
           (fun x1 x2 x3 x4 ->
             (x1, { kind = pkind_of_string x2; handle = x3 }, x4))
       with
-      (* | Scanf.Scan_failure _ -> raise (Invalid_argument "pouet")
-      | Not_found -> raise (Invalid_argument "prout") *)
+      | Scanf.Scan_failure _
+      | Not_found
       | End_of_file ->
           raise (Invalid_argument p) in
 
@@ -922,6 +927,11 @@ end = struct
 
     let goal = Proof.{ g_id = Handle.ofint root; g_pregoal = goal } in
     (goal, item, (sub, target))
+  
+
+  let term_of_ipath (proof : Proof.proof) (p : ipath) =
+    let (_, _, (_, t)) = of_ipath proof p in
+    t
 
 
   let is_sub_path (p : ipath) (sp : ipath) =
@@ -1855,6 +1865,7 @@ end = struct
     | `Nothing
     | `Both of linkaction * linkaction
     | `Subform of Form.Subst.subst * Form.Subst.subst
+    | `Instantiate of expr * ipath
     | `Rewrite of expr * expr * ipath list
   ]
 
@@ -2262,7 +2273,7 @@ end = struct
 
       | _ -> []
     with Invalid_argument _ -> []
-    
+  
   
   (** [intuitionistic_link lnk] checks if [lnk] is an intuitionistic link,
       and returns a [`Nothing] link action if so. *)
@@ -2287,6 +2298,84 @@ end = struct
                || m <= 1 && n = 0 -> [`Nothing]
       | _ -> []
     with InvalidSubFormPath _ | Invalid_argument _ -> []
+  
+  
+  (** [quantifier_instantiation proof (srcs, dsts)] checks if [srcs] (resp.
+      [dsts]) leads to an expression, and [dsts] (resp. [srcs]) leads either to
+      an instantiable quantified subformula, or the set of occurrences of an
+      instantiable quantified variable. It it succeeds, it returns the
+      corresponding [`Instantiate] link action. *)
+
+  let quantifier_instantiation : hlpred =
+    fun proof (srcs, dsts) ->
+    
+    let is_free_expr (t : term) (sub : int list) : bool =
+      let lenv, subt = List.fold_left
+        (fun (lenv, t) i ->
+          let lenv = match t with
+            | `F FBind (_, x, _, _) -> LEnv.enter lenv x
+            | _ -> lenv in
+          let t = direct_subterm t i in
+          lenv, t)
+        (LEnv.empty, t) sub
+      in
+      match subt with
+      | `F _ -> false
+      | `E e ->
+          List.for_all
+            (not <<| (LEnv.exists lenv))
+            (Form.e_vars e)
+    in
+    
+    (* Link to quantified subformula *)
+    let to_form p_wit p_form =
+      let _, item_wit, (sub_wit, wit) = of_ipath proof p_wit in
+      let where = match p_wit.ctxt.kind with
+        | `Var w -> w
+        | _ -> `Body in
+      let ctxt_wit = term_of_item ~where item_wit in
+
+      (* Check that the witness contains only free variables *)
+      if is_free_expr ctxt_wit sub_wit then
+        
+        let pol = pol_of_ipath proof p_form in
+        let f = term_of_ipath proof p_form in
+        
+        (* Check that the quantifier is instantiable, meaning it has
+           the right polarity *)
+        match pol, f with
+        | Neg, `F FBind (`Forall, _, _, _)
+        | Pos, `F FBind (`Exist, _, _, _) ->
+            [`Instantiate (expr_of_term wit, p_form)]
+
+        | _ -> []
+      else []
+    in
+    
+    (* Link to quantified occurrences *)
+    let to_occs =
+      assert false
+    in
+
+    match srcs, dsts with
+    
+    | [src], [dst] ->
+        begin match pair_map (term_of_ipath proof) (src, dst) with
+        | `E _, `F _ ->
+            to_form src dst
+        | `F _, `E _ ->
+            to_form dst src
+        | `E _, `E _ ->
+            [] (* TODO *)
+        | _ ->
+            []
+        end
+
+    | [wit], (_ :: _ as occs)
+    | (_ :: _ as occs), [wit] ->
+        [] (* TODO *)
+    
+    | _ -> []
   
 
   (** [rewrite_link lnk] checks if [lnk] is a rewrite hyperlink. That is, one
@@ -2375,6 +2464,7 @@ end = struct
 
     let hlp = hlpred_add [
       hlpred_mult (List.map hlpred_of_lpred [wf_subform_link; intuitionistic_link]);
+      quantifier_instantiation
       (* rewrite_link *)
     ] in
     
