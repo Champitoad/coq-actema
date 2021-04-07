@@ -737,10 +737,11 @@ end = struct
     | _ -> raise (Invalid_argument "Expected a formula item")
     
   let expr_of_item ?(where = `Body) : item -> expr = function
-    | `V (x, (_, Some b)) ->
+    | `V (x, (_, b)) ->
         begin match where with
         | `Head -> EVar x
-        | `Body -> b
+        | `Body -> Option.get_exn b
+            (Invalid_argument "Expected a local variable with a body")
         end
     | _ -> raise (Invalid_argument "Expected an expression item")
   
@@ -2354,7 +2355,7 @@ end = struct
     
     (* Link to quantified occurrences *)
     let to_occs =
-      assert false
+      [] (* TODO *)
     in
 
     match srcs, dsts with
@@ -2480,17 +2481,36 @@ end = struct
           let dsts = begin match dnd.destination with
             | None ->
                 let src = dnd.source in
-                (* Get the list of hypotheses handles *)
-                Proof.Hyps.ids g_pregoal.Proof.g_hyps |>
-                (* Create a list of paths to each hypothesis *)
-                List.map begin fun hd ->
-                  mk_ipath (Handle.toint g_id)
-                    ~ctxt:{ kind = `Hyp; handle = Handle.toint hd }
-                end |>
-                (* Add a path to the conclusion *)
-                fun hyps -> mk_ipath (Handle.toint g_id) :: hyps |>
-                (* Remove the source from the list of paths *)
-                fun dsts -> List.remove dsts src
+
+                let hyps =
+                  (* Get the list of hypotheses handles *)
+                  Proof.Hyps.ids g_pregoal.Proof.g_hyps |>
+                  (* Create a list of paths to each hypothesis *)
+                  List.map begin fun hd ->
+                    mk_ipath (Handle.toint g_id)
+                      ~ctxt:{ kind = `Hyp; handle = Handle.toint hd }
+                  end in
+
+                let vars =
+                  let env = g_pregoal.Proof.g_env in
+                  (* Get the list of variable handles *)
+                  env.env_handles |> BiMap.codomain |>
+                  (* Create a list of paths to each variable's head and body *)
+                  List.concat_map begin fun hd ->
+                    [mk_ipath (Handle.toint g_id)
+                      ~ctxt:{ kind = `Var `Head; handle = hd }]
+                    @
+                    match Vars.byid env hd with
+                    | Some (_, (_, Some _)) ->
+                        [mk_ipath (Handle.toint g_id)
+                          ~ctxt:{ kind = `Var `Body; handle = hd }]
+                    | _ -> []
+                  end in
+
+                let concl =
+                  mk_ipath (Handle.toint g_id) in
+
+                List.remove (hyps @ vars @ [concl]) src
                 
             | Some dst ->
                 [dst]

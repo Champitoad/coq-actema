@@ -202,6 +202,9 @@ module BiMap : sig
 
   val find        : 'a -> ('a, 'b) t -> 'b
   val find_opt    : 'a -> ('a, 'b) t -> 'b option
+  
+  val domain      : ('a, 'b) t -> 'a list
+  val codomain    : ('a, 'b) t -> 'b list
 end = struct
   type ('a, 'b) t = ('a, 'b) Map.t * ('b, 'a) Map.t
   
@@ -223,6 +226,12 @@ end = struct
 
   let find_opt k (r, _) =
     Map.find_opt k r
+  
+  let domain (r, _) =
+    Map.keys r |> List.of_enum
+
+  let codomain (_, l) =
+    Map.keys l |> List.of_enum
 end
 
 (* -------------------------------------------------------------------- *)
