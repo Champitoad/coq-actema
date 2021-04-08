@@ -937,7 +937,9 @@ end = struct
 
   let is_sub_path (p : ipath) (sp : ipath) =
        p.root = sp.root
-    && p.ctxt = sp.ctxt
+    && p.ctxt.handle = sp.ctxt.handle
+    && (p.ctxt.kind = sp.ctxt.kind ||
+       (p.ctxt.kind = `Var `Head && sp.ctxt.kind = `Var `Body))
     && List.is_prefix sp.sub p.sub
 
 
@@ -1892,6 +1894,7 @@ end = struct
       | `Nothing -> "⊥"
       | `Both (a, a') -> Printf.sprintf "(%s, %s)" (doit a) (doit a')
       | `Subform _ -> "SFL"
+      | `Instantiate _ -> "Instantiate"
       | `Rewrite (red, res, tgts) ->
           Printf.sprintf "%s[%s ~> %s]"
             (List.to_string ~sep:", " ~left:"{" ~right:"}"
@@ -2308,8 +2311,6 @@ end = struct
       corresponding [`Instantiate] link action. *)
 
   let quantifier_instantiation : hlpred =
-    fun proof (srcs, dsts) ->
-    
     let is_free_expr (t : term) (sub : int list) : bool =
       let lenv, subt = List.fold_left
         (fun (lenv, t) i ->
@@ -2327,6 +2328,8 @@ end = struct
             (not <<| (LEnv.exists lenv))
             (Form.e_vars e)
     in
+
+    fun proof (srcs, dsts) ->
     
     (* Link to quantified subformula *)
     let to_form p_wit p_form =
@@ -2354,9 +2357,9 @@ end = struct
     in
     
     (* Link to quantified occurrences *)
-    let to_occs =
+    (* let to_occs =
       [] (* TODO *)
-    in
+    in *)
 
     match srcs, dsts with
     
@@ -2372,9 +2375,9 @@ end = struct
             []
         end
 
-    | [wit], (_ :: _ as occs)
+    (* | [wit], (_ :: _ as occs)
     | (_ :: _ as occs), [wit] ->
-        [] (* TODO *)
+        [] (* TODO *) *)
     
     | _ -> []
   
@@ -2456,12 +2459,12 @@ end = struct
 
   let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) =
     let Proof.{ g_id; g_pregoal }, _, _ = of_ipath proof dnd.source in
-
+    
     let srcsel : selection =
       List.filter (is_sub_path dnd.source) selection in
-
+    
     let dstsel : selection =
-      List.remove_if (fun p -> p.ctxt = dnd.source.ctxt) selection in
+      List.remove_if (fun p -> p.ctxt.handle = dnd.source.ctxt.handle) selection in
 
     let hlp = hlpred_add [
       hlpred_mult (List.map hlpred_of_lpred [wf_subform_link; intuitionistic_link]);
@@ -2528,7 +2531,7 @@ end = struct
 
     let linkactions = search_linkactions hlp proof
       ?fixed_srcs ?fixed_dsts (src, dst) in
-
+    
     linkactions >>= fun ((srcs, dsts) as lnk, actions) ->
     let actions = remove_nothing actions in
     srcs >>= fun src ->
