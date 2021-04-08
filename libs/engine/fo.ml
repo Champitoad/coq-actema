@@ -962,9 +962,14 @@ module Form : sig
   val flatten_disjunctions : form -> form list
   val flatten_conjunctions : form -> form list
 
+  val t_unloc  : ptype -> type_
+  val e_unloc  : pexpr -> expr
+  val f_unloc  : pform -> form
+
   val parity   : logcon -> int
   val tcheck   : env -> ptype -> type_
   val trecheck : env -> type_ -> unit
+  val einfer   : env -> expr -> type_
   val echeck   : env -> pexpr -> expr * type_
   val erecheck : env -> type_ -> expr -> unit
   val check    : env -> pform -> form
@@ -1357,6 +1362,36 @@ end = struct
       aux 0
 
 
+  let rec t_unloc (t : ptype) : type_ =
+    match unloc t with
+    | PTUnit -> TUnit
+    | PTVar x -> TVar (unloc x, 0)
+    | PTSum (t1, t2) -> TOr (t_unloc t1, t_unloc t2)
+    | PTProd (t1, t2) -> TProd (t_unloc t1, t_unloc t2)
+    | PTRec (x, t) -> TRec (unloc x, t_unloc t)
+  
+  let rec e_unloc (e : pexpr) : expr =
+    match unloc e with
+    | PEVar (x, i) -> EVar (unloc x, i)
+    | PEApp (f, args) -> EFun (unloc f, List.map e_unloc args)
+  
+  let rec f_unloc (f : pform) : form =
+    let pred name fs = FConn (name, List.map f_unloc fs) in
+
+    match unloc f with
+    | PFApp (p, args) -> FPred (unloc p, List.map e_unloc args)
+    | PFCst b -> if b then FTrue else FFalse
+
+    | PFAnd   (f1, f2) -> pred `And   [f1; f2]
+    | PFOr    (f1, f2) -> pred `Or    [f1; f2]
+    | PFImp   (f1, f2) -> pred `Imp   [f1; f2]
+    | PFEquiv (f1, f2) -> pred `Equiv [f1; f2]
+    | PFNot   f1       -> pred `Not   [f1]
+    
+    | PFForall ((x, ty), f) -> FBind (`Forall, unloc x, t_unloc ty, f_unloc f)
+    | PFExists ((x, ty), f) -> FBind (`Exist, unloc x, t_unloc ty, f_unloc f)
+
+
   (* FIXME *)
   let rec trecheck (env : env) (ty : type_) : unit =
     match ty with
@@ -1407,6 +1442,7 @@ end = struct
     | FBind (_, x, xty, f) ->
         trecheck env xty; recheck (Vars.push env (x, (xty, None))) f
 
+
   let rec tcheck (env : env) (ty : ptype) =
     match unloc ty with
     | PTUnit          -> TUnit
@@ -1420,26 +1456,30 @@ end = struct
         if not (TVars.exists env (unloc x, 0)) then
           raise TypingError;
         TVar (unloc x, 0)
-
-  let rec echeck (env : env) (e : pexpr) =
-    match unloc e with
-    | PEVar (x, i) -> begin
-        match Vars.get env (unloc x, i) with
+  
+  let rec einfer (env : env) (e : expr) : type_ =
+    match e with
+    | EVar x -> begin
+        match Vars.get env x with
         | None          -> raise TypingError
-        | Some (xty, _) -> EVar (unloc x, i), xty
+        | Some (xty, _) -> xty
       end
 
-    | PEApp (f, args) -> begin
-        match Funs.get env (unloc f) with
+    | EFun (f, args) -> begin
+        match Funs.get env f with
         | None -> raise TypingError
         | Some (fargs, fres) ->
             if List.length fargs <> List.length args then
               raise TypingError;
-            let args = List.map (echeck env) args in
-            if not (List.for_all2 t_equal fargs (List.snd args)) then
+            let args = List.map (einfer env) args in
+            if not (List.for_all2 t_equal fargs args) then
               raise TypingError;
-            EFun (unloc f, List.fst args), fres
+            fres
       end
+
+  let echeck (env : env) (e : pexpr) =
+    let e = e_unloc e in
+    e, einfer env e
 
   let rec check (env : env) (form : pform) =
     let pred name fs = FConn (name, List.map (check env) fs) in

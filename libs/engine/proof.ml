@@ -2333,7 +2333,9 @@ end = struct
     
     (* Link to quantified subformula *)
     let to_form p_wit p_form =
-      let _, item_wit, (sub_wit, wit) = of_ipath proof p_wit in
+      let Proof.{ g_pregoal = goal; _ }, item_wit, (sub_wit, wit) =
+        of_ipath proof p_wit in
+
       let where = match p_wit.ctxt.kind with
         | `Var w -> w
         | _ -> `Body in
@@ -2344,13 +2346,16 @@ end = struct
         
         let pol = pol_of_ipath proof p_form in
         let f = term_of_ipath proof p_form in
+
+        let wit = expr_of_term wit in
+        let ty_wit = Form.einfer goal.g_env wit in
         
         (* Check that the quantifier is instantiable, meaning it has
-           the right polarity *)
+           the right polarity as well as the same type as the witness *)
         match pol, f with
-        | Neg, `F FBind (`Forall, _, _, _)
-        | Pos, `F FBind (`Exist, _, _, _) ->
-            [`Instantiate (expr_of_term wit, p_form)]
+        | Neg, `F FBind (`Forall, _, ty, _)
+        | Pos, `F FBind (`Exist, _, ty, _) when Form.t_equal ty ty_wit ->
+            [`Instantiate (wit, p_form)]
 
         | _ -> []
       else []
