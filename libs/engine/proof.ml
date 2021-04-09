@@ -193,6 +193,7 @@ end = struct
 
   let init (env : env) (hyps : form list) (goal : form) =
     Form.recheck env goal;
+    List.iter (Form.recheck env) hyps;
 
     let uid  = Handle.fresh () in
     let g_hyps = List.fold
@@ -696,6 +697,17 @@ end = struct
 
     Proof.xprogress proof id (TMove (from, before))
       [{ goal with g_hyps = hyps }]
+
+  type pnode += TDuplicate of Handle.t
+  
+  let duplicate (hd : Handle.t) : tactic =
+    fun (proof, id) ->
+
+    let goal = Proof.byid proof id in
+    let form = (Proof.Hyps.byid goal.g_hyps hd).h_form in
+    let subgoal = [Some hd, [form]], goal.g_goal in
+
+    Proof.sprogress proof id (TDuplicate hd) [subgoal]
   
 
   (** The [close_with_unit] tactic tries to close the goal either with
@@ -784,6 +796,12 @@ end = struct
       | `F FPred _ | `E _ -> raise (InvalidSubExprPath [i])
       | `F _ -> raise (InvalidSubFormPath [i])
 
+  let rec modify_subterm (t : term) (u : term) (p : int list) : term =
+    match p with
+    | [] -> u
+    | i :: p ->
+        let subt = modify_subterm (direct_subterm t i) u p in
+        modify_direct_subterm t subt i
 
   let subterm (t : term) (p : int list) =
     try List.fold_left direct_subterm t p
@@ -804,7 +822,7 @@ end = struct
     match subterm (`E e) p with
     | `E e -> e
     | _ -> raise (InvalidSubExprPath p)
-    
+  
 
   let rebuild_path i =
     let rec aux l = function
@@ -930,9 +948,43 @@ end = struct
     (goal, item, (sub, target))
   
 
-  let term_of_ipath (proof : Proof.proof) (p : ipath) =
+  let term_of_ipath (proof : Proof.proof) (p : ipath) : term =
     let (_, _, (_, t)) = of_ipath proof p in
     t
+  
+
+  type pnode += TModify
+
+  let modify_subterm_at (proof : Proof.proof) (p : ipath) (t : term) : Proof.proof =
+    let open Proof in
+
+    let { g_id; g_pregoal = goal }, item, (sub, _) = of_ipath proof p in
+    
+    match item with
+    | `C f ->
+        let new_concl = modify_subterm (`F f) t sub |> form_of_term in
+        progress proof g_id TModify [new_concl]
+    
+    | `H (hd, { h_form = f; _ }) ->
+        let new_hyp = modify_subterm (`F f) t sub |> form_of_term in
+        let subgoal = [Some hd, [new_hyp]], goal.g_goal in
+        sprogress ~clear:true proof g_id TModify [subgoal]
+    
+    | `V (x, (ty, body)) ->
+        begin match p.ctxt.kind with
+        | `Var `Head ->
+            failwith "Cannot modify an abstract definition"
+        | `Var `Body ->
+            begin match body with
+            | Some b ->
+                let new_body = modify_subterm (`E b) t sub |> expr_of_term in
+                let g_env = Vars.modify goal.g_env (x, (ty, Some new_body)) in
+                xprogress proof g_id TModify [{ goal with g_env }]
+            | None ->
+                failwith "Cannot modify an abstract definition"
+            end
+        | _ -> assert false
+        end
 
 
   let is_sub_path (p : ipath) (sp : ipath) =
@@ -941,7 +993,7 @@ end = struct
     && (p.ctxt.kind = sp.ctxt.kind ||
        (p.ctxt.kind = `Var `Head && sp.ctxt.kind = `Var `Body))
     && List.is_prefix sp.sub p.sub
-
+  
 
   (** [rewrite_subterm red res t sub] rewrites all occurrences of [red] in the
       subterm of [t] at subpath [sub] into [res], shifting variables in [red]
@@ -974,24 +1026,29 @@ end = struct
     let pnode = TRewrite (red, res, tgt) in
 
     match it with
+    | `C f ->
+        let new_concl = rewrite_subterm (`E red) (`E res) (`F f) sub |> form_of_term in
+        Proof.progress proof hd pnode [new_concl]
+
     | `H (src, { h_form = f; _ }) ->
         let new_hyp = rewrite_subterm (`E red) (`E res) (`F f) sub |> form_of_term in
         let subgoal = [Some src, [new_hyp]], goal.Proof.g_goal in
         Proof.sprogress ~clear:true proof hd pnode [subgoal]
-
-    | `C f ->
-        let new_concl = rewrite_subterm (`E red) (`E res) (`F f) sub |> form_of_term in
-        let subgoal = [], new_concl in
-        Proof.sprogress ~clear:true proof hd pnode [subgoal]
     
-    | `V ((x, _), (ty, b)) ->
-        begin match b with
-        | Some b ->
-            let new_body = rewrite_subterm (`E red) (`E res) (`E b) sub |> expr_of_term in
-            let g_env = Vars.push goal.g_env (x, (ty, Some new_body)) in
-            Proof.xprogress proof hd pnode [{ goal with g_env }]
-        | None ->
+    | `V (x, (ty, b)) ->
+        begin match tgt.ctxt.kind with
+        | `Var `Head ->
             failwith "Cannot rewrite in abstract definition"
+        | `Var `Body ->
+            begin match b with
+            | Some b ->
+                let new_body = rewrite_subterm (`E red) (`E res) (`E b) sub |> expr_of_term in
+                let g_env = Vars.modify goal.g_env (x, (ty, Some new_body)) in
+                Proof.xprogress proof hd pnode [{ goal with g_env }]
+            | None ->
+                failwith "Cannot rewrite in abstract definition"
+            end
+        | _ -> assert false
         end
     
 
@@ -1119,6 +1176,27 @@ end = struct
   
   let hyperlink_of_link : link -> hyperlink =
     fun (src, dst) -> [src], [dst]
+  
+
+  (** [instantiate wit tgt targ] instantiates the quantifier at path [tgt] with
+      the expression [wit]. If the quantifier occurs in a hypothesis, the
+      hypothesis is duplicated before instantiation. *)
+
+  let instantiate (wit : expr) (tgt : ipath) : tactic =
+    fun ((proof, _) as targ) ->
+  
+    match term_of_ipath proof tgt with
+    | `F FBind (_, x, _, f) ->
+        let proof, tgt =
+          if tgt.ctxt.kind = `Hyp then
+            let proof = duplicate (Handle.ofint tgt.ctxt.handle) targ in
+            let tgt = { tgt with root = Proof.focused proof |> Handle.toint } in
+            proof, tgt
+          else
+            proof, tgt
+        in modify_subterm_at proof tgt (`F (Form.Subst.f_apply1 (x, 0) wit f))
+    | _ ->
+        raise TacticNotApplicable
   
 
   type pnode += TLink
@@ -2581,23 +2659,26 @@ end = struct
 
   
   let apply (proof : Proof.proof) ((hd, a) : action) =
+    let targ = (proof, hd) in
     match a with
     | `Intro variant ->
-        intro ~variant:(variant, None) (proof, hd)
+        intro ~variant:(variant, None) targ
     | `Elim subhd ->
-        elim subhd (proof, hd)
+        elim subhd targ
     | `DisjDrop (subhd, fl) ->
-        or_drop subhd (proof, hd) (List.map (fun x -> [Some hd, []],x) fl)
+        or_drop subhd targ (List.map (fun x -> [Some hd, []],x) fl)
     | `ConjDrop subhd ->
-        and_drop subhd (proof, hd)
+        and_drop subhd targ
     | `Forward (src, dst, p, s) ->
-        forward (src, dst, p, s) (proof, hd)
+        forward (src, dst, p, s) targ
     | `Hyperlink (lnk, actions) ->
         match lnk, actions with
         | ([src], [dst]), [`Subform substs] ->
-            dlink (src, dst) substs (proof, hd)
+            dlink (src, dst) substs targ
+        | _, [`Instantiate (wit, tgt)] ->
+            instantiate wit tgt targ
         | _, [`Rewrite (red, res, tgts)] ->
-            rewrite_in red res tgts (proof, hd)
+            rewrite_in red res tgts targ
         | _, _ :: _ :: _ -> failwith "Cannot handle multiple link actions yet"
         | _, _ -> raise TacticNotApplicable
 end

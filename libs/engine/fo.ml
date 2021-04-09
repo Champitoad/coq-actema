@@ -716,6 +716,8 @@ module Vars : sig
   val push      : env -> name * bvar -> env
   val bind      : env -> name * type_ -> name * env
   val get       : env -> vname -> bvar option
+  val modify    : env -> vname * bvar -> env
+  val remove    : env -> vname -> env
   val exists    : env -> vname -> bool
   val byid      : env -> uid -> (vname * bvar) option
   val getid     : env -> vname -> uid option
@@ -768,6 +770,14 @@ end = struct
   let get (env : env) ((name, idx) : vname) =
     let bds = Map.find_default [] name env.env_var in
     List.nth_opt bds idx
+  
+  let modify (env : env) ((x, i), b : vname * bvar) =
+    let env_var = Map.modify x (List.modify_at i (fun _ -> b)) env.env_var in
+    { env with env_var }
+  
+  let remove (env : env) ((x, i) : vname) =
+    let env_var = Map.modify x (List.remove_at i) env.env_var in
+    { env with env_var }
 
   let exists (env : env) (x : vname) =
     Option.is_some (get env x)
@@ -1251,13 +1261,13 @@ end = struct
         ts |> List.map expr_of_term |> modify_direct_subexprs e |> term_of_expr
   
 
-    let rec rewrite ?bds red res (t : term) =
-      if equal ?bds red t then
-        res
-      else
-        direct_subterms t |>
-        List.map (rewrite (shift_under t red) (shift_under t res)) |>
-        modify_direct_subterms t
+  let rec rewrite ?bds red res (t : term) =
+    if equal ?bds red t then
+      res
+    else
+      direct_subterms t |>
+      List.map (rewrite (shift_under t red) (shift_under t res)) |>
+      modify_direct_subterms t
 
 
   let rec ec_fill e = function
