@@ -70,7 +70,8 @@ module Proof : sig
   val init    : env -> form list -> form -> proof
   val closed  : proof -> bool
   val opened  : proof -> Handle.t list
-  val focused : proof -> Handle.t
+  val after   : proof -> Handle.t -> Handle.t list
+  val focused : proof -> Handle.t -> Handle.t
   val byid    : proof -> Handle.t -> pregoal
 
   type meta = < > Js_of_ocaml.Js.t
@@ -218,9 +219,12 @@ end = struct
 
   let opened (proof : proof) =
     proof.p_crts
-  
-  let focused =
-    List.hd <<| opened
+
+  let after (proof : proof) (id : Handle.t) =
+    (Map.find id proof.p_frwd).d_dst
+
+  let focused (proof : proof) (id : Handle.t) =
+    List.hd (after proof id)
 
   let byid (proof : proof) (id : Handle.t) : pregoal =
     let goal =
@@ -402,19 +406,21 @@ end = struct
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
   
+  type pnode += TId
+
   let id_tac : tactic =
-    fst
+    fun (pr, id) -> Proof.xprogress pr id TId [Proof.byid pr id]
   
   let then_tac (t1 : tactic) (t2 : tactic) : tactic =
-    fun targ ->
+    fun (_, id as targ) ->
       let pr = t1 targ in
-      let hd = Proof.focused pr in
+      let hd = Proof.focused pr id in
       t2 (pr, hd)
 
   let thenl_tac (t1 : tactic) (t2 : tactic) : tactic =
-    fun targ ->
+    fun (_, id as targ) ->
       let pr = t1 targ in
-      List.fold_left (uncurry t2) pr (Proof.opened pr)
+      List.fold_left (uncurry t2) pr (Proof.after pr id)
 
   let prune_premisses =
     let rec doit acc = function
@@ -502,8 +508,10 @@ end = struct
         Proof.progress pr id pterm []
 
     | (0, None), FBind (`Forall, x, xty, body) ->
-        let pr = add_local (x, xty, None) (pr, id) in
-        Proof.progress pr (Proof.focused pr) pterm [body]
+        (pr, id) |> then_tac
+          (add_local (x, xty, None))
+          (fun (pr, id) ->
+            Proof.progress pr id pterm [body])
 
     | (0, Some (e, ety)), FBind (`Exist, x, xty, body) -> begin
         let goal = Proof.byid pr id in
@@ -574,16 +582,15 @@ end = struct
                        `S (subs @ [[Some h, []], f])) :: !result
         | FFalse -> result := ((TElim id), `S subs) :: !result
         | FBind (`Exist, x, ty, f) ->
-            let pr = add_local (x, ty, None) (pr, id) in
-
-            let goal = Proof.(byid pr (focused pr)) in
-
-            let g_hyps = Proof.Hyps.remove goal.g_hyps h in
-            let g_hyps = Proof.(Hyps.add g_hyps h (mk_hyp f)) in
-
-            let goal = Proof.{ goal with g_hyps } in
-            
-            result := ((TElim id), `X [goal]) :: !result
+            let _ = (pr, id) |> then_tac
+              (add_local (x, ty, None))
+              (fun (pr, id) ->
+                let goal = Proof.byid pr id in
+                let g_hyps = Proof.Hyps.remove goal.g_hyps h in
+                let g_hyps = Proof.(Hyps.add g_hyps h (mk_hyp f)) in
+                let goal = Proof.{ goal with g_hyps } in
+                result := ((TElim id), `X [goal]) :: !result; pr)
+            in ()
         | _ -> ()
         end;
         let _ , goal, s = prune_premisses_ex gl.g_goal in
@@ -1187,14 +1194,14 @@ end = struct
   
     match term_of_ipath proof tgt with
     | `F FBind (_, x, _, f) ->
-        let proof, tgt =
-          if tgt.ctxt.kind = `Hyp then
-            let proof = duplicate (Handle.ofint tgt.ctxt.handle) targ in
-            let tgt = { tgt with root = Proof.focused proof |> Handle.toint } in
-            proof, tgt
-          else
-            proof, tgt
-        in modify_subterm_at proof tgt (`F (Form.Subst.f_apply1 (x, 0) wit f))
+        let first =
+          if tgt.ctxt.kind = `Hyp
+          then duplicate (Handle.ofint tgt.ctxt.handle)
+          else id_tac
+        in targ |> then_tac first
+          (fun (pr, id) ->
+            let tgt = { tgt with root = Handle.toint id } in
+            modify_subterm_at pr tgt (`F (Form.Subst.f_apply1 (x, 0) wit f)))
     | _ ->
         raise TacticNotApplicable
   
@@ -2382,13 +2389,13 @@ end = struct
     with InvalidSubFormPath _ | Invalid_argument _ -> []
   
   
-  (** [quantifier_instantiation proof (srcs, dsts)] checks if [srcs] (resp.
+  (** [instantiate_link proof (srcs, dsts)] checks if [srcs] (resp.
       [dsts]) leads to an expression, and [dsts] (resp. [srcs]) leads either to
       an instantiable quantified subformula, or the set of occurrences of an
       instantiable quantified variable. It it succeeds, it returns the
       corresponding [`Instantiate] link action. *)
 
-  let quantifier_instantiation : hlpred =
+  let instantiate_link : hlpred =
     let is_free_expr (t : term) (sub : int list) : bool =
       let lenv, subt = List.fold_left
         (fun (lenv, t) i ->
@@ -2551,8 +2558,8 @@ end = struct
 
     let hlp = hlpred_add [
       hlpred_mult (List.map hlpred_of_lpred [wf_subform_link; intuitionistic_link]);
-      quantifier_instantiation
-      (* rewrite_link *)
+      instantiate_link;
+      (* rewrite_link; *)
     ] in
     
     let dummy_path = mk_ipath 0 in
