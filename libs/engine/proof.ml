@@ -2109,6 +2109,16 @@ end = struct
       List.concat
 
 
+  (** [hlpred_if_empty p1 p2] is equivalent to [p1] at links where the
+      latter is non-empty, and [p2] elsewhere. *)
+  
+  let hlpred_if_empty : hlpred -> hlpred -> hlpred =
+    fun p1 p2 -> fun pr lnk ->
+      let actions = p1 pr lnk in
+      if not (List.is_empty actions) then actions
+      else p2 pr lnk
+  
+
   (** [search_linkactions hlp proof (src, dst)] returns all links between
       subterms of [src] and [dst] in [proof] that can interact according to
       the hyperlink predicate [hlp], together with the lists of possible link
@@ -2259,11 +2269,11 @@ end = struct
       [proof], and returns the associated substitutions if they do inside a
       [`Subform] link action.
       
-      It also checks for deep rewrite links, that is links where one side is a
-      negative equality operand, and the other side an arbitrary unifiable
-      subexpression. *)
+      If [drewrite] is set to [true], it only checks for deep rewrite links,
+      that is links where one side is a negative equality operand, and the other
+      side an arbitrary unifiable subexpression. *)
 
-  let wf_subform_link : lpred =
+  let wf_subform_link ?(drewrite = false) : lpred =
     let open Form in
     let open PreUnif in
 
@@ -2318,14 +2328,14 @@ end = struct
       
       let s = begin match st1, st2 with
         (* Subformula linking *)
-        | `F f1, `F f2 ->
+        | `F f1, `F f2 when not drewrite ->
             begin match sp1, sp2 with
             | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
                 f_unify LEnv.empty s [f1, f2]
             | _ -> None
             end
         (* Deep rewrite *)
-        | `E e1, `E e2 ->
+        | `E e1, `E e2 when drewrite ->
             let eq1, eq2 = pair_map (is_eq_operand proof) (src, dst) in
             begin match (sp1, eq1), (sp2, eq2) with
             | (Neg, true), _ | _, (Neg, true) ->
@@ -2485,7 +2495,7 @@ end = struct
     fun proof lnk ->
     
     let rewrite_data (p : ipath) =
-      if p.ctxt.handle > 0 then
+      if p.ctxt.kind = `Hyp then
         let _, it, _ = of_ipath proof p in
         match p.sub, form_of_item it with
         | [0], FPred ("_EQ", [red; res])
@@ -2503,7 +2513,9 @@ end = struct
 
       | (_, tgts), (Some (red, res), _)
       | (tgts, _), (_, Some (red, res)) ->
-          [`Rewrite (red, res, tgts)]
+          if List.exists (fun p -> p.ctxt.kind = `Var `Head) tgts
+          then []
+          else [`Rewrite (red, res, tgts)]
           
       | _ -> []
     (* Empty link end *)
@@ -2555,11 +2567,16 @@ end = struct
     
     let dstsel : selection =
       List.remove_if (fun p -> p.ctxt.handle = dnd.source.ctxt.handle) selection in
+    
+    let hlpred_only_sel (p : hlpred) : hlpred =
+      fun pr lnk -> if lnk = (srcsel, dstsel) then p pr lnk else [] in
 
     let hlp = hlpred_add [
       hlpred_mult (List.map hlpred_of_lpred [wf_subform_link; intuitionistic_link]);
+      hlpred_if_empty
+        (wf_subform_link ~drewrite:true |> hlpred_of_lpred)
+        (rewrite_link |> hlpred_only_sel);
       instantiate_link;
-      (* rewrite_link; *)
     ] in
     
     let dummy_path = mk_ipath 0 in
