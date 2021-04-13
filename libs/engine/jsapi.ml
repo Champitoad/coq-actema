@@ -397,7 +397,7 @@ object%js (_self)
   (* Return the [html] of the enclosed local variable *)  
   method html =
     let open Tyxml in
-    let open Utils.Xml in
+    let open Utils.Html in
 
     let dt =
       span [
@@ -420,21 +420,20 @@ object%js (_self)
   (* Return the [mathml] of the enclosed local variable *)  
   method mathml =
     let open Tyxml in
-    let open Utils.Xml in
+    let open Utils.Mathml in
 
     let dt =
-      span [
-        span ~a:[Xml.string_attrib "id" _self##idhead] begin
-          [span begin
-            [span
-              [Xml.pcdata (UTF8.of_latin1 (Fo.Print.e_tostring (EVar x)))]] @
-            spaced [span [Xml.pcdata ":"]] @
+      math [
+        row ~a:[Xml.string_attrib "id" _self##idhead] begin
+          [row begin
+            [mi (UTF8.of_latin1 (Fo.Print.e_tostring (EVar x)))] @
+            [mo ":"] @
             [Fo.Print.t_tomathml ty]
           end]
           @
           match b with
           | Some b ->
-              spaced [span [Xml.pcdata ":="]] @
+              [mo ":="] @
               [Fo.Print.e_tomathml ~id:(Some _self##idbody) b]
           | None -> []
         end]
@@ -480,7 +479,7 @@ and js_form (source : source) (form : Fo.form) = object%js (_self)
       if not id then None else Some _self##.prefix in
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Fo.Print.f_tomathml ~id:prefix form))
+      (Utils.Mathml.math [Fo.Print.f_tomathml ~id:prefix form]))
 
   (* Return the [html] of the formula *)  
   method htmltag (id : bool) =
@@ -510,7 +509,7 @@ and js_expr (expr : Fo.expr) = object%js (_self)
   method mathmltag =
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Fo.Print.e_tomathml expr))
+      (Utils.Mathml.math [Fo.Print.e_tomathml expr]))
 
   (* Return the [html] of the formula *)  
   method htmltag =
@@ -528,7 +527,7 @@ end
 and js_type (ty : Fo.type_) = object%js (_self)
   (* Return the raw [mathml] of the type *)
   method rawmathml =
-    Fo.Print.t_tomathml ty
+    Utils.Mathml.math [Fo.Print.t_tomathml ty]
 
   (* Return the raw [html] of the type *)
   method rawhtml =

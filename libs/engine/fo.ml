@@ -248,14 +248,7 @@ end = struct
 
   let f_tohtml, e_tohtml, t_tohtml =
     let open Tyxml in
-    let open Utils.Xml in
-    
-    let pr doit c =
-      let l = [span [Xml.pcdata "("]] in
-      let r = [span [Xml.pcdata ")"]] in
-      if doit then l @ c @ r else c in
-
-    let spaced = spaced in
+    let open Utils.Html in
 
     let rec for_type ?(is_pr = false) (ty : type_) =
       let data = match ty with
@@ -287,7 +280,7 @@ end = struct
             in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
       in
 
-      [span (pr is_pr data)]
+      [span (pr ~doit:is_pr data)]
 
     and for_expr ?(id : string option option) (p : int list) (expr : expr) =
       let for_expr = for_expr ?id in
@@ -304,7 +297,7 @@ end = struct
             let args = List.mapi (fun i e -> for_expr (i :: p) e) args in
             let aout =
                 [[span [Xml.pcdata (UTF8.of_latin1 name)]]]
-              @ [pr true (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
+              @ [pr (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
 
             in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
       in
@@ -361,7 +354,7 @@ end = struct
             let args = List.mapi (fun i e -> for_expr ?id (i :: p) e) args in
             let aout =
                 [[span [Xml.pcdata (UTF8.of_latin1 name)]]]
-              @ [pr true (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
+              @ [pr (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
 
             in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
 
@@ -390,7 +383,7 @@ end = struct
             p prefix) in
       let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
 
-      [span ~a:(List.of_option thisid) (pr is_pr data)] in
+      [span ~a:(List.of_option thisid) (pr ~doit:is_pr data)] in
 
     ((fun ?id (form : form ) -> span (for_form ?id [] form)),
      (fun ?id (expr : expr ) -> span (for_expr ?id [] expr)),
@@ -402,26 +395,19 @@ end = struct
 
   let f_tomathml, e_tomathml, t_tomathml =
     let open Tyxml in
-    
-    let span ?(a = []) = Xml.node ~a "span" in
-
-    let pr doit c =
-      if doit then Xml.node "mfenced" [c] else c in
-
-    let mn x = Xml.node "mn" [Xml.pcdata x] in
-    let mo x = Xml.node "mo" [Xml.pcdata x] in
+    let open Utils.Mathml in
 
     let rec for_type ?(is_pr = false) (ty : type_) =
       let data = match ty with
         | TUnit ->
-            [mn (UTF8.of_char (UChar.of_int 0x2022))]
+            [mo (UTF8.of_char (UChar.of_int 0x2022))]
 
         | TVar (x, 0) ->
-            [mn (UTF8.of_latin1 x)]
+            [mi (UTF8.of_latin1 x)]
 
         | TVar (x, i) ->
             let x = Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i in
-            [mn (UTF8.of_latin1 x)]
+            [mi (UTF8.of_latin1 x)]
 
         | TProd (t1, t2)
         | TOr   (t1, t2) ->
@@ -434,12 +420,12 @@ end = struct
             t1 @ [mo (UTF8.of_char tycon)] @ t2
 
         | TRec (x, t) ->
-            [mn (UTF8.of_char (UChar.of_int 0x039C));
-             mn (UTF8.of_latin1 x);
+            [mo (UTF8.of_char (UChar.of_int 0x03BC));
+             mi (UTF8.of_latin1 x);
              mo (UTF8.of_latin1 ".")] @ for_type t
       in
 
-      [pr is_pr (Xml.node "row" data)]
+      [pr ~doit:is_pr (row data)]
 
     and for_expr ?(id : string option option) (p : int list) (expr : expr) =
       let for_expr = for_expr ?id in
@@ -447,16 +433,16 @@ end = struct
       let data =
         match expr with
         | EVar (x, 0) ->
-            [mn (UTF8.of_latin1 x)]
+            [mi (UTF8.of_latin1 x)]
 
         | EVar (x, i) ->
             let x = Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i in
-            [mn (UTF8.of_latin1 x)]
+            [mi (UTF8.of_latin1 x)]
 
         | EFun (name, args) ->
             let args = List.mapi (fun i e -> for_expr (i :: p) e) args in
-                [mn (UTF8.of_latin1 name)]
-              @ [pr true (Xml.node "row" (List.flatten (List.join [mo ","] args)))]
+                [mi (UTF8.of_latin1 name)]
+              @ [pr (row (List.flatten (List.join [mo ","] args)))]
       in
 
       let thisid =
@@ -465,9 +451,9 @@ end = struct
           Option.fold
             (fun p prefix -> Format.sprintf "%s:%s" prefix p)
             p prefix) in
-      let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
+      let thisid = thisid |> Option.map (Xml.string_attrib "id") in
 
-      [Xml.node "row" ~a:(List.of_option thisid) data]
+      [row ~a:(List.of_option thisid) data]
 
     and for_form ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
       let for_form = for_form ?id in
@@ -475,10 +461,10 @@ end = struct
       let data =
         match form with
         | FTrue ->
-            [mn (UTF8.of_char (UChar.of_int 0x22A4))]
+            [mo (UTF8.of_char (UChar.of_int 0x22A4))]
 
         | FFalse ->
-            [mn (UTF8.of_char (UChar.of_int 0x22A5))]
+            [mo (UTF8.of_char (UChar.of_int 0x22A5))]
 
         | FConn (lg, fs) -> begin
             let xml_lg =
@@ -504,19 +490,19 @@ end = struct
             @ (for_expr ?id (1 :: p) e2)
 
         | FPred (name, []) ->
-            [mn (UTF8.of_latin1 name)]
+            [mi (UTF8.of_latin1 name)]
 
         | FPred (name, args) ->
             let args = List.mapi (fun i e -> for_expr ?id (i :: p) e) args in
-               [mn (UTF8.of_latin1 name)]
-             @ [pr true (Xml.node "row" (List.flatten (List.join [mo ","] args)))]
+               [mi (UTF8.of_latin1 name)]
+             @ [pr (row (List.flatten (List.join [mo ","] args)))]
 
         | FBind (bd, x, ty, f) ->
             let bd = match bd with
               | `Forall -> UTF8.of_char (UChar.chr 0x2200)
               | `Exist  -> UTF8.of_char (UChar.chr 0x2203) in
 
-            [mo bd; mn (UTF8.of_latin1 x); mo ":"]
+            [mo bd; mi (UTF8.of_latin1 x); mo ":"]
           @ (for_type ty)
           @ [mo (UTF8.of_latin1 ".")]
           @ (for_form (0 :: p) f)
@@ -531,11 +517,11 @@ end = struct
             p prefix) in
       let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
 
-      [pr is_pr (Xml.node "row" ~a:(List.of_option thisid) data)] in
+      [pr ~doit:is_pr (row ~a:(List.of_option thisid) data)] in
 
-    ((fun ?id (form : form ) -> span (for_form ?id [] form)),
-     (fun ?id (expr : expr ) -> span (for_expr ?id [] expr)),
-     (fun     (ty   : type_) -> span (for_type ty)))
+    ((fun ?id (form : form ) -> row (for_form ?id [] form)),
+     (fun ?id (expr : expr ) -> row (for_expr ?id [] expr)),
+     (fun     (ty   : type_) -> row (for_type ty)))
 
   let tomathml ?id = function
     | `E e -> e_tomathml ?id e

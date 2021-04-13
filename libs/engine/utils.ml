@@ -281,15 +281,50 @@ end
 
 (* -------------------------------------------------------------------- *)
 open Tyxml
-module Xml : sig
+module Html : sig
   val span : ?a:Xml.attrib list -> Xml.elt list -> Xml.elt
+
   val spaced : ?left:bool -> ?right:bool -> Xml.elt list -> Xml.elt list
+  val pr     : ?doit:bool -> Xml.elt list -> Xml.elt list
 end = struct
-  let span ?(a = []) = Xml.node ~a "span"
+  let span ?a = Xml.node ?a "span"
 
   let spaced ?(left = true) ?(right = true) c =
     let sp = [span [Xml.entity "nbsp"]] in
     let c = if left  then sp @ c else c in
     let c = if right then c @ sp else c in
     c
+
+  let pr ?(doit = true) c =
+    let l = [span [Xml.pcdata "("]] in
+    let r = [span [Xml.pcdata ")"]] in
+    if doit then l @ c @ r else c
+end
+
+module Mathml : sig
+  val math   : ?a:Xml.attrib list -> Xml.elt list -> Xml.elt
+  val row    : ?a:Xml.attrib list -> Xml.elt list -> Xml.elt
+
+  val mo     : string -> Xml.elt
+  val mi     : string -> Xml.elt
+  val mn     : string -> Xml.elt
+
+  val spaced : ?left:bool -> ?right:bool -> Xml.elt list -> Xml.elt list
+  val pr     : ?doit:bool -> Xml.elt -> Xml.elt
+end = struct
+  let math ?a = Xml.node ?a "math"
+  let row ?a = Xml.node ?a "mrow"
+  
+  let mo c = Xml.node "mo" [Xml.pcdata c]
+  let mi c = Xml.node "mi" [Xml.pcdata c]
+  let mn c = Xml.node "mn" [Xml.pcdata c]
+  
+  let spaced ?(left = true) ?(right = true) c =
+    let sp = [Xml.node "mo" [Xml.entity "nbsp"]] in
+    let c = if left  then sp @ c else c in
+    let c = if right then c @ sp else c in
+    c
+
+  let pr ?(doit = true) c =
+    if doit then row [mo "("; c; mo ")"] else c
 end
