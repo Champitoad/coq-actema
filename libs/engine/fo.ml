@@ -71,24 +71,46 @@ let form_of_term (t : term) =
   | _ -> raise (Invalid_argument "Expected a formula")
 
 (* -------------------------------------------------------------------- *)
-(** Printing *)
+(** Notations and Printing *)
 
-module Print : sig 
+module Notations : sig
+  type t = {
+    tostring : expr -> string;
+    tohtml   : ?id:string option -> expr -> Tyxml.Xml.elt list;
+    tomathml : ?id:string option -> expr -> Tyxml.Xml.elt list;
+  }
+
+  val in_scope : name -> t
+end = struct
+  type t = {
+    tostring : expr -> string;
+    tohtml   : ?id:string option -> expr -> Tyxml.Xml.elt list;
+    tomathml : ?id:string option -> expr -> Tyxml.Xml.elt list;
+  }
+  
+  let all : (name, t) Map.t =
+    Map.empty
+  
+  let in_scope name =
+    Map.find name all
+end
+
+module Print : sig
   val t_tostring : type_ -> string
   val t_tohtml   : type_ -> Tyxml.Xml.elt
   val t_tomathml : type_ -> Tyxml.Xml.elt
 
-  val e_tostring : expr -> string
-  val e_tohtml   : ?id:string option -> expr -> Tyxml.Xml.elt
-  val e_tomathml : ?id:string option -> expr -> Tyxml.Xml.elt
+  val e_tostring : ?scope:name -> expr -> string
+  val e_tohtml   : ?scope:name -> ?id:string option -> expr -> Tyxml.Xml.elt
+  val e_tomathml : ?scope:name -> ?id:string option -> expr -> Tyxml.Xml.elt
 
-  val f_tostring : form -> string
-  val f_tohtml   : ?id:string option -> form -> Tyxml.Xml.elt
-  val f_tomathml : ?id:string option -> form -> Tyxml.Xml.elt
+  val f_tostring : ?scope:name -> form -> string
+  val f_tohtml   : ?scope:name -> ?id:string option -> form -> Tyxml.Xml.elt
+  val f_tomathml : ?scope:name -> ?id:string option -> form -> Tyxml.Xml.elt
   
   val tostring : term -> string
-  val tohtml   : ?id:string option -> term -> Tyxml.Xml.elt
-  val tomathml : ?id:string option -> term -> Tyxml.Xml.elt
+  val tohtml   : ?scope:name -> ?id:string option -> term -> Tyxml.Xml.elt
+  val tomathml : ?scope:name -> ?id:string option -> term -> Tyxml.Xml.elt
 end = struct
   let rec prio_of_form = function
     | FTrue         -> max_int
@@ -171,8 +193,13 @@ end = struct
       | TRec (x, t) ->
           Format.sprintf "rec %s . %s" (UTF8.of_latin1 x) (for_type t)
 
-    and for_expr (expr : expr) =
-      match expr with
+    and for_expr ?scope =
+      scope |>
+      
+      Option.map_default
+        (fun s -> (Notations.in_scope s).tostring)
+
+      begin function
       | EVar (x, 0) ->
           UTF8.of_latin1 x
 
@@ -180,11 +207,11 @@ end = struct
           Format.sprintf "%s{%d}" (UTF8.of_latin1 x) i
 
       | EFun (f, args) ->
-          let args = String.concat ", " (List.map for_expr args) in
+          let args = String.concat ", " (List.map (for_expr ?scope) args) in
           (UTF8.of_latin1 f) ^ (pr true args)
+      end
 
-    and for_form (form : form) =
-      match form with
+    and for_form ?scope = function
       | FTrue ->
           UTF8.of_char (UChar.chr 0x22A4)
 
@@ -220,14 +247,14 @@ end = struct
       
       | FPred ("_EQ", [e1; e2]) ->
           Format.sprintf "%s = %s"
-            (for_expr e1)
-            (for_expr e2)
+            (for_expr ?scope e1)
+            (for_expr ?scope e2)
 
       | FPred (name, []) ->
           UTF8.of_latin1 name
 
       | FPred (name, args) ->
-          let args = List.map for_expr args in
+          let args = List.map (for_expr ?scope) args in
           let args = String.join ", " args in
           UTF8.of_latin1 name ^ (pr true args)
 
@@ -238,9 +265,7 @@ end = struct
           Format.sprintf "%s%s : %s . %s"
             (bd) (UTF8.of_latin1 x) (for_type ty) (for_form f)
 
-    in ((fun (form : form ) -> for_form form ),
-        (fun (expr : expr ) -> for_expr expr ),
-        (fun (ty   : type_) -> for_type ty   ))
+    in for_form, for_expr, for_type
 
   let tostring = function
     | `E e -> e_tostring e
@@ -282,37 +307,44 @@ end = struct
 
       [span (pr ~doit:is_pr data)]
 
-    and for_expr ?(id : string option option) (p : int list) (expr : expr) =
-      let for_expr = for_expr ?id in
+    and for_expr ?scope ?(id : string option option) (p : int list) (expr : expr) =
+      scope |>
 
-      let data =
-        match expr with
-        | EVar (x, 0) ->
-            [span [Xml.pcdata (UTF8.of_latin1 x)]]
+      Option.map_default
+        (fun s -> (Notations.in_scope s).tohtml expr)
 
-        | EVar (x, i) ->
-            [span [Xml.pcdata (Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i)]]
+      begin
+        let for_expr = for_expr ?id in
 
-        | EFun (name, args) ->
-            let args = List.mapi (fun i e -> for_expr (i :: p) e) args in
-            let aout =
-                [[span [Xml.pcdata (UTF8.of_latin1 name)]]]
-              @ [pr (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
+        let data =
+          match expr with
+          | EVar (x, 0) ->
+              [span [Xml.pcdata (UTF8.of_latin1 x)]]
 
-            in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
-      in
+          | EVar (x, i) ->
+              [span [Xml.pcdata (Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i)]]
 
-      let thisid =
-        id |> Option.map (fun prefix ->
-          let p = String.concat "/" (List.rev_map string_of_int p) in
-          Option.fold
-            (fun p prefix -> Format.sprintf "%s:%s" prefix p)
-            p prefix) in
-      let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
+          | EFun (name, args) ->
+              let args = List.mapi (fun i e -> for_expr (i :: p) e) args in
+              let aout =
+                  [[span [Xml.pcdata (UTF8.of_latin1 name)]]]
+                @ [pr (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
 
-      [span ~a:(List.of_option thisid) data]
+              in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
+        in
 
-    and for_form ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
+        let thisid =
+          id |> Option.map (fun prefix ->
+            let p = String.concat "/" (List.rev_map string_of_int p) in
+            Option.fold
+              (fun p prefix -> Format.sprintf "%s:%s" prefix p)
+              p prefix) in
+        let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
+
+        [span ~a:(List.of_option thisid) data]
+      end
+
+    and for_form ?scope ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
       let for_form = for_form ?id in
 
       let data =
@@ -343,15 +375,15 @@ end = struct
           end
 
         | FPred ("_EQ", [e1; e2]) ->
-            [span (for_expr ?id (0 :: p) e1);
+            [span (for_expr ?scope ?id (0 :: p) e1);
              span [Xml.entity "nbsp"; Xml.pcdata "="; Xml.entity "nbsp"];
-             span (for_expr ?id (1 :: p) e2)]
+             span (for_expr ?scope ?id (1 :: p) e2)]
 
         | FPred (name, []) ->
             [span [Xml.pcdata (UTF8.of_latin1 name)]]
 
         | FPred (name, args) ->
-            let args = List.mapi (fun i e -> for_expr ?id (i :: p) e) args in
+            let args = List.mapi (fun i e -> for_expr ?scope ?id (i :: p) e) args in
             let aout =
                 [[span [Xml.pcdata (UTF8.of_latin1 name)]]]
               @ [pr (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
@@ -385,13 +417,13 @@ end = struct
 
       [span ~a:(List.of_option thisid) (pr ~doit:is_pr data)] in
 
-    ((fun ?id (form : form ) -> span (for_form ?id [] form)),
-     (fun ?id (expr : expr ) -> span (for_expr ?id [] expr)),
-     (fun     (ty   : type_) -> span (for_type ty)))
+    ((fun ?scope ?id (form : form ) -> span (for_form ?scope ?id [] form)),
+     (fun ?scope ?id (expr : expr ) -> span (for_expr ?scope ?id [] expr)),
+     (fun (ty : type_) -> span (for_type ty)))
 
-  let tohtml ?id = function
-    | `E e -> e_tohtml ?id e
-    | `F f -> f_tohtml ?id f
+  let tohtml ?scope ?id = function
+    | `E e -> e_tohtml ?scope ?id e
+    | `F f -> f_tohtml ?scope ?id f
 
   let f_tomathml, e_tomathml, t_tomathml =
     let open Tyxml in
@@ -427,35 +459,42 @@ end = struct
 
       [pr ~doit:is_pr (row data)]
 
-    and for_expr ?(id : string option option) (p : int list) (expr : expr) =
-      let for_expr = for_expr ?id in
+    and for_expr ?scope ?(id : string option option) (p : int list) (expr : expr) =
+      scope |>
+      
+      Option.map_default
+        (fun s -> (Notations.in_scope s).tomathml expr)
+      
+      begin
+        let for_expr = for_expr ?id in
 
-      let data =
-        match expr with
-        | EVar (x, 0) ->
-            [mi (UTF8.of_latin1 x)]
+        let data =
+          match expr with
+          | EVar (x, 0) ->
+              [mi (UTF8.of_latin1 x)]
 
-        | EVar (x, i) ->
-            let x = Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i in
-            [mi (UTF8.of_latin1 x)]
+          | EVar (x, i) ->
+              let x = Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i in
+              [mi (UTF8.of_latin1 x)]
 
-        | EFun (name, args) ->
-            let args = List.mapi (fun i e -> for_expr (i :: p) e) args in
-                [mi (UTF8.of_latin1 name)]
-              @ [pr (row (List.flatten (List.join [mo ","] args)))]
-      in
+          | EFun (name, args) ->
+              let args = List.mapi (fun i e -> for_expr (i :: p) e) args in
+                  [mi (UTF8.of_latin1 name)]
+                @ [pr (row (List.flatten (List.join [mo ","] args)))]
+        in
 
-      let thisid =
-        id |> Option.map (fun prefix ->
-          let p = String.concat "/" (List.rev_map string_of_int p) in
-          Option.fold
-            (fun p prefix -> Format.sprintf "%s:%s" prefix p)
-            p prefix) in
-      let thisid = thisid |> Option.map (Xml.string_attrib "id") in
+        let thisid =
+          id |> Option.map (fun prefix ->
+            let p = String.concat "/" (List.rev_map string_of_int p) in
+            Option.fold
+              (fun p prefix -> Format.sprintf "%s:%s" prefix p)
+              p prefix) in
+        let thisid = thisid |> Option.map (Xml.string_attrib "id") in
 
-      [row ~a:(List.of_option thisid) data]
+        [row ~a:(List.of_option thisid) data]
+      end
 
-    and for_form ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
+    and for_form ?scope ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
       let for_form = for_form ?id in
 
       let data =
@@ -485,15 +524,15 @@ end = struct
           end
 
         | FPred ("_EQ", [e1; e2]) ->
-              (for_expr ?id (0 :: p) e1)
+              (for_expr ?scope ?id (0 :: p) e1)
             @ [mo (UTF8.of_latin1 "=")]
-            @ (for_expr ?id (1 :: p) e2)
+            @ (for_expr ?scope ?id (1 :: p) e2)
 
         | FPred (name, []) ->
             [mi (UTF8.of_latin1 name)]
 
         | FPred (name, args) ->
-            let args = List.mapi (fun i e -> for_expr ?id (i :: p) e) args in
+            let args = List.mapi (fun i e -> for_expr ?scope ?id (i :: p) e) args in
                [mi (UTF8.of_latin1 name)]
              @ [pr (row (List.flatten (List.join [mo ","] args)))]
 
@@ -519,13 +558,13 @@ end = struct
 
       [pr ~doit:is_pr (row ~a:(List.of_option thisid) data)] in
 
-    ((fun ?id (form : form ) -> row (for_form ?id [] form)),
-     (fun ?id (expr : expr ) -> row (for_expr ?id [] expr)),
-     (fun     (ty   : type_) -> row (for_type ty)))
+    ((fun ?scope ?id (form : form ) -> row (for_form ?scope ?id [] form)),
+     (fun ?scope ?id (expr : expr ) -> row (for_expr ?scope ?id [] expr)),
+     (fun (ty : type_) -> row (for_type ty)))
 
-  let tomathml ?id = function
-    | `E e -> e_tomathml ?id e
-    | `F f -> f_tomathml ?id f
+  let tomathml ?scope ?id = function
+    | `E e -> e_tomathml ?scope ?id e
+    | `F f -> f_tomathml ?scope ?id f
 end
 
 (* -------------------------------------------------------------------- *)
@@ -572,22 +611,22 @@ type 'a eqns = ('a * 'a) list
 (** Environments *)
 
 type env = {
-  env_prp     : (name, arity     ) Map.t;
-  env_fun     : (name, sig_      ) Map.t;
-  env_var     : (name, bvar  list) Map.t;
-  env_evar    : (name, type_ list) Map.t;
-  env_tvar    : (name, int       ) Map.t;
-  env_handles : (vname, uid      ) BiMap.t;
+  env_prp     : (name, arity            ) Map.t;
+  env_fun     : (name, sig_             ) Map.t;
+  env_var     : (name, bvar  list       ) Map.t;
+  env_evar    : (name, type_ list       ) Map.t;
+  env_tvar    : (name, type_ option list) Map.t;
+  env_handles : (vname, uid             ) BiMap.t;
 }
 
 and bvar = type_ * expr option
 
 (* -------------------------------------------------------------------- *)
 module Env : sig
-  val empty      : env
+  val empty : env
 end = struct
   let empty : env = {
-    env_prp     = Map.empty |> Map.add "_EQ" [TUnit; TUnit];
+    env_prp     = Map.empty;
     env_fun     = Map.empty;
     env_var     = Map.empty;
     env_evar    = Map.empty;
@@ -846,17 +885,19 @@ end
 
 (* -------------------------------------------------------------------- *)
 module TVars : sig
-  val push   : env -> name -> env
+  val push   : env -> name * type_ option -> env
   val exists : env -> vname -> bool
-  val all    : env -> (name, int) Map.t
+  val all    : env -> (name, type_ option list) Map.t
 end = struct
-  let push (env : env) (name : name) =
+  let push (env : env) ((name, body) : name * type_ option) =
     { env with env_tvar =
-        Map.modify_opt name
-          (fun i -> Some (Option.default 0 i + 1)) env.env_tvar; }
+        Map.modify_opt name (fun bds ->
+          let v = body :: Option.default [] bds in
+          Some v) env.env_tvar }
 
   let exists (env : env) ((name, idx) : vname) =
-    Map.find_default 0 name env.env_tvar > idx
+    let bds = Map.find_default [] name env.env_tvar in
+    Option.is_some (List.nth_opt bds idx)
 
   let all (env : env) =
     env.env_tvar
@@ -1403,7 +1444,27 @@ end = struct
         List.iter (trecheck env) [ty1; ty2]
 
     | TRec (x, ty) ->
-        trecheck (TVars.push env x) ty
+        trecheck (TVars.push env (x, None)) ty
+
+  let rec einfer (env : env) (e : expr) : type_ =
+    match e with
+    | EVar x -> begin
+        match Vars.get env x with
+        | None          -> raise TypingError
+        | Some (xty, _) -> xty
+      end
+
+    | EFun (f, args) -> begin
+        match Funs.get env f with
+        | None -> raise TypingError
+        | Some (fargs, fres) ->
+            if List.length fargs <> List.length args then
+              raise TypingError;
+            let args = List.map (einfer env) args in
+            if not (List.for_all2 t_equal fargs args) then
+              raise TypingError;
+            fres
+      end
 
   let rec erecheck (env : env) (ty : type_) (expr : expr) : unit =
     match expr with
@@ -1422,6 +1483,10 @@ end = struct
   let rec recheck (env : env) (form : form) : unit =
     match form with
     | FTrue | FFalse -> ()
+    
+    | FPred (name, [e1; e2]) when name = "_EQ" ->
+        let t1, t2 = pair_map (einfer env) (e1, e2) in
+        if not (t_equal t1 t2) then raise RecheckFailure
 
     | FPred (name, args) -> begin
         let sig_ = Option.get_exn (Prps.get env name) RecheckFailure in
@@ -1446,32 +1511,12 @@ end = struct
     | PTProd (t1, t2) -> TProd (tcheck env t1, tcheck env t2)
 
     | PTRec (x, t) ->
-        TRec (unloc x, tcheck (TVars.push env (unloc x)) t)
+        TRec (unloc x, tcheck (TVars.push env (unloc x, None)) t)
 
     | PTVar x ->
         if not (TVars.exists env (unloc x, 0)) then
           raise TypingError;
         TVar (unloc x, 0)
-  
-  let rec einfer (env : env) (e : expr) : type_ =
-    match e with
-    | EVar x -> begin
-        match Vars.get env x with
-        | None          -> raise TypingError
-        | Some (xty, _) -> xty
-      end
-
-    | EFun (f, args) -> begin
-        match Funs.get env f with
-        | None -> raise TypingError
-        | Some (fargs, fres) ->
-            if List.length fargs <> List.length args then
-              raise TypingError;
-            let args = List.map (einfer env) args in
-            if not (List.for_all2 t_equal fargs args) then
-              raise TypingError;
-            fres
-      end
 
   let echeck (env : env) (e : pexpr) =
     let e = e_unloc e in
@@ -1489,6 +1534,11 @@ end = struct
     | PFImp   (f1, f2) -> pred `Imp   [f1; f2]
     | PFEquiv (f1, f2) -> pred `Equiv [f1; f2]
     | PFNot   f1       -> pred `Not   [f1]
+    
+    | PFApp (name, [e1; e2]) when unloc name = "_EQ" ->
+        let (e1, t1), (e2, t2) = pair_map (echeck env) (e1, e2) in
+        if not (t_equal t1 t2) then raise TypingError
+        else FPred ("_EQ", [e1; e2])
 
     | PFApp (name, args) -> begin
         match Prps.get env (unloc name) with

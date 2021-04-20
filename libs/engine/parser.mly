@@ -113,7 +113,7 @@ unparens_expr_r:
 | x=ident LBRACE i=NAT RBRACE
     { PEVar (x, i) }
 
-| f=ident args=parens(plist1(expr, COMMA))
+| f=ident args=parens(plist0(expr, COMMA))
     { PEApp (f, args) }
 
 expr_r:
