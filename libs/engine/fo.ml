@@ -886,6 +886,7 @@ end
 (* -------------------------------------------------------------------- *)
 module TVars : sig
   val push   : env -> name * type_ option -> env
+  val get    : env -> vname -> type_ option
   val exists : env -> vname -> bool
   val all    : env -> (name, type_ option list) Map.t
 end = struct
@@ -895,9 +896,12 @@ end = struct
           let v = body :: Option.default [] bds in
           Some v) env.env_tvar }
 
-  let exists (env : env) ((name, idx) : vname) =
+  let get (env : env) ((name, idx) : vname) =
     let bds = Map.find_default [] name env.env_tvar in
-    Option.is_some (List.nth_opt bds idx)
+    List.nth_opt bds idx |> Monad.Option.concat
+  
+  let exists (env : env) (x : vname) =
+    get env x |> Option.is_some
 
   let all (env : env) =
     env.env_tvar
@@ -1012,10 +1016,10 @@ module Form : sig
   val check    : env -> pform -> form
   val recheck  : env -> form -> unit
 
-  val t_equal : ?bds:VName.bds -> type_ -> type_ -> bool
+  val t_equal : ?bds:VName.bds -> env -> type_ -> type_ -> bool
   val e_equal : ?bds:VName.bds -> expr  -> expr  -> bool
-  val f_equal : ?bds:VName.bds -> form  -> form  -> bool
-  val equal   : ?bds:VName.bds -> term -> term -> bool
+  val f_equal : ?bds:VName.bds -> env -> form  -> form  -> bool
+  val equal   : ?bds:VName.bds -> env -> term -> term -> bool
 
   val e_vars      : expr -> vname list
   val free_vars   : form -> name list
@@ -1032,7 +1036,7 @@ module Form : sig
   val modify_direct_subforms : form -> form list -> form
   val modify_direct_subterms : term -> term list -> term
   
-  val rewrite : ?bds:VName.bds -> term -> term -> term -> term
+  val rewrite : ?bds:VName.bds -> env -> term -> term -> term -> term
 
   val ec_fill   : expr -> ectx -> expr
   val ec_concat : ectx -> ectx -> ectx
@@ -1131,26 +1135,40 @@ end = struct
 
 
   let t_equal =
-    let rec aux bds ty1 ty2 =
+    let rec eq_alias (bds : VName.bds) (env : env)
+      (a : vname) (ty : type_) : bool =
+        
+      match ty with
+      | TVar b ->
+          if VName.equal bds a b then true
+          else eq_alias bds env b (TVar a)
+      
+      | _ ->
+          begin match TVars.get env a with
+          | None -> false
+          | Some ty' -> eq bds env ty ty'
+          end
+
+    and eq bds env ty1 ty2 =
       match ty1, ty2 with
-      | TVar a1, TVar a2 ->
-          VName.equal bds a1 a2
+      | TVar a, ty | ty, TVar a ->
+          eq_alias bds env a ty
 
       | TUnit, TUnit ->
           true
         
       | TProd (tya1, tyb1), TProd (tya2, tyb2)
       | TOr   (tya1, tyb1), TOr   (tya2, tyb2) ->
-             aux bds tya1 tya2
-          && aux bds tyb1 tyb2
+             eq bds env tya1 tya2
+          && eq bds env tyb1 tyb2
 
       | TRec (a1, ty1), TRec (a2, ty2) ->
-          aux (VName.Map.push bds a1 a2) ty1 ty2
+          eq (VName.Map.push bds a1 a2) env ty1 ty2
 
       | _, _ ->
           false
 
-    in fun ?(bds = VName.Map.empty) ty1 ty2 -> aux bds ty1 ty2
+    in fun ?(bds = VName.Map.empty) env ty1 ty2 -> eq bds env ty1 ty2
 
   let e_equal =
     let rec aux bds e1 e2 =
@@ -1165,7 +1183,7 @@ end = struct
     fun ?(bds = VName.Map.empty) e1 e2 -> aux bds e1 e2
 
   let f_equal =
-    let rec aux bds f1 f2 =
+    let rec aux bds env f1 f2 =
       match f1, f2 with
       | FTrue , FTrue
       | FFalse, FFalse -> true
@@ -1176,21 +1194,21 @@ end = struct
 
       | FConn (c1, fs1), FConn (c2, fs2)
         when List.length fs1 = List.length fs2 
-        -> (c1 = c2) && List.for_all2 (aux bds) fs1 fs2
+        -> (c1 = c2) && List.for_all2 (aux bds env) fs1 fs2
 
       | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
         when b1 = b2 ->
-            t_equal ty1 ty2
-         && aux (VName.Map.push bds x1 x2) f1 f2
+            t_equal env ty1 ty2
+         && aux (VName.Map.push bds x1 x2) env f1 f2
 
       | _, _ ->
           false
 
     in fun ?(bds = VName.Map.empty) f1 f2 -> aux bds f1 f2
     
-  let equal ?bds (t1 : term) (t2 : term) : bool =
+  let equal ?bds (env : env) (t1 : term) (t2 : term) : bool =
     match t1, t2 with
-    | `F f1, `F f2 -> f_equal ?bds f1 f2
+    | `F f1, `F f2 -> f_equal ?bds env f1 f2
     | `E e1, `E e2 -> e_equal ?bds e1 e2
     | _ -> false
     
@@ -1288,12 +1306,12 @@ end = struct
         ts |> List.map expr_of_term |> modify_direct_subexprs e |> term_of_expr
   
 
-  let rec rewrite ?bds red res (t : term) =
-    if equal ?bds red t then
+  let rec rewrite ?bds env red res (t : term) =
+    if equal ?bds env red t then
       res
     else
       direct_subterms t |>
-      List.map (rewrite (shift_under t red) (shift_under t res)) |>
+      List.map (rewrite env (shift_under t red) (shift_under t res)) |>
       modify_direct_subterms t
 
 
@@ -1461,7 +1479,7 @@ end = struct
             if List.length fargs <> List.length args then
               raise TypingError;
             let args = List.map (einfer env) args in
-            if not (List.for_all2 t_equal fargs args) then
+            if not (List.for_all2 (t_equal env) fargs args) then
               raise TypingError;
             fres
       end
@@ -1470,11 +1488,11 @@ end = struct
     match expr with
     | EVar x ->
         let xty, _ = Option.get_exn (Vars.get env x) RecheckFailure in
-        if not (t_equal ty xty) then raise RecheckFailure
+        if not (t_equal env ty xty) then raise RecheckFailure
 
     | EFun (f, args) ->
         let sig_, res = Option.get_exn (Funs.get env f) RecheckFailure in
-        if not (t_equal ty res) then
+        if not (t_equal env ty res) then
           raise RecheckFailure;
         if List.length sig_ <> List.length args then
           raise RecheckFailure;
@@ -1486,7 +1504,7 @@ end = struct
     
     | FPred (name, [e1; e2]) when name = "_EQ" ->
         let t1, t2 = pair_map (einfer env) (e1, e2) in
-        if not (t_equal t1 t2) then raise RecheckFailure
+        if not (t_equal env t1 t2) then raise RecheckFailure
 
     | FPred (name, args) -> begin
         let sig_ = Option.get_exn (Prps.get env name) RecheckFailure in
@@ -1537,7 +1555,7 @@ end = struct
     
     | PFApp (name, [e1; e2]) when unloc name = "_EQ" ->
         let (e1, t1), (e2, t2) = pair_map (echeck env) (e1, e2) in
-        if not (t_equal t1 t2) then raise TypingError
+        if not (t_equal env t1 t2) then raise TypingError
         else FPred ("_EQ", [e1; e2])
 
     | PFApp (name, args) -> begin
@@ -1547,7 +1565,7 @@ end = struct
             if List.length args <> List.length ar then
               raise TypingError;
             let args = List.map (echeck env) args in
-            if not (List.for_all2 t_equal ar (List.snd args)) then
+            if not (List.for_all2 (t_equal env) ar (List.snd args)) then
               raise TypingError;
             FPred (unloc name, List.fst args)
       end

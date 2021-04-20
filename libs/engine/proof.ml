@@ -449,10 +449,10 @@ end = struct
 
     (pre, hy, Form.Subst.oflist s)
 	
-  let rec remove_form f = function
+  let rec remove_form env f = function
       | [] -> raise TacticNotApplicable
-      | g::l when Form.f_equal g f -> l
-      | g::l -> g::(remove_form f l)
+      | g::l when Form.f_equal env g f -> l
+      | g::l -> g::(remove_form env f l)
   
   
   type pnode += TDef of (Fo.type_ * Fo.expr option) * Handle.t
@@ -517,7 +517,7 @@ end = struct
         let goal = Proof.byid pr id in
 
         Fo.Form.erecheck goal.g_env ety e;
-        if not (Form.t_equal xty ety) then
+        if not (Form.t_equal goal.g_env xty ety) then
           raise TacticNotApplicable;
         let goal = Fo.Form.Subst.f_apply1 (x, 0) e body in
         Proof.sprogress pr id pterm [[], goal]
@@ -539,7 +539,7 @@ end = struct
     let gl  = Proof.byid pr id in
     let hy  = (Proof.Hyps.byid gl.g_hyps h).h_form in
     let gll = Form.flatten_conjunctions gl.g_goal in
-    let ng  = Form.f_ands (remove_form hy gll) in
+    let ng  = Form.f_ands (remove_form gl.g_env hy gll) in
 
     Proof.sprogress pr id (AndDrop id) [[None, []], ng]
 
@@ -552,7 +552,7 @@ end = struct
     let hyp = (Proof.Hyps.byid gl.g_hyps h).h_form in
 
     begin
-      if Form.f_equal hyp gl.g_goal
+      if Form.f_equal gl.g_env hyp gl.g_goal
       then result := [(TElim id), `S []]
       else
         let pre, hy, s = prune_premisses_fa hyp in
@@ -1002,16 +1002,16 @@ end = struct
     && List.is_prefix sp.sub p.sub
   
 
-  (** [rewrite_subterm red res t sub] rewrites all occurrences of [red] in the
-      subterm of [t] at subpath [sub] into [res], shifting variables in [red]
-      and [res] whenever a binder is encountered along the path. *)
+  (** [rewrite_subterm env red res t sub] rewrites all occurrences of [red] in
+      the subterm of [t] at subpath [sub] into [res], shifting variables in
+      [red] and [res] whenever a binder is encountered along the path. *)
   
-  let rec rewrite_subterm red res (t : term) =
+  let rec rewrite_subterm env red res (t : term) =
     let open Form in function
-    | [] -> rewrite red res t
+    | [] -> rewrite env red res t
     | i :: sub ->
         let u = direct_subterm t i in
-        let u = rewrite_subterm (shift_under t red) (shift_under t res) u sub in
+        let u = rewrite_subterm env (shift_under t red) (shift_under t res) u sub in
         modify_direct_subterm t u i
 
 
@@ -1034,11 +1034,11 @@ end = struct
 
     match it with
     | `C f ->
-        let new_concl = rewrite_subterm (`E red) (`E res) (`F f) sub |> form_of_term in
+        let new_concl = rewrite_subterm goal.g_env (`E red) (`E res) (`F f) sub |> form_of_term in
         Proof.progress proof hd pnode [new_concl]
 
     | `H (src, { h_form = f; _ }) ->
-        let new_hyp = rewrite_subterm (`E red) (`E res) (`F f) sub |> form_of_term in
+        let new_hyp = rewrite_subterm goal.g_env (`E red) (`E res) (`F f) sub |> form_of_term in
         let subgoal = [Some src, [new_hyp]], goal.Proof.g_goal in
         Proof.sprogress ~clear:true proof hd pnode [subgoal]
     
@@ -1049,7 +1049,7 @@ end = struct
         | `Var `Body ->
             begin match b with
             | Some b ->
-                let new_body = rewrite_subterm (`E red) (`E res) (`E b) sub |> expr_of_term in
+                let new_body = rewrite_subterm goal.g_env (`E red) (`E res) (`E b) sub |> expr_of_term in
                 let g_env = Vars.modify goal.g_env (x, (ty, Some new_body)) in
                 Proof.xprogress proof hd pnode [{ goal with g_env }]
             | None ->
@@ -1633,7 +1633,7 @@ end = struct
         let f : form = begin match l, r with
 
           (* Bid *)
-          | _ when f_equal l r -> f_true
+          | _ when f_equal goal.g_env l r -> f_true
           | FPred (c1, ts1), FPred (c2, ts2) when c1 = c2 ->
             List.fold_left2
               (fun f t1 t2 -> f_and f (FPred ("_EQ", [t1; t2])))
@@ -1653,7 +1653,7 @@ end = struct
           | 1 -> e2, e1
           | _ -> assert false
         end in
-        let f = rewrite_subterm (`E red) (`E res) (`F r) rsub |> form_of_term in
+        let f = rewrite_subterm goal.g_env (`E red) (`E res) (`F r) rsub |> form_of_term in
         fc_fill f (fc_rev ctx)
       
       (** Commuting rules *)
@@ -1816,7 +1816,7 @@ end = struct
 
         let f = begin match l, r with
           (* Fid *)
-          | _ when f_equal l r -> l
+          | _ when f_equal goal.g_env l r -> l
 
           (* Frel *)
           | _ -> f_and l r
@@ -1832,7 +1832,7 @@ end = struct
           | 1 -> e2, e1
           | _ -> assert false
         end in
-        let f = rewrite_subterm (`E red) (`E res) (`F r) rsub |> form_of_term in
+        let f = rewrite_subterm goal.g_env (`E red) (`E res) (`F r) rsub |> form_of_term in
         fc_fill f (fc_rev ctx)
 
       (** Commuting rules *)
@@ -2449,7 +2449,7 @@ end = struct
            the right polarity as well as the same type as the witness *)
         match pol, f with
         | Neg, `F FBind (`Forall, _, ty, _)
-        | Pos, `F FBind (`Exist, _, ty, _) when Form.t_equal ty ty_wit ->
+        | Pos, `F FBind (`Exist, _, ty, _) when Form.t_equal goal.g_env ty ty_wit ->
             [`Instantiate (wit, p_form)]
 
         | _ -> []
