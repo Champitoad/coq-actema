@@ -369,7 +369,7 @@ object%js (_self)
   val position = i
 
   (* the local variable name *)
-  val name = Js.string (Fo.Print.e_tostring (EVar x))
+  val name = Js.string (Fo.Notation.e_tostring (EVar x))
 
   (* the local variable type as a [js_type] *)
   val type_ = js_type ty
@@ -404,15 +404,15 @@ object%js (_self)
         span ~a:[Xml.string_attrib "id" _self##idhead] begin
           [span begin
             [span
-              [Xml.pcdata (UTF8.of_latin1 (Fo.Print.e_tostring (EVar x)))]] @
+              [Xml.pcdata (UTF8.of_latin1 (Fo.Notation.e_tostring (EVar x)))]] @
             spaced [span [Xml.pcdata ":"]] @
-            [Fo.Print.t_tohtml ty]
+            [Fo.Notation.t_tohtml ty]
           end]
           @
           match b with
           | Some b ->
               spaced [span [Xml.pcdata ":="]] @
-              [Fo.Print.e_tohtml ~id:(Some _self##idbody) b]
+              [Fo.Notation.e_tohtml ~id:(Some _self##idbody) b]
           | None -> []
         end]
     in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
@@ -426,15 +426,15 @@ object%js (_self)
       math [
         row ~a:[Xml.string_attrib "id" _self##idhead] begin
           [row begin
-            [mi (UTF8.of_latin1 (Fo.Print.e_tostring (EVar x)))] @
+            [mi (UTF8.of_latin1 (Fo.Notation.e_tostring (EVar x)))] @
             [mo ":"] @
-            [Fo.Print.t_tomathml ty]
+            [Fo.Notation.t_tomathml ty]
           end]
           @
           match b with
           | Some b ->
               [mo ":="] @
-              [Fo.Print.e_tomathml ~id:(Some _self##idbody) b]
+              [Fo.Notation.e_tomathml ~id:(Some _self##idbody) b]
           | None -> []
         end]
     in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
@@ -444,10 +444,10 @@ object%js (_self)
     match b with
     | Some b ->
         Js.string (Format.sprintf "%s : %s := %s"
-          (Fo.Print.e_tostring (EVar x)) (Fo.Print.t_tostring ty) (Fo.Print.e_tostring b))
+          (Fo.Notation.e_tostring (EVar x)) (Fo.Notation.t_tostring ty) (Fo.Notation.e_tostring b))
     | None ->
         Js.string (Format.sprintf "%s : %s"
-          (Fo.Print.e_tostring (EVar x)) (Fo.Print.t_tostring ty))
+          (Fo.Notation.e_tostring (EVar x)) (Fo.Notation.t_tostring ty))
 
   method getmeta =
     Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
@@ -479,7 +479,7 @@ and js_form (source : source) (form : Fo.form) = object%js (_self)
       if not id then None else Some _self##.prefix in
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Utils.Mathml.math [Fo.Print.f_tomathml ~id:prefix form]))
+      (Utils.Mathml.math [Fo.Notation.f_tomathml ~id:prefix form]))
 
   (* Return the [html] of the formula *)  
   method htmltag (id : bool) =
@@ -487,11 +487,11 @@ and js_form (source : source) (form : Fo.form) = object%js (_self)
       if not id then None else Some _self##.prefix in
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Fo.Print.f_tohtml ~id:prefix form))
+      (Fo.Notation.f_tohtml ~id:prefix form))
 
   (* Return an UTF8 string representation of the formula *)
   method tostring =
-    Js.string (Fo.Print.f_tostring form)
+    Js.string (Fo.Notation.f_tostring form)
 end
 
 (* -------------------------------------------------------------------- *)
@@ -509,17 +509,17 @@ and js_expr (expr : Fo.expr) = object%js (_self)
   method mathmltag =
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Utils.Mathml.math [Fo.Print.e_tomathml expr]))
+      (Utils.Mathml.math [Fo.Notation.e_tomathml expr]))
 
   (* Return the [html] of the formula *)  
   method htmltag =
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Fo.Print.e_tohtml expr))
+      (Fo.Notation.e_tohtml expr))
 
   (* Return an UTF8 string representation of the expression *)
   method tostring =
-    Js.string (Fo.Print.e_tostring expr)
+    Js.string (Fo.Notation.e_tostring expr)
 end
 
 (* -------------------------------------------------------------------- *)
@@ -527,15 +527,15 @@ end
 and js_type (ty : Fo.type_) = object%js (_self)
   (* Return the raw [mathml] of the type *)
   method rawmathml =
-    Utils.Mathml.math [Fo.Print.t_tomathml ty]
+    Utils.Mathml.math [Fo.Notation.t_tomathml ty]
 
   (* Return the raw [html] of the type *)
   method rawhtml =
-    Fo.Print.t_tohtml ty
+    Fo.Notation.t_tohtml ty
 
   (* Return the raw string representation of the type *)
   method rawstring =
-    Fo.Print.t_tostring ty
+    Fo.Notation.t_tostring ty
 
   (* Return the [mathml] of the type *)  
   method mathml =

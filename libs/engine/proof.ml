@@ -1541,7 +1541,7 @@ end = struct
   let print_linkage (mode : [`Backward | `Forward]) ((l, _), (r, _)) =
     let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
     Printf.sprintf "%s %s %s"
-      (Print.f_tostring l) op (Print.f_tostring r)
+      (Notation.f_tostring l) op (Notation.f_tostring r)
 
   
   (** [dlink] stands for _d_eep linking, and implements the deep interaction phase
@@ -1983,7 +1983,7 @@ end = struct
       | `Rewrite (red, res, tgts) ->
           Printf.sprintf "%s[%s ~> %s]"
             (List.to_string ~sep:", " ~left:"{" ~right:"}"
-              (fun p -> let _, _, (_, t) = of_ipath proof p in Print.tostring t)
+              (fun p -> let _, _, (_, t) = of_ipath proof p in Notation.tostring t)
              tgts)
             red res
     in doit

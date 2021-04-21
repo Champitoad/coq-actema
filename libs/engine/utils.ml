@@ -280,6 +280,19 @@ end = struct
 end
 
 (* -------------------------------------------------------------------- *)
+
+module Text : sig
+  val spaced : ?left:bool -> ?right:bool -> string -> string
+  val pr     : ?doit:bool -> string -> string
+end = struct
+  let pr ?(doit = true) c =
+    if doit then Format.sprintf "(%s)" c else c
+
+  let spaced ?(left = true) ?(right = true) c =
+    Format.sprintf "%s%s%s"
+      (if left then " " else "") c (if right then " " else "")
+end
+
 open Tyxml
 module Html : sig
   val span : ?a:Xml.attrib list -> Xml.elt list -> Xml.elt
