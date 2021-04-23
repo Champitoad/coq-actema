@@ -50,6 +50,9 @@ type pvar =
   | PProp of psymbol * parity
   | PFun  of psymbol * psignature
   | PVar  of psymbol * ptype
+  | PExpr of psymbol * pexpr
+  | PTVar of psymbol
+  | PType of psymbol * ptype
 
 type pgoal = pvar list * pform list * pform
 

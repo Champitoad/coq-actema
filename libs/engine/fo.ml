@@ -117,8 +117,8 @@ type env = {
   env_prp     : (name, arity            ) Map.t;
   env_fun     : (name, sig_             ) Map.t;
   env_var     : (name, bvar  list       ) Map.t;
-  env_evar    : (name, type_ list       ) Map.t;
   env_tvar    : (name, type_ option list) Map.t;
+  env_evar    : (name, type_ list       ) Map.t;
   env_handles : (vname, uid             ) BiMap.t;
 }
 
@@ -132,8 +132,8 @@ end = struct
     env_prp     = Map.empty;
     env_fun     = Map.empty;
     env_var     = Map.empty;
-    env_evar    = Map.empty;
     env_tvar    = Map.empty;
+    env_evar    = Map.empty;
     env_handles = BiMap.empty;
   }
 end
@@ -241,7 +241,7 @@ end
 (* -------------------------------------------------------------------- *)
 module TVars : sig
   val push   : env -> name * type_ option -> env
-  val get    : env -> vname -> type_ option
+  val get    : env -> vname -> type_ option option
   val exists : env -> vname -> bool
   val all    : env -> (name, type_ option list) Map.t
 end = struct
@@ -253,7 +253,7 @@ end = struct
 
   let get (env : env) ((name, idx) : vname) =
     let bds = Map.find_default [] name env.env_tvar in
-    List.nth_opt bds idx |> Monad.Option.concat
+    List.nth_opt bds idx
   
   let exists (env : env) (x : vname) =
     get env x |> Option.is_some
@@ -851,19 +851,6 @@ end = struct
 end
 
 (* -------------------------------------------------------------------- *)
-type entry =
-  | EPVar of (name * arity)
-  | ETFun of (name * sig_)
-  | ETVar of (name * bvar)
-
-let env_of_entries (entries : entry list) =
-  List.fold_left (fun env entry ->
-    match entry with
-    | EPVar nmty -> Prps.push env nmty
-    | ETFun nmty -> Funs.push env nmty
-    | ETVar nmty -> Vars.push env nmty) Env.empty entries
-
-(* -------------------------------------------------------------------- *)
 exception RecheckFailure
 exception TypingError
 
@@ -1088,8 +1075,8 @@ end = struct
       
       | _ ->
           begin match TVars.get env a with
-          | None -> false
-          | Some ty' -> eq bds env ty ty'
+          | None | Some None -> false
+          | Some Some ty' -> eq bds env ty ty'
           end
 
     and eq bds env ty1 ty2 =
@@ -1761,19 +1748,46 @@ end
 
 (* -------------------------------------------------------------------- *)
 module Goal : sig
+  type entry
+
+  val check_entry : env -> pvar -> entry
+  val env_of_entries : pvar list -> env
   val check : pgoal -> env * form list * form
 end = struct
+  type entry =
+    | EPVar  of (name * arity)
+    | ETFun  of (name * sig_)
+    | ETVar  of (name * bvar)
+    | ETTVar of (name * type_ option)
+    
+  let check_entry env =
+    let for_type = Form.tcheck env in
+    let for_expr = Form.echeck env in
+    function
+    | PProp (name, ar) ->
+        EPVar (unloc name, List.map for_type ar)
+    | PFun (name, (ar, ty)) ->
+        ETFun (unloc name, (List.map for_type ar, for_type ty))
+    | PVar (name, ty) ->
+        ETVar (unloc name, (for_type ty, None))
+    | PExpr (name, body) ->
+        let body, ty = for_expr body in
+        ETVar (unloc name, (ty, Some body))
+    | PTVar name ->
+        ETTVar (unloc name, None)
+    | PType (name, ty) ->
+        ETTVar (unloc name, Some (for_type ty))
+
+  let env_of_entries (entries : pvar list) =
+    List.fold_left (fun env entry ->
+      match check_entry env entry with
+      | EPVar  nmty -> Prps.push  env nmty
+      | ETFun  nmty -> Funs.push  env nmty
+      | ETVar  nmty -> Vars.push  env nmty
+      | ETTVar nmty -> TVars.push env nmty) Env.empty entries
+      
   let check ((ps, hs, f) : pgoal) =
-    let env =
-      let for_type = Form.tcheck Env.empty in
-      let for_entry = function
-        | PProp (name, ar) ->
-            EPVar (unloc name, List.map for_type ar)
-        | PFun (name, (ar, ty)) ->
-            ETFun (unloc name, (List.map for_type ar, for_type ty))
-        | PVar (name, ty) ->
-            ETVar (unloc name, (for_type ty, None)) in
-      env_of_entries (List.map for_entry ps) in
+    let env = env_of_entries ps in
     let for_form = Form.check env in
     (env, List.map for_form hs, for_form f)
 end

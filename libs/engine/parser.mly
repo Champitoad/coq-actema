@@ -13,6 +13,7 @@
 %token FALSE
 %token FORALL
 %token REC
+%token TYPE
 %token LARROW
 %token LRARROW
 %token EOF
@@ -113,7 +114,10 @@ unparens_expr_r:
 | x=ident LBRACE i=NAT RBRACE
     { PEVar (x, i) }
 
-| f=ident args=parens(plist0(expr, COMMA))
+| f=ident parens(empty)
+    { PEApp (f, []) }
+
+| f=ident args=parens(plist1(expr, COMMA))
     { PEApp (f, args) }
 
 expr_r:
@@ -193,11 +197,20 @@ entry:
 | x=ident DCOLON xty=arity
     { PProp (x, xty) }
 
+| x=ident COLON xty=signature
+    { PFun (x, xty) }
+
 | x=ident COLON xty=type_
     { PVar (x, xty) }
 
-| x=ident COLON xty=signature
-    { PFun (x, xty) }
+| x=ident COLONEQ body=expr
+    { PExpr (x, body) }
+
+| TYPE a=ident
+    { PTVar a }
+
+| TYPE a=ident COLONEQ t=type_
+    { PType (a, t) }
 
 (* -------------------------------------------------------------------- *)
 goal:
