@@ -126,14 +126,27 @@ and bvar = type_ * expr option
 
 (* -------------------------------------------------------------------- *)
 module Env : sig
+  val nat  : type_
+  val zero : expr
+  val succ : expr -> expr
+
   val empty : env
 end = struct
-  let empty : env = {
-    env_prp     = Map.empty;
-    env_fun     = Map.empty;
-    env_var     = Map.empty;
-    env_tvar    = Map.empty;
-    env_evar    = Map.empty;
+  let nat = TVar ("nat", 0)
+  let zero = EFun ("Z", [])
+  let succ n = EFun ("S", [n])
+    
+  let empty : env = Map.{
+    env_prp     = empty;
+    env_fun     = empty |>
+                  add "Z" ([], nat) |>
+                  add "S" ([nat], nat) |>
+                  add "add" ([nat; nat], nat) |>
+                  add "mult" ([nat; nat], nat);
+    env_var     = empty;
+    env_tvar    = empty |>
+                  add "nat" [None];
+    env_evar    = empty;
     env_handles = BiMap.empty;
   }
 end
