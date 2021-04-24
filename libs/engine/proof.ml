@@ -379,6 +379,8 @@ module CoreLogic : sig
     | `Subform of Form.Subst.subst * Form.Subst.subst
     | `Instantiate of expr * ipath
     | `Rewrite of expr * expr * ipath list
+    | `Fold of vname * ipath list
+    | `Unfold of vname * ipath list
   ]
 
   type action = Handle.t * [
@@ -1083,7 +1085,7 @@ end = struct
     | `V (x, (ty, b)) ->
         begin match tgt.ctxt.kind with
         | `Var `Head ->
-            failwith "Cannot rewrite in abstract definition"
+            failwith "Cannot rewrite variable names"
         | `Var `Body ->
             begin match b with
             | Some b ->
@@ -1091,7 +1093,7 @@ end = struct
                 let g_env = Vars.modify goal.g_env (x, (ty, Some new_body)) in
                 Proof.xprogress proof hd pnode [{ goal with g_env }]
             | None ->
-                failwith "Cannot rewrite in abstract definition"
+                failwith "Cannot rewrite variable names"
             end
         | _ -> assert false
         end
@@ -1101,6 +1103,27 @@ end = struct
       List.fold_left
         (fun tac tgt -> then_tac (rewrite red res tgt) tac)
         id_tac tgts
+    
+
+    (** [unfold x tgts targ] unfolds the definition of the local variable [x]
+        in all destinations specified by [tgts]. If [~fold] is set to [true],
+        it will fold it instead. *)
+    
+    let unfold ?(fold = false) (x : vname) (tgts : ipath list) : tactic =
+      fun (proof, hd) ->
+
+      let goal = Proof.byid proof hd in
+      let body = 
+        Vars.get goal.g_env x |>
+        Option.get_exn^~ TacticNotApplicable |>
+        snd |> Option.get_exn^~ TacticNotApplicable in
+      
+      let red, res =
+        if fold
+        then body, EVar x
+        else EVar x, body in
+      
+      rewrite_in red res tgts (proof, hd)
 
 
   (* -------------------------------------------------------------------- *)
@@ -1989,6 +2012,8 @@ end = struct
     | `Subform of Form.Subst.subst * Form.Subst.subst
     | `Instantiate of expr * ipath
     | `Rewrite of expr * expr * ipath list
+    | `Fold of vname * ipath list
+    | `Unfold of vname * ipath list
   ]
 
   let remove_nothing =
@@ -2546,12 +2571,61 @@ end = struct
       | ([_], [dst]), (Some (red, res), Some _) ->
           [`Rewrite (red, res, [dst])]
 
-      | (_, tgts), (Some (red, res), _)
-      | (tgts, _), (_, Some (red, res)) ->
+      | ([_], tgts), (Some (red, res), _)
+      | (tgts, [_]), (_, Some (red, res)) ->
           if List.exists (fun p -> p.ctxt.kind = `Var `Head) tgts
           then []
           else [`Rewrite (red, res, tgts)]
           
+      | _ -> []
+    (* Empty link end *)
+    with Failure _ -> []
+  
+
+  (** [fold_link lnk] checks if [lnk] is a fold hyperlink. That is, one
+      end of the link is the head [x] (resp. body [e]) of a local variable
+      definition, and the other end a non-empty set of arbitrary subterms where
+      all occurrences of [x] (resp. [e]) are to be rewritten into [e] (resp.
+      [x]).
+
+      If the check succeeds, it returns either a `Fold or `Unfold link action.
+      *)
+  
+  let fold_link : hlpred =
+    fun proof lnk ->
+    
+    let fold_data (p : ipath) =
+      let _, it, _ = of_ipath proof p in
+      match it, p.ctxt.kind, p.sub with
+      | `V (x, (_, Some _)), `Var where, [] -> Some (x, where)
+      | _ -> None
+    in
+    
+    try
+      match lnk, pair_map (List.hd |>> fold_data) lnk with
+      (* If it is a simple link where both ends are variable bodies,
+         disambiguate by folding in the destination *)
+      | ([_], [dst]), (Some (x, `Body), Some (_, `Body)) ->
+          [`Fold (x, [dst])]
+
+      | ([p], tgts), (Some (x, where), _)
+      | (tgts, [p]), (_, Some (x, where)) ->
+          let is_head p = p.ctxt.kind = `Var `Head in
+          if where = `Head then
+            if List.exists is_head tgts
+            then []
+            else [`Unfold (x, tgts)]
+          else
+            begin match List.filter is_head tgts with
+            | [p'] ->
+                Option.map_default
+                  (fun (y, _) -> [`Unfold (y, p :: List.remove tgts p')])
+                  [] (fold_data p')
+            | [] ->
+                [`Fold (x, tgts)]
+            | _ :: _ :: _ ->
+                []
+            end
       | _ -> []
     (* Empty link end *)
     with Failure _ -> []
@@ -2611,6 +2685,7 @@ end = struct
       hlpred_if_empty
         (wf_subform_link ~drewrite:true |> hlpred_of_lpred)
         (rewrite_link |> hlpred_only_sel);
+      fold_link |> hlpred_only_sel;
       instantiate_link;
     ] in
     
@@ -2746,6 +2821,10 @@ end = struct
             instantiate wit tgt targ
         | _, [`Rewrite (red, res, tgts)] ->
             rewrite_in red res tgts targ
+        | _, [`Fold (x, tgts)] ->
+            unfold ~fold:true x tgts targ
+        | _, [`Unfold (x, tgts)] ->
+            unfold x tgts targ
         | _, _ :: _ :: _ -> failwith "Cannot handle multiple link actions yet"
         | _, _ -> raise TacticNotApplicable
 end
