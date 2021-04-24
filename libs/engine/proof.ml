@@ -386,6 +386,7 @@ module CoreLogic : sig
   type action = Handle.t * [
     | `Intro     of int
     | `Elim      of Handle.t
+    | `Ind       of Handle.t
     | `Fold      of vname
     | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
@@ -632,6 +633,32 @@ end = struct
   let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     perform (core_elim ?clear h (pr, id)) pr id
   
+  
+  type pnode += TInd
+
+  let induction (h : Handle.t) ((pr, id) : targ) =
+    let goal = Proof.byid pr id in
+    let env = goal.g_env in
+    
+    let ((n, _) as x, (_, _)) = Vars.byid env (Handle.toint h) |> Option.get in
+    
+    let base_case = { goal with g_env =
+      Vars.modify env (x, Env.(nat, Some Env.zero))} in
+
+    let ind_case =
+      let n = Vars.fresh env ~basename:n () in
+      { goal with
+          g_env = begin
+              let env = Vars.push env (n, (Env.nat, None)) in
+              Vars.modify env (x, Env.(nat, Some (succ (EVar (n, 0)))))
+            end;
+          
+          g_hyps =
+            let indh = Form.Subst.f_apply1 x (EVar (n, 0)) goal.g_goal in
+            Proof.Hyps.add goal.g_hyps (Handle.fresh ()) (Proof.mk_hyp indh) } in
+    
+    Proof.xprogress pr id TInd [base_case; ind_case]
+
     
   let ivariants ((pr, id) : targ) =
     match (Proof.byid pr id).g_goal with
@@ -2078,6 +2105,7 @@ end = struct
   type action = Handle.t * [
     | `Intro     of int
     | `Elim      of Handle.t
+    | `Ind       of Handle.t
     | `Fold      of vname
     | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
@@ -2783,6 +2811,12 @@ end = struct
               let hg = mk_ipath (Handle.toint hd)
                 ~ctxt:{ kind = `Hyp; handle = Handle.toint rp } in
               ["Elim", [hg], `Click hg, (hd, `Elim rp)]
+
+          | `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
+              let rp = Vars.getid goal.g_env x |> Option.get in
+              let hg = mk_ipath (Handle.toint hd)
+                ~ctxt:{ kind = `Var `Head; handle = rp } in
+              ["Ind", [hg], `Click hg, (hd, `Ind (Handle.ofint rp))]
           
           | `V (x, (_, Some _)) ->
               let rp = Vars.getid goal.g_env x |> Option.get in
@@ -2794,7 +2828,7 @@ end = struct
 
               ["Unfold", [hg_unfold], `Click hg_unfold, (hd, `Unfold x);
                "Fold", [hg_fold], `Click hg_fold, (hd, `Fold x)]
-
+          
           | _ ->
               []
         end
@@ -2810,6 +2844,8 @@ end = struct
         intro ~variant:(variant, None) targ
     | `Elim subhd ->
         elim subhd targ
+    | `Ind subhd ->
+        induction subhd targ
     | `Unfold x ->
         unfold_all x targ
     | `Fold x ->
