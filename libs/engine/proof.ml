@@ -1025,10 +1025,10 @@ end = struct
         end
   
 
-  (** [rewrite red res tgt targ] rewrites every occurrence of the reducible
-      expression [red] in the subterm at path [tgt] into the residual
-      expression [res]. It automatically shifts variables in [red] and [res]
-      to avoid capture by binders in [tgt]. *)
+  (** [rewrite red res tgt targ] rewrites every occurrence of the expression
+      [red] in the subterm at path [tgt] into the expression [res]. It
+      automatically shifts variables in [red] and [res] to avoid capture by
+      binders in [tgt]. *)
 
   type pnode += TRewrite of expr * expr * ipath
 
@@ -1071,7 +1071,7 @@ end = struct
 
     let rewrite_in (red : expr) (res : expr) (tgts : ipath list) : tactic =
       List.fold_left
-        (fun tac tgt -> then_tac tac (rewrite red res tgt))
+        (fun tac tgt -> then_tac (rewrite red res tgt) tac)
         id_tac tgts
 
 
