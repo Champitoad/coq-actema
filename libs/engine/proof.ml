@@ -820,41 +820,58 @@ end = struct
       match t with
       | `F FPred _ | `E _ -> raise (InvalidSubExprPath [i])
       | `F _ -> raise (InvalidSubFormPath [i])
+
+  let subterm (t : term) (p : int list) =
+    try List.fold_left direct_subterm t p
+    with InvalidSubFormPath _ -> raise (InvalidSubFormPath p)
+       | InvalidSubExprPath _ -> raise (InvalidSubExprPath p)
       
-  let modify_direct_subterm (t : term) (u : term) (i : int) : term =
+  let modify_direct_subterm (f : term -> term) (t : term) (i : int) : term =
     let open Form in
     try
-      List.modify_at i (fun _ -> u) (direct_subterms t) |>
+      List.modify_at i f (direct_subterms t) |>
       modify_direct_subterms t
     with Invalid_argument _ ->
       match t with
       | `F FPred _ | `E _ -> raise (InvalidSubExprPath [i])
       | `F _ -> raise (InvalidSubFormPath [i])
 
-  let rec modify_subterm (t : term) (u : term) (p : int list) : term =
-    match p with
-    | [] -> u
-    | i :: p ->
-        let subt = modify_subterm (direct_subterm t i) u p in
-        modify_direct_subterm t subt i
+  let modify_subterm (f : 'a -> term -> term) (acc : int -> term -> 'a -> 'a)
+                     (a : 'a) (t : term) (p : int list) : term =
+    let rec aux a t = function
+      | [] -> f a t
+      | i :: p ->
+          let subt = aux (acc i t a) (direct_subterm t i) p in
+          modify_direct_subterm (fun _ -> subt) t i
+    in aux a t p
+  
+  (** [rewrite_subterm_all env red res t sub] rewrites all occurrences of [red]
+      in the subterm of [t] at subpath [sub] into [res], shifting variables in
+      [red] and [res] whenever a binder is encountered along the path. *)
 
-  let subterm (t : term) (p : int list) =
-    try List.fold_left direct_subterm t p
-    with InvalidSubFormPath _ -> raise (InvalidSubFormPath p)
-       | InvalidSubExprPath _ -> raise (InvalidSubExprPath p)
+  let rewrite_subterm_all env red res =
+    modify_subterm
+      (fun (red, res) -> Form.rewrite env red res)
+      (fun _ t (red, res) -> Form.(shift_under t red, shift_under t res))
+      (red, res)
 
+  (** [rewrite_subterm res t sub] rewrites the subterm of [t] at subpath
+      [sub] into [res], shifting variables in [res] whenever a binder is
+      encountered along the path. *)
+  
+  let rewrite_subterm res =
+    modify_subterm
+      (fun res _ -> res)
+      (fun _ t res -> Form.shift_under t res)
+      res
+  
   let subform (f : form) (p : int list) =
     match subterm (`F f) p with
     | `F f -> f
     | _ -> raise (InvalidSubFormPath p)
 
-  let f_subexpr (f : form) (p : int list) =
-    match subterm (`F f) p with
-    | `E e -> e
-    | _ -> raise (InvalidSubExprPath p)
-
-  let e_subexpr (e : expr) (p : int list) =
-    match subterm (`E e) p with
+  let subexpr (t : term) (p : int list) =
+    match subterm t p with
     | `E e -> e
     | _ -> raise (InvalidSubExprPath p)
   
@@ -986,40 +1003,6 @@ end = struct
   let term_of_ipath (proof : Proof.proof) (p : ipath) : term =
     let (_, _, (_, t)) = of_ipath proof p in
     t
-  
-
-  type pnode += TModify
-
-  let modify_subterm_at (proof : Proof.proof) (p : ipath) (t : term) : Proof.proof =
-    let open Proof in
-
-    let { g_id; g_pregoal = goal }, item, (sub, _) = of_ipath proof p in
-    
-    match item with
-    | `C f ->
-        let new_concl = modify_subterm (`F f) t sub |> form_of_term in
-        progress proof g_id TModify [new_concl]
-    
-    | `H (hd, { h_form = f; _ }) ->
-        let new_hyp = modify_subterm (`F f) t sub |> form_of_term in
-        let subgoal = [Some hd, [new_hyp]], goal.g_goal in
-        sprogress ~clear:true proof g_id TModify [subgoal]
-    
-    | `V (x, (ty, body)) ->
-        begin match p.ctxt.kind with
-        | `Var `Head ->
-            failwith "Cannot modify an abstract definition"
-        | `Var `Body ->
-            begin match body with
-            | Some b ->
-                let new_body = modify_subterm (`E b) t sub |> expr_of_term in
-                let g_env = Vars.modify goal.g_env (x, (ty, Some new_body)) in
-                xprogress proof g_id TModify [{ goal with g_env }]
-            | None ->
-                failwith "Cannot modify an abstract definition"
-            end
-        | _ -> assert false
-        end
 
 
   let is_sub_path (p : ipath) (sp : ipath) =
@@ -1028,20 +1011,47 @@ end = struct
     && (p.ctxt.kind = sp.ctxt.kind ||
        (p.ctxt.kind = `Var `Head && sp.ctxt.kind = `Var `Body))
     && List.is_prefix sp.sub p.sub
-  
 
-  (** [rewrite_subterm env red res t sub] rewrites all occurrences of [red] in
-      the subterm of [t] at subpath [sub] into [res], shifting variables in
-      [red] and [res] whenever a binder is encountered along the path. *)
   
-  let rec rewrite_subterm env red res (t : term) =
-    let open Form in function
-    | [] -> rewrite env red res t
-    | i :: sub ->
-        let u = direct_subterm t i in
-        let u = rewrite_subterm env (shift_under t red) (shift_under t res) u sub in
-        modify_direct_subterm t u i
+  (** [rewrite_at p t targ] rewrites the subterm at path [p] in the goal
+      into [t]. It automatically shifts variables in [t] to avoid capture by
+      binders. *)
 
+  type pnode += TRewriteAt of term * ipath
+
+  let rewrite_at (t : term) (p : ipath) : tactic =
+    let open Proof in fun (proof, _) ->
+
+    let { g_id; g_pregoal = goal }, item, (sub, _) = of_ipath proof p in
+    
+    let pnode = TRewriteAt (t, p) in
+    
+    match item with
+    | `C f ->
+        let new_concl = rewrite_subterm t (`F f) sub |> form_of_term in
+        progress proof g_id pnode [new_concl]
+    
+    | `H (hd, { h_form = f; _ }) ->
+        let new_hyp = rewrite_subterm t (`F f) sub |> form_of_term in
+        let subgoal = [Some hd, [new_hyp]], goal.g_goal in
+        sprogress ~clear:true proof g_id pnode [subgoal]
+    
+    | `V (x, (ty, body)) ->
+        begin match p.ctxt.kind with
+        | `Var `Head ->
+            failwith "Cannot modify an abstract definition"
+        | `Var `Body ->
+            begin match body with
+            | Some b ->
+                let new_body = rewrite_subterm t (`E b) sub |> expr_of_term in
+                let g_env = Vars.modify goal.g_env (x, (ty, Some new_body)) in
+                xprogress proof g_id pnode [{ goal with g_env }]
+            | None ->
+                failwith "Cannot modify an abstract definition"
+            end
+        | _ -> assert false
+        end
+  
 
   (** [rewrite red res tgt targ] rewrites every occurrence of the reducible
       expression [red] in the subterm at path [tgt] into the residual
@@ -1062,11 +1072,11 @@ end = struct
 
     match it with
     | `C f ->
-        let new_concl = rewrite_subterm goal.g_env (`E red) (`E res) (`F f) sub |> form_of_term in
+        let new_concl = rewrite_subterm_all goal.g_env (`E red) (`E res) (`F f) sub |> form_of_term in
         Proof.progress proof hd pnode [new_concl]
 
     | `H (src, { h_form = f; _ }) ->
-        let new_hyp = rewrite_subterm goal.g_env (`E red) (`E res) (`F f) sub |> form_of_term in
+        let new_hyp = rewrite_subterm_all goal.g_env (`E red) (`E res) (`F f) sub |> form_of_term in
         let subgoal = [Some src, [new_hyp]], goal.Proof.g_goal in
         Proof.sprogress ~clear:true proof hd pnode [subgoal]
     
@@ -1077,7 +1087,7 @@ end = struct
         | `Var `Body ->
             begin match b with
             | Some b ->
-                let new_body = rewrite_subterm goal.g_env (`E red) (`E res) (`E b) sub |> expr_of_term in
+                let new_body = rewrite_subterm_all goal.g_env (`E red) (`E res) (`E b) sub |> expr_of_term in
                 let g_env = Vars.modify goal.g_env (x, (ty, Some new_body)) in
                 Proof.xprogress proof hd pnode [{ goal with g_env }]
             | None ->
@@ -1229,7 +1239,7 @@ end = struct
         in targ |> then_tac first
           (fun (pr, id) ->
             let tgt = { tgt with root = Handle.toint id } in
-            modify_subterm_at pr tgt (`F (Form.Subst.f_apply1 (x, 0) wit f)))
+            rewrite_at (`F (Form.Subst.f_apply1 (x, 0) wit f)) tgt (pr, id))
     | _ ->
         raise TacticNotApplicable
   
@@ -1673,15 +1683,13 @@ end = struct
         in fc_fill f (fc_rev ctx)
       
       | (FPred ("_EQ", [e1; e2]), [i]), _
-        when subterm (`F r) rsub = `E (if i = 0 then e1 else e2) ->
-        let red, res = begin match i with 
+        when e_equal (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
+        let res =
           (* L=₁ *)
-          | 0 -> e1, e2
+          if i = 0 then e2
           (* L=₂ *)
-          | 1 -> e2, e1
-          | _ -> assert false
-        end in
-        let f = rewrite_subterm goal.g_env (`E red) (`E res) (`F r) rsub |> form_of_term in
+          else e1 in
+        let f = rewrite_subterm (`E res) (`F r) rsub |> form_of_term in
         fc_fill f (fc_rev ctx)
       
       (** Commuting rules *)
@@ -1852,15 +1860,13 @@ end = struct
         fc_fill f (fc_rev ctx)
 
       | (FPred ("_EQ", [e1; e2]), [i]), _
-        when subterm (`F r) rsub = `E (if i = 0 then e1 else e2) ->
-        let red, res = begin match i with 
-          (* F=₁ *)
-          | 0 -> e1, e2
-          (* F=₂ *)
-          | 1 -> e2, e1
-          | _ -> assert false
-        end in
-        let f = rewrite_subterm goal.g_env (`E red) (`E res) (`F r) rsub |> form_of_term in
+        when e_equal (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
+        let res =
+          (* L=₁ *)
+          if i = 0 then e2
+          (* L=₂ *)
+          else e1 in
+        let f = rewrite_subterm (`E res) (`F r) rsub |> form_of_term in
         fc_fill f (fc_rev ctx)
 
       (** Commuting rules *)
