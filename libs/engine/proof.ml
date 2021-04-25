@@ -384,12 +384,13 @@ module CoreLogic : sig
   ]
 
   type action = Handle.t * [
-    | `Elim      of Handle.t
     | `Intro     of int
+    | `Elim      of Handle.t
+    | `Ind       of Handle.t
+    | `Hyperlink of hyperlink * linkaction list
     | `Forward   of Handle.t * Handle.t * (int list) * Form.Subst.subst 
     | `DisjDrop  of Handle.t * form list
     | `ConjDrop  of Handle.t
-    | `Hyperlink of hyperlink * linkaction list
   ]
 
   exception InvalidPath of path
@@ -629,7 +630,34 @@ end = struct
   
   let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     perform (core_elim ?clear h (pr, id)) pr id
-	
+  
+  
+  type pnode += TInd
+
+  let induction (h : Handle.t) ((pr, id) : targ) =
+    let goal = Proof.byid pr id in
+    let env = goal.g_env in
+    
+    let ((n, _) as x, (_, _)) = Vars.byid env (Handle.toint h) |> Option.get in
+    
+    let base_case = { goal with g_env =
+      Vars.modify env (x, Env.(nat, Some Env.zero))} in
+
+    let ind_case =
+      let n = Vars.fresh env ~basename:n () in
+      { goal with
+          g_env = begin
+              let env = Vars.push env (n, (Env.nat, None)) in
+              Vars.modify env (x, Env.(nat, Some (succ (EVar (n, 0)))))
+            end;
+          
+          g_hyps =
+            let indh = Form.Subst.f_apply1 x (EVar (n, 0)) goal.g_goal in
+            Proof.Hyps.add goal.g_hyps (Handle.fresh ()) (Proof.mk_hyp indh) } in
+    
+    Proof.xprogress pr id TInd [base_case; ind_case]
+
+    
   let ivariants ((pr, id) : targ) =
     match (Proof.byid pr id).g_goal with
     | FPred ("_EQ", _) -> ["EQ-intro"]
@@ -1543,6 +1571,8 @@ end = struct
     | FBind (`Exist, _, _, FFalse) ->
         Form.f_false
 
+    | FPred ("_EQ", [e1; e2]) when Form.e_equal e1 e2 ->
+        Form.f_true
     | FConn (`Or, [_; FTrue])
     | FConn (`Or, [FTrue; _])
     | FConn (`Imp, [_; FTrue])
@@ -2020,12 +2050,13 @@ end = struct
     in doit
 
   type action = Handle.t * [
-    | `Elim      of Handle.t
     | `Intro     of int
+    | `Elim      of Handle.t
+    | `Ind       of Handle.t
+    | `Hyperlink of hyperlink * linkaction list
     | `Forward   of Handle.t * Handle.t * (int list) * Form.Subst.subst 
     | `DisjDrop  of Handle.t * form list
     | `ConjDrop  of Handle.t
-    | `Hyperlink of hyperlink * linkaction list
   ]
   
   
@@ -2452,7 +2483,7 @@ end = struct
       | `E e ->
           List.for_all
             (not <<| (LEnv.exists lenv))
-            (Form.e_vars e)
+            (e_vars e)
     in
 
     fun proof (srcs, dsts) ->
@@ -2732,7 +2763,7 @@ end = struct
   =
     match p.kind with
       | `Click path -> begin
-          let Proof.{ g_id = hd; g_pregoal = _goal}, item, (_fs, _subf) =
+          let Proof.{ g_id = hd; g_pregoal = goal}, item, (_, _) =
             of_ipath proof path
           in
           match item with
@@ -2755,7 +2786,13 @@ end = struct
                 ~ctxt:{ kind = `Hyp; handle = Handle.toint rp } in
               ["Elim", [hg], `Click hg, (hd, `Elim rp)]
           
-          | `V _ ->
+          | `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
+              let rp = Vars.getid goal.g_env x |> Option.get in
+              let hg = mk_ipath (Handle.toint hd)
+                ~ctxt:{ kind = `Var `Head; handle = rp } in
+              ["Ind", [hg], `Click hg, (hd, `Ind (Handle.ofint rp))]
+          
+          | _ ->
               []
         end
 
@@ -2770,6 +2807,8 @@ end = struct
         intro ~variant:(variant, None) targ
     | `Elim subhd ->
         elim subhd targ
+    | `Ind subhd ->
+        induction subhd targ
     | `DisjDrop (subhd, fl) ->
         or_drop subhd targ (List.map (fun x -> [Some hd, []],x) fl)
     | `ConjDrop subhd ->
