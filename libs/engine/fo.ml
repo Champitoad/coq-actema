@@ -576,6 +576,11 @@ end = struct
         | FFalse ->
             [span [Xml.entity "#x22A5"]]
 
+        | FConn (`Not, [FPred ("_EQ", [e1; e2])]) ->
+            [span (for_expr ?id (0 :: p) e1);
+             span [Xml.entity "nbsp"; Xml.entity "#x2260"; Xml.entity "nbsp"];
+             span (for_expr ?id (1 :: p) e2)]
+
         | FConn (lg, fs) -> begin
             let xml_lg =
               let hexcode = Printf.sprintf "#x%x" (unicode_of_op lg) in
@@ -755,6 +760,11 @@ end = struct
 
         | FFalse ->
             [mo (UTF8.of_char (UChar.of_int 0x22A5))]
+
+        | FConn (`Not, [FPred ("_EQ", [e1; e2])]) ->
+            (for_expr ?id (0 :: p) e1) @
+            [mo (UTF8.of_char (UChar.of_int 0x2260))] @
+            (for_expr ?id (1 :: p) e2)
 
         | FConn (lg, fs) -> begin
             let xml_lg =
