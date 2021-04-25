@@ -386,7 +386,8 @@ module CoreLogic : sig
   type action = Handle.t * [
     | `Intro     of int
     | `Elim      of Handle.t
-    | `Ind       of Handle.t
+    | `Fold      of vname
+    | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
     | `Forward   of Handle.t * Handle.t * (int list) * Form.Subst.subst 
     | `DisjDrop  of Handle.t * form list
@@ -631,32 +632,6 @@ end = struct
   let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     perform (core_elim ?clear h (pr, id)) pr id
   
-  
-  type pnode += TInd
-
-  let induction (h : Handle.t) ((pr, id) : targ) =
-    let goal = Proof.byid pr id in
-    let env = goal.g_env in
-    
-    let ((n, _) as x, (_, _)) = Vars.byid env (Handle.toint h) |> Option.get in
-    
-    let base_case = { goal with g_env =
-      Vars.modify env (x, Env.(nat, Some Env.zero))} in
-
-    let ind_case =
-      let n = Vars.fresh env ~basename:n () in
-      { goal with
-          g_env = begin
-              let env = Vars.push env (n, (Env.nat, None)) in
-              Vars.modify env (x, Env.(nat, Some (succ (EVar (n, 0)))))
-            end;
-          
-          g_hyps =
-            let indh = Form.Subst.f_apply1 x (EVar (n, 0)) goal.g_goal in
-            Proof.Hyps.add goal.g_hyps (Handle.fresh ()) (Proof.mk_hyp indh) } in
-    
-    Proof.xprogress pr id TInd [base_case; ind_case]
-
     
   let ivariants ((pr, id) : targ) =
     match (Proof.byid pr id).g_goal with
@@ -902,6 +877,42 @@ end = struct
   
   let item_ipath { root; ctxt; _ } =
     { root; ctxt; sub = [] }
+  
+
+  let concl_ipath Proof.{ g_id; _ } =
+    mk_ipath (Handle.toint g_id)
+
+  let all_hyps_ipaths Proof.{ g_id; g_pregoal } =
+    (* Get the list of hypotheses handles *)
+    Proof.Hyps.ids g_pregoal.Proof.g_hyps |>
+    (* Create a list of paths to each hypothesis *)
+    List.map begin fun hd ->
+      mk_ipath (Handle.toint g_id)
+        ~ctxt:{ kind = `Hyp; handle = Handle.toint hd }
+    end
+
+  let all_vars_ipaths ?(heads = true) Proof.{ g_id; g_pregoal } =
+    let env = g_pregoal.Proof.g_env in
+    (* Get the list of variable handles *)
+    env.env_handles |> BiMap.codomain |>
+    (* Create a list of paths to each variable's head and body *)
+    List.concat_map begin fun hd ->
+      if heads then
+        [mk_ipath (Handle.toint g_id)
+          ~ctxt:{ kind = `Var `Head; handle = hd }]
+      else []
+      @
+      match Vars.byid env hd with
+      | Some (_, (_, Some _)) ->
+          [mk_ipath (Handle.toint g_id)
+            ~ctxt:{ kind = `Var `Body; handle = hd }]
+      | _ -> []
+    end
+
+  let all_items_paths ?heads goal =
+    concl_ipath goal ::
+    all_hyps_ipaths goal @
+    all_vars_ipaths ?heads goal
 
 
   let pkind_codes : (pkind, string) BiMap.t =
@@ -1124,6 +1135,21 @@ end = struct
         else EVar x, body in
       
       rewrite_in red res tgts (proof, hd)
+      
+    
+    let unfold_all ?fold (x : vname) : tactic =
+      fun ((proof, hd) as targ) ->
+      
+      let goal = Proof.{ g_id = hd; g_pregoal = Proof.byid proof hd } in
+
+      let tgts =
+        let id = Vars.getid goal.g_pregoal.g_env x |> Option.get in
+        all_items_paths ~heads:false goal |>
+        List.remove_if
+          (fun p -> p.ctxt.handle = id) in
+
+      unfold ?fold x tgts targ
+
 
 
   (* -------------------------------------------------------------------- *)
@@ -2052,7 +2078,8 @@ end = struct
   type action = Handle.t * [
     | `Intro     of int
     | `Elim      of Handle.t
-    | `Ind       of Handle.t
+    | `Fold      of vname
+    | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
     | `Forward   of Handle.t * Handle.t * (int list) * Form.Subst.subst 
     | `DisjDrop  of Handle.t * form list
@@ -2671,7 +2698,7 @@ end = struct
  *)
 
   let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) =
-    let Proof.{ g_id; g_pregoal }, _, _ = of_ipath proof dnd.source in
+    let Proof.{ g_id; _ } as goal, _, _ = of_ipath proof dnd.source in
     
     let srcsel : selection =
       List.filter (is_sub_path dnd.source) selection in
@@ -2703,36 +2730,7 @@ end = struct
           let dsts = begin match dnd.destination with
             | None ->
                 let src = dnd.source in
-
-                let hyps =
-                  (* Get the list of hypotheses handles *)
-                  Proof.Hyps.ids g_pregoal.Proof.g_hyps |>
-                  (* Create a list of paths to each hypothesis *)
-                  List.map begin fun hd ->
-                    mk_ipath (Handle.toint g_id)
-                      ~ctxt:{ kind = `Hyp; handle = Handle.toint hd }
-                  end in
-
-                let vars =
-                  let env = g_pregoal.Proof.g_env in
-                  (* Get the list of variable handles *)
-                  env.env_handles |> BiMap.codomain |>
-                  (* Create a list of paths to each variable's head and body *)
-                  List.concat_map begin fun hd ->
-                    [mk_ipath (Handle.toint g_id)
-                      ~ctxt:{ kind = `Var `Head; handle = hd }]
-                    @
-                    match Vars.byid env hd with
-                    | Some (_, (_, Some _)) ->
-                        [mk_ipath (Handle.toint g_id)
-                          ~ctxt:{ kind = `Var `Body; handle = hd }]
-                    | _ -> []
-                  end in
-
-                let concl =
-                  mk_ipath (Handle.toint g_id) in
-
-                List.remove (hyps @ vars @ [concl]) src
+                List.remove (all_items_paths goal) src
                 
             | Some dst ->
                 [dst]
@@ -2786,12 +2784,17 @@ end = struct
                 ~ctxt:{ kind = `Hyp; handle = Handle.toint rp } in
               ["Elim", [hg], `Click hg, (hd, `Elim rp)]
           
-          | `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
+          | `V (x, (_, Some _)) ->
               let rp = Vars.getid goal.g_env x |> Option.get in
-              let hg = mk_ipath (Handle.toint hd)
+
+              let hg_unfold = mk_ipath (Handle.toint hd)
                 ~ctxt:{ kind = `Var `Head; handle = rp } in
-              ["Ind", [hg], `Click hg, (hd, `Ind (Handle.ofint rp))]
-          
+              let hg_fold = mk_ipath (Handle.toint hd)
+                ~ctxt:{ kind = `Var `Body; handle = rp } in
+
+              ["Unfold", [hg_unfold], `Click hg_unfold, (hd, `Unfold x);
+               "Fold", [hg_fold], `Click hg_fold, (hd, `Fold x)]
+
           | _ ->
               []
         end
@@ -2807,8 +2810,10 @@ end = struct
         intro ~variant:(variant, None) targ
     | `Elim subhd ->
         elim subhd targ
-    | `Ind subhd ->
-        induction subhd targ
+    | `Unfold x ->
+        unfold_all x targ
+    | `Fold x ->
+        unfold_all ~fold:true x targ
     | `DisjDrop (subhd, fl) ->
         or_drop subhd targ (List.map (fun x -> [Some hd, []],x) fl)
     | `ConjDrop subhd ->
