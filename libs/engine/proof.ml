@@ -1565,12 +1565,16 @@ end = struct
 
     (* Absorbing elements *)
 
+    | FPred ("_EQ", [e1; e2]) when not (Form.e_equal e1 e2) ->
+        Form.f_false
     | FConn (`And, [_; FFalse])
     | FConn (`And, [FFalse; _])
     | FConn (`Not, [FTrue])
     | FBind (`Exist, _, _, FFalse) ->
         Form.f_false
 
+    | FPred ("_EQ", [e1; e2]) when Form.e_equal e1 e2 ->
+        Form.f_true
     | FConn (`Or, [_; FTrue])
     | FConn (`Or, [FTrue; _])
     | FConn (`Imp, [_; FTrue])
