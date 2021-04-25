@@ -39,6 +39,11 @@ type expr  =
   | EVar of vname
   | EFun of name * expr list
   
+let rec e_vars =
+  let open Monad.List in function
+  | EVar x -> return x
+  | EFun (_, ts) -> ts >>= e_vars
+
 (* -------------------------------------------------------------------- *)
 (** Formulas *)
 
@@ -129,12 +134,16 @@ module Env : sig
   val nat  : type_
   val zero : expr
   val succ : expr -> expr
+  val add  : expr -> expr -> expr
+  val mult : expr -> expr -> expr
 
   val empty : env
 end = struct
   let nat = TVar ("nat", 0)
   let zero = EFun ("Z", [])
   let succ n = EFun ("S", [n])
+  let add n m = EFun ("add", [n; m])
+  let mult n m = EFun ("mult", [n; m])
     
   let empty : env = Map.{
     env_prp     = empty;
@@ -305,6 +314,10 @@ end = struct
     | FPred  _      -> max_int
     | FConn (op, _) -> prio_of_op op
     | FBind _       -> min_int
+  
+  and prio_of_expr = function
+    | EVar _ -> max_int
+    | EFun (f, _) -> prio_of_fun f
 
   and prio_of_type = function
     | TUnit   -> max_int
@@ -319,6 +332,13 @@ end = struct
     | `Or    -> prio_Or
     | `Imp   -> prio_Imp
     | `Equiv -> prio_Equiv
+  
+  and prio_of_fun = function
+    | "Z"    -> max_int
+    | "mult" -> 3
+    | "S"    -> 2
+    | "add"  -> 1
+    | _      -> min_int
 
   and prio_Not   = 5
   and prio_And   = 4
@@ -336,6 +356,13 @@ end = struct
     | `Or    -> left_assoc
     | `Imp   -> right_assoc
     | `Equiv -> no_assoc
+  
+  let assoc_of_fun = function
+    | "Z"    -> []
+    | "S"    -> [(<)]
+    | "add"
+    | "mult" -> left_assoc
+    | _      -> assert false
 
   let unicode_of_op = function
     | `Not   -> 0x00AC
@@ -442,6 +469,9 @@ end = struct
         | TUnit ->
             [span [Xml.pcdata "()"]]
 
+        | TVar ("nat", _) ->
+            [span [Xml.pcdata "ℕ"]]
+
         | TVar (x, 0) ->
             [span [Xml.pcdata (UTF8.of_latin1 x)]]
 
@@ -469,7 +499,7 @@ end = struct
 
       [span (pr ~doit:is_pr data)]
 
-    and for_expr ?(id : string option option) (p : int list) (expr : expr) =
+    and for_expr ?(id : string option option) ?(is_pr = false) (p : int list) (expr : expr) : Xml.elt list =
       let for_expr = for_expr ?id in
 
       let data =
@@ -479,6 +509,42 @@ end = struct
 
         | EVar (x, i) ->
             [span [Xml.pcdata (Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i)]]
+            
+        | EFun ("Z"    as f, es)
+        | EFun ("S"    as f, es)
+        | EFun ("add"  as f, es)
+        | EFun ("mult" as f, es) ->
+            let xml es p =
+              List.combine es (assoc_of_fun f) |>
+              List.mapi (fun i (e, cmp) ->
+                for_expr ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) (i :: p) e) in
+
+            begin match f, xml es p with
+            | "Z", [] ->
+                [span [Xml.pcdata "0"]]
+            | "S", _ ->
+                begin match es with
+                | [n] ->
+                    let rec numeral acc = function
+                      | EFun ("S", [x]) ->
+                          numeral (acc + 1) x
+                      | EFun ("Z", []) ->
+                          [span [Xml.pcdata (string_of_int acc)]]
+                      | e -> 
+                          [span [Xml.pcdata (string_of_int acc)]] @
+                          spaced [span [Xml.pcdata "+"]] @
+                          (xml [e] (List.init (acc - 1) (fun _ -> 0) @ p) |> List.hd)
+                    in numeral 1 n
+                | _ ->
+                    assert false
+                end
+            | "add", [e1; e2] ->
+                e1 @ spaced [span [Xml.pcdata "+"]] @ e2
+            | "mult", [e1; e2] ->
+                e1 @ spaced [span [Xml.pcdata "⋅"]] @ e2
+            | _ ->
+                assert false
+            end
 
         | EFun (name, args) ->
             let args = List.mapi (fun i e -> for_expr (i :: p) e) args in
@@ -497,7 +563,7 @@ end = struct
             p prefix) in
       let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
 
-      [span ~a:(List.of_option thisid) data]
+      [span ~a:(List.of_option thisid) (pr ~doit:is_pr data)]
 
     and for_form ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
       let for_form = for_form ?id in
@@ -588,6 +654,9 @@ end = struct
       let data = match ty with
         | TUnit ->
             [mo (UTF8.of_char (UChar.of_int 0x2022))]
+        
+        | TVar ("nat", _) ->
+            [mo "ℕ"]
 
         | TVar (x, 0) ->
             [mi (UTF8.of_latin1 x)]
@@ -614,7 +683,7 @@ end = struct
 
       [pr ~doit:is_pr (row data)]
 
-    and for_expr ?(id : string option option) (p : int list) (expr : expr) =
+    and for_expr ?(id : string option option) ?(is_pr = false) (p : int list) (expr : expr) =
       let for_expr = for_expr ?id in
 
       let data =
@@ -625,6 +694,40 @@ end = struct
         | EVar (x, i) ->
             let x = Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i in
             [mi (UTF8.of_latin1 x)]
+        
+        | EFun ("Z"    as f, es)
+        | EFun ("S"    as f, es)
+        | EFun ("add"  as f, es)
+        | EFun ("mult" as f, es) ->
+            let xml_es =
+              List.combine es (assoc_of_fun f) |>
+              List.mapi (fun i (e, cmp) ->
+                for_expr ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) (i :: p) e) in
+
+            begin match f, xml_es with
+            | "Z", [] ->
+                [mn "0"]
+            | "S", [e] ->
+                begin match es with
+                | [n] ->
+                    if not (List.is_empty (e_vars n)) then
+                      mn "1" :: mo "+" :: e
+                    else
+                      let rec numeral acc = function
+                        | EFun ("S", [x]) -> numeral (acc + 1) x
+                        | EFun ("Z", [])  -> acc
+                        | _ -> assert false
+                      in [mn (string_of_int (numeral 1 n))]
+                | _ ->
+                    assert false
+                end
+            | "add", [e1; e2] ->
+                e1 @ [mo "+"] @ e2
+            | "mult", [e1; e2] ->
+                e1 @ [mo "×"] @ e2
+            | _ ->
+                assert false
+            end
 
         | EFun (name, args) ->
             let args = List.mapi (fun i e -> for_expr (i :: p) e) args in
@@ -640,7 +743,7 @@ end = struct
             p prefix) in
       let thisid = thisid |> Option.map (Xml.string_attrib "id") in
 
-      [row ~a:(List.of_option thisid) data]
+      [pr ~doit:is_pr (row ~a:(List.of_option thisid) data)]
 
     and for_form ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
       let for_form = for_form ?id in
@@ -964,7 +1067,6 @@ module Form : sig
   val f_equal : ?bds:VName.bds -> env -> form  -> form  -> bool
   val equal   : ?bds:VName.bds -> env -> term -> term -> bool
 
-  val e_vars      : expr -> vname list
   val free_vars   : form -> name list
   val e_shift     : ?incr:int -> vname -> expr -> expr
   val f_shift     : ?incr:int -> vname -> form -> form
@@ -1155,12 +1257,6 @@ end = struct
     | `E e1, `E e2 -> e_equal ?bds e1 e2
     | _ -> false
     
-
-  let rec e_vars =
-    let open Monad.List in function
-    | EVar x -> return x
-    | EFun (_, ts) -> ts >>= e_vars
-
   
   let rec free_vars =
     let open Monad.List in function

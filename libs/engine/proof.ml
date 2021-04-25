@@ -2481,7 +2481,7 @@ end = struct
       | `E e ->
           List.for_all
             (not <<| (LEnv.exists lenv))
-            (Form.e_vars e)
+            (e_vars e)
     in
 
     fun proof (srcs, dsts) ->
