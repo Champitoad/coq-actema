@@ -38,6 +38,11 @@ type arity = type_ list
 type expr  =
   | EVar of vname
   | EFun of name * expr list
+
+  let rec e_vars =
+    let open Monad.List in function
+    | EVar x -> return x
+    | EFun (_, ts) -> ts >>= e_vars
   
 let rec e_vars =
   let open Monad.List in function
