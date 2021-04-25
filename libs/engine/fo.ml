@@ -377,6 +377,11 @@ end = struct
       | FFalse ->
           UTF8.of_char (UChar.chr 0x22A5)
 
+      | FConn (`Not, [FPred ("_EQ", [e1; e2])]) ->
+          for_expr e1 ^
+          spaced (UTF8.of_char (UChar.chr 0x2260)) ^
+          for_expr e2
+
       | FConn (lg, fs) -> begin
           let text_lg = lg |> unicode_of_op |> UChar.chr |> UTF8.of_char in
           let text_fs =
@@ -489,6 +494,16 @@ end = struct
     and for_form ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
       let for_form = for_form ?id in
 
+      let thisid p =
+        id |>
+        Option.map (fun prefix ->
+          let p = String.concat "/" (List.rev_map string_of_int p) in
+          Option.fold
+            (fun p prefix -> Format.sprintf "%s:%s" prefix p)
+            p prefix) |>
+        Option.map (fun x -> Xml.string_attrib "id" x) |>
+        List.of_option in
+
       let data =
         match form with
         | FTrue ->
@@ -496,6 +511,12 @@ end = struct
 
         | FFalse ->
             [span [Xml.entity "#x22A5"]]
+
+        | FConn (`Not, [FPred ("_EQ", [e1; e2])]) ->
+            [span ~a:(thisid (0 :: p)) (
+              [span (for_expr ?id (0 :: 0 :: p) e1);
+               span [Xml.entity "nbsp"; Xml.entity "#x2260"; Xml.entity "nbsp"];
+               span (for_expr ?id (1 :: 0 :: p) e2)])]
 
         | FConn (lg, fs) -> begin
             let xml_lg =
@@ -549,15 +570,7 @@ end = struct
 
       in
 
-      let thisid =
-        id |> Option.map (fun prefix ->
-          let p = String.concat "/" (List.rev_map string_of_int p) in
-          Option.fold
-            (fun p prefix -> Format.sprintf "%s:%s" prefix p)
-            p prefix) in
-      let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
-
-      [span ~a:(List.of_option thisid) (pr ~doit:is_pr data)] in
+      [span ~a:(thisid p) (pr ~doit:is_pr data)] in
 
     ((fun ?id (form : form ) -> span (for_form ?id [] form)),
      (fun ?id (expr : expr ) -> span (for_expr ?id [] expr)),
@@ -632,6 +645,16 @@ end = struct
     and for_form ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
       let for_form = for_form ?id in
 
+      let thisid p =
+        id |>
+        Option.map (fun prefix ->
+          let p = String.concat "/" (List.rev_map string_of_int p) in
+          Option.fold
+            (fun p prefix -> Format.sprintf "%s:%s" prefix p)
+            p prefix) |>
+        Option.map (fun x -> Xml.string_attrib "id" x) |>
+        List.of_option in
+
       let data =
         match form with
         | FTrue ->
@@ -639,6 +662,12 @@ end = struct
 
         | FFalse ->
             [mo (UTF8.of_char (UChar.of_int 0x22A5))]
+
+        | FConn (`Not, [FPred ("_EQ", [e1; e2])]) ->
+            [row ~a:(thisid (0 :: p)) (
+              (for_expr ?id (0 :: 0 :: p) e1) @
+              [mo (UTF8.of_char (UChar.of_int 0x2260))] @
+              (for_expr ?id (1 :: 0 :: p) e2))]
 
         | FConn (lg, fs) -> begin
             let xml_lg =
@@ -683,15 +712,7 @@ end = struct
 
       in
 
-      let thisid =
-        id |> Option.map (fun prefix ->
-          let p = String.concat "/" (List.rev_map string_of_int p) in
-          Option.fold
-            (fun p prefix -> Format.sprintf "%s:%s" prefix p)
-            p prefix) in
-      let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
-
-      [pr ~doit:is_pr (row ~a:(List.of_option thisid) data)] in
+      [pr ~doit:is_pr (row ~a:(thisid p) data)] in
 
     ((fun ?id (form : form ) -> row (for_form ?id [] form)),
      (fun ?id (expr : expr ) -> row (for_expr ?id [] expr)),
