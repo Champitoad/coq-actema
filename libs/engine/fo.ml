@@ -38,6 +38,11 @@ type arity = type_ list
 type expr  =
   | EVar of vname
   | EFun of name * expr list
+
+  let rec e_vars =
+    let open Monad.List in function
+    | EVar x -> return x
+    | EFun (_, ts) -> ts >>= e_vars
   
 (* -------------------------------------------------------------------- *)
 (** Formulas *)
@@ -972,7 +977,6 @@ module Form : sig
   val f_equal : ?bds:VName.bds -> env -> form  -> form  -> bool
   val equal   : ?bds:VName.bds -> env -> term -> term -> bool
 
-  val e_vars      : expr -> vname list
   val free_vars   : form -> name list
   val e_shift     : ?incr:int -> vname -> expr -> expr
   val f_shift     : ?incr:int -> vname -> form -> form
@@ -1163,12 +1167,6 @@ end = struct
     | `E e1, `E e2 -> e_equal ?bds e1 e2
     | _ -> false
     
-
-  let rec e_vars =
-    let open Monad.List in function
-    | EVar x -> return x
-    | EFun (_, ts) -> ts >>= e_vars
-
   
   let rec free_vars =
     let open Monad.List in function
