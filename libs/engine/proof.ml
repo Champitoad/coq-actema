@@ -2816,7 +2816,7 @@ end = struct
               let rp = Vars.getid goal.g_env x |> Option.get in
               let hg = mk_ipath (Handle.toint hd)
                 ~ctxt:{ kind = `Var `Head; handle = rp } in
-              ["Ind", [hg], `Click hg, (hd, `Ind (Handle.ofint rp))]
+              ["Induction", [hg], `Click hg, (hd, `Ind (Handle.ofint rp))]
           
           | `V (x, (_, Some _)) ->
               let rp = Vars.getid goal.g_env x |> Option.get in
