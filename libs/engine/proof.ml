@@ -924,10 +924,10 @@ end = struct
     env.env_handles |> BiMap.codomain |>
     (* Create a list of paths to each variable's head and body *)
     List.concat_map begin fun hd ->
-      if heads then
+      (if heads then
         [mk_ipath (Handle.toint g_id)
           ~ctxt:{ kind = `Var `Head; handle = hd }]
-      else []
+      else [])
       @
       match Vars.byid env hd with
       | Some (_, (_, Some _)) ->

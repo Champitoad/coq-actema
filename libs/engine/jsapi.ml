@@ -401,8 +401,8 @@ object%js (_self)
 
     let dt =
       span [
-        span ~a:[Xml.string_attrib "id" _self##idhead] begin
-          [span begin
+        span begin
+          [span ~a:[Xml.string_attrib "id" _self##idhead] begin
             [span
               [Xml.pcdata (UTF8.of_latin1 (Fo.Notation.e_tostring (EVar x)))]] @
             spaced [span [Xml.pcdata ":"]] @
