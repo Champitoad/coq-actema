@@ -197,7 +197,7 @@ end = struct
     List.iter (Form.recheck env) hyps;
 
     let uid  = Handle.fresh () in
-    let g_hyps = List.fold
+    let g_hyps = List.fold_left
       (fun hs f ->  Hyps.add hs (Handle.fresh ()) (mk_hyp f))
       Hyps.empty hyps in
     let root = { g_id = uid; g_pregoal = {
