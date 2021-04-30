@@ -550,8 +550,7 @@ end = struct
 
   type pnode += TElim of Handle.t
 
-  let core_elim ?clear (h : Handle.t) ((pr, id) : targ) =
-    let _ = clear in            (* FIXME *)
+  let core_elim (h : Handle.t) ((pr, id) : targ) =
     let result = ref ([]) in 
     let gl = Proof.byid pr id in
     let hyp = (Proof.Hyps.byid gl.g_hyps h).h_form in
@@ -586,6 +585,7 @@ end = struct
             result := ((TElim id), 
                        `S (subs @ [[Some h, []], f])) :: !result
         | FFalse -> result := ((TElim id), `S subs) :: !result
+        | FTrue -> result := ((TElim id), `S (subs @ [[Some h, []], gl.g_goal])) :: !result
         | FBind (`Exist, x, ty, f) ->
             let _ = (pr, id) |> then_tac
               (add_local (x, ty, None))
@@ -624,14 +624,14 @@ end = struct
       end;
     !result
 
-  let perform l pr id =
+  let perform ?clear l pr id =
     match l with
-      | (t, `S l)::_ -> Proof.sprogress pr id t l
+      | (t, `S l)::_ -> Proof.sprogress ?clear pr id t l
       | (t, `X l)::_ -> Proof.xprogress pr id t l
       | _ -> raise TacticNotApplicable
   
   let elim ?clear (h : Handle.t) ((pr, id) : targ) =
-    perform (core_elim ?clear h (pr, id)) pr id
+    perform ?clear (core_elim h (pr, id)) pr id
   
   
   type pnode += TInd
@@ -2843,7 +2843,11 @@ end = struct
     | `Intro variant ->
         intro ~variant:(variant, None) targ
     | `Elim subhd ->
-        elim subhd targ
+        let goal = Proof.byid proof hd in
+        let form = (Proof.Hyps.byid goal.g_hyps subhd).h_form in 
+        let clear =
+          Form.f_equal goal.g_env form FTrue in
+        elim ~clear subhd targ
     | `Ind subhd ->
         induction subhd targ
     | `Unfold x ->
