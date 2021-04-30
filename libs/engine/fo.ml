@@ -340,8 +340,8 @@ end = struct
   
   and prio_of_fun = function
     | "Z"    -> max_int
-    | "mult" -> 3
-    | "S"    -> 2
+    | "S"    -> 3
+    | "mult" -> 2
     | "add"  -> 1
     | _      -> min_int
 
@@ -512,6 +512,18 @@ end = struct
     and for_expr ?(id : string option option) ?(is_pr = false) (p : int list) (expr : expr) : Xml.elt list =
       let for_expr = for_expr ?id in
 
+      let thisid p =
+        id |>
+        Option.map (fun prefix ->
+          let p = String.concat "/" (List.rev_map string_of_int p) in
+          Option.fold
+            (fun p prefix -> Format.sprintf "%s:%s" prefix p)
+            p prefix) |>
+        Option.map (fun x -> Xml.string_attrib "id" x) |>
+        List.of_option in
+      
+      let id = ref true in
+
       let data =
         match expr with
         | EVar (x, 0) ->
@@ -533,21 +545,20 @@ end = struct
             | "Z", [] ->
                 [span [Xml.pcdata "0"]]
             | "S", _ ->
-                begin match es with
-                | [n] ->
-                    let rec numeral acc = function
-                      | EFun ("S", [x]) ->
-                          numeral (acc + 1) x
-                      | EFun ("Z", []) ->
-                          [span [Xml.pcdata (string_of_int acc)]]
-                      | e -> 
-                          [span [Xml.pcdata (string_of_int acc)]] @
-                          spaced [span [Xml.pcdata "+"]] @
-                          (xml [e] (List.init (acc - 1) (fun _ -> 0) @ p) |> List.hd)
-                    in numeral 1 n
-                | _ ->
-                    assert false
-                end
+                id := false;
+                let rec numeral acc num sub = function
+                  | EFun ("S", [x]) ->
+                      numeral (fun x -> [span ~a:(thisid sub) (acc x)]) (num + 1) (0 :: sub) x
+                  | EFun ("Z", []) ->
+                      [span ~a:(thisid sub) (acc [Xml.pcdata (string_of_int num)])]
+                  | e -> 
+                      acc begin
+                        (xml [e] (List.tl sub) |> List.hd) @
+                        [span [Xml.pcdata "⊕"]] @
+                        [Xml.pcdata (string_of_int num)]
+                      end
+                in
+                numeral identity 0 p expr
             | "add", [e1; e2] ->
                 e1 @ spaced [span [Xml.pcdata "+"]] @ e2
             | "mult", [e1; e2] ->
@@ -565,15 +576,7 @@ end = struct
             in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
       in
 
-      let thisid =
-        id |> Option.map (fun prefix ->
-          let p = String.concat "/" (List.rev_map string_of_int p) in
-          Option.fold
-            (fun p prefix -> Format.sprintf "%s:%s" prefix p)
-            p prefix) in
-      let thisid = thisid |> Option.map (fun x -> Xml.string_attrib "id" x) in
-
-      [span ~a:(List.of_option thisid) (pr ~doit:is_pr data)]
+      [span ~a:(if !id then thisid p else []) (pr ~doit:is_pr data)]
 
     and for_form ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
       let for_form = for_form ?id in
@@ -717,25 +720,27 @@ end = struct
         | EFun ("S"    as f, es)
         | EFun ("add"  as f, es)
         | EFun ("mult" as f, es) ->
-            let xml_es =
+            let xml es p =
               List.combine es (assoc_of_fun f) |>
               List.mapi (fun i (e, cmp) ->
                 for_expr ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) (i :: p) e) in
 
-            begin match f, xml_es with
+            begin match f, xml es p with
             | "Z", [] ->
                 [mn "0"]
-            | "S", [e] ->
+            | "S", _ ->
                 begin match es with
                 | [n] ->
-                    if not (List.is_empty (e_vars n)) then
-                      mn "1" :: mo "+" :: e
-                    else
-                      let rec numeral acc = function
-                        | EFun ("S", [x]) -> numeral (acc + 1) x
-                        | EFun ("Z", [])  -> acc
-                        | _ -> assert false
-                      in [mn (string_of_int (numeral 1 n))]
+                    let rec numeral acc = function
+                      | EFun ("S", [x]) ->
+                          numeral (acc + 1) x
+                      | EFun ("Z", []) ->
+                          [mn (string_of_int acc)]
+                      | e -> 
+                          (xml [e] (List.init (acc - 1) (fun _ -> 0) @ p) |> List.hd) @
+                          [mo "⊕"] @
+                          [mn (string_of_int acc)]
+                    in numeral 1 n
                 | _ ->
                     assert false
                 end
