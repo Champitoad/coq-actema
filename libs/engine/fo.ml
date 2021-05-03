@@ -295,18 +295,22 @@ end
 module Notation : sig
   open Tyxml
   
+  val t_toascii  : type_ -> string
   val t_tostring : type_ -> string
   val t_tohtml   : type_ -> Xml.elt
   val t_tomathml : type_ -> Xml.elt
 
+  val e_toascii  : expr -> string
   val e_tostring : expr -> string
   val e_tohtml   : ?id:string option -> expr -> Xml.elt
   val e_tomathml : ?id:string option -> expr -> Xml.elt
 
+  val f_toascii  : form -> string
   val f_tostring : form -> string
   val f_tohtml   : ?id:string option -> form -> Xml.elt
   val f_tomathml : ?id:string option -> form -> Xml.elt
   
+  val toascii  : term -> string
   val tostring : term -> string
   val tohtml   : ?id:string option -> term -> Xml.elt
   val tomathml : ?id:string option -> term -> Xml.elt
@@ -375,6 +379,103 @@ end = struct
     | `Or    -> 0x2228
     | `Imp   -> 0x27F9
     | `Equiv -> 0x27FA
+  
+  let ascii_of_op = function
+    | `Not   -> "~"
+    | `And   -> "&&"
+    | `Or    -> "||"
+    | `Imp   -> "->"
+    | `Equiv -> "<->"
+
+  let f_toascii, e_toascii, t_toascii =
+    let open Text in
+
+    let rec for_type ?(is_pr = false) =
+      pr ~doit:is_pr <<| function
+      | TUnit ->
+          "()"
+
+      | TVar (x, 0) ->
+          UTF8.of_latin1 x
+
+      | TVar (x, i) ->
+          Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i
+
+      | TProd (t1, t2)
+      | TOr (t1, t2) as ty ->
+          let t1 = for_type ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
+          let t2 = for_type ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
+          let tycon = begin match ty with
+            | TProd _ -> '*'
+            | TOr _   -> '+'
+            | _       -> assert false
+          end in t1 ^ (spaced (UTF8.of_char (UChar.of_char tycon))) ^ t2
+
+      | TRec (x, t) ->
+          Format.sprintf "rec %s . %s" (UTF8.of_latin1 x) (for_type t)
+
+    and for_expr = function
+      | EVar (x, 0) ->
+          UTF8.of_latin1 x
+
+      | EVar (x, i) ->
+          Format.sprintf "%s{%d}" (UTF8.of_latin1 x) i
+
+      | EFun (f, args) ->
+          let args = String.concat ", " (List.map for_expr args) in
+          (UTF8.of_latin1 f) ^ (pr args)
+
+    and for_form ?(is_pr = false) =
+      pr ~doit:is_pr <<| function
+      | FTrue ->
+          "true"
+
+      | FFalse ->
+          "false"
+
+      | FConn (lg, fs) -> begin
+          let text_lg = lg |> ascii_of_op in
+          let text_fs =
+            List.combine fs (assoc_of_op lg) |>
+            List.map (fun (f, cmp) ->
+              for_form ~is_pr:(cmp (prio_of_form f) (prio_of_op lg)) f) in
+
+          match lg, text_fs with
+          | (`And | `Or | `Imp | `Equiv), [f1; f2] ->
+              f1 ^ spaced text_lg ^ f2
+          | `Not, [f] ->
+              spaced ~left:false text_lg ^ f
+          | (`And | `Or | `Imp | `Not | `Equiv), _ ->
+              assert false
+        end
+      
+      | FPred ("_EQ", [e1; e2]) ->
+          Format.sprintf "%s = %s"
+            (for_expr e1)
+            (for_expr e2)
+
+      | FPred (name, []) ->
+          UTF8.of_latin1 name
+
+      | FPred (name, args) ->
+          let args = List.map for_expr args in
+          let args = String.join ", " args in
+          UTF8.of_latin1 name ^ (pr args)
+
+      | FBind (bd, x, ty, f) ->
+          let bd = match bd with
+            | `Forall -> "forall"
+            | `Exist -> "exists" in
+          Format.sprintf "%s %s : %s . %s"
+            (bd) (UTF8.of_latin1 x) (for_type ty) (for_form f)
+
+    in (fun f -> for_form f),
+       (fun e -> for_expr e),
+       (fun t -> for_type t)
+
+  let toascii = function
+    | `E e -> e_toascii e
+    | `F f -> f_toascii f
 
   let f_tostring, e_tostring, t_tostring =
     let open Text in

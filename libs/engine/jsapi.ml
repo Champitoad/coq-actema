@@ -200,11 +200,23 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
   (* the handle (UID) of the subgoal *)
   val handle = handle
 
-  (* Return all the propositional variables as a [string array] *)
-  method vars =
+  (* Return all the functional variables as a [string array] *)
+  method fvars =
     let goal = Proof.byid parent##.proof _self##.handle in
-    let vars = List.fst (Map.bindings (Fo.Prps.all goal.g_env)) in
-    Js.array (Array.of_list (List.map Js.string vars))
+    let fvars : string list =
+      Fo.Funs.all goal.g_env |>
+      Map.bindings |>
+      List.map (fun (f, (ar, res)) ->
+        let ar = List.to_string ~sep:" & " ~left:"" ~right:"" Fo.Notation.t_tostring ar in
+        let res = Fo.Notation.t_tostring res in
+        Printf.sprintf "%s : %s -> %s" f ar res) in
+    Js.array (Array.of_list (List.map Js.string fvars))
+
+  (* Return all the propositional variables as a [string array] *)
+  method pvars =
+    let goal = Proof.byid parent##.proof _self##.handle in
+    let pvars = List.fst (Map.bindings (Fo.Prps.all goal.g_env)) in
+    Js.array (Array.of_list (List.map Js.string pvars))
 
   (* Return all the local variables as a [js_tvar array] *)
   method tvars =
@@ -309,6 +321,27 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
 
   method setmeta meta =
     Proof.set_meta parent##.proof _self##.handle (Js.Opt.to_option meta)
+  
+  method tostring =
+    let funs : string list =
+      _self##fvars |> Js.to_array |> Array.to_list |> List.map Js.to_string in
+    let props : string list =
+      _self##pvars |> Js.to_array |> Array.to_list |> List.map Js.to_string in
+    let vars : string list =
+      _self##tvars |> Js.to_array |> Array.to_list |> List.map (fun v -> v##toascii |> Js.to_string) in
+    let hyps : string list =
+      _self##context |> Js.to_array |> Array.to_list |> List.map (fun h -> h##toascii |> Js.to_string) in
+    let concl : string =
+      _self##conclusion |> fun c -> c##toascii |> Js.to_string in
+    
+    let to_string = List.to_string ~sep:", " ~left:"" ~right:"" identity in
+    let comma s = if String.is_empty s then s else ", " ^ s in
+    Js.string (Printf.sprintf "%s%s%s; %s |- %s"
+      (to_string funs)
+      (to_string vars |> comma)
+      (to_string props |> comma)
+      (to_string hyps)
+      concl)
 end
 
 (* -------------------------------------------------------------------- *)
@@ -347,6 +380,10 @@ object%js (_self)
   (* Return an UTF8 string representation of the enclosed formula *)
   method tostring =
     _self##.form##tostring
+
+  (* Return an ASCII string representation of the enclosed formula *)
+  method toascii =
+    _self##.form##toascii
 
   method getmeta =
     Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
@@ -449,6 +486,16 @@ object%js (_self)
         Js.string (Format.sprintf "%s : %s"
           (Fo.Notation.e_tostring (EVar x)) (Fo.Notation.t_tostring ty))
 
+  (* Return an ASCII string representation of the enclosed local variable *)
+  method toascii =
+    match b with
+    | Some b ->
+        Js.string (Format.sprintf "%s : %s := %s"
+          (Fo.Notation.e_tostring (EVar x)) (Fo.Notation.t_toascii ty) (Fo.Notation.e_toascii b))
+    | None ->
+        Js.string (Format.sprintf "%s : %s"
+          (Fo.Notation.e_tostring (EVar x)) (Fo.Notation.t_toascii ty))
+
   method getmeta =
     Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
 
@@ -492,6 +539,10 @@ and js_form (source : source) (form : Fo.form) = object%js (_self)
   (* Return an UTF8 string representation of the formula *)
   method tostring =
     Js.string (Fo.Notation.f_tostring form)
+
+  (* Return an ASCII string representation of the formula *)
+  method toascii =
+    Js.string (Fo.Notation.f_toascii form)
 end
 
 (* -------------------------------------------------------------------- *)
