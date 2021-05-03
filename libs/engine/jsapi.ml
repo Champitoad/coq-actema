@@ -322,7 +322,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
   method setmeta meta =
     Proof.set_meta parent##.proof _self##.handle (Js.Opt.to_option meta)
   
-  method tostring =
+  method toascii =
     let funs : string list =
       _self##fvars |> Js.to_array |> Array.to_list |> List.map Js.to_string in
     let props : string list =
@@ -335,11 +335,17 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       _self##conclusion |> fun c -> c##toascii |> Js.to_string in
     
     let to_string = List.to_string ~sep:", " ~left:"" ~right:"" identity in
-    let comma s = if String.is_empty s then s else ", " ^ s in
-    Js.string (Printf.sprintf "%s%s%s; %s |- %s"
-      (to_string funs)
-      (to_string vars |> comma)
-      (to_string props |> comma)
+    let comma =
+      "" |> List.fold_left (fun s l ->
+        if String.is_empty s then
+          if List.is_empty l then ""
+          else to_string l
+        else
+          if List.is_empty l then s
+          else s ^ ", " ^ to_string l) in
+
+    Js.string (Printf.sprintf "%s; %s |- %s"
+      (comma [funs; vars; props])
       (to_string hyps)
       concl)
 end
