@@ -448,8 +448,8 @@ object%js (_self)
           [span ~a:[Xml.string_attrib "id" _self##idhead] begin
             [span
               [Xml.pcdata (UTF8.of_latin1 (Fo.Notation.e_tostring (EVar x)))]] @
-            spaced [span [Xml.pcdata ":"]] @
-            [Fo.Notation.t_tohtml ty]
+              spaced [span [Xml.pcdata ":"]] @
+              [Fo.Notation.t_tohtml ty]
           end]
           @
           match b with
@@ -467,8 +467,8 @@ object%js (_self)
 
     let dt =
       math [
-        row ~a:[Xml.string_attrib "id" _self##idhead] begin
-          [row begin
+        row begin
+          [row ~a:[Xml.string_attrib "id" _self##idhead] begin
             [mi (UTF8.of_latin1 (Fo.Notation.e_tostring (EVar x)))] @
             [mo ":"] @
             [Fo.Notation.t_tomathml ty]
@@ -496,8 +496,8 @@ object%js (_self)
   method toascii =
     match b with
     | Some b ->
-        Js.string (Format.sprintf "%s : %s := %s"
-          (Fo.Notation.e_tostring (EVar x)) (Fo.Notation.t_toascii ty) (Fo.Notation.e_toascii b))
+        Js.string (Format.sprintf "%s := %s"
+          (Fo.Notation.e_tostring (EVar x)) (Fo.Notation.e_toascii b))
     | None ->
         Js.string (Format.sprintf "%s : %s"
           (Fo.Notation.e_tostring (EVar x)) (Fo.Notation.t_toascii ty))
