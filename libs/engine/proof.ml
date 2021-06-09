@@ -2350,15 +2350,15 @@ end = struct
       | Pos, `F FBind (`Forall, x, _, f)
       | Neg, `F FBind (`Exist, x, _, f) ->
           get >>= fun { deps; rnm; subst } ->
+          let z = EVars.fresh () in
           let exs = Subst.fold
             (fun acc (x, t) -> if t = Sflex then x :: acc else acc)
             [] subst
           in
           let deps = List.fold_left
-            (fun deps y -> Deps.add_edge deps y x)
+            (fun deps y -> Deps.add_edge deps y z)
             deps exs
           in
-          let z = EVars.fresh () in
           let rnm = (z, x) :: rnm in
           put { deps; rnm; subst } >>= fun _ ->
           let f = Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f in
