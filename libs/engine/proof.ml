@@ -1624,8 +1624,8 @@ end = struct
     | FBind (`Exist, _, _, FFalse) ->
         Form.f_false
 
-    | FPred ("_EQ", [e1; e2]) when Form.e_equal e1 e2 ->
-        Form.f_true
+    (* | FPred ("_EQ", [e1; e2]) when Form.e_equal e1 e2 ->
+        Form.f_true *)
     | FConn (`Or, [_; FTrue])
     | FConn (`Or, [FTrue; _])
     | FConn (`Imp, [_; FTrue])
