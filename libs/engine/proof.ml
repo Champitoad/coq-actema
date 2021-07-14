@@ -1043,6 +1043,20 @@ end = struct
   let term_of_ipath (proof : Proof.proof) (p : ipath) : term =
     let (_, _, (_, t)) = of_ipath proof p in
     t
+  
+  let env_of_ipath (proof : Proof.proof) (p : ipath) : env =
+    let (goal, item, (sub, _)) = of_ipath proof p in
+    let env = goal.g_pregoal.g_env in
+    match item with
+    | `V _ -> env
+    | `H (_, Proof.{ h_form = f; _ })| `C f ->
+        let rec aux env t sub =
+          match sub with [] -> env | i :: sub ->
+          match t, i with
+          | `E _, _ -> env
+          | `F FBind (_, x, ty, f), 0 -> aux (Vars.push env (x, (ty, None))) (`F f) sub
+          | `F _, _ -> aux env (direct_subterm t i) sub
+        in aux env (`F f) sub
 
 
   let is_sub_path (p : ipath) (sp : ipath) =
@@ -2388,7 +2402,7 @@ end = struct
       
       If [drewrite] is set to [true], it only checks for deep rewrite links,
       that is links where one side is a negative equality operand, and the other
-      side an arbitrary unifiable subexpression. *)
+      side an arbitrary unifiable subexpression of the same type. *)
 
   let wf_subform_link ?(drewrite = false) : lpred =
     let open Form in
@@ -2407,8 +2421,8 @@ end = struct
 
     fun proof (src, dst) ->
 
-    let _, item_src, (sub_src, _) = of_ipath proof src in
-    let _, item_dst, (sub_dst, _) = of_ipath proof dst in
+    let goal, item_src, (sub_src, t_src) = of_ipath proof src in
+    let _, item_dst, (sub_dst, t_dst) = of_ipath proof dst in
 
     try
       let f1, f2 = pair_map form_of_item (item_src, item_dst) in
@@ -2452,7 +2466,11 @@ end = struct
             | _ -> None
             end
         (* Deep rewrite *)
-        | `E e1, `E e2 when drewrite ->
+        | `E e1, `E e2 when drewrite &&
+                            let env = goal.g_pregoal.g_env in
+                            let ty1 = einfer (env_of_ipath proof src) (expr_of_term t_src) in
+                            let ty2 = einfer (env_of_ipath proof dst) (expr_of_term t_dst) in
+                            Form.(t_equal env ty1 ty2) ->
             let eq1, eq2 = pair_map (is_eq_operand proof) (src, dst) in
             begin match (sp1, eq1), (sp2, eq2) with
             | (Neg, true), _ | _, (Neg, true) ->
