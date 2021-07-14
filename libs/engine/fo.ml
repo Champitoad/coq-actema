@@ -1314,17 +1314,20 @@ end = struct
   let t_equal =
     let rec eq_alias (bds : VName.bds) (env : env)
       (a : vname) (ty : type_) : bool =
-        
-      match ty with
-      | TVar b ->
-          if VName.equal bds a b then true
-          else eq_alias bds env b (TVar a)
       
-      | _ ->
-          begin match TVars.get env a with
-          | None | Some None -> false
-          | Some Some ty' -> eq bds env ty ty'
-          end
+      let tgt_a = TVars.get env a in
+      let b, tgt_b =
+        match ty with
+        | TVar b -> Some b, TVars.get env b
+        | _ -> None, None
+      in
+      match b, pair_map Monad.Option.concat (tgt_a, tgt_b) with
+      (* Base case *)
+      | None, (None, _) -> false (* b is not a var, and a is not an alias *)
+      | Some b, (None, None) -> VName.equal bds a b (* b is a var, and neither a nor b are aliases *)
+      (* Recursive case (either a or b is an alias) *)
+      | _, (Some ty', _) -> eq bds env ty ty'
+      | _, (_, Some ty') -> eq_alias bds env a ty'
 
     and eq bds env ty1 ty2 =
       match ty1, ty2 with
