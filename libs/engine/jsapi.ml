@@ -637,7 +637,7 @@ let export (name : string) : unit =
      * its unicode representation.
      *
      * Raise an exception if [input] is invalid *)
-    method parse_to_unicode x =
+    method parseToUnicode x =
       let _, hyps, goal = !!(fun () ->
           let goal = String.trim (Js.to_string x) in
           let goal = Io.parse_goal (Io.from_string goal) in
