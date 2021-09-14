@@ -1704,7 +1704,8 @@ end = struct
     in
 
     (** [instantiable lenv ctx s x] returns [true] if the variable [x] is
-        bound in substitution [s] to an expression [e] which is well-scoped. *)
+        either flex, or bound in substitution [s] to an expression [e] which is
+        well-scoped. *)
     
     let instantiable lenv ctx s x =
       let lenv = LEnv.enter lenv x in
@@ -1753,6 +1754,7 @@ end = struct
       ((env1, s1 as es1), (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       (((l, lsub as h), (r, rsub as c)) as linkage : (form * int list) * (form * int list)) : form =
       
+      js_log (Subst.to_string s1 ^ " ⊢ " ^ Subst.to_string s2);
       js_log (print_linkage `Backward linkage);
       
       match linkage with
@@ -1774,7 +1776,7 @@ end = struct
           end
         in fc_fill f (fc_rev ctx)
       
-      | (FPred ("_EQ", [e1; e2]), [i]), _
+      | (FPred ("_EQ", [e1; e2]), [i]), (FPred _, _)
         when e_equal (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
         let res =
           (* L=₁ *)
