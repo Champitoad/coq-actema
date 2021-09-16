@@ -639,13 +639,18 @@ let export (name : string) : unit =
      * Raise an exception if [input] is invalid *)
     method parseToUnicode x =
       let _, hyps, goal = !!(fun () ->
-          let goal = String.trim (Js.to_string x) in
+          let goal = String.trim (Js.to_string x##.input) in
           let goal = Io.parse_goal (Io.from_string goal) in
           Fo.Goal.check goal
         ) () in
 
-      Js.string (Printf.sprintf "%s ⊢ %s"
-        (List.to_string ~sep:", " ~left:"" ~right:"" Fo.Notation.f_tostring hyps)
+      Js.string (Printf.sprintf "%s⊢ %s"
+        (Js.Optdef.case x##.printHyps
+          (fun _ -> "")
+          (fun b -> if not (Js.to_bool b) then ""
+                    else List.to_string
+                           ~sep:", " ~left:"" ~right:" "
+                           Fo.Notation.f_tostring hyps))
         (Fo.Notation.f_tostring goal))
 
   end)
