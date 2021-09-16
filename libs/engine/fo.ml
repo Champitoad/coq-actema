@@ -484,6 +484,9 @@ end = struct
       pr ~doit:is_pr <<| function
       | TUnit ->
           "()"
+      
+      | TVar ("nat", _) ->
+          "ℕ"
 
       | TVar (x, 0) ->
           UTF8.of_latin1 x
@@ -504,12 +507,45 @@ end = struct
       | TRec (x, t) ->
           Format.sprintf "rec %s . %s" (UTF8.of_latin1 x) (for_type t)
 
-    and for_expr = function
+    and for_expr ?(is_pr = false) expr =
+      match expr with
       | EVar (x, 0) ->
           UTF8.of_latin1 x
 
       | EVar (x, i) ->
           Format.sprintf "%s{%d}" (UTF8.of_latin1 x) i
+      
+      | EFun ("Z"    as f, es)
+      | EFun ("S"    as f, es)
+      | EFun ("add"  as f, es)
+      | EFun ("mult" as f, es) ->
+          let str es =
+            List.combine es (assoc_of_fun f) |>
+            List.mapi (fun i (e, cmp) ->
+              for_expr ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) e) in
+
+          begin match f, str es with
+          | "Z", [] ->
+              "0"
+          | "S", _ ->
+              let rec numeral num = function
+                | EFun ("S", [x]) ->
+                    numeral (num + 1) x
+                | EFun ("Z", []) ->
+                    string_of_int num
+                | e -> 
+                    (str [e] |> List.hd) ^
+                    "⊕" ^
+                    string_of_int num
+              in
+              numeral 0 expr
+          | "add", [e1; e2] ->
+              e1 ^ spaced "+" ^ e2
+          | "mult", [e1; e2] ->
+              e1 ^ spaced "⋅" ^ e2
+          | _ ->
+              assert false
+          end
 
       | EFun (f, args) ->
           let args = String.concat ", " (List.map for_expr args) in
