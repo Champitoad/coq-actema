@@ -2348,8 +2348,7 @@ end = struct
            producing the final substitution for each formula.
           
          - [subst] is the substitution that will be fed to unification, in which we
-           record existential variables in [Sflex] entries, as well as the fresh
-           eigenvariables in [Sbound] entries together with their original names.
+           record existential variables in [Sflex] entries.
       *)
       type t =
         { deps : Deps.t;

@@ -51,9 +51,14 @@ end
 let () = Exn.register (fun exn ->
     match exn with
     | Syntax.ParseError _ ->
-        Some "invalid formula (parse error)"
-    | Fo.DuplicatedEntry _ | Fo.TypingError | Fo.RecheckFailure ->
-        Some "invalid formula"
+        Some "invalid goal (parse error)"
+    | Fo.DuplicatedEntry (_, name) ->
+        Some ("duplicated entry \"" ^ name ^ "\" in goal")
+    | Fo.TypingError
+    | Fo.RecheckFailure ->
+        Some "invalid goal (type error)"
+    | TacticNotApplicable ->
+        Some "tactic not applicable"
     | _ ->
         None
   )
@@ -633,7 +638,7 @@ let export (name : string) : unit =
         Fo.Goal.check goal
       ) () in js_proof_engine (Proof.init env hyps goal)
 
-    (* [this#parse_to_unicode input] parses the goal [input] and returns
+    (* [this#parseToUnicode input] parses the goal [input] and returns
      * its unicode representation.
      *
      * Raise an exception if [input] is invalid *)
