@@ -7,6 +7,7 @@ type source = Handle.t * [`C | `H of Handle.t]
 
 (* -------------------------------------------------------------------- *)
 exception InvalidASource
+exception InvalidLemmaDB
 
 (* -------------------------------------------------------------------- *)
 module Exn : sig
@@ -59,6 +60,8 @@ let () = Exn.register (fun exn ->
         Some "invalid goal (type error)"
     | TacticNotApplicable ->
         Some "tactic not applicable"
+    | LemmaDB.LemmaNotFound name ->
+        Some ("lemma \"" ^ name ^ "\" does not exist")
     | _ ->
         None
   )
@@ -194,6 +197,28 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   (* Apply the action [action] (as returned by [actions]) *)
   method apply action =
     js_proof_engine (!! (curry CoreLogic.apply) (_self##.proof, action))
+  
+  (* Load the lemma database specified by the [lemmas] array into the prover *)
+  method loaddb lemmas =
+    let lemmas : (string * string) list =
+      match Js.to_string (Js.typeof lemmas) with
+      | "object" ->
+          lemmas |> Js.object_keys |> Js.to_array |> Array.to_list |>
+          List.map begin fun name ->
+            let name = Js.as_string InvalidLemmaDB name in
+            let stmt = Js.as_string InvalidLemmaDB (Js.Unsafe.get lemmas name) in
+            (name, stmt)
+          end
+      | _ -> raise InvalidLemmaDB
+      in
+    let pr = Proof.loaddb _self##.proof lemmas in
+    js_proof_engine pr
+
+  
+  (* Serialize the current lemma database into a JS array *)
+  method getdb =
+    (* [TODO] Serialize into array of objects *)
+    assert false
 end
 
 (* -------------------------------------------------------------------- *)
@@ -280,6 +305,16 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       let form = Fo.Form.check goal.g_env form in
       CoreLogic.cut form (parent##.proof, _self##.handle)
     in js_proof_engine (!!doit ())
+  
+  (* [this#addlemma (name : string)] retrieves the lemma [name] in the database,
+     and adds it as a new hypothesis in the current goal. *)
+  method addlemma name =
+    let doit () =
+      let name = Js.to_string name in
+      let form = LemmaDB.find (Proof.db parent##.proof) name in
+      CoreLogic.assume form (parent##.proof, _self##.handle)
+    in js_proof_engine (!!doit ())
+      
 
   (* [this#add_local (name : string) (expr : string) parses [expr] in the goal
    * [context] and adds it to the local [context] under the name [name]. *)

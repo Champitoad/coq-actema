@@ -68,6 +68,8 @@ module Proof : sig
   type pregoals = pregoal list
 
   val init    : env -> form list -> form -> proof
+  val db      : proof -> LemmaDB.t
+  val loaddb  : proof -> (string * string) list -> proof
   val closed  : proof -> bool
   val opened  : proof -> Handle.t list
   val after   : proof -> Handle.t -> Handle.t list
@@ -179,6 +181,7 @@ end = struct
     p_frwd : (Handle.t, gdep) Map.t;
     p_bkwd : (Handle.t, gdep) Map.t;
     p_meta : (Handle.t, < > Js.t) Map.t ref;
+    p_db   : LemmaDB.t;
   }
 
   and goal = { g_id: Handle.t; g_pregoal: pregoal; }
@@ -212,7 +215,14 @@ end = struct
       p_crts = [uid];
       p_frwd = Map.empty;
       p_bkwd = Map.empty;
-      p_meta = ref Map.empty; }
+      p_meta = ref Map.empty;
+      p_db   = LemmaDB.empty env; }
+  
+  let db (proof : proof) =
+    proof.p_db
+    
+  let loaddb (proof : proof) (lemmas : (string * string) list) =
+    { proof with p_db = LemmaDB.load proof.p_db lemmas }
 
   let closed (proof : proof) =
     List.is_empty proof.p_crts
@@ -343,6 +353,7 @@ module CoreLogic : sig
   type pol = Pos | Neg | Sup
 
   val cut        : Fo.form -> tactic
+  val assume     : Fo.form -> tactic
   val add_local  : string * Fo.type_ * Fo.expr option -> tactic
   val generalize : Handle.t -> tactic
   val move       : Handle.t -> Handle.t option -> tactic
@@ -714,6 +725,16 @@ end = struct
     
     Proof.sprogress proof hd (TCut (form, hd))
       (subs @ [[None, [form]], goal.g_goal])
+
+  type pnode += TAssume of Fo.form * Handle.t
+
+  let assume (form : form) ((proof, hd) : targ) =
+    let goal = Proof.byid proof hd in
+
+    Fo.Form.recheck goal.g_env form;
+    
+    Proof.sprogress proof hd (TAssume (form, hd))
+      ([[None, [form]], goal.g_goal])
 
   type pnode += TGeneralize of Handle.t
 
