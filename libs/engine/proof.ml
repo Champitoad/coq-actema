@@ -485,9 +485,11 @@ end = struct
 
   let intro ?(variant = (0, None)) ((pr, id) : targ) =
     let pterm = TIntro variant in
+    let goal = Proof.byid pr id in
+    let g_env = goal.g_env in
 
     match variant, (Proof.byid pr id).g_goal with
-    | (0, None), FPred ("_EQ", [e1; e2]) when Form.e_equal e1 e2 ->
+    | (0, None), FPred ("_EQ", [e1; e2]) when Form.e_equal g_env e1 e2 ->
         Proof.progress pr id pterm []
 
     | (0, None), FConn (`And, [f1; f2]) ->
@@ -523,7 +525,7 @@ end = struct
 
         Fo.Form.erecheck goal.g_env ety e;
         if not (Form.t_equal goal.g_env xty ety) then
-          raise TacticNotApplicable;
+          raise TacticNotApplicable; 
         let goal = Fo.Form.Subst.f_apply1 (x, 0) e body in
         Proof.sprogress pr id pterm [[], goal]
       end
@@ -560,7 +562,7 @@ end = struct
       then result := [(TElim id), `S []]
       else
         let pre, hy, s = prune_premisses_fa hyp in
-        begin match Form.f_unify LEnv.empty s [(hy, gl.g_goal)] with
+        begin match Form.f_unify gl.g_env LEnv.empty s [(hy, gl.g_goal)] with
         | Some s when Form.Subst.is_complete s ->  
             let pres = List.map
             (fun (i, x) -> [Some h, []], (Form.Subst.f_iter s i x)) pre in
@@ -601,7 +603,7 @@ end = struct
         let _ , goal, s = prune_premisses_ex gl.g_goal in
         let pre, hy = prune_premisses hyp in
         let pre = List.map (fun x -> [(Some h), []],x) pre in
-        begin match Form.f_unify LEnv.empty s [(hy, goal)] with
+        begin match Form.f_unify gl.g_env LEnv.empty s [(hy, goal)] with
         | Some s when Form.Subst.is_complete s ->
             result := ((TElim id), `S pre) :: !result
         | Some _ -> () (* failwith "incomplete ex match" *)
@@ -611,7 +613,7 @@ end = struct
               let gll = Form.flatten_disjunctions goal in
               let rec aux = function
                 | [] -> false
-                | g::l -> begin match Form.f_unify LEnv.empty s [(hyp, g)] with
+                | g::l -> begin match Form.f_unify gl.g_env LEnv.empty s [(hyp, g)] with
                     | Some s when Form.Subst.is_complete s -> true
                     | _ -> aux l
                   end
@@ -1775,7 +1777,7 @@ end = struct
         in fc_fill f (fc_rev ctx)
       
       | (FPred ("_EQ", [e1; e2]), [i]), _
-        when e_equal (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
+        when e_equal goal.g_env (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
         let res =
           (* L=₁ *)
           if i = 0 then e2
@@ -1952,7 +1954,7 @@ end = struct
         fc_fill f (fc_rev ctx)
 
       | (FPred ("_EQ", [e1; e2]), [i]), _
-        when e_equal (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
+        when e_equal goal.g_env (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
         let res =
           (* L=₁ *)
           if i = 0 then e2
@@ -2462,7 +2464,7 @@ end = struct
         | `F f1, `F f2 when not drewrite ->
             begin match sp1, sp2 with
             | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
-                f_unify LEnv.empty s [f1, f2]
+                f_unify  goal.g_pregoal.g_env LEnv.empty s [f1, f2]
             | _ -> None
             end
         (* Deep rewrite *)
@@ -2474,7 +2476,7 @@ end = struct
             let eq1, eq2 = pair_map (is_eq_operand proof) (src, dst) in
             begin match (sp1, eq1), (sp2, eq2) with
             | (Neg, true), _ | _, (Neg, true) ->
-                e_unify LEnv.empty s [e1, e2]
+                e_unify goal.g_pregoal.g_env LEnv.empty s [e1, e2]
             | _ -> None
             end
         | _ -> None

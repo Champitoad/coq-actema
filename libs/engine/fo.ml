@@ -1195,7 +1195,7 @@ module Form : sig
   val recheck  : env -> form -> unit
 
   val t_equal : ?bds:VName.bds -> env -> type_ -> type_ -> bool
-  val e_equal : ?bds:VName.bds -> expr  -> expr  -> bool
+  val e_equal : ?bds:VName.bds -> env -> expr  -> expr  -> bool
   val f_equal : ?bds:VName.bds -> env -> form  -> form  -> bool
   val equal   : ?bds:VName.bds -> env -> term -> term -> bool
 
@@ -1265,8 +1265,8 @@ module Form : sig
     val to_string   : subst -> string
   end
 
-  val e_unify : LEnv.lenv -> Subst.subst -> expr eqns -> Subst.subst option
-  val f_unify : LEnv.lenv -> Subst.subst -> form eqns -> Subst.subst option
+  val e_unify : env -> LEnv.lenv -> Subst.subst -> expr eqns -> Subst.subst option
+  val f_unify : env -> LEnv.lenv -> Subst.subst -> form eqns -> Subst.subst option
 end = struct
   let f_and   = fun f1 f2 -> FConn (`And  , [f1; f2])
   let f_or    = fun f1 f2 -> FConn (`Or   , [f1; f2])
@@ -1351,16 +1351,20 @@ end = struct
     in fun ?(bds = VName.Map.empty) env ty1 ty2 -> eq bds env ty1 ty2
 
   let e_equal =
-    let rec aux bds e1 e2 =
+    let rec aux bds env e1 e2 =
       match e1, e2 with
-      | EVar x1, EVar x2 -> VName.equal bds x1 x2
+	| EVar x1, EVar x2 when VName.equal bds x1 x2 -> true
+	| EVar x1, t | t, EVar x1 ->
+			 (match Vars.get env x1 with
+			   | Some (_, Some u) -> aux bds env t u
+			   | _ -> false)
       | EFun (f1, es1), EFun (f2, es2) 
         when List.length es1 = List.length es2 ->
-          (f1 = f2) && List.for_all2 (aux bds) es1 es2
+          (f1 = f2) && List.for_all2 (aux bds env) es1 es2
       | _, _ ->
           false
     in
-    fun ?(bds = VName.Map.empty) e1 e2 -> aux bds e1 e2
+    fun ?(bds = VName.Map.empty) env e1 e2 -> aux bds env e1 e2
 
   let f_equal =
     let rec aux bds env f1 f2 =
@@ -1370,7 +1374,7 @@ end = struct
 
       | FPred (p1, es1), FPred (p2, es2)
         when List.length es1 = List.length es2
-        -> (p1 = p2)  && List.for_all2 (e_equal ~bds) es1 es2 
+        -> (p1 = p2)  && List.for_all2 (e_equal ~bds env) es1 es2 
 
       | FConn (c1, fs1), FConn (c2, fs2)
         when List.length fs1 = List.length fs2 
@@ -1389,7 +1393,7 @@ end = struct
   let equal ?bds (env : env) (t1 : term) (t2 : term) : bool =
     match t1, t2 with
     | `F f1, `F f2 -> f_equal ?bds env f1 f2
-    | `E e1, `E e2 -> e_equal ?bds e1 e2
+    | `E e1, `E e2 -> e_equal ?bds env e1 e2
     | _ -> false
     
   
@@ -1905,7 +1909,10 @@ end = struct
       "flex") variables, and a local environment [lenv] holding a context of locally
       bound variables. *)
 
-  let rec e_unify (lenv : LEnv.lenv) (s : Subst.subst) = function
+ 	   
+  exception Invalid_constant 
+	   
+  let rec e_unify (venv : env) (lenv : LEnv.lenv) (s : Subst.subst) = function
 
     (* success *)
     | [] ->
@@ -1921,18 +1928,23 @@ end = struct
             (LEnv.indices lenv)
         in
         let unify_body x t =
-          e_unify lenv (Subst.add x t s) eqns
+          e_unify venv lenv (Subst.add x t s) eqns
         in
 
         let substitute_cond x = Subst.bound x s in
         let substitute_body x t =
-          e_unify lenv s (((Subst.fetch x s), t) :: eqns)
+          e_unify venv lenv s (((Subst.fetch x s), t) :: eqns)
         in
-      
+        let is_const x  =
+	  match Vars.get venv x with
+	    | Some (_, Some _) -> true
+	    | _ -> false
+	in
+	
         match t, u with
-
+	    
         (* (eliminate) is decomposed into the 2 following mutually exclusive cases: *)
-
+	    	    
         (* (unify) *)
         | EVar x, t when unify_cond x t -> unify_body x t
         | t, EVar x when unify_cond x t -> unify_body x t
@@ -1943,11 +1955,21 @@ end = struct
 
         (* (delete) *)
         | EVar x, EVar y when x = y ->
-            e_unify lenv s eqns
-
+            e_unify venv lenv s eqns
+	    
         (* (decompose) *)
         | EFun (f, ts), EFun (g, us) when f = g ->
-            e_unify lenv s ((List.combine ts us) @ eqns)
+            e_unify venv lenv s ((List.combine ts us) @ eqns)
+
+	(*(expand)*)
+	| t, EVar y when is_const y ->
+	    (match Vars.get venv y with
+	      | Some (_, Some ye) -> e_unify venv lenv s ((t,ye)::eqns)
+	      | _ -> raise Invalid_constant)
+	| EVar x, u when is_const x ->
+	    (match Vars.get venv x with
+	      | Some (_, Some xe) -> e_unify venv lenv s ((xe, u)::eqns)
+	      | _ -> raise Invalid_constant)
 
         (* (fail) *)
         | _ -> None
@@ -1957,7 +1979,8 @@ end = struct
       formulas, updating along the way a substitution [s] and a local environment [lenv]
       holding a context of locally bound variables.
   *)
-  let rec f_unify (lenv : LEnv.lenv) (s : Subst.subst) =
+  let rec f_unify (venv : env)
+     (lenv : LEnv.lenv) (s : Subst.subst) =
     let open Monad.Option in function
 
     | [] -> Some s
@@ -1966,26 +1989,26 @@ end = struct
 
         | FTrue, FTrue | FFalse, FFalse ->
           
-            f_unify lenv s eqns
+            f_unify venv lenv s eqns
 
         | FPred (p1, l1), FPred (p2, l2)
           when p1 = p2 && List.length l1 = List.length l2 ->       
 
-            e_unify lenv s (List.combine l1 l2) >>= fun s ->
-            f_unify lenv s eqns
+            e_unify venv lenv s (List.combine l1 l2) >>= fun s ->
+            f_unify venv lenv s eqns
 
         | FConn (c1, l1), FConn (c2, l2)
           when c1 = c2 && List.length l1 = List.length l2 ->
 
             let subeqns = List.combine l1 l2 in
-            f_unify lenv s (subeqns @ eqns)
+            f_unify venv lenv s (subeqns @ eqns)
 
         | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
           when b1 = b2 && ty1 = ty2 ->
 
             let f2 = Subst.f_apply1 (x2, 0) (EVar (x1, 0)) (f_shift (x1, 0) f2) in
-            f_unify (LEnv.enter lenv x1) s [f1, f2] >>= fun s ->
-            f_unify lenv s eqns
+            f_unify venv (LEnv.enter lenv x1) s [f1, f2] >>= fun s ->
+            f_unify venv lenv s eqns
 
         | _ -> None
 end
