@@ -308,7 +308,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       CoreLogic.move
         from (Js.Opt.to_option before)
         (parent##.proof, _self##.handle)
-    in js_proof_engine (!!doit ())
+    in !!doit ()
 
   (* [this#generalize (h : handle<js_hyps>) generalizes the hypothesis [h] *)
   method generalize hid =
@@ -346,6 +346,18 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
 
     Js.string (Printf.sprintf "%s; %s |- %s"
       (comma [funs; vars; props])
+      (to_string hyps)
+      concl)
+
+  method tostring =
+    let hyps : string list =
+      _self##context |> Js.to_array |> Array.to_list |> List.map (fun h -> h##tostring |> Js.to_string) in
+    let concl : string =
+      _self##conclusion |> fun c -> c##tostring |> Js.to_string in
+    
+    let to_string = List.to_string ~sep:", " ~left:"" ~right:"" identity in
+
+    Js.string (Printf.sprintf "%s ⊢ %s"
       (to_string hyps)
       concl)
 end
@@ -620,4 +632,25 @@ let export (name : string) : unit =
         let goal = Io.parse_goal (Io.from_string goal) in
         Fo.Goal.check goal
       ) () in js_proof_engine (Proof.init env hyps goal)
+
+    (* [this#parse_to_unicode input] parses the goal [input] and returns
+     * its unicode representation.
+     *
+     * Raise an exception if [input] is invalid *)
+    method parseToUnicode x =
+      let _, hyps, goal = !!(fun () ->
+          let goal = String.trim (Js.to_string x##.input) in
+          let goal = Io.parse_goal (Io.from_string goal) in
+          Fo.Goal.check goal
+        ) () in
+
+      Js.string (Printf.sprintf "%s⊢ %s"
+        (Js.Optdef.case x##.printHyps
+          (fun _ -> "")
+          (fun b -> if not (Js.to_bool b) then ""
+                    else List.to_string
+                           ~sep:", " ~left:"" ~right:" "
+                           Fo.Notation.f_tostring hyps))
+        (Fo.Notation.f_tostring goal))
+
   end)
