@@ -218,7 +218,12 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   (* Serialize the current lemma database into a JS array *)
   method getdb =
     (* [TODO] Serialize into array of objects *)
-    assert false
+    _self##.proof |> Proof.db |> LemmaDB.all |>
+    List.map begin fun (name, form) ->
+      name, Js.Unsafe.inject (Fo.Notation.f_tostring form)
+    end |>
+    Array.of_list |>
+    Js.Unsafe.obj
 end
 
 (* -------------------------------------------------------------------- *)
