@@ -220,7 +220,11 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
     (* [TODO] Serialize into array of objects *)
     _self##.proof |> Proof.db |> LemmaDB.all |>
     List.map begin fun (name, form) ->
-      name, Js.Unsafe.inject (Fo.Notation.f_tostring form)
+      let stmt =
+        Fo.Notation.f_tostring form |>
+        Js.string |>
+        Js.Unsafe.inject
+      in name, stmt
     end |>
     Array.of_list |>
     Js.Unsafe.obj
