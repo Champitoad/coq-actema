@@ -772,7 +772,6 @@ end = struct
 
   (** The [close_with_unit] tactic tries to close the goal either with
       the falsity elimination rule, or the truth introduction rule. *)
-
   let close_with_unit : tactic =
     fun (proof, g_id as targ) ->
 
@@ -873,7 +872,6 @@ end = struct
   (** [rewrite_subterm_all env red res t sub] rewrites all occurrences of [red]
       in the subterm of [t] at subpath [sub] into [res], shifting variables in
       [red] and [res] whenever a binder is encountered along the path. *)
-
   let rewrite_subterm_all env red res =
     modify_subterm
       (fun (red, res) -> Form.rewrite env red res)
@@ -883,7 +881,6 @@ end = struct
   (** [rewrite_subterm res t sub] rewrites the subterm of [t] at subpath
       [sub] into [res], shifting variables in [res] whenever a binder is
       encountered along the path. *)
-  
   let rewrite_subterm res =
     modify_subterm
       (fun res _ -> res)
@@ -1088,12 +1085,11 @@ end = struct
     && List.is_prefix sp.sub p.sub
 
   
+  type pnode += TRewriteAt of term * ipath
+
   (** [rewrite_at p t targ] rewrites the subterm at path [p] in the goal
       into [t]. It automatically shifts variables in [t] to avoid capture by
       binders. *)
-
-  type pnode += TRewriteAt of term * ipath
-
   let rewrite_at (t : term) (p : ipath) : tactic =
     let open Proof in fun (proof, _) ->
 
@@ -1128,13 +1124,12 @@ end = struct
         end
   
 
+  type pnode += TRewrite of expr * expr * ipath
+
   (** [rewrite red res tgt targ] rewrites every occurrence of the expression
       [red] in the subterm at path [tgt] into the expression [res]. It
       automatically shifts variables in [red] and [res] to avoid capture by
       binders in [tgt]. *)
-
-  type pnode += TRewrite of expr * expr * ipath
-
   let rewrite (red : expr) (res : expr) (tgt : ipath) : tactic =
     fun (proof, hd) ->
       
@@ -1181,7 +1176,6 @@ end = struct
     (** [unfold x tgts targ] unfolds the definition of the local variable [x]
         in all destinations specified by [tgts]. If [~fold] is set to [true],
         it will fold it instead. *)
-    
     let unfold ?(fold = false) (x : vname) (tgts : ipath list) : tactic =
       fun (proof, hd) ->
 
@@ -1231,7 +1225,6 @@ end = struct
 
 
   (** [opp p] returns the opposite polarity of [p] *)
-
   let opp = function
     | Pos -> Neg
     | Neg -> Pos
@@ -1240,7 +1233,6 @@ end = struct
 
   (** [direct_subform_pol (p, f) i] returns the [i]th direct subformula of [f]
       together with its polarity, given that [f]'s polarity is [p] *)
-
   let direct_subform_pol (p, f : pol * form) (i : int) =
     match f with
     | FConn (c, fs) ->
@@ -1270,14 +1262,12 @@ end = struct
 
   (** [subform_pol (p, f) sub] returns the subformula of [f] at path [sub] together
       with its polarity, given that [f]'s polarity is [p] *)
-
   let subform_pol (p, f) sub =
     try List.fold_left direct_subform_pol (p, f) sub
     with InvalidSubFormPath _ -> raise (InvalidSubFormPath sub)
 
 
   (** [neg_count f sub] counts the number of negations in [f] along path [sub] *)
-  
   let neg_count (f : form) (sub : int list) : int =
     let rec aux (n, f) =
       function [] -> n | i :: sub ->
@@ -1302,7 +1292,6 @@ end = struct
 
 
   (** [pol_of_item it] returns the polarity of the item [it] *)
-
   let pol_of_item = function
     | `H _ -> Neg
     | `C _ -> Pos
@@ -1311,7 +1300,6 @@ end = struct
 
   (** [pol_of_ipath proof p] returns the polarity of the subformula
       at path [p] in [proof] *)
-
   let pol_of_ipath (proof : Proof.proof) (p : ipath) : pol =
     let _, item, (sub, _) = of_ipath proof p in
     let pol, form =
@@ -1337,7 +1325,6 @@ end = struct
   (** [instantiate wit tgt targ] instantiates the quantifier at path [tgt] with
       the expression [wit]. If the quantifier occurs in a hypothesis, the
       hypothesis is duplicated before instantiation. *)
-
   let instantiate (wit : expr) (tgt : ipath) : tactic =
     fun ((proof, _) as targ) ->
   
@@ -1359,7 +1346,6 @@ end = struct
 
   (** [link] is the equivalent of Proof by Pointing's [finger_tac], but using
       the interaction rules specific to subformula linking. *)
-
   let link (src, dst : link) (s_src, s_dst : Form.Subst.subst * Form.Subst.subst) : tactic =
     fun (proof, hd) ->
 
@@ -1648,7 +1634,6 @@ end = struct
 
   (** [elim_units f] eliminates all occurrences of units
       in formula [f] using algebraic unit laws. *)
-
   let rec elim_units : form -> form = function
 
     (* Absorbing elements *)
@@ -1697,7 +1682,6 @@ end = struct
   
   (** [dlink] stands for _d_eep linking, and implements the deep interaction phase
       à la Chaudhuri for intuitionistic logic. *)
-  
   let dlink (src, dst : link) (s_src, s_dst : Form.Subst.subst * Form.Subst.subst) : tactic =
     fun (proof, g_id) ->
 
@@ -1716,7 +1700,6 @@ end = struct
     (** [well_scoped lenv e] returns [true] if all variables in the
         expression [e] are bound either in the global environment [goal.g_env],
         or in the local environment [lenv]. *)
-
     let well_scoped ctx e =
       e_vars e |> List.for_all begin fun x ->
         fc_is_bound x ctx ||
@@ -1727,7 +1710,6 @@ end = struct
     (** [instantiable lenv ctx s x] returns [true] if the variable [x] is
         either flex, or bound in substitution [s] to an expression [e] which is
         well-scoped. *)
-    
     let instantiable lenv ctx s x =
       let lenv = LEnv.enter lenv x in
       match get_tag (x, LEnv.get_index lenv x) s with
@@ -2157,7 +2139,6 @@ end = struct
 
   
   (** [t_subs f] returns all the paths leading to a subterm in [t]. *)
-  
   let t_subs (t : term) : (int list) list =
 
     let rec aux sub = function
@@ -2181,7 +2162,6 @@ end = struct
 
 
   (** [f_subs f] returns all the paths leading to a subformula in [f]. *)
-
   let f_subs (f : form) : (int list) list =
 
     let rec aux sub = function
@@ -2199,7 +2179,6 @@ end = struct
 
 
   (** [e_subs f] returns all the paths leading to a subexpression in [f]. *)
-
   let e_subs (f : form) : (int list) list =
 
     let rec f_aux sub = function
@@ -2244,7 +2223,6 @@ end = struct
   
   (** [hlpred_mult lps] returns a hyperlink predicate that denotes the cartesian
       product of the actions denoted by the hyperlink predicates in [lps]. *)
-
   let hlpred_mult : hlpred list -> hlpred =
     let mult : hlpred -> hlpred -> hlpred =
       fun p1 p2 -> fun pr lnk ->
@@ -2256,7 +2234,6 @@ end = struct
 
   (** [hlpred_add lps] returns a hyperlink predicate that denotes the disjoint
       union of the actions denoted by the hyperlink predicates in [lps]. *)
-
   let hlpred_add : hlpred list -> hlpred =
     fun ps -> fun pr lnk ->
       List.map (fun p -> p pr lnk) ps |> 
@@ -2265,7 +2242,6 @@ end = struct
 
   (** [hlpred_if_empty p1 p2] is equivalent to [p1] at links where the
       latter is non-empty, and [p2] elsewhere. *)
-  
   let hlpred_if_empty : hlpred -> hlpred -> hlpred =
     fun p1 p2 -> fun pr lnk ->
       let actions = p1 pr lnk in
@@ -2282,7 +2258,6 @@ end = struct
       hyperlinks with sources [fixed_srcs] (resp. destinations [fixed_dsts]),
       and whose destinations (resp. sources) are subterms of [dst] (resp.
       [src]). *)
-  
   let search_linkactions
     ?(fixed_srcs : ipath list option) ?(fixed_dsts : ipath list option)
     (hlp : hlpred) proof (src, dst : link) :
@@ -2350,26 +2325,26 @@ end = struct
     let acyclic = not <<| TraverseDeps.has_cycle
 
     module Env = struct
-      (* While traversing formulas in search for targets to unify, we need to
-         record and update multiple informations handling the first-order content
-         of the proof. We do so with a record of the form
+      (** While traversing formulas in search for targets to unify, we need to
+          record and update multiple informations handling the first-order content
+          of the proof. We do so with a record of the form
            
-           [{deps; rnm; subst}]
+            [{deps; rnm; subst}]
            
-         where:
+          where:
 
-         - [deps] is a directed graph recording the dependency relation between
-           existential and eigenvariables, in the same spirit of the dependency
-           relation of expansion trees.
-
-         - [rnm] is an association list, where each item [(z, x)] maps a fresh name
-           [z] to the variable [x] it renames. Indeed, to avoid name clashes between
-           bound variables of [f1] and [f2] during unification, we give them temporary
-           fresh names, which are reverted to the original names with [rnm] when
-           producing the final substitution for each formula.
-          
-         - [subst] is the substitution that will be fed to unification, in which we
-           record existential variables in [Sflex] entries.
+          - [deps] is a directed graph recording the dependency relation between
+            existential and eigenvariables, in the same spirit of the dependency
+            relation of expansion trees.
+ 
+          - [rnm] is an association list, where each item [(z, x)] maps a fresh name
+            [z] to the variable [x] it renames. Indeed, to avoid name clashes between
+            bound variables of [f1] and [f2] during unification, we give them temporary
+            fresh names, which are reverted to the original names with [rnm] when
+            producing the final substitution for each formula.
+           
+          - [subst] is the substitution that will be fed to unification, in which we
+            record existential variables in [Sflex] entries.
       *)
       type t =
         { deps : Deps.t;
@@ -2425,7 +2400,6 @@ end = struct
       If [drewrite] is set to [true], it only checks for deep rewrite links,
       that is links where one side is a negative equality operand, and the other
       side an arbitrary unifiable subexpression of the same type. *)
-
   let wf_subform_link ?(drewrite = false) : lpred =
     let open Form in
     let open PreUnif in
@@ -2533,7 +2507,6 @@ end = struct
   
   (** [intuitionistic_link lnk] checks if [lnk] is an intuitionistic link,
       and returns a [`Nothing] link action if so. *)
-  
   let intuitionistic_link : lpred =
     fun proof (src, dst) ->
 
@@ -2561,7 +2534,6 @@ end = struct
       an instantiable quantified subformula, or the set of occurrences of an
       instantiable quantified variable. It it succeeds, it returns the
       corresponding [`Instantiate] link action. *)
-
   let instantiate_link : hlpred =
     let is_free_expr (t : term) (sub : int list) : bool =
       let lenv, subt = List.fold_left
@@ -2647,7 +2619,6 @@ end = struct
       If the check succeeds, it returns a [`Rewrite (red, res, tgts)] link
       action, where [red] and [res] are respectively the reduced ([e]) and
       residual expressions, and [tgts] are the targeted subterms. *)
-  
   let rewrite_link : hlpred =
     fun proof lnk ->
     
@@ -2685,9 +2656,8 @@ end = struct
       all occurrences of [x] (resp. [e]) are to be rewritten into [e] (resp.
       [x]).
 
-      If the check succeeds, it returns either a `Fold or `Unfold link action.
+      If the check succeeds, it returns either a [`Fold] or [`Unfold] link action.
       *)
-  
   let fold_link : hlpred =
     fun proof lnk ->
     
@@ -2751,9 +2721,9 @@ end = struct
     | `DnD   of link
   ]
 
-  (** [dnd_actions dnd] computes all possible proof actions associated with the
-      DnD action [dnd], and packages them as an array of output actions as
-      specified in the JS API.
+  (** [dnd_actions (dnd, selection)] computes all possible proof actions
+      associated with the DnD action [dnd], and packages them as an array of
+      output actions as specified in the JS API.
 
       More specifically, it will try to query actions for hyperlinks whose
       sources (resp. destinations) are those of [selection] occuring in
@@ -2764,7 +2734,6 @@ end = struct
       [dnd.source] (resp. [dnd.destination]). If [dnd.destination] is [None], it
       will search for destinations everywhere in the current goal.
  *)
-
   let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) =
     let Proof.{ g_id; _ } as goal, _, _ = of_ipath proof dnd.source in
     

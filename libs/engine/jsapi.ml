@@ -198,7 +198,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   method apply action =
     js_proof_engine (!! (curry CoreLogic.apply) (_self##.proof, action))
   
-  (* Load the lemma database specified by the [lemmas] array into the prover *)
+  (* Load the lemma database specified by the [lemmas] object into the prover *)
   method loaddb lemmas =
     let lemmas : (string * string) list =
       match Js.to_string (Js.typeof lemmas) with
@@ -215,9 +215,8 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
     js_proof_engine pr
 
   
-  (* Serialize the current lemma database into a JS array *)
+  (* Serialize the current lemma database into a JS object *)
   method getdb =
-    (* [TODO] Serialize into array of objects *)
     _self##.proof |> Proof.db |> LemmaDB.all |>
     List.map begin fun (name, form) ->
       let stmt =
