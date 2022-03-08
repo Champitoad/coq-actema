@@ -76,6 +76,16 @@ let (!!) f = fun x ->
         (Exn.translate e)
     in Js.raise_js_error (new%js Js.error_constr (Js.string msg))
 
+module Path : sig
+  val of_obj : 'a Js.t -> CoreLogic.ipath
+  val of_array : 'a Js.t Js.js_array Js.t -> CoreLogic.ipath list
+  val of_opt : 'a Js.t Js.opt -> CoreLogic.ipath option
+end = struct
+  let of_obj obj = obj |> Js.as_string InvalidASource |> CoreLogic.ipath_of_path
+  let of_array obj = obj |> Js.to_array |> Array.to_list |> List.map of_obj
+  let of_opt obj = obj |> Js.Opt.to_option |> Option.map of_obj
+end
+  
 (* -------------------------------------------------------------------- *)
 let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   val proof  = proof
@@ -129,32 +139,28 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
    *)
   method actions asource =
     let actions =
-      let path_of obj = CoreLogic.ipath_of_path (Js.as_string InvalidASource obj) in
-      let path_list_of obj = obj |> Js.to_array |> Array.to_list |> List.map path_of in
-      let path_option_of obj = obj |> Js.Opt.to_option |> Option.map path_of in
-
       let kinds =
         match Js.to_string (Js.typeof asource) with
         | "string" ->
-          [`Click (path_of asource)]
+          [`Click (Path.of_obj asource)]
         | "object" -> begin
           let asource = Js.Unsafe.coerce asource in
           match Js.as_string InvalidASource asource##.kind with
             | "click" ->
-                let path = path_of asource##.path in
+                let path = Path.of_obj asource##.path in
                 [`Click path]
             | "dnd" ->
-                let source = path_of asource##.source in
-                let destination = path_option_of asource##.destination in
+                let source = Path.of_obj asource##.source in
+                let destination = Path.of_opt asource##.destination in
                 [`DnD CoreLogic.{ source; destination; }]
             | "any" ->
-                let path = path_of asource##.path in
+                let path = Path.of_obj asource##.path in
                 [`Click path; `DnD CoreLogic.{ source = path; destination = None; }]
             | _ -> raise InvalidASource
           end
         | _ -> raise InvalidASource
 
-      and selection = path_list_of asource##.selection in
+      and selection = Path.of_array asource##.selection in
 
       let asource =
         List.map (fun kind -> CoreLogic.{ kind; selection; }) kinds in
@@ -214,10 +220,11 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
     let pr = Proof.loaddb _self##.proof lemmas in
     js_proof_engine pr
 
-  
-  (* Serialize the current lemma database into a JS object *)
-  method getdb =
-    _self##.proof |> Proof.db |> LemmaDB.all |>
+  (* Serialize the current lemma database into a JS object. If [selection] is
+     defined, filters out lemmas which cannot be applied to the selection. *)
+  method getdb selection =
+    let selection = selection |> Js.Optdef.to_option |> Option.map Path.of_array in
+    _self##.proof |> CoreLogic.lemmas ?selection |>
     List.map begin fun (name, form) ->
       let stmt =
         Fo.Notation.f_tostring form |>

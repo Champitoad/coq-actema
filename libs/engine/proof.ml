@@ -92,6 +92,9 @@ module Proof : sig
     proof -> ?clear:bool -> Handle.t -> pnode ->
       ((Handle.t option * form list) list * form) list -> proof
 
+  val hprogress :
+    proof -> Handle.t -> pnode -> pregoal -> Handle.t * proof
+
   val xprogress :
     proof -> Handle.t -> pnode -> pregoals -> proof
 end = struct
@@ -256,6 +259,40 @@ end = struct
   let get_meta (proof : proof) (id : Handle.t) : meta option =
     Map.Exceptionless.find id !(proof.p_meta)
 
+  let hprogress (pr : proof) (id : Handle.t) (pn : pnode) (sub : pregoal) =
+    let _goal = byid pr id in
+
+    let g_id = Handle.fresh () in
+    let sub =
+      let hyps = Hyps.bump sub.g_hyps in
+      let sub  = { sub with g_hyps = hyps } in
+      { g_id; g_pregoal = sub; } in
+
+    let gr, _, go =
+      try  List.pivot (Handle.eq id) pr.p_crts
+      with Invalid_argument _ -> raise (SubgoalNotOpened id) in
+
+    let dep = { d_src = id; d_dst = [g_id]; d_ndn = pn; } in
+
+    let meta =
+      match Map.Exceptionless.find id !(pr.p_meta) with
+      | None ->
+          !(pr.p_meta)
+
+      | Some meta ->
+          Map.add g_id meta !(pr.p_meta)
+    in
+
+    let map =
+      Map.add sub.g_id sub pr.p_maps in
+
+    g_id, { pr with
+        p_maps = map;
+        p_crts = gr @ [g_id] @ go;
+        p_frwd = Map.add id dep pr.p_frwd;
+        p_bkwd = Map.add g_id dep pr.p_bkwd;
+        p_meta = ref meta; }
+
   let xprogress (pr : proof) (id : Handle.t) (pn : pnode) (sub : pregoals) =
     let _goal = byid pr id in
 
@@ -416,6 +453,8 @@ module CoreLogic : sig
     ipath list : surbrillance
     osource 
  *)
+
+  val lemmas : ?selection:selection -> Proof.proof -> (string * form) list
 
   val apply   : Proof.proof -> action -> Proof.proof
 end = struct
@@ -924,6 +963,9 @@ end = struct
     { root; ctxt; sub = [] }
   
 
+  let dummy_path = mk_ipath 0
+
+
   let concl_ipath Proof.{ g_id; _ } =
     mk_ipath (Handle.toint g_id)
 
@@ -954,7 +996,7 @@ end = struct
       | _ -> []
     end
 
-  let all_items_paths ?heads goal =
+  let all_items_ipaths ?heads goal =
     concl_ipath goal ::
     all_hyps_ipaths goal @
     all_vars_ipaths ?heads goal
@@ -1056,7 +1098,10 @@ end = struct
 
     let goal = Proof.{ g_id = Handle.ofint root; g_pregoal = goal } in
     (goal, item, (sub, target))
-  
+
+  let goal_of_ipath (proof : Proof.proof) (p : ipath) : Proof.goal =
+    let (g, _, _) = of_ipath proof p in
+    g
 
   let term_of_ipath (proof : Proof.proof) (p : ipath) : term =
     let (_, _, (_, t)) = of_ipath proof p in
@@ -1200,7 +1245,7 @@ end = struct
 
       let tgts =
         let id = Vars.getid goal.g_pregoal.g_env x |> Option.get in
-        all_items_paths ~heads:false goal |>
+        all_items_ipaths ~heads:false goal |>
         List.remove_if
           (fun p -> p.ctxt.handle = id) in
 
@@ -2721,6 +2766,43 @@ end = struct
     | `DnD   of link
   ]
 
+  (** [lemmas ?selection proof] returns all lemmas for which there is a DnD
+      action involving one subterm of the [selection] in [proof]. If there
+      is no selection or the selection is empty, then it simply returns the
+      entire lemma database.
+  *)
+  let lemmas ?selection (proof : Proof.proof) : (string * form) list =
+    let filter =
+      hlpred_add [
+        hlpred_mult (List.map hlpred_of_lpred [wf_subform_link; intuitionistic_link]);
+        (wf_subform_link ~drewrite:true |> hlpred_of_lpred)
+      ] in
+
+    match selection with
+    | None | Some [] -> proof |> Proof.db |> LemmaDB.all
+    | Some ((p :: _) as sel) ->
+        let Proof.{ g_id; g_pregoal = sub } = goal_of_ipath proof p in
+
+        proof |> Proof.db |> LemmaDB.all |>
+        List.filter begin fun (_, stmt) ->
+          let hd = Handle.fresh () in
+          let sub =
+            let hyp = Proof.mk_hyp stmt in
+            let g_hyps = Proof.Hyps.add sub.g_hyps hd hyp in
+            Proof.{ sub with g_hyps } in
+
+          let g_id, proof = Proof.hprogress proof g_id (TAssume (stmt, g_id)) sub in
+          let lp = mk_ipath ~ctxt:{ kind = `Hyp; handle = Handle.toint hd } (Handle.toint g_id) in
+
+          let linkactions =
+            let open Monad.List in
+            sel >>= fun src ->
+            search_linkactions filter proof ~fixed_srcs:[src] (dummy_path, lp) in
+
+          not (List.is_empty linkactions)
+        end
+
+
   (** [dnd_actions (dnd, selection)] computes all possible proof actions
       associated with the DnD action [dnd], and packages them as an array of
       output actions as specified in the JS API.
@@ -2735,7 +2817,7 @@ end = struct
       will search for destinations everywhere in the current goal.
  *)
   let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) =
-    let Proof.{ g_id; _ } as goal, _, _ = of_ipath proof dnd.source in
+    let Proof.{ g_id; _ } as goal = goal_of_ipath proof dnd.source in
     
     let srcsel : selection =
       List.filter (is_sub_path dnd.source) selection in
@@ -2754,8 +2836,6 @@ end = struct
       fold_link |> hlpred_only_sel;
       instantiate_link;
     ] in
-    
-    let dummy_path = mk_ipath 0 in
 
     let srcs, fixed_srcs = begin match srcsel with
       | [] -> [dnd.source], None
@@ -2767,7 +2847,7 @@ end = struct
           let dsts = begin match dnd.destination with
             | None ->
                 let src = dnd.source in
-                List.remove (all_items_paths goal) src
+                List.remove (all_items_ipaths goal) src
                 
             | Some dst ->
                 [dst]
@@ -2845,7 +2925,7 @@ end = struct
       | `DnD dnd ->
         dnd_actions (dnd, p.selection) proof
 
-  
+
   let apply (proof : Proof.proof) ((hd, a) : action) =
     let targ = (proof, hd) in
     match a with
