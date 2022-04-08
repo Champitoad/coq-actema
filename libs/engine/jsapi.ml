@@ -7,6 +7,7 @@ type source = Handle.t * [`C | `H of Handle.t]
 
 (* -------------------------------------------------------------------- *)
 exception InvalidASource
+exception InvalidLemmaDB
 
 (* -------------------------------------------------------------------- *)
 module Exn : sig
@@ -51,9 +52,16 @@ end
 let () = Exn.register (fun exn ->
     match exn with
     | Syntax.ParseError _ ->
-        Some "invalid formula (parse error)"
-    | Fo.DuplicatedEntry _ | Fo.TypingError | Fo.RecheckFailure ->
-        Some "invalid formula"
+        Some "invalid goal (parse error)"
+    | Fo.DuplicatedEntry (_, name) ->
+        Some ("duplicated entry \"" ^ name ^ "\" in goal")
+    | Fo.TypingError
+    | Fo.RecheckFailure ->
+        Some "invalid goal (type error)"
+    | TacticNotApplicable ->
+        Some "tactic not applicable"
+    | LemmaDB.LemmaNotFound name ->
+        Some ("lemma \"" ^ name ^ "\" does not exist")
     | _ ->
         None
   )
@@ -68,6 +76,16 @@ let (!!) f = fun x ->
         (Exn.translate e)
     in Js.raise_js_error (new%js Js.error_constr (Js.string msg))
 
+module Path : sig
+  val of_obj : 'a Js.t -> CoreLogic.ipath
+  val of_array : 'a Js.t Js.js_array Js.t -> CoreLogic.ipath list
+  val of_opt : 'a Js.t Js.opt -> CoreLogic.ipath option
+end = struct
+  let of_obj obj = obj |> Js.as_string InvalidASource |> CoreLogic.ipath_of_path
+  let of_array obj = obj |> Js.to_array |> Array.to_list |> List.map of_obj
+  let of_opt obj = obj |> Js.Opt.to_option |> Option.map of_obj
+end
+  
 (* -------------------------------------------------------------------- *)
 let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   val proof  = proof
@@ -121,32 +139,28 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
    *)
   method actions asource =
     let actions =
-      let path_of obj = CoreLogic.ipath_of_path (Js.as_string InvalidASource obj) in
-      let path_list_of obj = obj |> Js.to_array |> Array.to_list |> List.map path_of in
-      let path_option_of obj = obj |> Js.Opt.to_option |> Option.map path_of in
-
       let kinds =
         match Js.to_string (Js.typeof asource) with
         | "string" ->
-          [`Click (path_of asource)]
+          [`Click (Path.of_obj asource)]
         | "object" -> begin
           let asource = Js.Unsafe.coerce asource in
           match Js.as_string InvalidASource asource##.kind with
             | "click" ->
-                let path = path_of asource##.path in
+                let path = Path.of_obj asource##.path in
                 [`Click path]
             | "dnd" ->
-                let source = path_of asource##.source in
-                let destination = path_option_of asource##.destination in
+                let source = Path.of_obj asource##.source in
+                let destination = Path.of_opt asource##.destination in
                 [`DnD CoreLogic.{ source; destination; }]
             | "any" ->
-                let path = path_of asource##.path in
+                let path = Path.of_obj asource##.path in
                 [`Click path; `DnD CoreLogic.{ source = path; destination = None; }]
             | _ -> raise InvalidASource
           end
         | _ -> raise InvalidASource
 
-      and selection = path_list_of asource##.selection in
+      and selection = Path.of_array asource##.selection in
 
       let asource =
         List.map (fun kind -> CoreLogic.{ kind; selection; }) kinds in
@@ -189,6 +203,37 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   (* Apply the action [action] (as returned by [actions]) *)
   method apply action =
     js_proof_engine (!! (curry CoreLogic.apply) (_self##.proof, action))
+  
+  (* Load the lemma database specified by the [lemmas] object into the prover *)
+  method loaddb lemmas =
+    let lemmas : (string * string) list =
+      match Js.to_string (Js.typeof lemmas) with
+      | "object" ->
+          lemmas |> Js.object_keys |> Js.to_array |> Array.to_list |>
+          List.map begin fun name ->
+            let name = Js.as_string InvalidLemmaDB name in
+            let stmt = Js.as_string InvalidLemmaDB (Js.Unsafe.get lemmas name) in
+            (name, stmt)
+          end
+      | _ -> raise InvalidLemmaDB
+      in
+    let pr = Proof.loaddb _self##.proof lemmas in
+    js_proof_engine pr
+
+  (* Serialize the current lemma database into a JS object. If [selection] is
+     defined, filters out lemmas which cannot be applied to the selection. *)
+  method getdb selection =
+    let selection = selection |> Js.Optdef.to_option |> Option.map Path.of_array in
+    _self##.proof |> CoreLogic.lemmas ?selection |>
+    List.map begin fun (name, form) ->
+      let stmt =
+        Fo.Notation.f_tostring form |>
+        Js.string |>
+        Js.Unsafe.inject
+      in name, stmt
+    end |>
+    Array.of_list |>
+    Js.Unsafe.obj
 end
 
 (* -------------------------------------------------------------------- *)
@@ -275,6 +320,16 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       let form = Fo.Form.check goal.g_env form in
       CoreLogic.cut form (parent##.proof, _self##.handle)
     in js_proof_engine (!!doit ())
+  
+  (* [this#addlemma (name : string)] retrieves the lemma [name] in the database,
+     and adds it as a new hypothesis in the current goal. *)
+  method addlemma name =
+    let doit () =
+      let name = Js.to_string name in
+      let form = LemmaDB.find (Proof.db parent##.proof) name in
+      CoreLogic.assume form (parent##.proof, _self##.handle)
+    in js_proof_engine (!!doit ())
+      
 
   (* [this#add_local (name : string) (expr : string) parses [expr] in the goal
    * [context] and adds it to the local [context] under the name [name]. *)
@@ -633,7 +688,7 @@ let export (name : string) : unit =
         Fo.Goal.check goal
       ) () in js_proof_engine (Proof.init env hyps goal)
 
-    (* [this#parse_to_unicode input] parses the goal [input] and returns
+    (* [this#parseToUnicode input] parses the goal [input] and returns
      * its unicode representation.
      *
      * Raise an exception if [input] is invalid *)
