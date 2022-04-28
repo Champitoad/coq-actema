@@ -1389,7 +1389,20 @@ end = struct
         raise TacticNotApplicable
   
 
-  type pnode += TLink
+  type choice = (int * expr option)
+  type itrace = choice list
+
+  let print_choice ((side, witness) : choice) : string =
+    let side = if side = 0 then "←" else "→" in
+    let witness =
+      witness |> Option.map_default
+        (fun e -> Printf.sprintf "{%s}" (Fo.Notation.e_tostring e)) "" in
+    Printf.sprintf "%s%s" side witness
+
+  let print_itrace : itrace -> string =
+    Utils.List.to_string print_choice ~left:"" ~right:"" ~sep:" "
+
+  type pnode += TLink of itrace
 
   (** [link] is the equivalent of Proof by Pointing's [finger_tac], but using
       the interaction rules specific to subformula linking. *)
@@ -1676,7 +1689,7 @@ end = struct
     in
 
     let subgoals = pbp (goal, []) item_src sub_src s_src item_dst sub_dst s_dst in
-    Proof.xprogress proof hd TLink subgoals
+    Proof.xprogress proof hd (TLink []) subgoals
 
 
   (** [elim_units f] eliminates all occurrences of units
@@ -1724,8 +1737,7 @@ end = struct
   let print_linkage (mode : [`Backward | `Forward]) ((l, _), (r, _)) =
     let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
     Printf.sprintf "%s %s %s"
-      (Notation.f_tostring l) op (Notation.f_tostring r)
-
+      (Notation.f_tostring l) op (Notation.f_tostring r) 
   
   (** [dlink] stands for _d_eep linking, and implements the deep interaction phase
       à la Chaudhuri for intuitionistic logic. *)
@@ -1800,11 +1812,11 @@ end = struct
       not inv || List.is_empty sub
     in
 
-    let rec backward (ctx : fctx)
+    let rec backward (ctx : fctx) (itrace : itrace)
       ((env1, s1 as es1), (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
-      (((l, lsub as h), (r, rsub as c)) as linkage : (form * int list) * (form * int list)) : form =
+      (((l, lsub as h), (r, rsub as c)) as linkage : (form * int list) * (form * int list)) : form * itrace =
       
-      js_log (Subst.to_string s1 ^ " ⊢ " ^ Subst.to_string s2);
+      (* js_log (Subst.to_string s1 ^ " ⊢ " ^ Subst.to_string s2); *)
       js_log (print_linkage `Backward linkage);
       
       match linkage with
@@ -1812,7 +1824,7 @@ end = struct
       (** End rules *)
 
       | (_, []), (_, []) ->
-        let f : form = begin match l, r with
+        let f = begin match l, r with
 
           (* Bid *)
           | _ when f_equal goal.g_env l r -> f_true
@@ -1824,7 +1836,7 @@ end = struct
           (* Brel *)
           | _ -> f_imp l r
           end
-        in fc_fill f (fc_rev ctx)
+        in fc_fill f (fc_rev ctx), itrace
       
       | (FPred ("_EQ", [e1; e2]), [i]), _
         when e_equal goal.g_env (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
@@ -1834,7 +1846,7 @@ end = struct
           (* L=₂ *)
           else e1 in
         let f = rewrite_subterm (`E res) (`F r) rsub |> form_of_term in
-        fc_fill f (fc_rev ctx)
+        fc_fill f (fc_rev ctx), itrace
       
       (** Commuting rules *)
 
@@ -1843,6 +1855,7 @@ end = struct
         let s = ref s in
 
         let (ictx : ifctx option),
+            (choice : choice),
             (linkage : (form * int list) * (form * int list)) =
           
           begin match linkage with
@@ -1854,7 +1867,7 @@ end = struct
             when no_prio `Left h ->
             begin try
               let fi, fs = List.pop_at i fs in
-              Some (CConn (`And, fs, i)), (h, (fi, sub))
+              Some (CConn (`And, fs, i)), (1, None), (h, (fi, sub))
             with Not_found ->
               failwith "empty conjunction"
             end
@@ -1864,7 +1877,7 @@ end = struct
             when no_prio `Left h ->
             begin try
               let fi, fs = List.pop_at i fs in
-              Some (CConn (`Or, fs, i)), (h, (fi, sub))
+              Some (CConn (`Or, fs, i)), (1, None), (h, (fi, sub))
             with Not_found ->
               failwith "empty disjunction"
             end
@@ -1872,16 +1885,16 @@ end = struct
           (* R⇒₁ *)
           | _, (FConn (`Imp, [f1; f2]), 0 :: sub) ->
             switch_pol := true;
-            Some (CConn (`Imp, [f2], 0)), (h, (f1, sub))
+            Some (CConn (`Imp, [f2], 0)), (1, None), (h, (f1, sub))
 
           (* R⇒₂ *)
           | _, (FConn (`Imp, [f1; f2]), 1 :: sub) ->
-            Some (CConn (`Imp, [f1], 1)), (h, (f2, sub))
+            Some (CConn (`Imp, [f1], 1)), (1, None), (h, (f2, sub))
 
           (* R¬ *)
           | _, (FConn (`Not, [f1]), 0 :: sub) ->
             switch_pol := true;
-            Some (CConn (`Not, [], 0)), (h, (f1, sub))
+            Some (CConn (`Not, [], 0)), (1, None), (h, (f1, sub))
 
           | _, (FConn (`Equiv, [_; _]), _) ->
             failwith "DnD on positive equivalence currently unsupported"
@@ -1896,12 +1909,12 @@ end = struct
             (* R∃i *)
             | Some Sbound e ->
               let f1 = Subst.f_apply1 (x, 0) e f1 in
-              None, (h, (f1, sub))
+              None, (1, Some e), (h, (f1, sub))
             (* R∃s *)
             | Some Sflex ->
               s := es1, (env2, s2);
               let h = (f_shift (x, 0) l), lsub in
-              Some (CBind (`Exist, x, ty)), (h, (f1, sub))
+              Some (CBind (`Exist, x, ty)), (1, None), (h, (f1, sub))
             | None -> assert false
             end
 
@@ -1909,7 +1922,7 @@ end = struct
           | _, (FBind (`Forall, x, ty, f1), 0 :: sub) ->
             s := es1, (LEnv.enter env2 x, s2);
             let h = (f_shift (x, 0) l), lsub in
-            Some (CBind (`Forall, x, ty)), (h, (f1, sub))
+            Some (CBind (`Forall, x, ty)), (1, None), (h, (f1, sub))
 
           (** Left rules *)
 
@@ -1917,7 +1930,7 @@ end = struct
           | (FConn (`And, fs), i :: sub), _
             when no_prio `Right c ->
             begin try
-              None, (((List.at fs i), sub), c)
+              None, (0, None), (((List.at fs i), sub), c)
             with Invalid_argument _ ->
               failwith "empty conjunction"
             end
@@ -1927,7 +1940,7 @@ end = struct
             begin try
               let fi, fs = List.pop_at i fs in
               let fs = List.map (fun fj -> f_imp fj r) fs in
-              Some (CConn (`And, fs, i)), ((fi, sub), c)
+              Some (CConn (`And, fs, i)), (0, None), ((fi, sub), c)
             with Not_found ->
               failwith "empty disjunction"
             end
@@ -1935,23 +1948,23 @@ end = struct
           (* L⇒₂ *)
           | (FConn (`Imp, [f1; f2]), 1 :: sub), _
             when no_prio `Right c ->
-            Some (CConn (`And, [f1], 1)), ((f2, sub), c)
+            Some (CConn (`And, [f1], 1)), (0, None), ((f2, sub), c)
 
           (* L⇔₁ *)
           | (FConn (`Equiv, [f1; f2]), 0 :: sub), _
             when no_prio `Right c ->
-            Some (CConn (`And, [f2], 0)), ((f1, sub), c)
+            Some (CConn (`And, [f2], 0)), (0, None), ((f1, sub), c)
 
           (* L⇔₂ *)
           | (FConn (`Equiv, [f1; f2]), 1 :: sub), _
             when no_prio `Right c ->
-            Some (CConn (`And, [f1], 1)), ((f2, sub), c)
+            Some (CConn (`And, [f1], 1)), (0, None), ((f2, sub), c)
           
           (* L∃s *)
           | (FBind (`Exist, x, ty, f1), 0 :: sub), _ ->
             s := (LEnv.enter env1 x, s1), es2;
             let c = (f_shift (x, 0) r), rsub in
-            Some (CBind (`Forall, x, ty)), ((f1, sub), c)
+            Some (CBind (`Forall, x, ty)), (0, None), ((f1, sub), c)
 
           | (FBind (`Forall, x, ty, f1), 0 :: sub), _
             when no_prio `Right c &&
@@ -1963,28 +1976,28 @@ end = struct
             (* L∀i *)
             | Some Sbound e ->
               let f1 = f_apply1 (x, 0) e f1 in
-              None, ((f1, sub), c)
+              None, (0, Some e), ((f1, sub), c)
             (* L∀s *)
             | Some Sflex ->
               s := (env1, s1), es2;
               let c = (f_shift (x, 0) r), rsub in
-              Some (CBind (`Exist, x, ty)), ((f1, sub), c)
+              Some (CBind (`Exist, x, ty)), (0, None), ((f1, sub), c)
             | None -> assert false
             end
 
           | _ -> raise TacticNotApplicable
           end
         in
-        let cont = if !switch_pol then forward else backward in
+        let cont = if !switch_pol then forward ~side:1 else backward in
         let ctx = match ictx with
           | Some i -> i :: ctx
           | None -> ctx in 
-        cont ctx !s linkage
+        cont ctx (choice :: itrace) !s linkage
       
 
-    and forward (ctx : fctx)
+    and forward (ctx : fctx) (itrace : itrace) ?(side = 1)
       (es1, (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
-      (((l, lsub as h), (r, rsub)) as linkage : (form * int list) * (form * int list)) : form =
+      (((l, lsub as h), (r, rsub)) as linkage : (form * int list) * (form * int list)) : form * itrace =
 
       js_log (print_linkage `Forward linkage);
       
@@ -2001,7 +2014,7 @@ end = struct
           (* Frel *)
           | _ -> f_and l r
         end in
-        fc_fill f (fc_rev ctx)
+        fc_fill f (fc_rev ctx), itrace
 
       | (FPred ("_EQ", [e1; e2]), [i]), _
         when e_equal goal.g_env (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
@@ -2011,13 +2024,15 @@ end = struct
           (* L=₂ *)
           else e1 in
         let f = rewrite_subterm (`E res) (`F r) rsub |> form_of_term in
-        fc_fill f (fc_rev ctx)
+        fc_fill f (fc_rev ctx), itrace
 
       (** Commuting rules *)
 
       | _ ->
         let switch_pol = ref false in
         let s = ref s in
+        let new_side = ref side in
+        let witness = ref None in
 
         let (ictx : ifctx option),
             (linkage : (form * int list) * (form * int list)) =
@@ -2087,6 +2102,7 @@ end = struct
             (* F∀i *)
             | Some Sbound e ->
               let f1 = Subst.f_apply1 (x, 0) e f1 in
+              witness := Some e;
               None, (h, (f1, sub))
             (* F∀s *)
             | Some Sflex ->
@@ -2099,28 +2115,37 @@ end = struct
           (* Fcomm *)
           | h, h' ->
             s := (es2, es1);
+            new_side := 0;
             None, (h', h)
           end
         in
-        let cont = if !switch_pol then backward else forward in
+        let cont = if !switch_pol then backward else forward ~side:!new_side in
         let ctx = match ictx with
           | Some i -> i :: ctx
           | None -> ctx in 
-        cont ctx !s linkage
+        let itrace =
+          if !new_side <> side then itrace
+          else (!new_side, !witness) :: itrace in
+        cont ctx itrace !s linkage
     in
 
-    let subgoal = match (item_src, sub_src, s_src), (item_dst, sub_dst, s_dst) with
+    let subgoal, itrace = match (item_src, sub_src, s_src), (item_dst, sub_dst, s_dst) with
       | (`H (hid, { h_form = h; _ }), subh, sh), (`C c, subc, sc)
       | (`C c, subc, sc), (`H (hid, { h_form = h; _ }), subh, sh) ->
-        [[Some hid, []], backward ([]) ((LEnv.empty, sh), (LEnv.empty, sc)) ((h, subh), (c, subc)) |> elim_units]
+        let form, itrace = backward ([]) [] ((LEnv.empty, sh), (LEnv.empty, sc)) ((h, subh), (c, subc)) in
+        [[Some hid, []], form |> elim_units], itrace
       
       | (`H (hid, { h_form = h; _ }), subh, s), (`H (hid', { h_form = h'; _ }), subh', s') ->
-        [[Some hid, []; Some hid', [forward ([]) ((LEnv.empty, s), (LEnv.empty, s')) ((h, subh), (h', subh')) |> elim_units]], goal.g_goal]
+        let form, itrace = forward ([]) [] ((LEnv.empty, s), (LEnv.empty, s')) ((h, subh), (h', subh')) in
+        [[Some hid, []; Some hid', [form |> elim_units]], goal.g_goal], itrace
       
       | _ -> raise TacticNotApplicable
     in
+    let itrace = List.rev itrace in
 
-    let pr = sprogress ~clear:false proof g_id TLink subgoal in
+    js_log (Printf.sprintf "itrace: %s" (print_itrace itrace));
+
+    let pr = sprogress ~clear:false proof g_id (TLink itrace) subgoal in
     List.fold_left (uncurry close_with_unit) pr (opened pr)
 
   
