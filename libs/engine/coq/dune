@@ -1,0 +1,9 @@
+(library
+  (name coq)
+  (public_name prover.engine.coq)
+  (libraries coq.stm)
+  ; Coq 8.15: coq-core.stm
+  (synopsis "Mini-prover (engine library)")
+;  (flags -w -8)
+  )
+
