@@ -30,7 +30,7 @@ let uncurry f x y = f (x, y)
 let (^~) f = fun x y -> f y x
 
 let (/>) (x : 'a option) (f : 'a -> 'b) =
-  Option.map f x
+  BatOption.map f x
 
 let ueta (f : unit -> 'a) : 'b -> 'a =
   fun _ -> f ()
