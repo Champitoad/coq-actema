@@ -1,0 +1,10 @@
+-R theories/ Actema
+-I src
+
+theories/Loader.v
+theories/Test.v
+
+src/actema_main.ml
+src/actema_main.mli
+src/g_actema.mlg
+src/actema_plugin.mlpack

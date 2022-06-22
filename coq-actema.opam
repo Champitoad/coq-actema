@@ -1,0 +1,30 @@
+opam-version: "2.0"
+maintainer: "pablo.donato@tuta.io"
+
+homepage: "https://github.com/Champitoad"
+dev-repo: "git+https://github.com/Champitoad/coq-actema"
+bug-reports: "https://github.com/Champitoad/coq-actema/issues"
+doc: "https://actema.xyz/about"
+# license: "MIT"
+
+synopsis: "Integrating the Actema GUI as a tactic."
+# description: """
+# Longer description of what your plugin does that can
+# cover multiple lines. Including punctuation."""
+
+build: ["dune" "build" "-p" name "-j" jobs]
+depends: [
+  "ocaml" {>= "4.07.1"}
+  "dune" {>= "2.5"}
+  "coq" {>= "8.14" & < "8.15"}
+]
+
+tags: [
+  "category:Miscellaneous/Coq Extensions"
+  "keyword:GUI"
+  "logpath:Actema"
+]
+
+authors: [
+  "Pablo Donato"
+]
