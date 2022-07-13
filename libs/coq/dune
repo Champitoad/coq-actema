@@ -1,7 +1,0 @@
-(library
-  (name coq)
-  (public_name prover.engine.coq)
-  (libraries coq-core.stm js_of_ocaml-lwt)
-  (synopsis "Mini-prover (engine library)")
-  )
-
