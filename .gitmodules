@@ -1,0 +1,3 @@
+[submodule "prover"]
+	path = prover
+	url = git@gitlab.com:prover-ui/prover.git

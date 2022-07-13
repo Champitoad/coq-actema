@@ -9,7 +9,10 @@
     "electron:build": "vue-cli-service electron:build",
     "electron:serve": "vue-cli-service electron:serve",
     "postinstall": "electron-builder install-app-deps",
-    "postuninstall": "electron-builder install-app-deps"
+    "postuninstall": "electron-builder install-app-deps",
+    "update-prover": "yarn run pull-prover && yarn run build-prover",
+    "pull-prover": "git submodule update --remote prover",
+    "build-prover": "opam exec -- make -C prover build; cp prover/_build/default/src/jsprover.js public/engine.js"
   },
   "dependencies": {
     "core-js": "^3.8.3",
