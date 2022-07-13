@@ -1402,7 +1402,7 @@ end = struct
   let print_itrace : itrace -> string =
     Utils.List.to_string print_choice ~left:"" ~right:"" ~sep:" "
 
-  type pnode += TLink of itrace
+  type pnode += TLink of (ipath * ipath * itrace)
 
   (** [link] is the equivalent of Proof by Pointing's [finger_tac], but using
       the interaction rules specific to subformula linking. *)
@@ -1689,7 +1689,7 @@ end = struct
     in
 
     let subgoals = pbp (goal, []) item_src sub_src s_src item_dst sub_dst s_dst in
-    Proof.xprogress proof hd (TLink []) subgoals
+    Proof.xprogress proof hd (TLink (src, dst, [])) subgoals
 
 
   (** [elim_units f] eliminates all occurrences of units
@@ -2145,7 +2145,7 @@ end = struct
 
     js_log (Printf.sprintf "itrace: %s" (print_itrace itrace));
 
-    let pr = sprogress ~clear:false proof g_id (TLink itrace) subgoal in
+    let pr = sprogress ~clear:false proof g_id (TLink (src, dst, itrace)) subgoal in
     List.fold_left (uncurry close_with_unit) pr (opened pr)
 
   
