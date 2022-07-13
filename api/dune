@@ -1,0 +1,39 @@
+(executables
+ (names hello prettify tree)
+ (libraries atdgen))
+
+(rule
+ (targets logic_b.ml
+          logic_b.mli)
+ (deps    logic.atd)
+ (action  (run atdgen -b %{deps})))
+
+(rule
+ (targets logic_t.ml
+          logic_t.mli)
+ (deps    logic.atd)
+ (action  (run atdgen -t %{deps})))
+
+(rule
+ (targets hello_j.ml
+          hello_j.mli)
+ (deps    hello.atd)
+ (action  (run atdgen -j -j-std %{deps})))
+
+(rule
+ (targets hello_t.ml
+          hello_t.mli)
+ (deps    hello.atd)
+ (action  (run atdgen -t %{deps})))
+
+(rule
+ (targets tree_b.ml
+          tree_b.mli)
+ (deps    tree.atd)
+ (action  (run atdgen -b %{deps})))
+
+(rule
+ (targets tree_t.ml
+          tree_t.mli)
+ (deps    tree.atd)
+ (action  (run atdgen -t %{deps})))

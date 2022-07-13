@@ -46,3 +46,5 @@ time-of-build-pretty.log
 
 _build
 Makefile.*
+
+src/g_actema.ml

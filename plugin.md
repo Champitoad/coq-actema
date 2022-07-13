@@ -28,8 +28,12 @@
   * sinon :
 
     + en mode **interactif**, on lance un serveur local et l'interface, et on
-    connecte les deux. Le serveur envoie Bouton `Done` dans l'interface : ferme la fenêtre, envoie
-    l'objet de preuve en JSON, puis le serveur l'écrit dans `{invokeID}.actema`
+    connecte les deux (le serveur peut aussi servir l'interface ?). Le serveur
+    envoie le proof state de Coq à Actema avec `export_state`, puis
+    l'utilisateur fait son bout de preuve dans Actema. Bouton `Done` dans
+    l'interface : ferme la fenêtre, envoie l'objet de preuve en JSON au serveur,
+    puis le serveur le compile avec `import_proof` et l'écrit dans
+    `{invokeID}.actema`
 
     + en mode **compilation**, on ne fait rien (`idtac`)
 
