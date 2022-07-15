@@ -3,6 +3,8 @@
 ## Project setup
 ```
 yarn install
+git submodule update --init
+yarn run update-prover
 ```
 
 ### Compiles and hot-reloads for development
