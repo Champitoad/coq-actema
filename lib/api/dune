@@ -1,5 +1,5 @@
-(executables
- (names hello prettify tree)
+(library
+ (name api)
  (libraries atdgen))
 
 (rule

@@ -1,3 +1,7 @@
 (tests
- (names server)
- (libraries tiny_httpd))
+ (names client)
+ (libraries api unix))
+
+(env
+  (dev
+    (flags (:standard -warn-error -A))))

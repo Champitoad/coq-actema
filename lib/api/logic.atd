@@ -48,20 +48,6 @@ type form = [
 type term = [F of form | E of expr]
 
 (* -------------------------------------------------------------------- *)
-(** Environments *)
-
-type env = {
-  env_prp     : (name * arity            ) list;
-  env_fun     : (name * sig_             ) list;
-  env_var     : (name * bvar  list       ) list;
-  env_tvar    : (name * type_ option list) list;
-  env_evar    : (name * type_ list       ) list;
-  env_handles : (vname * uid             ) list;
-}
-
-type bvar = (type_ * expr option)
-
-(* -------------------------------------------------------------------- *)
 (** Actions *)
 
 type pkind = [Hyp | Concl | Var of [Head | Body]]
@@ -88,3 +74,17 @@ type atree = [
   | PLeaf
   | PNode of (action * atree list)
 ]
+
+(* -------------------------------------------------------------------- *)
+(** Environments *)
+
+type bvar = (type_ * expr option)
+
+type env = {
+  env_prp     : (name * arity            ) list;
+  env_fun     : (name * sig_             ) list;
+  env_var     : (name * bvar  list       ) list;
+  env_tvar    : (name * type_ option list) list;
+  env_evar    : (name * type_ list       ) list;
+  env_handles : (vname * uid             ) list;
+}
