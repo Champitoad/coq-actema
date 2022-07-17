@@ -205,6 +205,8 @@ module BiMap : sig
   
   val domain      : ('a, 'b) t -> 'a list
   val codomain    : ('a, 'b) t -> 'b list
+
+  val of_enum     : ('a * 'b) Enum.t -> ('a, 'b) t
 end = struct
   type ('a, 'b) t = ('a, 'b) Map.t * ('b, 'a) Map.t
   
@@ -232,6 +234,9 @@ end = struct
 
   let codomain (_, l) =
     Map.keys l |> List.of_enum
+  
+  let of_enum e =
+    Map.of_enum e, Map.of_enum (e |> Enum.map (fun (x, y) -> (y, x)))
 end
 
 (* -------------------------------------------------------------------- *)

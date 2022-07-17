@@ -68,13 +68,19 @@ module Proof : sig
   type pregoals = pregoal list
 
   val init    : env -> form list -> form -> proof
-  val db      : proof -> LemmaDB.t
-  val loaddb  : proof -> (string * string) list -> proof
   val closed  : proof -> bool
   val opened  : proof -> Handle.t list
   val after   : proof -> Handle.t -> Handle.t list
   val focused : proof -> Handle.t -> Handle.t
   val byid    : proof -> Handle.t -> pregoal
+
+  val db      : proof -> LemmaDB.t
+  val loaddb  : proof -> (string * string) list -> proof
+
+  type ptree =
+    | PNode of (pnode * ptree list)
+
+  val get_ptree : proof -> ptree
 
   type meta = < > Js_of_ocaml.Js.t
 
@@ -227,6 +233,28 @@ end = struct
   let loaddb (proof : proof) (lemmas : (string * string) list) =
     { proof with p_db = LemmaDB.load proof.p_db lemmas }
 
+  type ptree =
+    | PNode of (pnode * ptree list)
+
+  let get_ptree (proof : proof) : ptree =
+    let rec aux (id : Handle.t) : ptree =
+      let { d_dst; d_ndn; _ } = Map.find id proof.p_frwd in
+      PNode (d_ndn, List.map aux d_dst)
+    in aux proof.p_root
+
+  type meta = < > Js_of_ocaml.Js.t
+
+  let set_meta (proof : proof) (id : Handle.t) (meta : meta option) : unit =
+    match meta with
+    | None ->
+        proof.p_meta := Map.remove id !(proof.p_meta)
+        
+    | Some meta ->
+        proof.p_meta := Map.add id meta !(proof.p_meta)
+
+  let get_meta (proof : proof) (id : Handle.t) : meta option =
+    Map.Exceptionless.find id !(proof.p_meta)
+
   let closed (proof : proof) =
     List.is_empty proof.p_crts
 
@@ -245,19 +273,6 @@ end = struct
         (Map.Exceptionless.find id proof.p_maps)
         (InvalidGoalId id)
     in goal.g_pregoal
-
-  type meta = < > Js_of_ocaml.Js.t
-
-  let set_meta (proof : proof) (id : Handle.t) (meta : meta option) : unit =
-    match meta with
-    | None ->
-        proof.p_meta := Map.remove id !(proof.p_meta)
-        
-    | Some meta ->
-        proof.p_meta := Map.add id meta !(proof.p_meta)
-
-  let get_meta (proof : proof) (id : Handle.t) : meta option =
-    Map.Exceptionless.find id !(proof.p_meta)
 
   let hprogress (pr : proof) (id : Handle.t) (pn : pnode) (sub : pregoal) =
     let _goal = byid pr id in
@@ -2990,4 +3005,106 @@ end = struct
             unfold x tgts targ
         | _, _ :: _ :: _ -> failwith "Cannot handle multiple link actions yet"
         | _, _ -> raise TacticNotApplicable
+
+  (* -------------------------------------------------------------------- *)
+  (** API conversion layer, for communication with the plugin *)
+
+  module Api : sig
+    open Api
+    val export_proof : Proof.proof -> Logic_t.atree
+    val import_goal : Logic_t.goal -> Fo.env * Fo.form list * Fo.form
+  end = struct
+    open Api
+    open Logic_b
+
+    let rec of_expr (e : Fo.expr) : Logic_t.expr =
+      match e with
+      | EVar x -> `EVar x
+      | EFun (f, es) -> `EFun (f, List.map of_expr es)
+
+    let rec of_type_ (t : Fo.type_) : Logic_t.type_ =
+      match t with
+      | TVar x -> `TVar x
+      | TUnit -> `TUnit
+      | TProd (t1, t2) -> `TProd (of_type_ t1, of_type_ t2)
+      | TOr (t1, t2) -> `TOr (of_type_ t1, of_type_ t2)
+      | TRec (x, ty) -> `TRec (x, of_type_ ty)
+
+    exception UnsupportedAction of pnode
+    
+    let action_of_pnode (p : pnode) : Logic_t.action =
+      match p with
+      | TIntro (i, wit) ->
+          let wit' = wit |>
+            Option.map begin fun (e, t) ->
+              of_expr e, of_type_ t
+            end in
+          `AIntro (i, wit')
+      | _ -> raise (UnsupportedAction p)
+
+    let export_proof (proof : Proof.proof) : Logic_t.atree =
+      let rec aux (p : Proof.ptree) : Logic_t.atree =
+        match p with
+        | PNode (pn, subs) -> `PNode (action_of_pnode pn, List.map aux subs)
+      in aux (Proof.get_ptree proof)
+
+    let rec to_expr (e : Logic_t.expr) : Fo.expr =
+      match e with
+      | `EVar x -> EVar x
+      | `EFun (f, es) -> EFun (f, List.map to_expr es)
+    
+    let rec to_type_ (t : Logic_t.type_) : Fo.type_ =
+      match t with
+      | `TVar x -> TVar x
+      | `TUnit -> TUnit
+      | `TProd (t1, t2) -> TProd (to_type_ t1, to_type_ t2)
+      | `TOr (t1, t2) -> TOr (to_type_ t1, to_type_ t2)
+      | `TRec (x, ty) -> TRec (x, to_type_ ty)
+
+    let to_arity (ar : Logic_t.arity) : Fo.arity =
+      List.map to_type_ ar
+
+    let to_sig_ ((ar, ret) : Logic_t.sig_) : Fo.sig_ =
+      to_arity ar, to_type_ ret
+    
+    let to_bvar ((ty, body) : Logic_t.bvar) : Fo.bvar =
+      (to_type_ ty, Option.map to_expr body)
+    
+    let rec to_form (f : Logic_t.form) : Fo.form =
+      let open Fo in
+      match f with
+      | `FTrue -> FTrue
+      | `FFalse -> FFalse
+      | `FPred (p, args) -> FPred (p, List.map to_expr args)
+      | `FConn (c, fs) -> FConn (c, List.map to_form fs)
+      | `FBind (b, x, ty, f) -> FBind (b, x, to_type_ ty, to_form f)
+    
+    let to_env (env : Logic_t.env) : Fo.env =
+      let assoc_to_map l f =
+        l |> List.map f |> List.enum |> Map.of_enum in
+
+      let assoc_to_bimap l f =
+        l |> List.map f |> List.enum |> BiMap.of_enum in
+
+      let env_prp = assoc_to_map env.env_prp
+        (fun (p, ar) -> p, to_arity ar) in
+      
+      let env_fun = assoc_to_map env.env_fun
+        (fun (f, sig_) -> f, to_sig_ sig_) in
+
+      let env_var = assoc_to_map env.env_var
+        (fun (x, bodies) -> x, List.map to_bvar bodies) in
+
+      let env_tvar = assoc_to_map env.env_tvar
+        (fun (x, aliases) -> x, List.map (Option.map to_type_) aliases) in
+
+      let env_handles = assoc_to_bimap env.env_handles
+        identity in
+      
+      { env_prp; env_fun; env_var; env_tvar; env_evar = Map.empty; env_handles }
+    
+    let import_goal (goal : Logic_t.goal) : Fo.env * Fo.form list * Fo.form =
+      let env, hyps, concl = goal in
+      to_env env, List.map to_form hyps, to_form concl
+  end
 end
