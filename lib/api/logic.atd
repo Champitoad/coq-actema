@@ -88,3 +88,8 @@ type env = {
   env_evar    : (name * type_ list       ) list;
   env_handles : (vname * uid             ) list;
 }
+
+(* -------------------------------------------------------------------- *)
+(** Goals *)
+
+type goal = (env * form list * form)
