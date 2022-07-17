@@ -71,7 +71,6 @@ type action = [
 ]
 
 type atree = [
-  | PLeaf
   | PNode of (action * atree list)
 ]
 
@@ -85,7 +84,6 @@ type env = {
   env_fun     : (name * sig_             ) list;
   env_var     : (name * bvar  list       ) list;
   env_tvar    : (name * type_ option list) list;
-  env_evar    : (name * type_ list       ) list;
   env_handles : (vname * uid             ) list;
 }
 
