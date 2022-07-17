@@ -100,6 +100,15 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   (* Return true when there are no opened subgoals left *)
   method closed =
     Js.bool (Proof.closed proof)
+  
+  method getproofb =
+    let atree = CoreLogic.Api.export_proof _self##.proof in
+    Js.string (Api.Logic_b.string_of_atree atree)
+  
+  method setgoalb p =
+    let goal = Api.Logic_b.goal_of_string (Js.to_string p) in
+    let env, hyps, concl = CoreLogic.Api.import_goal goal in
+    js_proof_engine (Proof.init env hyps concl)
 
   (* Get the meta-data attached to this proof engine *)
   method getmeta =

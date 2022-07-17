@@ -27,6 +27,7 @@ end
 
 (* -------------------------------------------------------------------- *)
 type pnode = ..
+type pnode += TId
 
 exception InvalidGoalId    of Handle.t
 exception InvalidHyphId    of Handle.t
@@ -238,8 +239,11 @@ end = struct
 
   let get_ptree (proof : proof) : ptree =
     let rec aux (id : Handle.t) : ptree =
-      let { d_dst; d_ndn; _ } = Map.find id proof.p_frwd in
-      PNode (d_ndn, List.map aux d_dst)
+      try
+        let { d_dst; d_ndn; _ } = Map.find id proof.p_frwd in
+        PNode (d_ndn, List.map aux d_dst)
+      with Not_found ->
+        PNode (TId, [])
     in aux proof.p_root
 
   type meta = < > Js_of_ocaml.Js.t
@@ -472,11 +476,15 @@ module CoreLogic : sig
   val lemmas : ?selection:selection -> Proof.proof -> (string * form) list
 
   val apply   : Proof.proof -> action -> Proof.proof
+
+  module Api : sig
+    open Api
+    val export_proof : Proof.proof -> Logic_t.atree
+    val import_goal : Logic_t.goal -> Fo.env * Fo.form list * Fo.form
+  end
 end = struct
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
-  
-  type pnode += TId
 
   let id_tac : tactic =
     fun (pr, id) -> Proof.xprogress pr id TId [Proof.byid pr id]
@@ -3034,6 +3042,8 @@ end = struct
     
     let action_of_pnode (p : pnode) : Logic_t.action =
       match p with
+      | TId ->
+          `AId
       | TIntro (i, wit) ->
           let wit' = wit |>
             Option.map begin fun (e, t) ->
