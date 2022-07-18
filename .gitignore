@@ -48,3 +48,5 @@ _build
 Makefile.*
 
 src/g_actema.ml
+src/logic_t.ml*
+src/logic_b.ml*

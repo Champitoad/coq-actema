@@ -5,14 +5,38 @@ let message = "Welcome to Actema!"
 let dummy_form : Logic_t.form =
   `FPred ("dummy", [])
 
-let form_of_types (evd : Evd.evar_map) (t : EConstr.types) : Logic_t.form =
-  try
-    let prod = EConstr.destProd evd t in
-    dummy_form
-  with Constr.DestKO ->
-    dummy_form
+type fdest = ((Environ.env * Evd.evar_map) * EConstr.types) -> Logic_t.form
+
+let comp_fdest (d1 : fdest) (d2 : fdest) : fdest = fun (e, t) ->
+  try d1 (e, t) with Constr.DestKO -> d2 (e, t)
+
+let ( >>! ) = comp_fdest
+
+let is_prop env evd term =
+  let sort = Retyping.get_sort_of env evd term in
+  Sorts.is_prop sort
+
+let is_imp (env, evd) x t1 t2 : bool = 
+  Printf.printf "%b" (is_prop env evd t1);
+  is_prop env evd t1
+  && is_prop
+       (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env)
+       evd t2
+  && (x.Context.binder_name = Names.Anonymous || EConstr.Vars.noccurn evd 1 t2)
+
+let rec dest_imp : fdest = fun ((_, evd as e), t) ->
+  let x, t1, t2 = EConstr.destProd evd t in
+  if not (is_imp e x t1 t2) then raise Constr.DestKO;
+  `FConn (`Imp, [dest_form (e, t1); dest_form (e, t2)])
+
+and dest_form : fdest = fun et ->
+  begin
+    dest_imp >>!
+    fun _ -> dummy_form
+  end et
 
 let export_goal (goal : Goal.t) : Logic_t.goal =
+  let coq_env = Goal.env goal in
   let evd = Goal.sigma goal in
   let coq_hyps = Goal.hyps goal in
   let coq_concl = Goal.concl goal in
@@ -28,7 +52,7 @@ let export_goal (goal : Goal.t) : Logic_t.goal =
     [] in
 
   let concl : Logic_t.form =
-    form_of_types evd coq_concl in
+    dest_form ((coq_env, evd), coq_concl) in
   
   env, hyps, concl
 
