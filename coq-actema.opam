@@ -14,9 +14,9 @@ synopsis: "Integrating the Actema GUI as a tactic."
 
 build: ["dune" "build" "-p" name "-j" jobs]
 depends: [
-  "ocaml" {>= "4.07.1"}
+  "ocaml" {>= "4.14"}
   "dune" {>= "2.5"}
-  "coq" {>= "8.14" & < "8.15"}
+  "coq" {>= "8.15"}
 ]
 
 tags: [

@@ -4,6 +4,11 @@
 theories/Loader.v
 theories/Test.v
 
+src/logic_b.ml
+src/logic_b.mli
+src/logic_t.ml
+src/logic_t.mli
+
 src/actema_main.ml
 src/actema_main.mli
 src/g_actema.mlg

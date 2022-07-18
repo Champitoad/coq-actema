@@ -12,3 +12,8 @@ TACTIC EXTEND actema_tactic
   { let _ = Feedback.msg_notice (str Actema_main.message) in
     Tacticals.tclIDTAC }
 END
+
+TACTIC EXTEND proofstate_tactic
+| [ "proofstate" ] ->
+  { Actema_main.proofstate_tac }
+END

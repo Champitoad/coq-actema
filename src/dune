@@ -3,6 +3,22 @@
  (public_name coq-actema.plugin)
  (synopsis "Integrating the Actema GUI as a tactic.")
  (flags :standard -rectypes -w -27) ; Coq requires the `-rectypes`
- (libraries coq-core.plugins.ltac))
+ (libraries atdgen coq-core.plugins.ltac))
 
 (coq.pp (modules g_actema))
+
+(env
+  (dev
+    (flags (:standard -warn-error -A))))
+
+(rule
+ (targets logic_b.ml
+          logic_b.mli)
+ (deps    logic.atd)
+ (action  (run atdgen -b %{deps})))
+
+(rule
+ (targets logic_t.ml
+          logic_t.mli)
+ (deps    logic.atd)
+ (action  (run atdgen -t %{deps})))
