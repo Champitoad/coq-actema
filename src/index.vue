@@ -2,12 +2,13 @@
     <div>
         <div class="container-fluid">
             <div class="row" style="padding-top: 20px; padding-bottom: 20px; background-color: #eee;">
+                <button id="done" class="btn btn-info ml-2" @click="done" title="Done" :disabled="doneDisabled">Done</button>
                 <form class="form-inline mx-auto" action="javascript:false">
                     <div class="form-group">
                         <label for="formula-input">Prove: </label>
                         <input type="text" class="form-control ml-2" id="formula-input" size="40" value="Socrates:(), Human::(), Mortal::(); Human(Socrates), forall x:(). Human(x) -> Mortal(x) |- Mortal(Socrates)" />
                     </div>
-                    <button type="submit" class="btn btn-outline-secondary" id="parse" @click="parseGoal" disabled>Start</button>
+                    <button type="submit" class="btn btn-outline-secondary" id="parse" @click="parseGoal" :disabled="parseDisabled">Start</button>
                 </form>
                 <div class="buttons text-right mr-2">
                     <button class="btn btn-outline-secondary btn-select" @click="toggleSelectionMode" title="Undo (ctrl+z)"><i class="fas fa-mouse-pointer fa-sm"></i></button>
@@ -26,9 +27,9 @@
 
 <script>
 import ProofCanvas from "./components/proofCanvas.vue";
-import Vue from 'vue';
+import Vue from "vue";
 
-const vue2TouchEvents = require('vue2-touch-events');
+const vue2TouchEvents = require("vue2-touch-events");
 Vue.use(vue2TouchEvents);
 
 export default {
@@ -36,13 +37,13 @@ export default {
         ProofCanvas,
     },
     created() {
-        window.ipcRenderer.on('action', (_, goalb) => {
+        window.ipcRenderer.on("action", (_, goalb) => {
             window.goal = window.goal.setgoalb(goalb);
             this.$refs.proofCanvas.setGoal(window.goal);
+            this.setProofMode("server");
         })
     },
     updated() {
-        this.$refs.proofCanvas.fitHypsZone();
     },
     mounted() {
         window.vue = this; // for debug purposes
@@ -51,7 +52,7 @@ export default {
         this.loadLemmaDB();
 
         // when prover is ready, enable parse button
-        $("#parse").prop("disabled", false);
+        this.parseDisabled = false;
 
         // manage the url parameter goal if there is one
         var goal = this.loadGoal();
@@ -91,7 +92,9 @@ export default {
     },
     data() {
         return {
-            goal: null
+            goal: null,
+            parseDisabled: true,
+            doneDisabled: true,
         };
     },
 
@@ -170,6 +173,36 @@ export default {
 
         redo() {
             this.$refs.proofCanvas.redo();
+        },
+
+        setProofMode(mode) {
+            switch (mode) {
+                case "server":
+                    this.parseDisabled = true;
+                    this.doneDisabled = false;
+                    break;
+                case "draft":
+                    this.parseDisabled = false;
+                    this.doneDisabled = true;
+                    break;
+                default:
+                    break;
+            }
+        },
+
+        updateClient() {
+            try {
+                let proofb = window.goal.getproofb();
+                window.ipcRenderer.send('action', proofb);
+            } catch (e) {
+                this.$refs.proofCanvas.showErrorMessage(e);
+                window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
+            }
+        },
+
+        done() {
+            this.updateClient();
+            this.setProofMode("draft");
         },
 
         toggleMenu() {},

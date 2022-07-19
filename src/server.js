@@ -19,12 +19,17 @@ export default {
         let query = parseQueryString(req);
         switch (query.pathname) {
           case "/action":
-            rcode = 200;
             let goal = data;
             win.webContents.send('action', goal);
-            res.writeHead(rcode, { 'Content-Type': 'text/plain' });
             ipcMain.on('action', (_, proofb) => {
+              rcode = 200;
+              res.writeHead(rcode, { 'Content-Type': 'text/plain' });
               res.end(proofb);
+            });
+            ipcMain.on('error', (_, msg) => {
+              rcode = 550;
+              res.writeHead(rcode, { 'Content-Type': 'text/plain' });
+              res.end(msg);
             });
             break;
           default:
