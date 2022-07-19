@@ -36,6 +36,10 @@ export default {
         ProofCanvas,
     },
     created() {
+        window.ipcRenderer.on('action', (_, goalb) => {
+            window.goal = window.goal.setgoalb(goalb);
+            this.$refs.proofCanvas.setGoal(window.goal);
+        })
     },
     updated() {
         this.$refs.proofCanvas.fitHypsZone();

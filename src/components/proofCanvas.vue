@@ -466,11 +466,17 @@ export default {
             }
         },
 
+        updateClient() {
+            let proofb = this.proofState.getproofb();
+            window.ipcRenderer.send('action', proofb);
+        },
+
         // change the proof state by applying a prover rule
         apply(actionCode) {
             try {
                 var proof = this.proofState.apply(actionCode);
                 this.setProofState(proof);
+                this.updateClient();
                 this.resetSelection();
             } catch (e) {
                 this.showErrorMessage(e);
