@@ -8,7 +8,7 @@
   (target jsprover.js.bc)
   (deps (file jsprover.bc))
   (action (run ocamlfind ocamlc -g -o jsprover.js.bc
-     -package menhirLib,batteries,tyxml,lwt,ocamlgraph,js_of_ocaml,atdgen
+     -package menhirLib,batteries,tyxml,lwt,ocamlgraph,js_of_ocaml,atdgen,base64
      -linkpkg ../libs/api/api.cma
      -linkpkg ../libs/engine/engine.cma
      .jsprover.eobjs/byte/jsprover.cmo)))

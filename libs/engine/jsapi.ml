@@ -101,14 +101,28 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   method closed =
     Js.bool (Proof.closed proof)
   
+  (* Return the current action tree as a binary, base64-encoded string *)
   method getproofb =
-    let atree = CoreLogic.Api.export_proof _self##.proof in
-    Js.string (Api.Logic_b.string_of_atree atree)
+    _self##.proof |>
+    CoreLogic.Api.export_proof |>
+    Api.Logic_b.string_of_atree |>
+    Base64.encode_string |>
+    Js.string
   
-  method setgoalb p =
-    let goal = Api.Logic_b.goal_of_string (Js.to_string p) in
-    let env, hyps, concl = CoreLogic.Api.import_goal goal in
-    js_proof_engine (Proof.init env hyps concl)
+  (* Return a new proof engine whose goal is the base64, binary decoding of [goalb]  *)
+  method setgoalb goalb =
+    try
+      let goal =
+        goalb |>
+        Js.to_string |>
+        Base64.decode_exn |>
+        Api.Logic_b.goal_of_string in
+      js_log (Utils.Atd.string_of_goal goal);
+      let env, hyps, concl = CoreLogic.Api.import_goal goal in
+      js_proof_engine (Proof.init env hyps concl)
+    with e -> 
+      js_log (Printexc.to_string e);
+      js_proof_engine _self##.proof
 
   (* Get the meta-data attached to this proof engine *)
   method getmeta =
