@@ -1,6 +1,7 @@
 open Proofview
 
-let message = "Welcome to Actema!"
+(* -------------------------------------------------------------------- *)
+(** Exporting Coq goals to Actema *)
 
 let dummy_form : Logic_t.form =
   `FPred ("dummy", [])
@@ -42,7 +43,7 @@ let export_goal (goal : Goal.t) : Logic_t.goal =
   let coq_concl = Goal.concl goal in
 
   let env : Logic_t.env =
-    { env_prp = [];
+    { env_prp = [("dummy", [])];
       env_fun = [];
       env_var = [];
       env_tvar = [];
@@ -73,10 +74,44 @@ let biniou_unhash_dict = Bi_io.make_unhash [
 let string_of_goal goal =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_goal goal)
 
-let proofstate_tac =
+let string_of_atree t =
+  Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_atree t)
+
+(* -------------------------------------------------------------------- *)
+(** Importing Actema actions as Coq tactics *)
+
+exception UnsupportedAction of Logic_t.action
+
+let import_action (a : Logic_t.action) : unit tactic =
+  match a with
+  | `AId ->
+      Tacticals.tclIDTAC
+  | `AIntro (i, wit) ->
+      Tactics.intro
+  | _ ->
+      raise (UnsupportedAction a)
+
+let rec import_atree (t : Logic_t.atree) : unit tactic =
+  match t with
+  | `PNode (a, subs) ->
+      let tac = import_action a in
+      if subs = [] then tac
+      else
+        let subs_tacs = List.map import_atree subs in
+        Tacticals.tclTHENS tac subs_tacs
+
+(* -------------------------------------------------------------------- *)
+(** The actema tactic *)
+
+let actema_tac : unit tactic =
   Goal.enter begin fun coq_goal ->
     let goal = export_goal coq_goal in
-    let goal_str = string_of_goal goal in
-    Feedback.msg_notice (Pp.str goal_str);
-    Tacticals.tclIDTAC
+    Feedback.msg_notice (Pp.str "Goal:");
+    Feedback.msg_notice (Pp.str (string_of_goal goal));
+
+    let atree = Lwt_main.run (Client.action goal) in
+    Feedback.msg_notice (Pp.str "Action:");
+    Feedback.msg_notice (Pp.str (string_of_atree atree));
+
+    import_atree atree
   end

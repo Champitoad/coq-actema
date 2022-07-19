@@ -1,6 +1,10 @@
 From Actema Require Import Loader.
 
-Lemma test (A : Prop) : A -> A.
+Lemma test (A B : Prop) : A -> B -> A -> B -> A.
 Proof.
-  proofstate.
-Abort.
+  actema;
+  actema;
+  actema;
+  actema;
+  assumption.
+Qed.

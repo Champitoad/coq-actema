@@ -1,2 +1,1 @@
-val message : string
-val proofstate_tac : unit Proofview.tactic
+val actema_tac : unit Proofview.tactic

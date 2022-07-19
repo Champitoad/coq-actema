@@ -1,6 +1,6 @@
 (tests
  (names client)
- (libraries unix))
+ (libraries cohttp-lwt-unix))
 
 (env
   (dev
