@@ -45,7 +45,8 @@ time-of-build-both.log
 time-of-build-pretty.log
 
 _build
-Makefile.*
+Makefile.coq
+Makefile.coq.conf
 
 src/g_actema.ml
 src/logic_t.ml*
