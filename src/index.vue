@@ -38,9 +38,14 @@ export default {
     },
     created() {
         window.ipcRenderer.on("action", (_, goalb) => {
-            window.goal = window.goal.setgoalb(goalb);
-            this.$refs.proofCanvas.setGoal(window.goal);
-            this.setProofMode("server");
+            try {
+                window.goal = window.goal.setgoalb(goalb);
+                this.$refs.proofCanvas.setGoal(window.goal);
+                this.setProofMode("server");
+            } catch (e) {
+                this.$refs.proofCanvas.showErrorMessage(e);
+                window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
+            }
         })
     },
     updated() {
