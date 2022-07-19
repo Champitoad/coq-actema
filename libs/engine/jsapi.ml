@@ -111,18 +111,14 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   
   (* Return a new proof engine whose goal is the base64, binary decoding of [goalb]  *)
   method setgoalb goalb =
-    try
-      let goal =
-        goalb |>
-        Js.to_string |>
-        Base64.decode_exn |>
-        Api.Logic_b.goal_of_string in
-      js_log (Utils.Atd.string_of_goal goal);
-      let env, hyps, concl = CoreLogic.Api.import_goal goal in
-      js_proof_engine (Proof.init env hyps concl)
-    with e -> 
-      js_log (Printexc.to_string e);
-      js_proof_engine _self##.proof
+    let goal =
+      goalb |>
+      Js.to_string |>
+      Base64.decode_exn |>
+      Api.Logic_b.goal_of_string in
+    js_log (Utils.Atd.string_of_goal goal);
+    let env, hyps, concl = CoreLogic.Api.import_goal goal in
+    js_proof_engine (Proof.init env hyps concl)
 
   (* Get the meta-data attached to this proof engine *)
   method getmeta =
