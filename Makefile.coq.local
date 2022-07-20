@@ -1,5 +1,5 @@
 CAMLFLAGS = -rectypes -w -26 -warn-error -A -thread
-CAMLPKGS = -package atdgen -package cohttp-lwt-unix
+CAMLPKGS = -package atdgen -package cohttp-lwt-unix -package sha
 
 APIDIR = src
 

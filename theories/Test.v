@@ -2,5 +2,6 @@ From Actema Require Import Loader.
 
 Lemma test (A B : Prop) : A -> B -> A -> B -> A.
 Proof.
-  intros; assumption.
+  actema.
+  assumption.
 Qed.

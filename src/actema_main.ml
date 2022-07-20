@@ -138,15 +138,75 @@ let rec import_atree (t : Logic_t.atree) : unit tactic =
 (* -------------------------------------------------------------------- *)
 (** The actema tactic *)
 
-let actema_tac : unit tactic =
+(** Action identifier *)
+type aident = string * Logic_t.goal
+
+let hash_of_goal (goal : Logic_t.goal) : string =
+  goal |> Logic_b.string_of_goal |>
+  Sha512.string |> Sha512.to_bin |>
+  Base64.encode_string ~alphabet:Base64.uri_safe_alphabet
+
+let proofs_path : string =
+  let root_path = Loadpath.find_load_path "." |> Loadpath.physical in
+  root_path ^ "/actema.proofs"
+
+let path_of_atree ((name, goal) : aident) : string =
+  Printf.sprintf "%s/%s-%s" proofs_path (hash_of_goal goal) name
+
+let save_atree (id : aident) (t : Logic_t.atree) : unit =
+  let path = path_of_atree id in
+
+  if not (CUnix.file_readable_p proofs_path) then begin
+    let status = CUnix.sys_command "mkdir" [proofs_path] in
+    match status with
+    | WEXITED 0 -> ()
+    | _ ->
+        let err_msg = Printf.sprintf
+          "Could not create directory %s" proofs_path in
+        raise (Sys_error err_msg)
+  end;
+  Atdgen_runtime.Util.Biniou.to_file Logic_b.write_atree path t
+
+let load_atree (id : aident) : Logic_t.atree option =
+  let path = path_of_atree id in
+  try
+    Some (Atdgen_runtime.Util.Biniou.from_file Logic_b.read_atree path)
+  with Sys_error _ ->
+    None
+
+let actema_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
     let goal = export_goal coq_goal in
     Feedback.msg_notice (Pp.str "Goal:");
-    Feedback.msg_notice (Pp.str (string_of_goal goal));
+    Feedback.msg_notice (Pp.str (goal |> string_of_goal));
+
+    let id = action_name, goal in
+
+    let atree =
+      match load_atree id with
+      | None ->
+          let atree = Lwt_main.run (Client.action goal) in
+          save_atree id atree; atree
+      | Some t -> t
+    in
+
+    Feedback.msg_notice (Pp.str "Action tree:");
+    Feedback.msg_notice (Pp.str (string_of_atree atree));
+    import_atree atree
+  end
+
+let actema_force_tac (action_name : string) : unit tactic =
+  Goal.enter begin fun coq_goal ->
+    let goal = export_goal coq_goal in
+    Feedback.msg_notice (Pp.str "Goal:");
+    Feedback.msg_notice (Pp.str (goal |> string_of_goal));
+
+    let id = action_name, goal in
 
     let atree = Lwt_main.run (Client.action goal) in
-    Feedback.msg_notice (Pp.str "Action:");
-    Feedback.msg_notice (Pp.str (string_of_atree atree));
+    save_atree id atree;
 
+    Feedback.msg_notice (Pp.str "Action tree:");
+    Feedback.msg_notice (Pp.str (string_of_atree atree));
     import_atree atree
   end

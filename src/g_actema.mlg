@@ -4,10 +4,20 @@ DECLARE PLUGIN "actema_plugin"
 
 open Pp
 open Ltac_plugin
+open Stdarg
 
 }
 
 TACTIC EXTEND actema_tactic
+| [ "actema" string(action_name) ] ->
+  { Actema_main.actema_tac action_name }
 | [ "actema" ] ->
-  { Actema_main.actema_tac }
+  { Actema_main.actema_tac "default" }
+END
+
+TACTIC EXTEND actema_force_tactic
+| [ "actema_force" string(action_name) ] ->
+  { Actema_main.actema_force_tac action_name }
+| [ "actema_force" ] ->
+  { Actema_main.actema_force_tac "default" }
 END
