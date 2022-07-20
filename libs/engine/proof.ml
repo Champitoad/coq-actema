@@ -56,6 +56,7 @@ module Proof : sig
     val ids     : hyps -> Handle.t list
     val map     : (hyp -> hyp) -> hyps -> hyps
     val to_list : hyps -> (Handle.t * hyp) list
+    val of_list : (Handle.t * hyp) list -> hyps
   end
 
   type pregoal = {
@@ -68,12 +69,13 @@ module Proof : sig
 
   type pregoals = pregoal list
 
-  val init    : env -> form list -> form -> proof
-  val closed  : proof -> bool
-  val opened  : proof -> Handle.t list
-  val after   : proof -> Handle.t -> Handle.t list
-  val focused : proof -> Handle.t -> Handle.t
-  val byid    : proof -> Handle.t -> pregoal
+  val init      : env -> form list -> form -> proof
+  val hinit     : env -> hyps -> form -> proof
+  val closed    : proof -> bool
+  val opened    : proof -> Handle.t list
+  val after     : proof -> Handle.t -> Handle.t list
+  val focused   : proof -> Handle.t -> Handle.t
+  val byid      : proof -> Handle.t -> pregoal
 
   val db      : proof -> LemmaDB.t
   val loaddb  : proof -> (string * string) list -> proof
@@ -104,6 +106,10 @@ module Proof : sig
 
   val xprogress :
     proof -> Handle.t -> pnode -> pregoals -> proof
+  
+  module Translate : sig
+    val import_goal : Api.Logic_t.goal -> env * hyps * form
+  end
 end = struct
   module Js = Js_of_ocaml.Js
 
@@ -125,6 +131,7 @@ end = struct
     val ids     : hyps -> Handle.t list
     val map     : (hyp -> hyp) -> hyps -> hyps
     val to_list : hyps -> (Handle.t * hyp) list
+    val of_list : (Handle.t * hyp) list -> hyps
   end = struct
     type hyps = (Handle.t * hyp) list
 
@@ -172,6 +179,9 @@ end = struct
 
     let to_list (hyps : hyps) =
       hyps
+    
+    let of_list hyps =
+      hyps
   end
 
   type hyps = Hyps.hyps
@@ -216,6 +226,27 @@ end = struct
     let root = { g_id = uid; g_pregoal = {
         g_env  = env;
         g_hyps;
+        g_goal = goal;
+      }
+    } in
+
+    { p_root = uid;
+      p_maps = Map.singleton uid root;
+      p_crts = [uid];
+      p_frwd = Map.empty;
+      p_bkwd = Map.empty;
+      p_meta = ref Map.empty;
+      p_db   = LemmaDB.empty env; }
+
+  let hinit (env : env) (hyps : hyps) (goal : form) =
+    Form.recheck env goal;
+
+    List.iter (fun (_, h) -> Form.recheck env h.h_form) (Hyps.to_list hyps);
+
+    let uid  = Handle.fresh () in
+    let root = { g_id = uid; g_pregoal = {
+        g_env  = env;
+        g_hyps = hyps;
         g_goal = goal;
       }
     } in
@@ -382,6 +413,24 @@ end = struct
     let goal = byid pr id in
     let sub  = List.map (fun x -> { goal with g_goal = x }) sub in
     xprogress pr id pn sub
+
+  module Translate = struct
+    open Api
+    open Fo.Translate
+
+    let to_hyps (hyps : Logic_t.hyp list) =
+      let open Logic_t in
+      hyps |> List.map begin fun { hyp_src; hyp_id; hyp_form } ->
+        Handle.ofint hyp_id,
+        { h_src = Option.map Handle.ofint hyp_src;
+                h_gen = 0;
+                h_form = to_form hyp_form }
+      end |> Hyps.of_list
+
+    let import_goal (goal : Logic_t.goal) : env * hyps * form =
+      let env, hyps, concl = goal in
+      to_env env, to_hyps hyps, to_form concl
+  end
 end
 
 (* -------------------------------------------------------------------- *)
@@ -477,10 +526,9 @@ module CoreLogic : sig
 
   val apply   : Proof.proof -> action -> Proof.proof
 
-  module Api : sig
-    open Api
-    val export_proof : Proof.proof -> Logic_t.atree
-    val import_goal : Logic_t.goal -> Fo.env * Fo.form list * Fo.form
+  module Translate : sig
+    exception UnsupportedAction of pnode
+    val export_proof : Proof.proof -> Api.Logic_t.atree
   end
 end = struct
   type targ   = Proof.proof * Handle.t
@@ -623,6 +671,7 @@ end = struct
 
     Proof.sprogress pr id (AndDrop id) [[None, []], ng]
 
+  type pnode += TExact of Handle.t
   type pnode += TElim of Handle.t
 
   let core_elim (h : Handle.t) ((pr, id) : targ) =
@@ -632,7 +681,7 @@ end = struct
 
     begin
       if Form.f_equal gl.g_env hyp gl.g_goal
-      then result := [(TElim id), `S []]
+      then result := [(TExact h), `S []]
       else
         let pre, hy, s = prune_premisses_fa hyp in
         begin match Form.f_unify gl.g_env LEnv.empty s [(hy, gl.g_goal)] with
@@ -3014,32 +3063,12 @@ end = struct
         | _, _ :: _ :: _ -> failwith "Cannot handle multiple link actions yet"
         | _, _ -> raise TacticNotApplicable
 
-  (* -------------------------------------------------------------------- *)
-  (** API conversion layer, for communication with the plugin *)
-
-  module Api : sig
+  module Translate = struct
     open Api
-    val export_proof : Proof.proof -> Logic_t.atree
-    val import_goal : Logic_t.goal -> Fo.env * Fo.form list * Fo.form
-  end = struct
-    open Api
-    open Logic_b
-
-    let rec of_expr (e : Fo.expr) : Logic_t.expr =
-      match e with
-      | EVar x -> `EVar x
-      | EFun (f, es) -> `EFun (f, List.map of_expr es)
-
-    let rec of_type_ (t : Fo.type_) : Logic_t.type_ =
-      match t with
-      | TVar x -> `TVar x
-      | TUnit -> `TUnit
-      | TProd (t1, t2) -> `TProd (of_type_ t1, of_type_ t2)
-      | TOr (t1, t2) -> `TOr (of_type_ t1, of_type_ t2)
-      | TRec (x, ty) -> `TRec (x, of_type_ ty)
+    open Fo.Translate
 
     exception UnsupportedAction of pnode
-    
+
     let action_of_pnode (p : pnode) : Logic_t.action =
       match p with
       | TId ->
@@ -3057,64 +3086,5 @@ end = struct
         match p with
         | PNode (pn, subs) -> `PNode (action_of_pnode pn, List.map aux subs)
       in aux (Proof.get_ptree proof)
-
-    let rec to_expr (e : Logic_t.expr) : Fo.expr =
-      match e with
-      | `EVar x -> EVar x
-      | `EFun (f, es) -> EFun (f, List.map to_expr es)
-    
-    let rec to_type_ (t : Logic_t.type_) : Fo.type_ =
-      match t with
-      | `TVar x -> TVar x
-      | `TUnit -> TUnit
-      | `TProd (t1, t2) -> TProd (to_type_ t1, to_type_ t2)
-      | `TOr (t1, t2) -> TOr (to_type_ t1, to_type_ t2)
-      | `TRec (x, ty) -> TRec (x, to_type_ ty)
-
-    let to_arity (ar : Logic_t.arity) : Fo.arity =
-      List.map to_type_ ar
-
-    let to_sig_ ((ar, ret) : Logic_t.sig_) : Fo.sig_ =
-      to_arity ar, to_type_ ret
-    
-    let to_bvar ((ty, body) : Logic_t.bvar) : Fo.bvar =
-      (to_type_ ty, Option.map to_expr body)
-    
-    let rec to_form (f : Logic_t.form) : Fo.form =
-      let open Fo in
-      match f with
-      | `FTrue -> FTrue
-      | `FFalse -> FFalse
-      | `FPred (p, args) -> FPred (p, List.map to_expr args)
-      | `FConn (c, fs) -> FConn (c, List.map to_form fs)
-      | `FBind (b, x, ty, f) -> FBind (b, x, to_type_ ty, to_form f)
-    
-    let to_env (env : Logic_t.env) : Fo.env =
-      let assoc_to_map l f =
-        l |> List.map f |> List.enum |> Map.of_enum in
-
-      let assoc_to_bimap l f =
-        l |> List.map f |> List.enum |> BiMap.of_enum in
-
-      let env_prp = assoc_to_map env.env_prp
-        (fun (p, ar) -> p, to_arity ar) in
-      
-      let env_fun = assoc_to_map env.env_fun
-        (fun (f, sig_) -> f, to_sig_ sig_) in
-
-      let env_var = assoc_to_map env.env_var
-        (fun (x, bodies) -> x, List.map to_bvar bodies) in
-
-      let env_tvar = assoc_to_map env.env_tvar
-        (fun (x, aliases) -> x, List.map (Option.map to_type_) aliases) in
-
-      let env_handles = assoc_to_bimap env.env_handles
-        identity in
-      
-      { env_prp; env_fun; env_var; env_tvar; env_evar = Map.empty; env_handles }
-    
-    let import_goal (goal : Logic_t.goal) : Fo.env * Fo.form list * Fo.form =
-      let env, hyps, concl = goal in
-      to_env env, List.map to_form hyps, to_form concl
-  end
+    end
 end

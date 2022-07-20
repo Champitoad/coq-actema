@@ -104,7 +104,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   (* Return the current action tree as a binary, base64-encoded string *)
   method getproofb =
     _self##.proof |>
-    CoreLogic.Api.export_proof |>
+    CoreLogic.Translate.export_proof |>
     Api.Logic_b.string_of_atree |>
     Base64.encode_string |>
     Js.string
@@ -116,9 +116,9 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
       Js.to_string |>
       Base64.decode_exn |>
       Api.Logic_b.goal_of_string in
-    js_log (Utils.Atd.string_of_goal goal);
-    let env, hyps, concl = CoreLogic.Api.import_goal goal in
-    js_proof_engine (Proof.init env hyps concl)
+    js_log (Api.Utils.string_of_goal goal);
+    let env, hyps, concl = Proof.Translate.import_goal goal in
+    js_proof_engine (Proof.hinit env hyps concl)
 
   (* Get the meta-data attached to this proof engine *)
   method getmeta =

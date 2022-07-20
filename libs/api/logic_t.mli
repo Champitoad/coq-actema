@@ -44,6 +44,7 @@ type action = [
   | `ADef of ((type_ * expr option) * uid)
   | `AIntro of (int * (expr * type_) option)
   | `AElim of uid
+  | `AExact of uid
   | `ACut of (form * uid)
   | `AAssume of (form * uid)
   | `AGeneralize of uid
@@ -60,6 +61,8 @@ type arity = type_ list
 
 type sig_ = (arity * type_)
 
+type hyp = { hyp_src: uid option; hyp_id: uid; hyp_form: form }
+
 type bvar = (type_ * expr option)
 
 type env = {
@@ -70,4 +73,4 @@ type env = {
   env_handles: (vname * uid) list
 }
 
-type goal = (env * form list * form)
+type goal = (env * hyp list * form)

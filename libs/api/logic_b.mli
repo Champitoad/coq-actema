@@ -37,6 +37,8 @@ type arity = Logic_t.arity
 
 type sig_ = Logic_t.sig_
 
+type hyp = Logic_t.hyp = { hyp_src: uid option; hyp_id: uid; hyp_form: form }
+
 type bvar = Logic_t.bvar
 
 type env = Logic_t.env = {
@@ -694,6 +696,42 @@ val read_sig_ :
 val sig__of_string :
   ?pos:int -> string -> sig_
   (** Deserialize a biniou value of type {!type:sig_}.
+      @param pos specifies the position where
+                 reading starts. Default: 0. *)
+
+(* Writers for type hyp *)
+
+val hyp_tag : Bi_io.node_tag
+  (** Tag used by the writers for type {!hyp}.
+      Readers may support more than just this tag. *)
+
+val write_untagged_hyp :
+  Bi_outbuf.t -> hyp -> unit
+  (** Output an untagged biniou value of type {!type:hyp}. *)
+
+val write_hyp :
+  Bi_outbuf.t -> hyp -> unit
+  (** Output a biniou value of type {!type:hyp}. *)
+
+val string_of_hyp :
+  ?len:int -> hyp -> string
+  (** Serialize a value of type {!type:hyp} into
+      a biniou string. *)
+
+(* Readers for type hyp *)
+
+val get_hyp_reader :
+  Bi_io.node_tag -> (Bi_inbuf.t -> hyp)
+  (** Return a function that reads an untagged
+      biniou value of type {!type:hyp}. *)
+
+val read_hyp :
+  Bi_inbuf.t -> hyp
+  (** Input a tagged biniou value of type {!type:hyp}. *)
+
+val hyp_of_string :
+  ?pos:int -> string -> hyp
+  (** Deserialize a biniou value of type {!type:hyp}.
       @param pos specifies the position where
                  reading starts. Default: 0. *)
 

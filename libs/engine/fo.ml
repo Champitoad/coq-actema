@@ -2094,3 +2094,74 @@ end = struct
     let for_form = Form.check env in
     (env, List.map for_form hs, for_form f)
 end
+
+module Translate = struct
+  open Api
+
+  let rec of_expr (e : expr) : Logic_t.expr =
+    match e with
+    | EVar x -> `EVar x
+    | EFun (f, es) -> `EFun (f, List.map of_expr es)
+
+  let rec of_type_ (t : type_) : Logic_t.type_ =
+    match t with
+    | TVar x -> `TVar x
+    | TUnit -> `TUnit
+    | TProd (t1, t2) -> `TProd (of_type_ t1, of_type_ t2)
+    | TOr (t1, t2) -> `TOr (of_type_ t1, of_type_ t2)
+    | TRec (x, ty) -> `TRec (x, of_type_ ty)
+
+  let rec to_expr (e : Logic_t.expr) : expr =
+    match e with
+    | `EVar x -> EVar x
+    | `EFun (f, es) -> EFun (f, List.map to_expr es)
+
+  let rec to_type_ (t : Logic_t.type_) : type_ =
+    match t with
+    | `TVar x -> TVar x
+    | `TUnit -> TUnit
+    | `TProd (t1, t2) -> TProd (to_type_ t1, to_type_ t2)
+    | `TOr (t1, t2) -> TOr (to_type_ t1, to_type_ t2)
+    | `TRec (x, ty) -> TRec (x, to_type_ ty)
+
+  let to_arity (ar : Logic_t.arity) : arity =
+    List.map to_type_ ar
+
+  let to_sig_ ((ar, ret) : Logic_t.sig_) : sig_ =
+    to_arity ar, to_type_ ret
+
+  let to_bvar ((ty, body) : Logic_t.bvar) : bvar =
+    (to_type_ ty, Option.map to_expr body)
+
+  let rec to_form (f : Logic_t.form) : form =
+    match f with
+    | `FTrue -> FTrue
+    | `FFalse -> FFalse
+    | `FPred (p, args) -> FPred (p, List.map to_expr args)
+    | `FConn (c, fs) -> FConn (c, List.map to_form fs)
+    | `FBind (b, x, ty, f) -> FBind (b, x, to_type_ ty, to_form f)
+
+  let to_env (env : Logic_t.env) : env =
+    let assoc_to_map l f =
+      l |> List.map f |> List.enum |> Map.of_enum in
+
+    let assoc_to_bimap l f =
+      l |> List.map f |> List.enum |> BiMap.of_enum in
+
+    let env_prp = assoc_to_map env.env_prp
+      (fun (p, ar) -> p, to_arity ar) in
+    
+    let env_fun = assoc_to_map env.env_fun
+      (fun (f, sig_) -> f, to_sig_ sig_) in
+
+    let env_var = assoc_to_map env.env_var
+      (fun (x, bodies) -> x, List.map to_bvar bodies) in
+
+    let env_tvar = assoc_to_map env.env_tvar
+      (fun (x, aliases) -> x, List.map (Option.map to_type_) aliases) in
+
+    let env_handles = assoc_to_bimap env.env_handles
+      identity in
+    
+    { env_prp; env_fun; env_var; env_tvar; env_evar = Map.empty; env_handles }
+end

@@ -37,6 +37,8 @@ type arity = Logic_t.arity
 
 type sig_ = Logic_t.sig_
 
+type hyp = Logic_t.hyp = { hyp_src: uid option; hyp_id: uid; hyp_form: form }
+
 type bvar = Logic_t.bvar
 
 type env = Logic_t.env = {
@@ -1480,6 +1482,11 @@ let write_untagged_action = (
         (
           write_uid
         ) ob x
+      | `AExact x ->
+        Bi_outbuf.add_char4 ob '\135' 't' '\006' '\190';
+        (
+          write_uid
+        ) ob x
       | `ACut x ->
         Bi_outbuf.add_char4 ob '\171' '*' '\027' '\193';
         (
@@ -1634,6 +1641,11 @@ let get_action_reader = (
                 ) ib
               ))
             | 452574444, true -> (`AElim (
+                (
+                  read_uid
+                ) ib
+              ))
+            | 125044414, true -> (`AExact (
                 (
                   read_uid
                 ) ib
@@ -1798,6 +1810,11 @@ let read_action = (
             ) ib
           ))
         | 452574444, true -> (`AElim (
+            (
+              read_uid
+            ) ib
+          ))
+        | 125044414, true -> (`AExact (
             (
               read_uid
             ) ib
@@ -2185,6 +2202,117 @@ let read_sig_ = (
 )
 let sig__of_string ?pos s =
   read_sig_ (Bi_inbuf.from_string ?pos s)
+let hyp_tag = Bi_io.record_tag
+let write_untagged_hyp : Bi_outbuf.t -> hyp -> unit = (
+  fun ob x ->
+    Bi_vint.write_uvint ob 3;
+    Bi_outbuf.add_char4 ob '\129' '\234' '\203' '\164';
+    (
+      write__8
+    ) ob x.hyp_src;
+    Bi_outbuf.add_char4 ob '\138' '\234' '\015' '\027';
+    (
+      write_uid
+    ) ob x.hyp_id;
+    Bi_outbuf.add_char4 ob '\162' '\237' 'd' '\132';
+    (
+      write_form
+    ) ob x.hyp_form;
+)
+let write_hyp ob x =
+  Bi_io.write_tag ob Bi_io.record_tag;
+  write_untagged_hyp ob x
+let string_of_hyp ?(len = 1024) x =
+  let ob = Bi_outbuf.create len in
+  write_hyp ob x;
+  Bi_outbuf.contents ob
+let get_hyp_reader = (
+  fun tag ->
+    if tag <> 21 then Atdgen_runtime.Ob_run.read_error () else
+      fun ib ->
+        let field_hyp_src = ref (Obj.magic (Sys.opaque_identity 0.0)) in
+        let field_hyp_id = ref (Obj.magic (Sys.opaque_identity 0.0)) in
+        let field_hyp_form = ref (Obj.magic (Sys.opaque_identity 0.0)) in
+        let bits0 = ref 0 in
+        let len = Bi_vint.read_uvint ib in
+        for i = 1 to len do
+          match Bi_io.read_field_hashtag ib with
+            | 32164772 ->
+              field_hyp_src := (
+                (
+                  read__8
+                ) ib
+              );
+              bits0 := !bits0 lor 0x1;
+            | 183111451 ->
+              field_hyp_id := (
+                (
+                  read_uid
+                ) ib
+              );
+              bits0 := !bits0 lor 0x2;
+            | 585983108 ->
+              field_hyp_form := (
+                (
+                  read_form
+                ) ib
+              );
+              bits0 := !bits0 lor 0x4;
+            | _ -> Bi_io.skip ib
+        done;
+        if !bits0 <> 0x7 then Atdgen_runtime.Ob_run.missing_fields [| !bits0 |] [| "hyp_src"; "hyp_id"; "hyp_form" |];
+        (
+          {
+            hyp_src = !field_hyp_src;
+            hyp_id = !field_hyp_id;
+            hyp_form = !field_hyp_form;
+          }
+         : hyp)
+)
+let read_hyp = (
+  fun ib ->
+    if Bi_io.read_tag ib <> 21 then Atdgen_runtime.Ob_run.read_error_at ib;
+    let field_hyp_src = ref (Obj.magic (Sys.opaque_identity 0.0)) in
+    let field_hyp_id = ref (Obj.magic (Sys.opaque_identity 0.0)) in
+    let field_hyp_form = ref (Obj.magic (Sys.opaque_identity 0.0)) in
+    let bits0 = ref 0 in
+    let len = Bi_vint.read_uvint ib in
+    for i = 1 to len do
+      match Bi_io.read_field_hashtag ib with
+        | 32164772 ->
+          field_hyp_src := (
+            (
+              read__8
+            ) ib
+          );
+          bits0 := !bits0 lor 0x1;
+        | 183111451 ->
+          field_hyp_id := (
+            (
+              read_uid
+            ) ib
+          );
+          bits0 := !bits0 lor 0x2;
+        | 585983108 ->
+          field_hyp_form := (
+            (
+              read_form
+            ) ib
+          );
+          bits0 := !bits0 lor 0x4;
+        | _ -> Bi_io.skip ib
+    done;
+    if !bits0 <> 0x7 then Atdgen_runtime.Ob_run.missing_fields [| !bits0 |] [| "hyp_src"; "hyp_id"; "hyp_form" |];
+    (
+      {
+        hyp_src = !field_hyp_src;
+        hyp_id = !field_hyp_id;
+        hyp_form = !field_hyp_form;
+      }
+     : hyp)
+)
+let hyp_of_string ?pos s =
+  read_hyp (Bi_inbuf.from_string ?pos s)
 let bvar_tag = Bi_io.tuple_tag
 let write_untagged_bvar = (
   fun ob x ->
@@ -2849,6 +2977,33 @@ let read_env = (
 )
 let env_of_string ?pos s =
   read_env (Bi_inbuf.from_string ?pos s)
+let _18_tag = Bi_io.array_tag
+let write_untagged__18 = (
+  Atdgen_runtime.Ob_run.write_untagged_list
+    hyp_tag
+    (
+      write_untagged_hyp
+    )
+)
+let write__18 ob x =
+  Bi_io.write_tag ob Bi_io.array_tag;
+  write_untagged__18 ob x
+let string_of__18 ?(len = 1024) x =
+  let ob = Bi_outbuf.create len in
+  write__18 ob x;
+  Bi_outbuf.contents ob
+let get__18_reader = (
+  Atdgen_runtime.Ob_run.get_list_reader (
+    get_hyp_reader
+  )
+)
+let read__18 = (
+  Atdgen_runtime.Ob_run.read_list (
+    get_hyp_reader
+  )
+)
+let _18_of_string ?pos s =
+  read__18 (Bi_inbuf.from_string ?pos s)
 let goal_tag = Bi_io.tuple_tag
 let write_untagged_goal = (
   fun ob x ->
@@ -2860,7 +3015,7 @@ let write_untagged_goal = (
     );
     (
       let _, x, _ = x in (
-        write__3
+        write__18
       ) ob x
     );
     (
@@ -2889,7 +3044,7 @@ let get_goal_reader = (
         in
         let x1 =
           (
-            read__3
+            read__18
           ) ib
         in
         let x2 =
@@ -2912,7 +3067,7 @@ let read_goal = (
     in
     let x1 =
       (
-        read__3
+        read__18
       ) ib
     in
     let x2 =
