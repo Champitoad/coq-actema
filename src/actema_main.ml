@@ -25,7 +25,7 @@ let is_imp (env, evd) x t1 t2 : bool =
        evd t2
   && (x.Context.binder_name = Names.Anonymous || EConstr.Vars.noccurn evd 1 t2)
 
-let dest_pvar : fdest = fun ((env, evd as e), t) ->
+let dest_pvar : fdest = fun ((env, evd), t) ->
   if not (is_prop env evd t) then raise Constr.DestKO;
   let name = EConstr.destVar evd t |> Names.Id.to_string in
   `FPred (name, [])
@@ -50,7 +50,7 @@ let empty_env : Logic_t.env =
     env_handles = [] }
 
 let export_env (coq_env : Environ.env) (evd : Evd.evar_map) : Logic_t.env =
-  let update_env isprop name env =
+  let add_pvar isprop name env =
     let env_prp =
       try
         if isprop () then
@@ -62,30 +62,41 @@ let export_env (coq_env : Environ.env) (evd : Evd.evar_map) : Logic_t.env =
     { env with env_prp } in
 
   let env = empty_env in
+
   let env = Environ.fold_constants begin fun c _ env ->
       let isprop () = is_prop coq_env evd (EConstr.mkConst c) in
       let name = Names.Constant.to_string c in
-      update_env isprop name env
+      add_pvar isprop name env
     end coq_env env in
+
   let env = Environ.fold_named_context begin fun _ decl env ->
       let name = Context.Named.Declaration.get_id decl |> Names.Id.to_string in
       let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
       let isprop () = ty |> EConstr.to_constr evd |> Constr.destSort |> Sorts.is_prop in
-      update_env isprop name env
+      add_pvar isprop name env
     end coq_env ~init:env in
+
   env
+
+let export_hyps (coq_env : Environ.env) (evd : Evd.evar_map) : Logic_t.form list =
+  Environ.fold_named_context_reverse begin fun hyps decl ->
+    let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
+    if is_prop coq_env evd ty then
+      (dest_form ((coq_env, evd), ty)) :: hyps
+    else
+      hyps
+  end ~init:[] coq_env
 
 let export_goal (goal : Goal.t) : Logic_t.goal =
   let coq_env = Goal.env goal in
   let evd = Goal.sigma goal in
-  let coq_hyps = Goal.hyps goal in
   let coq_concl = Goal.concl goal in
 
   let env : Logic_t.env =
     export_env coq_env evd in
 
   let hyps : Logic_t.form list =
-    [] in
+    export_hyps coq_env evd in
 
   let concl : Logic_t.form =
     dest_form ((coq_env, evd), coq_concl) in

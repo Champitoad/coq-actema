@@ -30,7 +30,7 @@ This is a bit dirty, but it entails three manual build scenarios:
 
 ## Update API
 
-When updating the API, one needs to export it to `actema-desktop`:
+When updating the API in `src/logic.atd`, one needs to export it to `actema-desktop`:
 
 ```
 make update-api
