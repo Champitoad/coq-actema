@@ -670,7 +670,7 @@ end = struct
         begin match Form.f_unify gl.g_env LEnv.empty s [(hy, gl.g_goal)] with
         | Some s when Form.Subst.is_complete s ->  
             let pres = List.map
-            (fun (i, x) -> [Some h, []], (Form.Subst.f_iter s i x)) pre in
+              (fun (i, x) -> [Some h, []], (Form.Subst.f_iter s i x)) pre in
             result :=  ((TElim id), `S pres)::!result
         | Some _ -> () (* "incomplete match" *)
         | _ -> ();
@@ -705,7 +705,7 @@ end = struct
             in ()
         | _ -> ()
         end;
-        let _ , goal, s = prune_premisses_ex gl.g_goal in
+        (* let _ , goal, s = prune_premisses_ex gl.g_goal in
         let pre, hy = prune_premisses hyp in
         let pre = List.map (fun x -> [(Some h), []],x) pre in
         begin match Form.f_unify gl.g_env LEnv.empty s [(hy, goal)] with
@@ -727,7 +727,7 @@ end = struct
               then result := ((TElim id), `S []) :: !result
               else ()
             | _ -> ()
-        end;
+        end; *)
       end;
     !result
 
@@ -3057,12 +3057,16 @@ end = struct
       match p with
       | TId ->
           `AId
+      | TExact hd ->
+          `AExact (Handle.toint hd)
       | TIntro (i, wit) ->
           let wit' = wit |>
             Option.map begin fun (e, t) ->
               of_expr e, of_type_ t
             end in
           `AIntro (i, wit')
+      | TElim hd ->
+          `AElim (Handle.toint hd)
       | _ -> raise (UnsupportedAction p)
 
     let export_proof (proof : Proof.proof) : Logic_t.atree =
