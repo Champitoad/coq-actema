@@ -128,7 +128,7 @@ let string_of_atree t =
 
 exception UnsupportedAction of Logic_t.action
 
-let import_action (a : Logic_t.action) : unit tactic =
+let import_action (a : Logic_t.action) (ipat : Logic_t.intro_pat) : unit tactic =
   match a with
   | `AId ->
       Tacticals.tclIDTAC
@@ -139,8 +139,8 @@ let import_action (a : Logic_t.action) : unit tactic =
 
 let rec import_atree (t : Logic_t.atree) : unit tactic =
   match t with
-  | `PNode (a, subs) ->
-      let tac = import_action a in
+  | `PNode (a, ipat, subs) ->
+      let tac = import_action a ipat in
       if subs = [] then tac
       else
         let subs_tacs = List.map import_atree subs in

@@ -62,6 +62,7 @@ type action = [
   | ADef of ((type_ * expr option) * uid)
   | AIntro of (int * (expr * type_) option)
   | AElim of uid
+  | AExact of uid
   | ACut of (form * uid)
   | AAssume of (form * uid)
   | AGeneralize of uid
@@ -70,8 +71,10 @@ type action = [
   | ALink of (ipath * ipath * itrace)
 ]
 
+type intro_pat = uid list list
+
 type atree = [
-  | PNode of (action * atree list)
+  | PNode of (action * intro_pat * atree list)
 ]
 
 (* -------------------------------------------------------------------- *)
@@ -90,4 +93,6 @@ type env = {
 (* -------------------------------------------------------------------- *)
 (** Goals *)
 
-type goal = (env * form list * form)
+type hyp = form
+
+type goal = (env * hyp list * form)
