@@ -7,3 +7,4 @@ html/jspover.js
 html/jsprover.js
 *.merlin
 libs/engine/test.ml
+libs/api/*.d
