@@ -13,6 +13,8 @@ type uid = Logic_t.uid
 
 type ctxt = Logic_t.ctxt = { kind: pkind; handle: uid }
 
+type intro_pat = Logic_t.intro_pat
+
 type ipath = Logic_t.ipath = { root: uid; ctxt: ctxt; sub: int list }
 
 type vname = Logic_t.vname
@@ -37,7 +39,7 @@ type arity = Logic_t.arity
 
 type sig_ = Logic_t.sig_
 
-type hyp = Logic_t.hyp = { hyp_src: uid option; hyp_id: uid; hyp_form: form }
+type hyp = Logic_t.hyp
 
 type bvar = Logic_t.bvar
 
@@ -264,6 +266,42 @@ val read_ctxt :
 val ctxt_of_string :
   ?pos:int -> string -> ctxt
   (** Deserialize a biniou value of type {!type:ctxt}.
+      @param pos specifies the position where
+                 reading starts. Default: 0. *)
+
+(* Writers for type intro_pat *)
+
+val intro_pat_tag : Bi_io.node_tag
+  (** Tag used by the writers for type {!intro_pat}.
+      Readers may support more than just this tag. *)
+
+val write_untagged_intro_pat :
+  Bi_outbuf.t -> intro_pat -> unit
+  (** Output an untagged biniou value of type {!type:intro_pat}. *)
+
+val write_intro_pat :
+  Bi_outbuf.t -> intro_pat -> unit
+  (** Output a biniou value of type {!type:intro_pat}. *)
+
+val string_of_intro_pat :
+  ?len:int -> intro_pat -> string
+  (** Serialize a value of type {!type:intro_pat} into
+      a biniou string. *)
+
+(* Readers for type intro_pat *)
+
+val get_intro_pat_reader :
+  Bi_io.node_tag -> (Bi_inbuf.t -> intro_pat)
+  (** Return a function that reads an untagged
+      biniou value of type {!type:intro_pat}. *)
+
+val read_intro_pat :
+  Bi_inbuf.t -> intro_pat
+  (** Input a tagged biniou value of type {!type:intro_pat}. *)
+
+val intro_pat_of_string :
+  ?pos:int -> string -> intro_pat
+  (** Deserialize a biniou value of type {!type:intro_pat}.
       @param pos specifies the position where
                  reading starts. Default: 0. *)
 

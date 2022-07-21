@@ -13,6 +13,8 @@ type uid = int
 
 type ctxt = { kind: pkind; handle: uid }
 
+type intro_pat = uid list list
+
 type ipath = { root: uid; ctxt: ctxt; sub: int list }
 
 type vname = (name * int)
@@ -53,7 +55,7 @@ type action = [
   | `ALink of (ipath * ipath * itrace)
 ]
 
-type atree = [ `PNode of (action * atree list) ]
+type atree = [ `PNode of (action * intro_pat * atree list) ]
 
 type term = [ `F of form | `E of expr ]
 
@@ -61,7 +63,7 @@ type arity = type_ list
 
 type sig_ = (arity * type_)
 
-type hyp = { hyp_src: uid option; hyp_id: uid; hyp_form: form }
+type hyp = form
 
 type bvar = (type_ * expr option)
 

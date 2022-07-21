@@ -118,7 +118,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
       Api.Logic_b.goal_of_string in
     js_log (Api.Utils.string_of_goal goal);
     let env, hyps, concl = Proof.Translate.import_goal goal in
-    js_proof_engine (Proof.hinit env hyps concl)
+    js_proof_engine (Proof.init env hyps concl)
 
   (* Get the meta-data attached to this proof engine *)
   method getmeta =
