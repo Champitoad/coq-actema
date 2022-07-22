@@ -14,8 +14,9 @@ This is a bit dirty, but it entails three manual build scenarios:
 
 1. when building for the first time, run:
     ```
+    make api
     dune build
-    make; make clean; make
+    make
     ```
 2. when rebuilding *without* changing the project structure, run:
     ```
@@ -25,13 +26,13 @@ This is a bit dirty, but it entails three manual build scenarios:
     ```
     make cleanall
     dune build
-    make; make clean; make
+    make
     ```
 
 ## Update API
 
-When updating the API in `src/logic.atd`, one needs to export it to `actema-desktop`:
+When updating the API in `actema-desktop/prover/libs/api`, one needs to import it to `src`:
 
 ```
-make update-api
+make api
 ```

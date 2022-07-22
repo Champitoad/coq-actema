@@ -10,15 +10,3 @@
 (env
   (dev
     (flags (:standard -warn-error -A))))
-
-(rule
- (targets logic_b.ml
-          logic_b.mli)
- (deps    logic.atd)
- (action  (run atdgen -b %{deps})))
-
-(rule
- (targets logic_t.ml
-          logic_t.mli)
- (deps    logic.atd)
- (action  (run atdgen -t %{deps})))

@@ -1,22 +1,6 @@
 CAMLFLAGS = -rectypes -w -26 -warn-error -A -thread
 CAMLPKGS = -package atdgen -package cohttp-lwt-unix -package sha
 
-APIDIR = src
-
-src/logic_t.ml: $(APIDIR)/logic.atd
-	atdgen -t $<
-
-src/logic_b.ml: $(APIDIR)/logic.atd
-	atdgen -b $<
-
-api: $(APIDIR)/logic_t.ml $(APIDIR)/logic_b.ml
-
-update-api: api
-	cp $(APIDIR)/logic_t.ml* actema-desktop/prover/libs/api
-	cp $(APIDIR)/logic_b.ml* actema-desktop/prover/libs/api
-
-pre-all:: api
-
 cleanall::
-	rm src/logic_b.ml* src/logic_t.ml*
-	rm theories/.*.aux
+	rm -f theories/.*.aux
+	rm -f Makefile.coq Makefile.coq.conf
