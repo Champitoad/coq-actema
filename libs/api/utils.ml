@@ -14,3 +14,6 @@ let biniou_unhash_dict = Bi_io.make_unhash [
 
 let string_of_goal goal =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_goal goal)
+
+let string_of_atree t =
+  Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_atree t)
