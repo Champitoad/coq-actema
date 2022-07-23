@@ -24,7 +24,7 @@ let action (goal : Logic_t.goal) : Logic_t.proof t =
 
   req >>= fun (resp, body) ->
 
-  (* Receive response with action tree *)
+  (* Receive response with proof *)
 
   body |> Cohttp_lwt.Body.to_string >|= fun body ->
 
