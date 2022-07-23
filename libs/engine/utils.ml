@@ -193,6 +193,8 @@ end
 module BiMap : sig
   type ('a, 'b) t
 
+  val bindings    : ('a, 'b) t -> ('a * 'b) list
+
   val empty       : ('a, 'b) t
 
   val inverse     : ('a, 'b) t -> ('b, 'a) t
@@ -209,6 +211,9 @@ module BiMap : sig
   val of_enum     : ('a * 'b) Enum.t -> ('a, 'b) t
 end = struct
   type ('a, 'b) t = ('a, 'b) Map.t * ('b, 'a) Map.t
+
+  let bindings (r, _) =
+    Map.bindings r
   
   let empty =
     Map.empty, Map.empty

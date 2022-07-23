@@ -105,7 +105,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   method getproofb =
     _self##.proof |>
     CoreLogic.Translate.export_proof |>
-    Api.Logic_b.string_of_atree |>
+    Api.Logic_b.string_of_proof |>
     Base64.encode_string |>
     Js.string
   
@@ -117,8 +117,8 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
       Base64.decode_exn |>
       Api.Logic_b.goal_of_string in
     js_log (Api.Utils.string_of_goal goal);
-    let env, hyps, concl = Proof.Translate.import_goal goal in
-    js_proof_engine (Proof.init env hyps concl)
+    let gl = Proof.Translate.import_goal goal in
+    js_proof_engine (Proof.ginit gl)
 
   (* Get the meta-data attached to this proof engine *)
   method getmeta =

@@ -2098,6 +2098,9 @@ end
 module Translate = struct
   open Api
 
+(* -------------------------------------------------------------------- *)
+  (** From engine to API *)
+
   let rec of_expr (e : expr) : Logic_t.expr =
     match e with
     | EVar x -> `EVar x
@@ -2110,6 +2113,50 @@ module Translate = struct
     | TProd (t1, t2) -> `TProd (of_type_ t1, of_type_ t2)
     | TOr (t1, t2) -> `TOr (of_type_ t1, of_type_ t2)
     | TRec (x, ty) -> `TRec (x, of_type_ ty)
+  
+  let of_arity (ar : arity) : Logic_t.arity =
+    List.map of_type_ ar
+  
+  let of_sig_ ((ar, ret) : sig_) : Logic_t.sig_ =
+    (of_arity ar, of_type_ ret)
+
+  let rec of_form (f : form) : Logic_t.form =
+    match f with
+    | FTrue -> `FTrue
+    | FFalse -> `FFalse
+    | FPred (p, args) -> `FPred (p, List.map of_expr args)
+    | FConn (c, fs) -> `FConn (c, List.map of_form fs)
+    | FBind (b, x, ty, f) -> `FBind (b, x, of_type_ ty, of_form f)
+  
+  let of_bvar ((ty, body) : bvar) : Logic_t.bvar =
+    (of_type_ ty, Option.map of_expr body)
+
+  let of_env (env : env) : Logic_t.env =
+    let map_to_assoc m f =
+      Map.bindings m |> List.map f in
+
+    let bimap_to_assoc m f =
+      BiMap.bindings m |> List.map f in
+
+    let env_prp = map_to_assoc env.env_prp
+      (fun (p, ar) -> p, of_arity ar) in
+    
+    let env_fun = map_to_assoc env.env_fun
+      (fun (f, sig_) -> f, of_sig_ sig_) in
+
+    let env_var = map_to_assoc env.env_var
+      (fun (x, bodies) -> x, List.map of_bvar bodies) in
+
+    let env_tvar = map_to_assoc env.env_tvar
+      (fun (x, aliases) -> x, List.map (Option.map of_type_) aliases) in
+
+    let env_handles = bimap_to_assoc env.env_handles
+      identity in
+    
+    { env_prp; env_fun; env_var; env_tvar; env_handles }
+
+(* -------------------------------------------------------------------- *)
+  (** From API to engine *)
 
   let rec to_expr (e : Logic_t.expr) : expr =
     match e with
