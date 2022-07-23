@@ -80,8 +80,9 @@ module Proof : sig
   val db      : proof -> LemmaDB.t
   val loaddb  : proof -> (string * string) list -> proof
 
+  type intro_pat = Handle.t list list
   type ptree =
-    | PNode of (pnode * pregoal * ptree list)
+    | PNode of (pnode * pregoal * intro_pat * ptree list)
 
   val get_ptree : proof -> ptree
 
@@ -207,10 +208,11 @@ end = struct
 
   type goal = { g_id: Handle.t; g_pregoal: pregoal; }
 
+  type intro_pat = Handle.t list list
   type gdep = {
     d_src : Handle.t;
     d_dst : Handle.t list;
-    d_ndn : pnode;
+    d_ndn : pnode * intro_pat;
   }
 
   type proof = {
@@ -303,16 +305,16 @@ end = struct
     in goal.g_pregoal
 
   type ptree =
-    | PNode of (pnode * pregoal * ptree list)
+    | PNode of (pnode * pregoal * intro_pat * ptree list)
 
   let get_ptree (proof : proof) : ptree =
     let rec aux (id : Handle.t) : ptree =
       let goal = byid proof id in
       try
-        let { d_dst; d_ndn; _ } = Map.find id proof.p_frwd in
-        PNode (d_ndn, goal, List.map aux d_dst)
+        let { d_dst; d_ndn = pn, ipat; _ } = Map.find id proof.p_frwd in
+        PNode (pn, goal, ipat, List.map aux d_dst)
       with Not_found ->
-        PNode (TId, goal, [])
+        PNode (TId, goal, [], [])
     in aux proof.p_root
 
   let hprogress (pr : proof) (id : Handle.t) (pn : pnode) (sub : pregoal) =
@@ -328,7 +330,9 @@ end = struct
       try  List.pivot (Handle.eq id) pr.p_crts
       with Invalid_argument _ -> raise (SubgoalNotOpened id) in
 
-    let dep = { d_src = id; d_dst = [g_id]; d_ndn = pn; } in
+    let new_hyps = Hyps.diff sub.g_pregoal.g_hyps _goal.g_hyps in
+    let d_ndn = pn, [Hyps.ids new_hyps] in
+    let dep = { d_src = id; d_dst = [g_id]; d_ndn; } in
 
     let meta =
       match Map.Exceptionless.find id !(pr.p_meta) with
@@ -365,7 +369,10 @@ end = struct
       try  List.pivot (Handle.eq id) pr.p_crts
       with Invalid_argument _ -> raise (SubgoalNotOpened id) in
 
-    let dep = { d_src = id; d_dst = sids; d_ndn = pn; } in
+    let ipat = subs |> List.map (fun sub ->
+        Hyps.(diff sub.g_pregoal.g_hyps _goal.g_hyps |> ids)) in
+    let d_ndn = pn, ipat in
+    let dep = { d_src = id; d_dst = sids; d_ndn; } in
 
     let meta =
       match Map.Exceptionless.find id !(pr.p_meta) with
@@ -395,15 +402,15 @@ end = struct
       let subfor1 hyps (hid, newlc) =
         let hyps =
           Option.fold (fun hyps hid ->
-            let _h = (Hyps.byid hyps hid).h_form in
             if clear then Hyps.remove hyps hid else hyps)
           hyps hid in
         let hsrc = if clear then None else hid in
 
         let hyps = List.fold_left (fun hyps newh ->
             Hyps.add hyps (Handle.fresh ()) (mk_hyp ?src:hsrc newh))
-          hyps newlc
-        in hyps in
+          hyps newlc in
+        
+        hyps in
 
       let hyps = List.fold_left subfor1 goal.g_hyps newlc in
       { g_env = goal.g_env; g_hyps = hyps; g_goal = concl; }
@@ -703,28 +710,28 @@ end = struct
         | Some s when Form.Subst.is_complete s ->  
             let pres = List.map
               (fun (i, x) -> [Some h, []], (Form.Subst.f_iter s i x)) pre in
-            result :=  ((TElim id), `S pres)::!result
+            result :=  ((TElim h), `S pres)::!result
         | Some _ -> () (* "incomplete match" *)
         | _ -> ();
         end;
         let subs = List.map (fun (_, f) -> [Some h, []], f) pre in
         begin match hy with
         | FConn (`And, [f1; f2]) ->
-            result := ((TElim id), `S (subs @ [[Some h, [f1; f2]], gl.g_goal])) :: !result
+            result := ((TElim h), `S (subs @ [[Some h, [f1; f2]], gl.g_goal])) :: !result
         (* clear *) 
         | FConn (`Or, [f1; f2]) ->
-            result := ((TElim id), 
+            result := ((TElim h), 
                        `S (subs @ [[Some h, [f1]], gl.g_goal;
                                [Some h, [f2]], gl.g_goal])) :: !result
         | FConn (`Equiv, [f1; f2]) ->
-            result := ((TElim id),
+            result := ((TElim h),
                        `S (subs @ [[Some h, [Form.f_imp f1 f2;
                                           Form.f_imp f2 f1]], gl.g_goal])) :: !result
         | FConn (`Not, [f]) ->
-            result := ((TElim id), 
+            result := ((TElim h), 
                        `S (subs @ [[Some h, []], f])) :: !result
-        | FFalse -> result := ((TElim id), `S subs) :: !result
-        | FTrue -> result := ((TElim id), `S (subs @ [[Some h, []], gl.g_goal])) :: !result
+        | FFalse -> result := ((TElim h), `S subs) :: !result
+        | FTrue -> result := ((TElim h), `S (subs @ [[Some h, []], gl.g_goal])) :: !result
         | FBind (`Exist, x, ty, f) ->
             let _ = (pr, id) |> then_tac
               (add_local (x, ty, None))
@@ -733,7 +740,7 @@ end = struct
                 let g_hyps = Proof.Hyps.remove goal.g_hyps h in
                 let g_hyps = Proof.(Hyps.add g_hyps h (mk_hyp f)) in
                 let goal = Proof.{ goal with g_hyps } in
-                result := ((TElim id), `X [goal]) :: !result; pr)
+                result := ((TElim h), `X [goal]) :: !result; pr)
             in ()
         | _ -> ()
         end;
@@ -742,7 +749,7 @@ end = struct
         let pre = List.map (fun x -> [(Some h), []],x) pre in
         begin match Form.f_unify gl.g_env LEnv.empty s [(hy, goal)] with
         | Some s when Form.Subst.is_complete s ->
-            result := ((TElim id), `S pre) :: !result
+            result := ((TElim h), `S pre) :: !result
         | Some _ -> () (* failwith "incomplete ex match" *)
         | None ->
             match goal with
@@ -756,7 +763,7 @@ end = struct
                   end
               in 
               if aux gll 
-              then result := ((TElim id), `S []) :: !result
+              then result := ((TElim h), `S []) :: !result
               else ()
             | _ -> ()
         end; *)
@@ -3104,9 +3111,10 @@ end = struct
     let export_proof (proof : Proof.proof) : Logic_t.proof =
       let rec aux (p : Proof.ptree) : Logic_t.proof =
         match p with
-        | PNode (pn, gl, subs) ->
+        | PNode (pn, gl, ipat, subs) ->
             `PNode (action_of_pnode pn,
                     Proof.Translate.export_goal gl,
+                    List.map (List.map Handle.toint) ipat,
                     List.map aux subs)
       in aux (Proof.get_ptree proof)
     end

@@ -1,3 +1,7 @@
+open Logic_t
+
 val biniou_unhash_dict : int -> string option
-val string_of_goal : Logic_t.goal -> string
-val string_of_proof : Logic_t.proof -> string
+val string_of_goal : goal -> string
+val string_of_proof : proof -> string
+
+val get_hyp : goal -> uid -> hyp

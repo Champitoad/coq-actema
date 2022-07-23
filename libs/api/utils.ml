@@ -1,3 +1,5 @@
+open Logic_t
+
 let biniou_unhash_dict = Bi_io.make_unhash [
   "EVar"; "EFun";
   "And"; "Or"; "Imp"; "Equiv"; "Not";
@@ -19,3 +21,6 @@ let string_of_goal goal =
 
 let string_of_proof prf =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_proof prf)
+
+let get_hyp ({ g_hyps; _ } : goal) (id : uid) : hyp =
+  List.find (fun { h_id; _ } -> h_id = id) g_hyps

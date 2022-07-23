@@ -75,6 +75,8 @@ type action = [
 
 (** Proofs *)
 
+type intro_pat = uid list list
+
 type proof = [
-  | PNode of (action * goal * proof list)
+  | PNode of (action * goal * intro_pat * proof list)
 ]

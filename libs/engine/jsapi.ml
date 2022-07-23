@@ -105,6 +105,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   method getproofb =
     _self##.proof |>
     CoreLogic.Translate.export_proof |>
+    fun pr -> js_log (pr |> Api.Utils.string_of_proof); pr |>
     Api.Logic_b.string_of_proof |>
     Base64.encode_string |>
     Js.string
@@ -116,7 +117,6 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
       Js.to_string |>
       Base64.decode_exn |>
       Api.Logic_b.goal_of_string in
-    js_log (Api.Utils.string_of_goal goal);
     let gl = Proof.Translate.import_goal goal in
     js_proof_engine (Proof.ginit gl)
 
