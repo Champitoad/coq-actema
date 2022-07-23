@@ -13,8 +13,8 @@ exception ActemaError of string
 exception UnsupportedRequestMethod of string
 exception UnsupportedHttpResponseCode of int
 
-let action (goal : Logic_t.goal) : Logic_t.atree t =
-  (** Send request with goal *)
+let action (goal : Logic_t.goal) : Logic_t.proof t =
+  (* Send request with goal *)
 
   let goalb =
     goal |>
@@ -24,7 +24,7 @@ let action (goal : Logic_t.goal) : Logic_t.atree t =
 
   req >>= fun (resp, body) ->
 
-  (** Receive response with action tree *)
+  (* Receive response with action tree *)
 
   body |> Cohttp_lwt.Body.to_string >|= fun body ->
 
@@ -33,7 +33,7 @@ let action (goal : Logic_t.goal) : Logic_t.atree t =
   | 200 ->
       body |>
       Base64.decode_exn |>
-      Logic_b.atree_of_string
+      Logic_b.proof_of_string
   | 501 ->
       raise (UnsupportedRequestMethod body)
   | 550 ->

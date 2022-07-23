@@ -49,8 +49,10 @@ Makefile.coq
 Makefile.coq.conf
 
 src/g_actema.ml
+src/fo_t.ml*
+src/fo_b.ml*
 src/logic_t.ml*
 src/logic_b.ml*
-src/utils.ml
+src/utils.ml*
 
 actema.proofs

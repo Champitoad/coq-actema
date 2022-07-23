@@ -34,5 +34,5 @@ This is a bit dirty, but it entails three manual build scenarios:
 When updating the API in `actema-desktop/prover/libs/api`, one needs to import it to `src`:
 
 ```
-make api
+make update-api
 ```

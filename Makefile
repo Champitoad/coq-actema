@@ -6,16 +6,22 @@ all: Makefile.coq api
 APIDIR = actema-desktop/prover/_build/default/libs/api
 APIDIR_LOCAL = src
 
-$(APIDIR_LOCAL)/logic_t.%: $(APIDIR)/logic_t.%
+APIMODS = fo_t fo_b logic_t logic_b utils
+APIMODS_SRCS = $(APIMODS:%=$(APIDIR)/%.ml) $(APIMODS:%=$(APIDIR)/%.mli)
+APIMODS_SRCS_LOCAL = $(APIMODS:%=$(APIDIR_LOCAL)/%.ml) $(APIMODS:%=$(APIDIR_LOCAL)/%.mli)
+
+$(APIDIR_LOCAL)/%.ml: $(APIDIR)/%.ml
 	cp $< $@
 
-$(APIDIR_LOCAL)/logic_b.%: $(APIDIR)/logic_b.%
+$(APIDIR_LOCAL)/%.mli: $(APIDIR)/%.mli
 	cp $< $@
 
-$(APIDIR_LOCAL)/utils.ml: $(APIDIR)/utils.ml
-	cp $< $@
+api: $(APIMODS_SRCS_LOCAL)
 
-api: $(APIDIR_LOCAL)/logic_t.ml $(APIDIR_LOCAL)/logic_t.mli $(APIDIR_LOCAL)/logic_b.ml $(APIDIR_LOCAL)/logic_b.mli $(APIDIR_LOCAL)/utils.ml
+clean-api:
+	rm -f $(APIMODS_SRCS_LOCAL)
+
+update-api: clean-api api
 
 # Coq make
 

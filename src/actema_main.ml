@@ -54,11 +54,11 @@ let export_env (coq_env : Environ.env) (evd : Evd.evar_map) : Logic_t.env =
     let env_prp =
       try
         if isprop () then
-          (name, []) :: env.Logic_t.env_prp
+          (name, []) :: env.Fo_t.env_prp
         else
-          env.Logic_t.env_prp
+          env.Fo_t.env_prp
       with e when CErrors.is_anomaly e ->
-          env.Logic_t.env_prp in
+          env.Fo_t.env_prp in
     { env with env_prp } in
 
   let env = empty_env in
@@ -78,53 +78,82 @@ let export_env (coq_env : Environ.env) (evd : Evd.evar_map) : Logic_t.env =
 
   env
 
-let export_hyps (coq_env : Environ.env) (evd : Evd.evar_map) : Logic_t.form list =
-  Environ.fold_named_context_reverse begin fun hyps decl ->
+module Uid : sig
+  include Map.OrderedType
+
+  val fresh : unit -> t
+end with type t = Logic_t.uid = struct
+  type t = Logic_t.uid
+  
+  let compare = Int.compare
+
+  let fresh : unit -> t =
+    let count = ref (-1) in
+    fun () -> incr count; !count
+end
+
+module UidMap = Map.Make(Uid)
+
+type hidmap = Names.Id.t UidMap.t
+
+let export_hyps (coq_env : Environ.env) (evd : Evd.evar_map) : Logic_t.hyp list * hidmap =
+  Environ.fold_named_context begin fun _ decl (hyps, hm) ->
+    let id = Context.Named.Declaration.get_id decl in
     let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
     if is_prop coq_env evd ty then
-      (dest_form ((coq_env, evd), ty)) :: hyps
+      let h_id = Uid.fresh () in
+      let h_form = dest_form ((coq_env, evd), ty) in
+      let hyp = Logic_t.{ h_id; h_form } in
+      (hyp :: hyps, UidMap.add h_id id hm)
     else
-      hyps
-  end ~init:[] coq_env
+      (hyps, hm)
+  end coq_env ~init:([], UidMap.empty)
 
-let export_goal (goal : Goal.t) : Logic_t.goal =
+let export_goal (goal : Goal.t) : Logic_t.goal * hidmap =
   let coq_env = Goal.env goal in
   let evd = Goal.sigma goal in
   let coq_concl = Goal.concl goal in
 
-  let env : Logic_t.env =
+  let g_env : Logic_t.env =
     export_env coq_env evd in
 
-  let hyps : Logic_t.form list =
+  let (g_hyps, hm) : Logic_t.hyp list * hidmap =
     export_hyps coq_env evd in
 
-  let concl : Logic_t.form =
+  let g_concl : Logic_t.form =
     dest_form ((coq_env, evd), coq_concl) in
   
-  env, hyps, concl
+  Logic_t.{ g_env; g_hyps; g_concl }, hm
 
 (* -------------------------------------------------------------------- *)
 (** Importing Actema actions as Coq tactics *)
 
 exception UnsupportedAction of Logic_t.action
 
-let import_action (a : Logic_t.action) (ipat : Logic_t.intro_pat) : unit tactic =
+let import_action (hm : hidmap) (goal : Logic_t.goal) (a : Logic_t.action) : hidmap tactic =
+  let open Proofview.Monad in
   match a with
   | `AId ->
-      Tacticals.tclIDTAC
+      Tacticals.tclIDTAC >>= fun () ->
+      return hm
   | `AIntro (i, wit) ->
-      Tactics.intro
+      Tactics.intro >>= fun () ->
+      return hm
+  (* | `AElim hd -> *)
+
   | _ ->
       raise (UnsupportedAction a)
 
-let rec import_atree (t : Logic_t.atree) : unit tactic =
+let rec import_proof (hm : hidmap) (t : Logic_t.proof) : unit tactic =
+  let open Proofview.Monad in
   match t with
-  | `PNode (a, ipat, subs) ->
-      let tac = import_action a ipat in
-      if subs = [] then tac
+  | `PNode (a, goal, subs) ->
+      import_action hm goal a >>= fun hm ->
+      if subs = [] then 
+        Tacticals.tclIDTAC
       else
-        let subs_tacs = List.map import_atree subs in
-        Tacticals.tclTHENS tac subs_tacs
+        let subs_tacs = Stdlib.List.map (import_proof hm) subs in
+        Proofview.tclDISPATCH subs_tacs
 
 (* -------------------------------------------------------------------- *)
 (** The actema tactic *)
@@ -141,11 +170,11 @@ let proofs_path : string =
   let root_path = Loadpath.find_load_path "." |> Loadpath.physical in
   root_path ^ "/actema.proofs"
 
-let path_of_atree ((name, goal) : aident) : string =
+let path_of_proof ((name, goal) : aident) : string =
   Printf.sprintf "%s/%s-%s" proofs_path (hash_of_goal goal) name
 
-let save_atree (id : aident) (t : Logic_t.atree) : unit =
-  let path = path_of_atree id in
+let save_proof (id : aident) (t : Logic_t.proof) : unit =
+  let path = path_of_proof id in
 
   if not (CUnix.file_readable_p proofs_path) then begin
     let status = CUnix.sys_command "mkdir" [proofs_path] in
@@ -156,48 +185,48 @@ let save_atree (id : aident) (t : Logic_t.atree) : unit =
           "Could not create directory %s" proofs_path in
         raise (Sys_error err_msg)
   end;
-  Atdgen_runtime.Util.Biniou.to_file Logic_b.write_atree path t
+  Atdgen_runtime.Util.Biniou.to_file Logic_b.write_proof path t
 
-let load_atree (id : aident) : Logic_t.atree option =
-  let path = path_of_atree id in
+let load_proof (id : aident) : Logic_t.proof option =
+  let path = path_of_proof id in
   try
-    Some (Atdgen_runtime.Util.Biniou.from_file Logic_b.read_atree path)
-  with Sys_error _ ->
+    Some (Atdgen_runtime.Util.Biniou.from_file Logic_b.read_proof path)
+  with _ ->
     None
 
 let actema_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
-    let goal = export_goal coq_goal in
+    let goal, hm = export_goal coq_goal in
     Feedback.msg_notice (Pp.str "Goal:");
     Feedback.msg_notice (Pp.str (goal |> Utils.string_of_goal));
 
     let id = action_name, goal in
 
-    let atree =
-      match load_atree id with
+    let proof =
+      match load_proof id with
       | None ->
-          let atree = Lwt_main.run (Client.action goal) in
-          save_atree id atree; atree
+          let proof = Lwt_main.run (Client.action goal) in
+          save_proof id proof; proof
       | Some t -> t
     in
 
-    Feedback.msg_notice (Pp.str "Action tree:");
-    Feedback.msg_notice (Pp.str (Utils.string_of_atree atree));
-    import_atree atree
+    Feedback.msg_notice (Pp.str "Proof:");
+    Feedback.msg_notice (Pp.str (Utils.string_of_proof proof));
+    import_proof hm proof
   end
 
 let actema_force_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
-    let goal = export_goal coq_goal in
+    let goal, hm = export_goal coq_goal in
     Feedback.msg_notice (Pp.str "Goal:");
     Feedback.msg_notice (Pp.str (goal |> Utils.string_of_goal));
 
     let id = action_name, goal in
 
-    let atree = Lwt_main.run (Client.action goal) in
-    save_atree id atree;
+    let proof = Lwt_main.run (Client.action goal) in
+    save_proof id proof;
 
-    Feedback.msg_notice (Pp.str "Action tree:");
-    Feedback.msg_notice (Pp.str (Utils.string_of_atree atree));
-    import_atree atree
+    Feedback.msg_notice (Pp.str "Proof:");
+    Feedback.msg_notice (Pp.str (Utils.string_of_proof proof));
+    import_proof hm proof
   end

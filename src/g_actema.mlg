@@ -2,7 +2,6 @@ DECLARE PLUGIN "actema_plugin"
 
 {
 
-open Pp
 open Ltac_plugin
 open Stdarg
 
