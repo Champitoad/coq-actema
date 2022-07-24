@@ -64,4 +64,4 @@ Qed.
 Lemma and_assoc : A /\ (B /\ C) <-> (A /\ B) /\ C.
 Proof.
   actema.
-Abort.
+Qed.

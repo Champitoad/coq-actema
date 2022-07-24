@@ -239,6 +239,9 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
             | _ -> raise (UnexpectedIntroVariant i) in
           side >>= fun _ ->
           return hm
+      | `FConn (`Equiv, _) ->
+          Tactics.split Tactypes.NoBindings >>= fun _ ->
+            return hm
       | _ ->
           raise (UnsupportedAction a)
       end
