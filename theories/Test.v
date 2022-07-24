@@ -1,5 +1,6 @@
 From Actema Require Import Loader.
 
-Lemma test (A B : Prop) : A /\ (A -> B) -> B.
+Lemma test (A B C : Prop) : A /\ (A -> B) /\ C /\ A -> B.
 Proof.
-Abort.
+  actema.
+Qed.

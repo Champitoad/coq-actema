@@ -158,22 +158,40 @@ let export_goal (goal : Goal.t) : Logic_t.goal * hidmap =
 (* -------------------------------------------------------------------- *)
 (** Importing Actema actions as Coq tactics *)
 
+let get_hyps_names (coq_goal : Goal.t) =
+  Goal.hyps coq_goal |> Context.Named.to_vars
+
+let mk_intro_pattern (pat : Names.variable list list) : Tactypes.or_and_intro_pattern =
+  let open Tactypes in
+  let disj_conj =
+    pat |> List.map begin fun conj ->
+      conj |> List.map begin fun name ->
+        CAst.make (IntroNaming (Namegen.IntroIdentifier name))
+      end
+    end in
+  CAst.make (IntroOrPattern disj_conj)
+
 exception UnsupportedAction of Logic_t.action
 exception UnexpectedIntroPattern of Logic_t.intro_pat
 
-let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t) (ipat : Logic_t.intro_pat) (a : Logic_t.action) : hidmap tactic =
+let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
+                  (ipat : Logic_t.intro_pat) (a : Logic_t.action) : hidmap tactic =
   let open Proofview.Monad in
   match a with
   | `AId ->
       Tacticals.tclIDTAC >>= fun () ->
+      return hm
+  | `AExact id ->
+      let name = UidMap.find id hm in
+      Tactics.exact_check (EConstr.mkVar name) >>= fun _ ->
       return hm
   | `AIntro (i, wit) ->
       begin match goal.g_concl with
       | `FConn (`Imp, _) ->
           (* Generate fresh Coq identifier for intro *)
           let base_name = Names.Id.of_string "H" in
-          let ctx_names = Goal.hyps coq_goal |> Context.Named.to_vars in
-          let name = Namegen.next_ident_away base_name ctx_names in
+          let hyps_names = get_hyps_names coq_goal in
+          let name = Namegen.next_ident_away base_name hyps_names in
           (* Apply intro *)
           Tactics.introduction name >>= fun _ ->
           (* Retrieve associated Actema identifier from intro pattern *)
@@ -186,12 +204,27 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t) (ipat 
           raise (UnsupportedAction a)
       end
   | `AElim id ->
-      let name = UidMap.find id hm |> EConstr.mkVar in
+      let name = UidMap.find id hm in
       let hyp = Utils.get_hyp goal id in
       begin match hyp.h_form with
       | `FConn (`Imp, _) ->
-          Tactics.apply name >>= fun _ ->
+          Tactics.apply (EConstr.mkVar name) >>= fun _ ->
           return hm
+      | `FConn (`And, _) ->
+          (* Generate fresh Coq identifiers for destruct *)
+          let hyps_names = get_hyps_names coq_goal in
+          let name1 = Namegen.next_ident_away name hyps_names in
+          let name2 = Namegen.next_ident_away name (Names.Id.Set.add name1 hyps_names) in
+          (* Apply destruct *)
+          let h = EConstr.mkVar name in
+          let pat = mk_intro_pattern [[name1; name2]] in
+          Tactics.destruct false None h (Some pat) None >>= fun _ ->
+          (* Retrieve associated Actema identifiers from intro pattern *)
+          let id1, id2 = match ipat with
+                         | [[id2; id1]] -> id1, id2
+                         | _ -> raise (UnexpectedIntroPattern ipat) in
+          (* Add them to the hidmap *)
+          return (UidMap.(hm |> add id1 name1 |> add id2 name2))
       | _ ->
           raise (UnsupportedAction a)
       end
@@ -253,9 +286,6 @@ let load_proof (id : aident) : Logic_t.proof option =
 let actema_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
     let goal, hm = export_goal coq_goal in
-    log "Goal:";
-    log (goal |> Utils.string_of_goal);
-
     let id = action_name, goal in
 
     let proof =
@@ -266,23 +296,16 @@ let actema_tac (action_name : string) : unit tactic =
       | Some t -> t
     in
 
-    log "Proof:";
-    log (Utils.string_of_proof proof);
     import_proof hm proof
   end
 
 let actema_force_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
     let goal, hm = export_goal coq_goal in
-    log "Goal:";
-    log (goal |> Utils.string_of_goal);
-
     let id = action_name, goal in
 
     let proof = Lwt_main.run (Client.action goal) in
     save_proof id proof;
 
-    log "Proof:";
-    log (Utils.string_of_proof proof);
     import_proof hm proof
   end
