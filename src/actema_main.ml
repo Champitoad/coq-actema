@@ -1,5 +1,27 @@
 open Proofview
 
+let log str =
+  Feedback.msg_notice (Pp.str str)
+
+let string_of_econstr env evd (t : EConstr.t) : string =
+  let pp = Printer.pr_constr_env env evd (EConstr.to_constr evd t) in
+  Pp.string_of_ppcmds pp
+
+let name_of_construct evd t =
+  let name, _ = EConstr.destConstruct evd t in
+  name |> Names.Construct.modpath |> Names.ModPath.to_string
+
+let name_of_inductive env evd t =
+  let name, _ = EConstr.destInd evd t in
+  Printer.pr_inductive env name |> Pp.string_of_ppcmds
+
+let log_econstr env evd t =
+  string_of_econstr env evd t |> log
+
+let log_debug_econstr evd t =
+  t |> EConstr.to_constr evd |> Constr.debug_print |>
+  Feedback.msg_notice
+
 (* -------------------------------------------------------------------- *)
 (** Exporting Coq goals to Actema *)
 
@@ -18,7 +40,6 @@ let is_prop env evd term =
   Sorts.is_prop sort
 
 let is_imp (env, evd) x t1 t2 : bool = 
-  Printf.printf "%b" (is_prop env evd t1);
   is_prop env evd t1
   && is_prop
        (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env)
@@ -35,10 +56,19 @@ let rec dest_imp : fdest = fun ((_, evd as e), t) ->
   if not (is_imp e x t1 t2) then raise Constr.DestKO;
   `FConn (`Imp, [dest_form (e, t1); dest_form (e, t2)])
 
+and dest_and : fdest = fun ((env, evd as e), t) ->
+  let f, args  = EConstr.destApp evd t in
+  match name_of_inductive env evd f, Array.to_list args with
+  | "and", [t1; t2] ->
+      `FConn (`And, [dest_form (e, t1); dest_form (e, t2)])
+  | name, _ ->
+      raise Constr.DestKO
+
 and dest_form : fdest = fun et ->
   begin
     dest_pvar >>!
     dest_imp >>!
+    dest_and >>!
     fun _ -> dummy_form
   end et
 
@@ -223,8 +253,8 @@ let load_proof (id : aident) : Logic_t.proof option =
 let actema_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
     let goal, hm = export_goal coq_goal in
-    Feedback.msg_notice (Pp.str "Goal:");
-    Feedback.msg_notice (Pp.str (goal |> Utils.string_of_goal));
+    log "Goal:";
+    log (goal |> Utils.string_of_goal);
 
     let id = action_name, goal in
 
@@ -236,23 +266,23 @@ let actema_tac (action_name : string) : unit tactic =
       | Some t -> t
     in
 
-    Feedback.msg_notice (Pp.str "Proof:");
-    Feedback.msg_notice (Pp.str (Utils.string_of_proof proof));
+    log "Proof:";
+    log (Utils.string_of_proof proof);
     import_proof hm proof
   end
 
 let actema_force_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
     let goal, hm = export_goal coq_goal in
-    Feedback.msg_notice (Pp.str "Goal:");
-    Feedback.msg_notice (Pp.str (goal |> Utils.string_of_goal));
+    log "Goal:";
+    log (goal |> Utils.string_of_goal);
 
     let id = action_name, goal in
 
     let proof = Lwt_main.run (Client.action goal) in
     save_proof id proof;
 
-    Feedback.msg_notice (Pp.str "Proof:");
-    Feedback.msg_notice (Pp.str (Utils.string_of_proof proof));
+    log "Proof:";
+    log (Utils.string_of_proof proof);
     import_proof hm proof
   end
