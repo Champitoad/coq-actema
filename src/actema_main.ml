@@ -7,14 +7,6 @@ let string_of_econstr env evd (t : EConstr.t) : string =
   let pp = Printer.pr_constr_env env evd (EConstr.to_constr evd t) in
   Pp.string_of_ppcmds pp
 
-let name_of_construct evd t =
-  let name, _ = EConstr.destConstruct evd t in
-  name |> Names.Construct.modpath |> Names.ModPath.to_string
-
-let name_of_inductive env evd t =
-  let name, _ = EConstr.destInd evd t in
-  Printer.pr_inductive env name |> Pp.string_of_ppcmds
-
 let log_econstr env evd t =
   string_of_econstr env evd t |> log
 
@@ -24,6 +16,18 @@ let log_debug_econstr evd t =
 
 (* -------------------------------------------------------------------- *)
 (** Exporting Coq goals to Actema *)
+
+let name_of_const evd t =
+  EConstr.destConst evd t |> fst |>
+  Names.Constant.repr2 |> snd |> Names.Label.to_string
+
+let name_of_construct evd t =
+  let name, _ = EConstr.destConstruct evd t in
+  name |> Names.Construct.modpath |> Names.ModPath.to_string
+
+let name_of_inductive env evd t =
+  let name, _ = EConstr.destInd evd t in
+  Printer.pr_inductive env name |> Pp.string_of_ppcmds
 
 let dummy_form : Logic_t.form =
   `FPred ("dummy", [])
@@ -51,6 +55,11 @@ let dest_pvar : fdest = fun ((env, evd), t) ->
   let name = EConstr.destVar evd t |> Names.Id.to_string in
   `FPred (name, [])
 
+let dest_pconst : fdest = fun ((env, evd), t) ->
+  if not (is_prop env evd t) then raise Constr.DestKO;
+  let name = name_of_const evd t in
+  `FPred (name, [])
+
 let rec dest_imp : fdest = fun ((_, evd as e), t) ->
   let x, t1, t2 = EConstr.destProd evd t in
   if not (is_imp e x t1 t2) then raise Constr.DestKO;
@@ -74,6 +83,7 @@ and dest_or : fdest = fun ((env, evd as e), t) ->
 
 and dest_form : fdest = fun et ->
   begin
+    dest_pconst >>!
     dest_pvar >>!
     dest_imp >>!
     dest_and >>!
@@ -104,7 +114,7 @@ let export_env (coq_env : Environ.env) (evd : Evd.evar_map) : Logic_t.env =
 
   let env = Environ.fold_constants begin fun c _ env ->
       let isprop () = is_prop coq_env evd (EConstr.mkConst c) in
-      let name = Names.Constant.to_string c in
+      let name = name_of_const evd (EConstr.mkConst c) in
       add_pvar isprop name env
     end coq_env env in
 
