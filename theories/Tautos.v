@@ -77,3 +77,22 @@ Lemma demorgan_or : ~ A /\ ~ B -> ~ (A \/ B).
 Proof.
   actema.
 Qed.
+
+(** * Truth *)
+
+Lemma true_intro : True.
+Proof.
+  actema.
+Qed.
+
+Lemma true_elim : A -> True -> A.
+Proof.
+  actema.
+Qed.
+
+(** * Falsity *)
+
+Lemma efq : False -> A.
+Proof.
+  actema.
+Qed.

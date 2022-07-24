@@ -60,6 +60,20 @@ let dest_pconst : fdest = fun ((env, evd), t) ->
   let name = name_of_const evd t in
   `FPred (name, [])
 
+and dest_true : fdest = fun ((env, evd), t) ->
+  match name_of_inductive env evd t with
+  | "True" ->
+      `FTrue
+  | name ->
+      raise Constr.DestKO
+
+and dest_false : fdest = fun ((env, evd), t) ->
+  match name_of_inductive env evd t with
+  | "False" ->
+      `FFalse
+  | name ->
+      raise Constr.DestKO
+
 let rec dest_imp : fdest = fun ((_, evd as e), t) ->
   let x, t1, t2 = EConstr.destProd evd t in
   if not (is_imp e x t1 t2) then raise Constr.DestKO;
@@ -99,6 +113,8 @@ and dest_not : fdest = fun ((env, evd as e), t) ->
 
 and dest_form : fdest = fun et ->
   begin
+    dest_true >>!
+    dest_false >>!
     dest_pconst >>!
     dest_pvar >>!
     dest_imp >>!
@@ -229,6 +245,9 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
       return hm
   | `AIntro (i, wit) ->
       begin match goal.g_concl with
+      | `FTrue ->
+          Tactics.one_constructor 1 Tactypes.NoBindings >>= fun _ ->
+          return hm
       | `FConn (`Imp, _) | `FConn (`Not, _) ->
           (* Generate fresh Coq identifier for intro *)
           let base_name = Names.Id.of_string "H" in
@@ -291,6 +310,9 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
         mk_destruct2 mk_ipat dest_ipat
       in
       begin match hyp.h_form with
+      | `FTrue | `FFalse ->
+          Tactics.destruct false None (EConstr.mkVar name) None None >>= fun _ ->
+          return hm
       | `FConn (`Imp, _) | `FConn (`Not, _) ->
           Tactics.apply (EConstr.mkVar name) >>= fun _ ->
           return hm
