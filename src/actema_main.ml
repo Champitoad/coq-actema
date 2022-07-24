@@ -89,6 +89,14 @@ and dest_iff : fdest = fun ((env, evd as e), t) ->
   | name, _ ->
       raise Constr.DestKO
 
+and dest_not : fdest = fun ((env, evd as e), t) ->
+  let f, args  = EConstr.destApp evd t in
+  match name_of_const evd f, Array.to_list args with
+  | "not", [t1] ->
+      `FConn (`Not, [dest_form (e, t1)])
+  | name, _ ->
+      raise Constr.DestKO
+
 and dest_form : fdest = fun et ->
   begin
     dest_pconst >>!
@@ -97,6 +105,7 @@ and dest_form : fdest = fun et ->
     dest_and >>!
     dest_or >>!
     dest_iff >>!
+    dest_not >>!
     fun _ -> dummy_form
   end et
 
@@ -189,7 +198,7 @@ let export_goal (goal : Goal.t) : Logic_t.goal * hidmap =
 let get_hyps_names (coq_goal : Goal.t) =
   Goal.hyps coq_goal |> Context.Named.to_vars
 
-let mk_intro_pattern (pat : Names.variable list list) : Tactypes.or_and_intro_pattern =
+let mk_or_and_intro_pattern (pat : Names.variable list list) : Tactypes.or_and_intro_pattern =
   let open Tactypes in
   let disj_conj =
     pat |> List.map begin fun conj ->
@@ -198,6 +207,10 @@ let mk_intro_pattern (pat : Names.variable list list) : Tactypes.or_and_intro_pa
       end
     end in
   CAst.make (IntroOrPattern disj_conj)
+
+let mk_intro_patterns (names : Names.variable list) : Tactypes.intro_patterns =
+  let open Tactypes in
+  List.map (fun name -> CAst.make (IntroNaming (Namegen.IntroIdentifier name))) names
 
 exception UnsupportedAction of Logic_t.action
 exception UnexpectedIntroPattern of Logic_t.intro_pat
@@ -216,20 +229,21 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
       return hm
   | `AIntro (i, wit) ->
       begin match goal.g_concl with
-      | `FConn (`Imp, _) ->
+      | `FConn (`Imp, _) | `FConn (`Not, _) ->
           (* Generate fresh Coq identifier for intro *)
           let base_name = Names.Id.of_string "H" in
           let hyps_names = get_hyps_names coq_goal in
           let name = Namegen.next_ident_away base_name hyps_names in
           (* Apply intro *)
-          Tactics.introduction name >>= fun _ ->
+          let pat = mk_intro_patterns [name] in
+          Tactics.intro_patterns false pat >>= fun _ ->
           (* Retrieve associated Actema identifier from intro pattern *)
           let id = match ipat with
                    | [[id]] -> id
                    | _ -> raise (UnexpectedIntroPattern ipat) in
           (* Add it to the hidmap *)
           return (UidMap.add id name hm)
-      | `FConn (`And, _) ->
+      | `FConn (`And, _) | `FConn (`Equiv, _) ->
           Tactics.split Tactypes.NoBindings >>= fun _ ->
             return hm
       | `FConn (`Or, _) ->
@@ -239,9 +253,6 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
             | _ -> raise (UnexpectedIntroVariant i) in
           side >>= fun _ ->
           return hm
-      | `FConn (`Equiv, _) ->
-          Tactics.split Tactypes.NoBindings >>= fun _ ->
-            return hm
       | _ ->
           raise (UnsupportedAction a)
       end
@@ -258,7 +269,7 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
         let name2 = Namegen.next_ident_away name (Names.Id.Set.add name1 hyps_names) in
         (* Apply destruct *)
         let h = EConstr.mkVar name in
-        let pat = mk_intro_pattern (mk_ipat (name1, name2)) in
+        let pat = mk_or_and_intro_pattern (mk_ipat (name1, name2)) in
         Tactics.destruct false None h (Some pat) None >>= fun _ ->
         (* Retrieve associated Actema identifiers from intro pattern *)
         let id1, id2 = dest_ipat ipat in
@@ -280,7 +291,7 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
         mk_destruct2 mk_ipat dest_ipat
       in
       begin match hyp.h_form with
-      | `FConn (`Imp, _) ->
+      | `FConn (`Imp, _) | `FConn (`Not, _) ->
           Tactics.apply (EConstr.mkVar name) >>= fun _ ->
           return hm
       | `FConn (`And, _) | `FConn (`Equiv, _) ->

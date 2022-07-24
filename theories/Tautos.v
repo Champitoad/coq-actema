@@ -65,3 +65,15 @@ Lemma and_assoc : A /\ (B /\ C) <-> (A /\ B) /\ C.
 Proof.
   actema.
 Qed.
+
+(** * Negation *)
+
+Lemma demorgan_and : ~ A \/ ~ B -> ~ (A /\ B).
+Proof.
+  actema.
+Qed.
+
+Lemma demorgan_or : ~ A /\ ~ B -> ~ (A \/ B).
+Proof.
+  actema.
+Qed.
