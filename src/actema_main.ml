@@ -64,11 +64,20 @@ and dest_and : fdest = fun ((env, evd as e), t) ->
   | name, _ ->
       raise Constr.DestKO
 
+and dest_or : fdest = fun ((env, evd as e), t) ->
+  let f, args  = EConstr.destApp evd t in
+  match name_of_inductive env evd f, Array.to_list args with
+  | "or", [t1; t2] ->
+      `FConn (`Or, [dest_form (e, t1); dest_form (e, t2)])
+  | name, _ ->
+      raise Constr.DestKO
+
 and dest_form : fdest = fun et ->
   begin
     dest_pvar >>!
     dest_imp >>!
     dest_and >>!
+    dest_or >>!
     fun _ -> dummy_form
   end et
 
@@ -173,6 +182,7 @@ let mk_intro_pattern (pat : Names.variable list list) : Tactypes.or_and_intro_pa
 
 exception UnsupportedAction of Logic_t.action
 exception UnexpectedIntroPattern of Logic_t.intro_pat
+exception UnexpectedIntroVariant of int
 
 let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
                   (ipat : Logic_t.intro_pat) (a : Logic_t.action) : hidmap tactic =
@@ -203,6 +213,13 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
       | `FConn (`And, _) ->
           Tactics.split Tactypes.NoBindings >>= fun _ ->
             return hm
+      | `FConn (`Or, _) ->
+          let side = match i with
+            | 0 -> Tactics.left Tactypes.NoBindings
+            | 1 -> Tactics.right Tactypes.NoBindings
+            | _ -> raise (UnexpectedIntroVariant i) in
+          side >>= fun _ ->
+          return hm
       | _ ->
           raise (UnsupportedAction a)
       end
