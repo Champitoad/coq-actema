@@ -243,7 +243,7 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
       let name = UidMap.find id hm in
       Tactics.exact_check (EConstr.mkVar name) >>= fun _ ->
       return hm
-  | `AIntro (i, wit) ->
+  | `AIntro (iv, wit) ->
       begin match goal.g_concl with
       | `FTrue ->
           Tactics.one_constructor 1 Tactypes.NoBindings >>= fun _ ->
@@ -265,12 +265,20 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
       | `FConn (`And, _) | `FConn (`Equiv, _) ->
           Tactics.split Tactypes.NoBindings >>= fun _ ->
             return hm
-      | `FConn (`Or, _) ->
-          let side = match i with
-            | 0 -> Tactics.left Tactypes.NoBindings
-            | 1 -> Tactics.right Tactypes.NoBindings
-            | _ -> raise (UnexpectedIntroVariant i) in
-          side >>= fun _ ->
+      | `FConn (`Or, _) as f ->
+          let rec arity acc f =
+            match f with
+            | `FConn (`Or, [f1; f2]) -> arity (acc + 1) f1
+            | _ -> acc + 1
+          in
+          let rec aux zero i =
+            match i with
+            | 1 when zero -> Tactics.left Tactypes.NoBindings
+            | 0 -> Tactics.right Tactypes.NoBindings
+            | n ->
+                Tactics.left Tactypes.NoBindings >>= fun _ -> aux zero (n-1)
+          in
+          aux (iv = 0) (arity 0 f - iv - 1) >>= fun _ ->
           return hm
       | _ ->
           raise (UnsupportedAction a)

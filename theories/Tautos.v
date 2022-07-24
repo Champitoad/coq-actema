@@ -1,6 +1,6 @@
 From Actema Require Import Loader.
 
-Parameters (A B C D E : Prop).
+Parameters (A B C D E F G : Prop).
 
 (** * Implication *)
 
@@ -62,6 +62,66 @@ Proof.
 Qed.
 
 Lemma and_assoc : A /\ (B /\ C) <-> (A /\ B) /\ C.
+Proof.
+  actema.
+Qed.
+
+Lemma imp_and_distr : (A -> B /\ C) <-> (A -> B) /\ (A -> C).
+Proof.
+  actema.
+  * apply H in H0. actema "go".
+  * actema "go". apply H in H0. actema.
+  * actema.
+Qed.
+
+Lemma jn_switch : (A /\ (B /\ (C /\ D -> E) -> F) -> G) -> A /\ D /\ (B /\ (C -> E) -> F) -> G.
+Proof.
+  actema.
+Qed.
+
+(** * Disjunction *)
+
+Lemma switch : A /\ (B \/ C) -> (A /\ B) \/ C.
+Proof.
+  actema.
+Qed.
+
+Lemma or_intro_l : A -> A \/ B.
+Proof.
+  actema.
+Qed.
+
+Lemma or_intro_r : B -> A \/ B.
+Proof.
+  actema.
+Qed.
+
+Lemma or_elim : A \/ B -> (A -> C) -> (B -> C) -> C.
+Proof.
+  actema.
+Qed.
+
+Lemma imp_or_distr : (A -> B) \/ (A -> C) -> A -> B \/ C.
+Proof.
+  actema.
+Qed.
+
+Lemma or_imp_weak_distr : (A -> B) \/ C -> A -> B \/ C.
+Proof.
+  actema.
+Qed.
+
+Lemma or_assoc : A \/ (B \/ C) <-> (A \/ B) \/ C.
+Proof.
+  actema.
+Qed.
+
+Lemma imp_or_anti_distr : (A \/ B -> C) <-> (A -> C) /\ (B -> C).
+Proof.
+  actema.
+Qed.
+
+Lemma or_and_distr : A \/ B /\ C <-> (A \/ B) /\ (A \/ C).
 Proof.
   actema.
 Qed.
