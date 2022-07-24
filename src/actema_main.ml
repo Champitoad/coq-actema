@@ -248,40 +248,45 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
   | `AElim id ->
       let name = UidMap.find id hm in
       let hyp = Utils.get_hyp goal id in
+      let mk_destruct2
+          (mk_ipat : Names.variable * Names.variable -> Names.variable list list)
+          (dest_ipat : Logic_t.intro_pat -> Logic_t.uid * Logic_t.uid)
+          : hidmap tactic =
+        (* Generate fresh Coq identifiers for destruct *)
+        let hyps_names = get_hyps_names coq_goal in
+        let name1 = Namegen.next_ident_away name hyps_names in
+        let name2 = Namegen.next_ident_away name (Names.Id.Set.add name1 hyps_names) in
+        (* Apply destruct *)
+        let h = EConstr.mkVar name in
+        let pat = mk_intro_pattern (mk_ipat (name1, name2)) in
+        Tactics.destruct false None h (Some pat) None >>= fun _ ->
+        (* Retrieve associated Actema identifiers from intro pattern *)
+        let id1, id2 = dest_ipat ipat in
+        (* Add them to the hidmap *)
+        return (UidMap.(hm |> add id1 name1 |> add id2 name2))
+      in
+      let destruct_and =
+        let mk_ipat (x, y) = [[x; y]] in
+        let dest_ipat = function
+                        | [[id2; id1]] -> id1, id2
+                        | _ -> raise (UnexpectedIntroPattern ipat) in
+        mk_destruct2 mk_ipat dest_ipat
+      in
+      let destruct_or =
+        let mk_ipat (x, y) = [[x]; [y]] in
+        let dest_ipat = function
+                        | [[id1]; [id2]] -> id1, id2
+                        | _ -> raise (UnexpectedIntroPattern ipat) in
+        mk_destruct2 mk_ipat dest_ipat
+      in
       begin match hyp.h_form with
       | `FConn (`Imp, _) ->
           Tactics.apply (EConstr.mkVar name) >>= fun _ ->
           return hm
-      | `FConn (`And, _) ->
-          (* Generate fresh Coq identifiers for destruct *)
-          let hyps_names = get_hyps_names coq_goal in
-          let name1 = Namegen.next_ident_away name hyps_names in
-          let name2 = Namegen.next_ident_away name (Names.Id.Set.add name1 hyps_names) in
-          (* Apply destruct *)
-          let h = EConstr.mkVar name in
-          let pat = mk_intro_pattern [[name1; name2]] in
-          Tactics.destruct false None h (Some pat) None >>= fun _ ->
-          (* Retrieve associated Actema identifiers from intro pattern *)
-          let id1, id2 = match ipat with
-                         | [[id2; id1]] -> id1, id2
-                         | _ -> raise (UnexpectedIntroPattern ipat) in
-          (* Add them to the hidmap *)
-          return (UidMap.(hm |> add id1 name1 |> add id2 name2))
+      | `FConn (`And, _) | `FConn (`Equiv, _) ->
+          destruct_and
       | `FConn (`Or, _) ->
-          (* Generate fresh Coq identifiers for destruct *)
-          let hyps_names = get_hyps_names coq_goal in
-          let name1 = Namegen.next_ident_away name hyps_names in
-          let name2 = Namegen.next_ident_away name (Names.Id.Set.add name1 hyps_names) in
-          (* Apply destruct *)
-          let h = EConstr.mkVar name in
-          let pat = mk_intro_pattern [[name1]; [name2]] in
-          Tactics.destruct false None h (Some pat) None >>= fun _ ->
-          (* Retrieve associated Actema identifiers from intro pattern *)
-          let id1, id2 = match ipat with
-                         | [[id1]; [id2]] -> id1, id2
-                         | _ -> raise (UnexpectedIntroPattern ipat) in
-          (* Add them to the hidmap *)
-          return (UidMap.(hm |> add id1 name1 |> add id2 name2))
+          destruct_or
       | _ ->
           raise (UnsupportedAction a)
       end
