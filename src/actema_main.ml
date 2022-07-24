@@ -81,6 +81,14 @@ and dest_or : fdest = fun ((env, evd as e), t) ->
   | name, _ ->
       raise Constr.DestKO
 
+and dest_iff : fdest = fun ((env, evd as e), t) ->
+  let f, args  = EConstr.destApp evd t in
+  match name_of_const evd f, Array.to_list args with
+  | "iff", [t1; t2] ->
+      `FConn (`Equiv, [dest_form (e, t1); dest_form (e, t2)])
+  | name, _ ->
+      raise Constr.DestKO
+
 and dest_form : fdest = fun et ->
   begin
     dest_pconst >>!
@@ -88,6 +96,7 @@ and dest_form : fdest = fun et ->
     dest_imp >>!
     dest_and >>!
     dest_or >>!
+    dest_iff >>!
     fun _ -> dummy_form
   end et
 

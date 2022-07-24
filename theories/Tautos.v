@@ -60,3 +60,8 @@ Lemma and_imp_weak_distr : (A -> B) /\ C -> A -> B /\ C.
 Proof.
   actema.
 Qed.
+
+Lemma and_assoc : A /\ (B /\ C) <-> (A /\ B) /\ C.
+Proof.
+  actema.
+Abort.
