@@ -200,6 +200,9 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
                    | _ -> raise (UnexpectedIntroPattern ipat) in
           (* Add it to the hidmap *)
           return (UidMap.add id name hm)
+      | `FConn (`And, _) ->
+          Tactics.split Tactypes.NoBindings >>= fun _ ->
+            return hm
       | _ ->
           raise (UnsupportedAction a)
       end
