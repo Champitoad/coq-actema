@@ -321,7 +321,10 @@ let import_action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
       | `FTrue | `FFalse ->
           Tactics.destruct false None (EConstr.mkVar name) None None >>= fun _ ->
           return hm
-      | `FConn (`Imp, _) | `FConn (`Not, _) ->
+      | `FConn (`Not, _) ->
+          Tactics.simplest_case (EConstr.mkVar name) >>= fun _ ->
+          return hm
+      | `FConn (`Imp, _) ->
           Tactics.apply (EConstr.mkVar name) >>= fun _ ->
           return hm
       | `FConn (`And, _) | `FConn (`Equiv, _) ->

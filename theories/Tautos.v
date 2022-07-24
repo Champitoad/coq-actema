@@ -128,6 +128,41 @@ Qed.
 
 (** * Negation *)
 
+Lemma contra : A -> ~A -> B.
+Proof.
+  actema.
+Qed.
+
+Lemma contra_disj : A -> (~A \/ B) -> B.
+Proof.
+  actema.
+Qed.
+
+Lemma disj_contra : ~A -> (A \/ B) -> B.
+Proof.
+  actema.
+Qed.
+
+Lemma not_not : A -> ~~A.
+Proof.
+  actema.
+Qed.
+
+Lemma not_not_tnd : ~~(A \/ ~A).
+Proof.
+  actema.
+Qed.
+
+Lemma double_neg_modus_ponens : ~~(A -> B) -> ~~A -> ~~B.
+Proof.
+  actema.
+Qed.
+
+Lemma double_neg_imp : (~~A -> ~~B) -> ~~(A -> B).
+Proof.
+  actema.
+Qed.
+
 Lemma demorgan_and : ~ A \/ ~ B -> ~ (A /\ B).
 Proof.
   actema.
