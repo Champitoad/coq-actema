@@ -2,8 +2,11 @@ Fo_t
 Fo_b
 Logic_t
 Logic_b
-Monads
 Utils
+
+Log
+Monads
+Translate
 Client
 Actema_main
 G_actema

@@ -13,10 +13,12 @@ src/logic_t.ml
 src/logic_t.mli
 src/logic_b.ml
 src/logic_b.mli
-src/monads.ml
 src/utils.ml
 src/utils.mli
 
+src/log.ml
+src/monads.ml
+src/translate.ml
 src/client.ml
 src/actema_main.ml
 src/actema_main.mli
