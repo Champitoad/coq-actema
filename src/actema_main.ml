@@ -66,3 +66,35 @@ let actema_force_tac (action_name : string) : unit tactic =
 
     Import.proof hm proof
   end
+
+let calltac_tac (tacname : string) (args : EConstr.constr list) : unit tactic =
+  let open Ltac_plugin in
+  let open Tacexpr in
+  let open Tacinterp in
+  let open Names in
+  let open Locus in
+  let ltac_call tac (args:glob_tactic_arg list) =
+    CAst.make @@ TacArg (TacCall (CAst.make (ArgArg(Loc.tag @@ Lazy.force tac),args)))
+  in
+  Goal.enter begin fun coq_goal ->
+    let env = Goal.env coq_goal in
+    let sigma = Goal.sigma coq_goal in
+    let f =
+      let dir = DirPath.make (List.map Id.of_string ["DnD";"Actema"]) in
+      lazy (KerName.make (ModPath.MPfile dir) (Label.make tacname)) in
+    let fold arg (i, vars, lfun) =
+      let id = Id.of_string ("x" ^ string_of_int i) in
+      let x = Reference (ArgVar CAst.(make id)) in
+      (succ i, x :: vars, Id.Map.add id (Value.of_constr arg) lfun)
+    in
+    let (_, args, lfun) = List.fold_right fold args (0, [], Id.Map.empty) in
+    let ist = { (Tacinterp.default_ist ()) with Tacinterp.lfun = lfun; } in
+    let _, pv = Proofview.init sigma [env, EConstr.mkProp] in
+    try
+      let tac = Tacinterp.eval_tactic_ist ist (ltac_call f args) in
+      let _ = Proofview.apply ~name:(Id.of_string tacname) ~poly:false (Global.env ()) tac pv in
+      Proofview.Monad.return ()
+    with Not_found ->
+      let _ = Log.error (Printf.sprintf "Could not find tactic \"%s\"" tacname) in
+      Proofview.Monad.return ()
+  end

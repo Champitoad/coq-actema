@@ -1,7 +1,22 @@
 From Actema Require Import Loader.
+From Actema Require Import DnD.
 
-Lemma test (A B C : Prop) : A <-> B -> B <-> A.
+Lemma test : (2=2 /\ 3=3) -> 2=2 /\ 3=3.
 Proof.
-  actema.
-  actema.
+  intro H.
+  Fail calltac "back" H
+    (cons false (@nil bool))
+    (cons false (@nil bool))
+    (cons true (cons false nil))
+    empty_inst.
+  back H
+    (cons false (@nil bool))
+    (cons false (@nil bool))
+    (cons true (cons false nil))
+    empty_inst.
+  back H
+    (cons true (@nil bool))
+    (@nil bool)
+    (cons false (@nil bool))
+    empty_inst.
 Qed.

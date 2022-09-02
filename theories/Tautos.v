@@ -9,6 +9,8 @@ Proof.
   actema.
 Qed.
 
+Print id.
+
 Lemma K_combinator : A -> B -> A.
 Proof.
   actema.

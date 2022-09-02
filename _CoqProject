@@ -4,6 +4,7 @@
 theories/Loader.v
 theories/Test.v
 theories/Tautos.v
+theories/DnD.v
 
 src/fo_t.ml
 src/fo_t.mli
