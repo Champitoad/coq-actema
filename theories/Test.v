@@ -4,6 +4,7 @@ From Actema Require Import DnD.
 Lemma test : (2=2 /\ 3=3) -> 2=2 /\ 3=3.
 Proof.
   intro H.
+  calltac "foo" 42.
   Fail calltac "back" H
     (cons false (@nil bool))
     (cons false (@nil bool))
