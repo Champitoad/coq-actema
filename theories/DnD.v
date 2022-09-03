@@ -1277,5 +1277,3 @@ Goal (exists x, x=2 /\ 3=3) -> exists y, y=2 /\ 3=3.
   back xx  ( cons false (cons true (@nil bool)))  (cons false ( (@nil bool)))
        (cons false (cons false (cons true (  nil)))) empty_inst.
 Abort.
-
-Ltac foo x := idtac "foo"; idtac x.
