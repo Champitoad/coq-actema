@@ -73,8 +73,8 @@ module Proof : sig
   val ginit     : pregoal -> proof
   val closed    : proof -> bool
   val opened    : proof -> Handle.t list
-  val after     : proof -> Handle.t -> Handle.t list
-  val focused   : proof -> Handle.t -> Handle.t
+  val after     : proof -> Handle.t -> Handle.t list option
+  val focused   : proof -> Handle.t -> Handle.t option
   val byid      : proof -> Handle.t -> pregoal
 
   val db      : proof -> LemmaDB.t
@@ -292,10 +292,13 @@ end = struct
     proof.p_crts
 
   let after (proof : proof) (id : Handle.t) =
-    (Map.find id proof.p_frwd).d_dst
+    try Some (Map.find id proof.p_frwd).d_dst
+    with Not_found -> None
 
   let focused (proof : proof) (id : Handle.t) =
-    List.hd (after proof id)
+    let open Monad.Option in
+    let* subs = after proof id in
+    List.at_opt subs 0
 
   let byid (proof : proof) (id : Handle.t) : pregoal =
     let goal =
@@ -562,13 +565,13 @@ end = struct
   let then_tac (t1 : tactic) (t2 : tactic) : tactic =
     fun (_, id as targ) ->
       let pr = t1 targ in
-      let hd = Proof.focused pr id in
+      let hd = Option.get (Proof.focused pr id) in
       t2 (pr, hd)
-
+  
   let thenl_tac (t1 : tactic) (t2 : tactic) : tactic =
     fun (_, id as targ) ->
       let pr = t1 targ in
-      List.fold_left (uncurry t2) pr (Proof.after pr id)
+      List.fold_left (uncurry t2) pr (Proof.after pr id |> Option.get)
 
   let prune_premisses =
     let rec doit acc = function
@@ -924,7 +927,7 @@ end = struct
       (fun (hd, { h_form = f; _ }) ->
        if f = FFalse then Some (elim hd targ) else None)
     |>
-    Option.default proof
+    Option.default (id_tac targ)
     
 
   (* -------------------------------------------------------------------- *)
@@ -2227,11 +2230,11 @@ end = struct
       | (`H (hid, { h_form = h; _ }), subh, sh), (`C c, subc, sc)
       | (`C c, subc, sc), (`H (hid, { h_form = h; _ }), subh, sh) ->
         let form, itrace = backward ([]) [] ((LEnv.empty, sh), (LEnv.empty, sc)) ((h, subh), (c, subc)) in
-        [[Some hid, []], form |> elim_units], itrace
+        ([Some hid, []], form |> elim_units), itrace
       
       | (`H (hid, { h_form = h; _ }), subh, s), (`H (hid', { h_form = h'; _ }), subh', s') ->
         let form, itrace = forward ([]) [] ((LEnv.empty, s), (LEnv.empty, s')) ((h, subh), (h', subh')) in
-        [[Some hid, []; Some hid', [form |> elim_units]], goal.g_goal], itrace
+        ([Some hid, []; Some hid', [form |> elim_units]], goal.g_goal), itrace
       
       | _ -> raise TacticNotApplicable
     in
@@ -2239,8 +2242,15 @@ end = struct
 
     js_log (Printf.sprintf "itrace: %s" (print_itrace itrace));
 
-    let pr = sprogress ~clear:false proof g_id (TLink (src, dst, itrace)) subgoal in
-    List.fold_left (uncurry close_with_unit) pr (opened pr)
+    let open Proof in
+    let tac =
+      thenl_tac
+        (fun (pr, hd) -> sprogress ~clear:false pr hd TId [subgoal])
+        (fun (pr, hd) ->
+          let pr = close_with_unit (pr, hd) in
+          let subs = after pr hd |> Option.get |> List.map (byid pr) in
+          xprogress proof g_id (TLink (src, dst, itrace)) subs) in
+    tac (proof, g_id)
 
   
   (* -------------------------------------------------------------------- *)
@@ -3092,6 +3102,15 @@ end = struct
 
     exception UnsupportedAction of pnode
 
+    let of_ctxt (ctxt : ctxt) : Logic_t.ctxt =
+      Logic_t.{ kind = ctxt.kind; handle = ctxt.handle }
+
+    let of_ipath (p : ipath) : Logic_t.ipath =
+      Logic_t.{ root = p.root; ctxt = of_ctxt (p.ctxt); sub = p.sub }
+    
+    let of_itrace (itrace : itrace) : Logic_t.itrace =
+      List.map (fun (i, e) -> i, Option.map of_expr e) itrace
+
     let action_of_pnode (p : pnode) : Logic_t.action =
       match p with
       | TId ->
@@ -3106,6 +3125,8 @@ end = struct
           `AIntro (i, wit')
       | TElim hd ->
           `AElim (Handle.toint hd)
+      | TLink (src, dst, itrace) ->
+          `ALink (of_ipath src, of_ipath dst, of_itrace itrace)
       | _ -> raise (UnsupportedAction p)
 
     let export_proof (proof : Proof.proof) : Logic_t.proof =

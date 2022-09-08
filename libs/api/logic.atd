@@ -49,6 +49,8 @@ type goal = {
   g_concl : form;
 }
 
+type lgoal = (hyp list * form)
+
 (* -------------------------------------------------------------------- *)
 (** Actions *)
 
@@ -72,6 +74,8 @@ type action = [
   | ADuplicate of uid
   | ALink of (ipath * ipath * itrace)
 ]
+
+type aident = (string * lgoal)
 
 (** Proofs *)
 
