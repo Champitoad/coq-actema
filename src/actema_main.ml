@@ -1,23 +1,51 @@
 open Proofview
 open Translate
+open CoqUtils
 
 (* -------------------------------------------------------------------- *)
 (** The actema tactic *)
 
-(** Action identifier *)
-type aident = string * Logic_t.goal
+(** Every Actema action must be associated to an identifier, so that it can be
+    stored and later retrieved by the proof script for recompilation. It could
+    be a simple string, but then this would require an intractable amount of
+    name management from the user.
 
-let hash_of_goal (goal : Logic_t.goal) : string =
-  goal |> Logic_b.string_of_goal |>
-  Sha512.string |> Sha512.to_bin |>
+    The simple solution that we choose is to add in the identifier the local
+    proof context, that is (a hash of) the hypotheses and conclusion at the
+    point where the action is performed. Adding the global environment would be
+    too much, since the identifier would break as soon as a new constant is
+    added/removed earlier in the development (whether or not it is involved in
+    the action).
+
+    One could imagine a more elaborate system where actions in the same local
+    context but in different modules/sections/proofs have different identifiers,
+    but for now we dispense from such complexity (maybe experience will prove
+    that it is necessary in the future).
+    *)
+type aident = Logic_t.aident
+
+let hash_of (s : string) : string =
+  s |> Sha512.string |> Sha512.to_bin |>
   Base64.encode_string ~alphabet:Base64.uri_safe_alphabet
+
+let hash_of_hyp (hyp : Logic_t.hyp) : string =
+  hyp |> Logic_b.string_of_hyp |> hash_of
+
+let hash_of_form (form : Logic_t.form) : string =
+  form |> Logic_b.string_of_form |> hash_of
+
+let hash_of_lgoal g =
+  g |> Logic_b.string_of_lgoal |> hash_of
+
+let hash_of_aident (id : aident) : string =
+  id |> Logic_b.string_of_aident |> hash_of
 
 let proofs_path : string =
   let root_path = Loadpath.find_load_path "." |> Loadpath.physical in
   root_path ^ "/actema.proofs"
 
-let path_of_proof ((name, goal) : aident) : string =
-  Printf.sprintf "%s/%s-%s" proofs_path (hash_of_goal goal) name
+let path_of_proof (id : aident) : string =
+  Printf.sprintf "%s/%s" proofs_path (hash_of_aident id)
 
 let save_proof (id : aident) (t : Logic_t.proof) : unit =
   let path = path_of_proof id in
@@ -43,11 +71,14 @@ let load_proof (id : aident) : Logic_t.proof option =
 let actema_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
     let goal, hm = Export.goal coq_goal in
-    let id = action_name, goal in
+    let id = action_name, (goal.g_hyps, goal.g_concl) in
 
     let proof =
       match load_proof id with
       | None ->
+          Log.str (hash_of_lgoal (goal.g_hyps, goal.g_concl));
+          Log.str (Utils.string_of_goal
+            ({ g_env = Utils.empty_env; g_hyps = goal.g_hyps; g_concl = goal.g_concl }));
           let proof = Lwt_main.run (Client.action goal) in
           save_proof id proof; proof
       | Some t -> t
@@ -59,7 +90,7 @@ let actema_tac (action_name : string) : unit tactic =
 let actema_force_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
     let goal, hm = Export.goal coq_goal in
-    let id = action_name, goal in
+    let id = action_name, (goal.g_hyps, goal.g_concl) in
 
     let proof = Lwt_main.run (Client.action goal) in
     save_proof id proof;
@@ -67,28 +98,13 @@ let actema_force_tac (action_name : string) : unit tactic =
     Import.proof hm proof
   end
 
-let calltac_tac (tacname : string) (args : EConstr.constr list) : unit tactic =
-  let open Ltac_plugin in
-  let open Tacexpr in
-  let open Tacinterp in
-  let open Names in
-  let open Locus in
-  let ltac_call tac (args:glob_tactic_arg list) =
-    CAst.make @@ TacArg (TacCall (CAst.make (ArgArg(Loc.tag @@ Lazy.force tac),args)))
-  in
-  let f =
-    let dir = DirPath.make (List.map Id.of_string ["DnD";"Actema"]) in
-    lazy (KerName.make (ModPath.MPfile dir) (Label.make tacname))
-  in
-  let fold arg (i, vars, lfun) =
-    let id = Id.of_string ("x" ^ string_of_int i) in
-    let x = Reference (ArgVar CAst.(make id)) in
-    (succ i, x :: vars, Id.Map.add id (Value.of_constr arg) lfun)
-  in
-  let (_, args, lfun) = List.fold_right fold args (0, [], Id.Map.empty) in
-  let ist = { (Tacinterp.default_ist ()) with Tacinterp.lfun = lfun; } in
-  try
-    Tacinterp.eval_tactic_ist ist (ltac_call f args)
-  with Not_found ->
-    let _ = Log.error (Printf.sprintf "Could not find tactic \"%s\"" tacname) in
+let calltac_tac = calltac
+
+let test_tac : unit tactic =
+  let open EConstr in
+  Goal.enter begin fun g ->
+    let env, sigma = Goal.(env g, sigma g) in
+    Log.econstr env sigma (Trm.natlist [0;1;2;3;7]);
+    Log.econstr env sigma (Trm.boollist [true;false;true]);
     Proofview.Monad.return ()
+  end

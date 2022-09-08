@@ -1,15 +1,16 @@
 open Proofview
+open CoqUtils
 
 module Uid : sig
   include Map.OrderedType
 
-  val fresh : unit -> t
+  val fresh : unit -> unit -> t
 end with type t = Logic_t.uid = struct
   type t = Logic_t.uid
   
   let compare = Int.compare
 
-  let fresh : unit -> t =
+  let fresh () : unit -> t =
     let count = ref (-1) in
     fun () -> incr count; !count
 end
@@ -167,11 +168,12 @@ module Export = struct
     env
 
   let hyps (coq_env : Environ.env) (evd : Evd.evar_map) : Logic_t.hyp list * hidmap =
+    let fresh = Uid.fresh () in
     Environ.fold_named_context begin fun _ decl (hyps, hm) ->
       let name = Context.Named.Declaration.get_id decl in
       let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
       if is_prop coq_env evd ty then
-        let h_id = Uid.fresh () in
+        let h_id = fresh () in
         let h_form = dest_form ((coq_env, evd), ty) in
         let hyp = Logic_t.{ h_id; h_form } in
         (hyp :: hyps, UidMap.add h_id name hm)
@@ -220,6 +222,7 @@ module Import = struct
   exception UnsupportedAction of Logic_t.action
   exception UnexpectedIntroPattern of Logic_t.intro_pat
   exception UnexpectedIntroVariant of int
+  exception UnexpectedDnD
 
   let action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
              (ipat : Logic_t.intro_pat) (a : Logic_t.action) : hidmap tactic =
@@ -322,6 +325,42 @@ module Import = struct
             destruct_or
         | _ ->
             raise (UnsupportedAction a)
+        end
+    | `ALink (src, dst, itrace) ->
+        begin match (src, src.ctxt.kind), (dst, dst.ctxt.kind) with
+
+        (* Forward DnD *)
+        | (_, `Hyp), (_, `Hyp) ->
+            raise (UnsupportedAction a)
+
+        (* Backward DnD *)
+        | (hyp, `Hyp), (concl, `Concl)
+        | (concl, `Concl), (hyp, `Hyp) ->
+            let h =
+              let id = UidMap.find hyp.ctxt.handle hm in
+              EConstr.mkVar id in
+
+            let boollist_of_intlist =
+              Stdlib.List.map (fun n -> if n = 0 then false else true) in
+
+            let hp =
+              hyp.sub |> boollist_of_intlist |> Trm.boollist in
+            let gp =
+              concl.sub |> boollist_of_intlist |> Trm.boollist in
+            
+            let t =
+              Stdlib.List.(itrace |> split |> fst
+                                  |> boollist_of_intlist |> Trm.boollist) in
+            
+            let i =
+              let kname = kername ["Actema"; "DnD"] "empty_inst" in
+              EConstr.mkConst (Names.Constant.make1 kname) in
+
+            let open Proofview.Monad in
+            calltac "back" [h; hp; gp; t; i] >>= fun _ ->
+            return hm
+
+        | _ -> raise UnexpectedDnD
         end
     | _ ->
         raise (UnsupportedAction a)

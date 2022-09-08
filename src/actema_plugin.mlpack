@@ -5,6 +5,7 @@ Logic_b
 Utils
 
 Log
+CoqUtils
 Monads
 Translate
 Client

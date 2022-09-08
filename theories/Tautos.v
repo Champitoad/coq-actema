@@ -9,8 +9,6 @@ Proof.
   actema.
 Qed.
 
-Print id.
-
 Lemma K_combinator : A -> B -> A.
 Proof.
   actema.
@@ -71,15 +69,21 @@ Qed.
 Lemma imp_and_distr : (A -> B /\ C) <-> (A -> B) /\ (A -> C).
 Proof.
   actema.
-  * apply H in H0. actema "go".
-  * actema "go". apply H in H0. actema.
-  * actema.
 Qed.
 
 Lemma jn_switch : (A /\ (B /\ (C /\ D -> E) -> F) -> G) -> A /\ D /\ (B /\ (C -> E) -> F) -> G.
 Proof.
   actema.
 Qed.
+
+Print jn_switch.
+
+Lemma jn_switch_clicks : (A /\ (B /\ (C /\ D -> E) -> F) -> G) -> A /\ D /\ (B /\ (C -> E) -> F) -> G.
+Proof.
+  actema "clicks".
+Qed.
+
+Print jn_switch_clicks.
 
 (** * Disjunction *)
 
@@ -162,6 +166,7 @@ Qed.
 
 Lemma double_neg_imp : (~~A -> ~~B) -> ~~(A -> B).
 Proof.
+  (* BUG: some DnD proofs do not work out correctly *)
   actema.
 Qed.
 

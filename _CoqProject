@@ -17,7 +17,7 @@ src/logic_b.mli
 src/utils.ml
 src/utils.mli
 
-src/log.ml
+src/coqUtils.ml
 src/monads.ml
 src/translate.ml
 src/client.ml
