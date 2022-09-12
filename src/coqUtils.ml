@@ -59,11 +59,17 @@ module Trm = struct
   let bool_kname =
     kername ["Coq"; "Init"; "Datatypes"] "bool"
   
+  let unit_kname =
+    kername ["Coq"; "Init"; "Datatypes"] "unit"
+  
   let nat =
     mkInd (Names.MutInd.make1 nat_kname, 0)
 
   let bool =
     mkInd (Names.MutInd.make1 bool_kname, 0)
+
+  let unit =
+    mkInd (Names.MutInd.make1 unit_kname, 0)
 
   let nil ty =
     let nil = mkConstruct ((Names.MutInd.make1 list_kname, 0), 1) in
@@ -79,6 +85,9 @@ module Trm = struct
   let succ n =
     let succ = mkConstruct ((Names.MutInd.make1 nat_kname, 0), 2) in
     mkApp (succ, [|n|])
+  
+  let tt =
+    mkConstruct ((Names.MutInd.make1 unit_kname, 0), 1)
   
   let rec nat_of_int n =
     match n with
