@@ -68,34 +68,34 @@ let load_proof (id : aident) : Logic_t.proof option =
   with _ ->
     None
 
+module E = Export(Peano)
+module I = Import(Peano)
+
 let actema_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
-    let goal, hm = Export.goal coq_goal in
+    let goal, hm = E.goal coq_goal in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
 
     let proof =
       match load_proof id with
       | None ->
-          Log.str (hash_of_lgoal (goal.g_hyps, goal.g_concl));
-          Log.str (Utils.string_of_goal
-            ({ g_env = Utils.empty_env; g_hyps = goal.g_hyps; g_concl = goal.g_concl }));
           let proof = Lwt_main.run (Client.action goal) in
           save_proof id proof; proof
       | Some t -> t
     in
 
-    Import.proof hm proof
+    I.proof hm proof
   end
 
 let actema_force_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
-    let goal, hm = Export.goal coq_goal in
+    let goal, hm = E.goal coq_goal in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
 
     let proof = Lwt_main.run (Client.action goal) in
     save_proof id proof;
 
-    Import.proof hm proof
+    I.proof hm proof
   end
 
 let calltac_tac = calltac

@@ -6,3 +6,8 @@ Proof.
   actema "2steps".
   actema "2steps".
 Qed.
+
+Lemma test_eq : 3 + (4 * 5) = 23.
+  actema.
+  easy.
+Qed.

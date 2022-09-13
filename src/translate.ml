@@ -19,10 +19,43 @@ module UidMap = Map.Make(Uid)
 
 type hidmap = Names.Id.t UidMap.t
 
+module KNameMap = Map.Make(Names.KerName)
+
+type cstmap = (Fo_t.name * Fo_t.sig_) KNameMap.t
+type pstmap = (Fo_t.name * Fo_t.arity) KNameMap.t
+
+type fosign =
+  { sorts : string KNameMap.t; funcs : cstmap; preds : pstmap }
+
+module type FOSign = sig
+  val sign : fosign
+end
+
+module Peano : FOSign = struct
+  let nat : Fo_t.type_ = `TVar ("nat", 0)
+  let sign : fosign =
+    let open KNameMap in
+    let sorts =
+      empty |>
+      add Trm.nat_kname "nat" in
+    let funcs =
+      empty |>
+      add Trm.zero_kname ("Z", ([], nat)) |>
+      add Trm.succ_kname ("S", ([nat], nat)) |>
+      add Trm.add_kname ("add", ([nat; nat], nat)) |>
+      add Trm.mul_kname ("mult", ([nat; nat], nat)) in
+    let preds =
+      empty in
+    { sorts; funcs; preds }
+end
+
 (* -------------------------------------------------------------------- *)
 (** Exporting Coq goals to Actema *)
 
-module Export = struct
+module Export (S : FOSign) = struct
+  let fosign (sign : EConstr.t) : fosign =
+    failwith "TODO"
+
   let name_of_const evd t =
     EConstr.destConst evd t |> fst |>
     Names.Constant.repr2 |> snd |> Names.Label.to_string
@@ -35,14 +68,21 @@ module Export = struct
     let name, _ = EConstr.destInd evd t in
     Printer.pr_inductive env name |> Pp.string_of_ppcmds
 
+  let dummy_expr : Logic_t.expr =
+    `EFun ("dummy", [])
+
   let dummy_form : Logic_t.form =
     `FPred ("dummy", [])
 
+  type edest = ((Environ.env * Evd.evar_map) * EConstr.types) -> Logic_t.expr
   type fdest = ((Environ.env * Evd.evar_map) * EConstr.types) -> Logic_t.form
 
-  let comp_fdest (d1 : fdest) (d2 : fdest) : fdest = fun (e, t) ->
-    try d1 (e, t) with Constr.DestKO -> d2 (e, t)
+  let comp_edest (d1 : edest) (d2 : edest) : edest = fun et ->
+    try d1 et with Constr.DestKO -> d2 et
+  let comp_fdest (d1 : fdest) (d2 : fdest) : fdest = fun et ->
+    try d1 et with Constr.DestKO -> d2 et
 
+  let ( >>!! ) = comp_edest
   let ( >>! ) = comp_fdest
 
   let is_prop env evd term =
@@ -56,15 +96,53 @@ module Export = struct
         evd t2
     && (x.Context.binder_name = Names.Anonymous || EConstr.Vars.noccurn evd 1 t2)
 
-  let dest_pvar : fdest = fun ((env, evd), t) ->
+  let get_func (env, evd) t : Fo_t.name * Fo_t.sig_ =
+    let kname =
+      try
+        EConstr.destConst evd t |> fst |> Names.Constant.canonical
+      with Constr.DestKO ->
+        EConstr.destConstruct evd t |> fst |> construct_kname env in
+    try
+      KNameMap.find kname S.sign.funcs
+    with Not_found ->
+      raise Constr.DestKO
+    
+  let rec dest_econst : edest = fun ((env, evd), t) ->
+    match get_func (env, evd) t with
+    | name, ([], _) ->
+        `EFun (name, [])
+    | _ -> raise Constr.DestKO
+
+  and dest_eapp : edest = fun ((env, evd), t) ->
+    let head, args = EConstr.destApp evd t in
+    match get_func (env, evd) head with
+    | name, _ ->
+        let targs = Array.map (fun u -> dest_expr ((env, evd), u)) args in
+        `EFun (name, Array.to_list targs)
+
+  and dest_pvar : fdest = fun ((env, evd), t) ->
     if not (is_prop env evd t) then raise Constr.DestKO;
     let name = EConstr.destVar evd t |> Names.Id.to_string in
     `FPred (name, [])
 
-  let dest_pconst : fdest = fun ((env, evd), t) ->
+  and dest_pconst : fdest = fun ((env, evd), t) ->
     if not (is_prop env evd t) then raise Constr.DestKO;
     let name = name_of_const evd t in
     `FPred (name, [])
+
+  and dest_eq : fdest = fun ((env, evd), t) ->
+    if not (is_prop env evd t) then raise Constr.DestKO;
+    let head, args = EConstr.destApp evd t in
+    let (mind, i), _ = EConstr.destInd evd head in
+    let head_is_eq =
+      Names.(KerName.equal (MutInd.canonical mind) Trm.eq_kname) && i = 0 in
+    match head_is_eq, args with
+    | true, [| _; t1; t2 |] ->
+        let e1 = dest_expr ((env, evd), t1) in
+        let e2 = dest_expr ((env, evd), t2) in
+        `FPred ("_EQ", [e1; e2])
+    | _ ->
+        raise Constr.DestKO
 
   and dest_true : fdest = fun ((env, evd), t) ->
     match name_of_inductive env evd t with
@@ -80,7 +158,7 @@ module Export = struct
     | name ->
         raise Constr.DestKO
 
-  let rec dest_imp : fdest = fun ((_, evd as e), t) ->
+  and dest_imp : fdest = fun ((_, evd as e), t) ->
     let x, t1, t2 = EConstr.destProd evd t in
     if not (is_imp e x t1 t2) then raise Constr.DestKO;
     `FConn (`Imp, [dest_form (e, t1); dest_form (e, t2)])
@@ -117,8 +195,16 @@ module Export = struct
     | name, _ ->
         raise Constr.DestKO
 
+  and dest_expr : edest = fun et ->
+    begin
+      dest_econst >>!!
+      dest_eapp >>!!
+      fun _ -> dummy_expr
+    end et
+  
   and dest_form : fdest = fun et ->
     begin
+      dest_eq >>!
       dest_true >>!
       dest_false >>!
       dest_pconst >>!
@@ -132,11 +218,16 @@ module Export = struct
     end et
 
   let empty_env : Logic_t.env =
-    { env_prp = [("dummy", [])];
-      env_fun = [];
-      env_var = [];
-      env_tvar = [];
-      env_handles = [] }
+    let env_tvar =
+      KNameMap.bindings S.sign.sorts |> List.split |> snd |>
+      List.map (fun name -> (name, [])) in
+    let env_fun =
+      ("dummy", ([], `TVar ("unit", 0))) ::
+      (KNameMap.bindings S.sign.funcs |> List.split |> snd) in
+    let env_prp =
+      ("dummy", []) ::
+      (KNameMap.bindings S.sign.preds |> List.split |> snd) in
+    { env_prp; env_fun; env_var = []; env_tvar; env_handles = [] }
 
   let env (coq_env : Environ.env) (evd : Evd.evar_map) : Logic_t.env =
     let add_pvar isprop name env =
@@ -201,7 +292,10 @@ end
 (* -------------------------------------------------------------------- *)
 (** Importing Actema actions as Coq tactics *)
 
-module Import = struct
+module Import (S : FOSign) = struct
+  let fosign () : EConstr.t =
+    failwith "TODO"
+
   let get_hyps_names (coq_goal : Goal.t) =
     Goal.hyps coq_goal |> Context.Named.to_vars
 

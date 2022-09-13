@@ -1,5 +1,13 @@
 open Proofview
 
+module Array = struct
+  include Array
+
+  let get_opt a n =
+    try Some a.(n)
+    with Invalid_argument _ -> None
+end
+
 module Log = struct
   let str str =
     Feedback.msg_notice (Pp.str str)
@@ -24,6 +32,16 @@ let kername (path : string list) (name : string) =
   let dir = DirPath.make (path |> List.rev |> List.map Id.of_string) in
   KerName.make (ModPath.MPfile dir) (Label.make name)
 
+let construct_kname env (c : Names.Construct.t) : Names.KerName.t =
+  let ind = Names.inductive_of_constructor c in
+  let spec = Inductive.lookup_mind_specif env ind in
+  let Declarations.({ mind_packets; _ }, _) = spec in
+  let ind_body = mind_packets.(snd ind) in
+  let modpath = Names.Construct.modpath c in
+  let i = Names.index_of_constructor c in
+  let label = ind_body.mind_consnames.(i-1) |> Names.Label.of_id in
+  Names.KerName.make modpath label
+
 let calltac (tacname : string) (args : EConstr.constr list) : unit tactic =
   let open Ltac_plugin in
   let open Tacexpr in
@@ -45,7 +63,7 @@ let calltac (tacname : string) (args : EConstr.constr list) : unit tactic =
     Tacinterp.eval_tactic_ist ist (ltac_call f args)
   with Not_found ->
     let _ = Log.error (Printf.sprintf "Could not find tactic \"%s\"" tacname) in
-   Proofview.Monad.return ()
+    Proofview.Monad.return ()
 
 module Trm = struct
   open EConstr
@@ -62,6 +80,21 @@ module Trm = struct
   let unit_kname =
     kername ["Coq"; "Init"; "Datatypes"] "unit"
   
+  let zero_kname =
+    kername ["Coq"; "Init"; "Datatypes"] "O"
+
+  let succ_kname =
+    kername ["Coq"; "Init"; "Datatypes"] "S"
+  
+  let add_kname =
+    kername ["Coq"; "Init"; "Nat"] "add"
+  
+  let mul_kname =
+    kername ["Coq"; "Init"; "Nat"] "mul"
+  
+  let eq_kname =
+    kername ["Coq"; "Init"; "Logic"] "eq"
+  
   let nat =
     mkInd (Names.MutInd.make1 nat_kname, 0)
 
@@ -70,6 +103,10 @@ module Trm = struct
 
   let unit =
     mkInd (Names.MutInd.make1 unit_kname, 0)
+  
+  let eq ty =
+    let eq = mkInd (Names.MutInd.make1 eq_kname, 0) in
+    mkApp (eq, [|ty|])
 
   let nil ty =
     let nil = mkConstruct ((Names.MutInd.make1 list_kname, 0), 1) in
