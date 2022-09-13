@@ -19,6 +19,12 @@ let biniou_unhash_dict = Bi_io.make_unhash [
 let empty_env =
   Fo_t.{ env_prp = []; env_fun = []; env_var = []; env_tvar = []; env_handles = [] }
 
+let string_of_expr e =
+  Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_expr e)
+
+let string_of_form f =
+  Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_form f)
+
 let string_of_goal goal =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_goal goal)
 
