@@ -68,12 +68,11 @@ let load_proof (id : aident) : Logic_t.proof option =
   with _ ->
     None
 
-module E = Export(Peano)
-module I = Import(Peano)
+let sign = Translate.peano
 
 let actema_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
-    let goal, hm = E.goal coq_goal in
+    let goal, hm = Export.goal sign coq_goal in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
 
     let proof =
@@ -84,18 +83,18 @@ let actema_tac (action_name : string) : unit tactic =
       | Some t -> t
     in
 
-    I.proof hm proof
+    Import.proof hm proof
   end
 
 let actema_force_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
-    let goal, hm = E.goal coq_goal in
+    let goal, hm = Export.goal sign coq_goal in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
 
     let proof = Lwt_main.run (Client.action goal) in
     save_proof id proof;
 
-    I.proof hm proof
+    Import.proof hm proof
   end
 
 let calltac_tac = calltac
