@@ -2193,7 +2193,7 @@ module Translate = struct
       l |> List.map f |> List.enum |> Map.of_enum in
 
     let assoc_to_bimap l f =
-      l |> List.map f |> List.enum |> BiMap.of_enum in
+      l |> List.map f |> List.to_seq |> BiMap.of_seq in
 
     let env_prp = assoc_to_map env.env_prp
       (fun (p, ar) -> p, to_arity ar) in

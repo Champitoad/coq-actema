@@ -209,6 +209,7 @@ module BiMap : sig
   val codomain    : ('a, 'b) t -> 'b list
 
   val of_enum     : ('a * 'b) Enum.t -> ('a, 'b) t
+  val of_seq      : ('a * 'b) Seq.t -> ('a, 'b) t
 end = struct
   type ('a, 'b) t = ('a, 'b) Map.t * ('b, 'a) Map.t
 
@@ -242,6 +243,9 @@ end = struct
   
   let of_enum e =
     Map.of_enum e, Map.of_enum (e |> Enum.map (fun (x, y) -> (y, x)))
+
+  let of_seq s =
+    Map.of_seq s, Map.of_seq (s |> Seq.map (fun (x, y) -> (y, x)))
 end
 
 (* -------------------------------------------------------------------- *)

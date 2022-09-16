@@ -1,6 +1,38 @@
 open Logic_t
 
+module Uid : sig
+  include Map.OrderedType
+
+  val fresh : unit -> unit -> t
+end with type t = Logic_t.uid = struct
+  type t = Logic_t.uid
+  
+  let compare = Int.compare
+
+  let fresh () : unit -> t =
+    let count = ref (-1) in
+    fun () -> incr count; !count
+end
+
+module Vars = struct
+  let fresh = Uid.fresh ()
+
+  let push (env : env) ((name, bvar) : name * bvar) =
+    let bds =
+      match List.assoc_opt name env.env_var with
+      | None -> []
+      | Some bds -> bds in
+
+    let env_var = (name, bvar :: bds) :: env.env_var in
+
+    let env_handles = 
+      ((name, List.length bds), fresh ()) :: env.env_handles in
+
+    { env with env_var; env_handles }
+end
+
 let biniou_unhash_dict = Bi_io.make_unhash [
+  "TVar"; "TUnit"; "TProd"; "TOr"; "TRec";
   "EVar"; "EFun";
   "And"; "Or"; "Imp"; "Equiv"; "Not";
   "Forall"; "Exist";
