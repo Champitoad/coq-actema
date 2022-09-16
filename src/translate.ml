@@ -1,19 +1,6 @@
 open Proofview
 open CoqUtils
-
-module Uid : sig
-  include Map.OrderedType
-
-  val fresh : unit -> unit -> t
-end with type t = Logic_t.uid = struct
-  type t = Logic_t.uid
-  
-  let compare = Int.compare
-
-  let fresh () : unit -> t =
-    let count = ref (-1) in
-    fun () -> incr count; !count
-end
+open Utils
 
 module UidMap = Map.Make(Uid)
 
@@ -92,6 +79,17 @@ module Export = struct
         (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env)
         evd t2
     && (x.Context.binder_name = Names.Anonymous || EConstr.Vars.noccurn evd 1 t2)
+
+  let get_sort { env; evd; sign } t : string =
+    let kname =
+      try
+        EConstr.destConst evd t |> fst |> Names.Constant.canonical
+      with Constr.DestKO ->
+        EConstr.destInd evd t |> fst |> fst |> Names.MutInd.canonical in
+    try
+      KNameMap.find kname sign.sorts
+    with Not_found ->
+      raise Constr.DestKO
 
   let get_func { env; evd; sign } t : Fo_t.name * Fo_t.sig_ =
     let kname =
@@ -237,20 +235,35 @@ module Export = struct
         with e when CErrors.is_anomaly e ->
             env.Fo_t.env_prp in
       { env with env_prp } in
+    
+    let add_var name ty env =
+      try
+        let sort = get_sort { env = coq_env; evd; sign } ty in
+        Vars.push env (name, (`TVar (sort, 0), None))
+      with Constr.DestKO ->
+        env in
 
     let env = empty_env sign in
 
     let env = Environ.fold_constants begin fun c _ env ->
         let isprop () = is_prop coq_env evd (EConstr.mkConst c) in
-        let name = name_of_const evd (EConstr.mkConst c) in
-        add_pvar isprop name env
+        let c = EConstr.mkConst c in
+        let name = name_of_const evd c in
+        let cname = c |> EConstr.destConst evd |> fst in
+        let ty =
+          Environ.constant_type_in coq_env (Univ.in_punivs cname) |>
+          EConstr.of_constr in
+        env |>
+        add_pvar isprop name
       end coq_env env in
 
     let env = Environ.fold_named_context begin fun _ decl env ->
         let name = Context.Named.Declaration.get_id decl |> Names.Id.to_string in
         let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
         let isprop () = ty |> EConstr.to_constr evd |> Constr.destSort |> Sorts.is_prop in
-        add_pvar isprop name env
+        env |>
+        add_pvar isprop name |>
+        add_var name ty
       end coq_env ~init:env in
 
     env

@@ -7,7 +7,9 @@ Proof.
   actema "2steps".
 Qed.
 
-Lemma test_eq : 3 + (4 * 5) = 23.
+Definition k := 3.
+
+Lemma test_eq (n m : nat) : 3 + 4 * 5 = 23.
   actema.
   easy.
 Qed.
