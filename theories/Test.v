@@ -27,3 +27,9 @@ Lemma peano_inj : forall x : nat, 0 = S x.
 Proof.
   actema.
 Admitted.
+
+Lemma robinson_ind :
+  forall x, x = 0 \/ exists y, x = S y.
+Proof.
+  actema_force.
+Admitted.

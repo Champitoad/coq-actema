@@ -223,7 +223,6 @@ module Export = struct
         `FPred (name, Array.to_list targs)
 
   and dest_eq : fdest = fun ({ env; evd; _ } as e, t) ->
-    if not (is_prop env evd t) then raise Constr.DestKO;
     let head, args = EConstr.destApp evd t in
     let (mind, i), _ = EConstr.destInd evd head in
     let head_is_eq =
@@ -287,7 +286,7 @@ module Export = struct
     | name, _ ->
         raise Constr.DestKO
   
-  and dest_forall : fdest = fun ({ env; evd; sign } as e, t) ->
+  and dest_forall : fdest = fun ({ env; evd; _ } as e, t) ->
     let x, t1, t2 = EConstr.destProd evd t in
     let sort = find_sort (e, t1) in
     match Context.binder_name x with
@@ -298,6 +297,27 @@ module Export = struct
           (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env) in
         let body = dest_form ({ e with env }, t2) in
         `FBind (`Forall, name, ty, body)
+    | _ -> raise Constr.DestKO
+  
+  and dest_exists : fdest = fun ({ env; evd; _ } as e, t) ->
+    let head, args = EConstr.destApp evd t in
+    let (mind, i), _ = EConstr.destInd evd head in
+    let head_is_ex =
+      Names.(KerName.equal (MutInd.canonical mind) Trm.ex_kname) && i = 0 in
+    match head_is_ex, args with
+    | true, [| _; t2 |] ->
+        let x, t1, t2 = EConstr.destLambda evd t2 in
+        let sort = find_sort (e, t1) in
+        begin match Context.binder_name x with
+        | Name id ->
+            let name = Names.Id.to_string id in
+            let ty = `TVar (sort, 0) in
+            let env =
+              (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env) in
+            let body = dest_form ({ e with env }, t2) in
+            `FBind (`Exist, name, ty, body)
+        | _ -> raise Constr.DestKO
+        end
     | _ -> raise Constr.DestKO
   
   and dest_form : fdest = fun et ->
@@ -314,6 +334,7 @@ module Export = struct
       dest_iff >>!
       dest_not >>!
       dest_forall >>!
+      dest_exists >>!
       fun _ -> dummy_form
     end et
 

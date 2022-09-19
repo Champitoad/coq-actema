@@ -110,6 +110,9 @@ module Trm = struct
   let eq_kname =
     kername ["Coq"; "Init"; "Logic"] "eq"
   
+  let ex_kname =
+    kername ["Coq"; "Init"; "Logic"] "ex"
+  
   let nat =
     mkInd (Names.MutInd.make1 nat_kname, 0)
 
@@ -122,7 +125,7 @@ module Trm = struct
   let eq ty =
     let eq = mkInd (Names.MutInd.make1 eq_kname, 0) in
     mkApp (eq, [|ty|])
-
+  
   let nil ty =
     let nil = mkConstruct ((Names.MutInd.make1 list_kname, 0), 1) in
     mkApp (nil, [|ty|])
