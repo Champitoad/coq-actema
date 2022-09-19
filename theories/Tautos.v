@@ -1,6 +1,6 @@
 From Actema Require Import Loader.
 
-Parameters (A B C D E F G : Prop).
+Context (A B C D E F G : Prop).
 
 (** * Implication *)
 

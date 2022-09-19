@@ -7,9 +7,11 @@ Proof.
   actema "2steps".
 Qed.
 
-Definition k := 3.
+Require Import Lia.
 
-Lemma test_eq (n m : nat) : 3 + 4 * 5 = 23.
+Parameters A : Prop.
+
+Lemma test_eq (n m : nat) : (A -> A) /\ 3 + 4 * 5 < 25.
   actema.
-  easy.
+  lia.
 Qed.

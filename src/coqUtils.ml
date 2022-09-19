@@ -27,12 +27,24 @@ module Log = struct
     Feedback.msg_notice
 end
 
+let name_of_const evd t =
+  EConstr.destConst evd t |> fst |>
+  Names.Constant.repr2 |> snd |> Names.Label.to_string
+
+let name_of_inductive env evd t =
+  let name, _ = EConstr.destInd evd t in
+  Printer.pr_inductive env name |> Pp.string_of_ppcmds
+
 let kername (path : string list) (name : string) =
   let open Names in
   let dir = DirPath.make (path |> List.rev |> List.map Id.of_string) in
   KerName.make (ModPath.MPfile dir) (Label.make name)
 
-let construct_kname env (c : Names.Construct.t) : Names.KerName.t =
+let const_kname evd t =
+  EConstr.destConst evd t |> fst |> Names.Constant.user
+
+let construct_kname env evd (t : EConstr.t) : Names.KerName.t =
+  let c = EConstr.destConstruct evd t |> fst in
   let ind = Names.inductive_of_constructor c in
   let spec = Inductive.lookup_mind_specif env ind in
   let Declarations.({ mind_packets; _ }, _) = spec in
@@ -41,6 +53,9 @@ let construct_kname env (c : Names.Construct.t) : Names.KerName.t =
   let i = Names.index_of_constructor c in
   let label = ind_body.mind_consnames.(i-1) |> Names.Label.of_id in
   Names.KerName.make modpath label
+
+let ind_kname evd t =
+  EConstr.destInd evd t |> fst |> fst |> Names.MutInd.canonical
 
 let calltac (tacname : string) (args : EConstr.constr list) : unit tactic =
   let open Ltac_plugin in

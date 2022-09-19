@@ -89,6 +89,7 @@ let actema_tac (action_name : string) : unit tactic =
 let actema_force_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
     let goal, hm = Export.goal sign coq_goal in
+    Log.str (Utils.string_of_goal goal);
     let id = action_name, (goal.g_hyps, goal.g_concl) in
 
     let proof = Lwt_main.run (Client.action goal) in
