@@ -19,5 +19,6 @@ Qed.
 Lemma yolo (U : Set) (t u : U) (P : U -> Prop) (f : U -> U -> U) :
   P(t) -> f t u = f u t -> t = u -> P(u).
 Proof.
+  intros.
   actema.
 Admitted.

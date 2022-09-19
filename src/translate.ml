@@ -362,7 +362,7 @@ module Export = struct
       env e in
 
     let (g_hyps, hm) =
-      hyps e in
+      hyps { e with sign } in
 
     let g_concl : Logic_t.form =
       dest_form ({ e with sign }, concl) in
