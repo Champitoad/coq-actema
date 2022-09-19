@@ -153,6 +153,11 @@ module Export = struct
     let name = name_of_const evd t in
     `FPred (name, [])
 
+  and dest_pvar : fdest = fun ({ env; evd; _ }, t) ->
+    if not (is_prop env evd t) then raise Constr.DestKO;
+    let name = EConstr.destVar evd t |> Names.Id.to_string in
+    `FPred (name, [])
+
   and dest_eq : fdest = fun ({ env; evd; _ } as e, t) ->
     if not (is_prop env evd t) then raise Constr.DestKO;
     let head, args = EConstr.destApp evd t in
@@ -232,6 +237,7 @@ module Export = struct
       dest_true >>!
       dest_false >>!
       dest_pconst >>!
+      dest_pvar >>!
       dest_imp >>!
       dest_and >>!
       dest_or >>!
