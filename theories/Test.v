@@ -15,3 +15,9 @@ Lemma test_eq (n m : nat) : (A -> A) /\ 3 + 4 * 5 < 25.
   actema.
   lia.
 Qed.
+
+Lemma yolo (U : Set) (t u : U) (P : U -> Prop) (f : U -> U -> U) :
+  P(t) -> f t u = f u t -> t = u -> P(u).
+Proof.
+  actema.
+Admitted.

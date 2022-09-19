@@ -77,32 +77,24 @@ module Export = struct
   
   type destarg = destenv * EConstr.types
 
-  let find_sort ({ env; evd; sign }, t : destarg) : string =
-    let kname =
-      try
-        const_kname evd t
-      with Constr.DestKO ->
-        ind_kname evd t in
+  let dest_symbol ({ evd; _}, t : destarg) : symbol =
     try
-      SymbolMap.find (Cst kname) sign.sorts
+      Cst (const_kname evd t)
+    with Constr.DestKO ->
+      try
+        Cst (ind_kname evd t)
+      with Constr.DestKO ->
+        Var (EConstr.destVar evd t)
+
+  let find_sort ({ sign; _ }, _ as d : destarg) : string =
+    try
+      SymbolMap.find (dest_symbol d) sign.sorts
     with Not_found ->
       raise Constr.DestKO
-  
-  let is_sort (e, t : destarg) : bool =
-    try
-      let _ = find_sort (e, t) in
-      true
-    with Constr.DestKO ->
-      false
 
-  let find_func ({ env; evd; sign }, t : destarg) : Fo_t.name * Fo_t.sig_ =
-    let kname =
-      try
-        const_kname evd t
-      with Constr.DestKO ->
-        construct_kname env evd t in
+  let find_func ({ sign; _ }, _ as d : destarg) : Fo_t.name * Fo_t.sig_ =
     try
-      SymbolMap.find (Cst kname) sign.funcs
+      SymbolMap.find (dest_symbol d) sign.funcs
     with Not_found ->
       raise Constr.DestKO
 
@@ -144,6 +136,10 @@ module Export = struct
     | name, ([], _) ->
         `EFun (name, [])
     | _ -> raise Constr.DestKO
+
+  and dest_evar : edest = fun (e, t) ->
+    let id = EConstr.destVar e.evd t |> Names.Id.to_string in
+    `EVar (id, 0)
 
   and dest_eapp : edest = fun ({ evd; _ } as e, t) ->
     let head, args = EConstr.destApp evd t in
@@ -225,6 +221,7 @@ module Export = struct
   and dest_expr : edest = fun et ->
     begin
       dest_econst >>!!
+      dest_evar >>!!
       dest_eapp >>!!
       fun _ -> dummy_expr
     end et
@@ -255,15 +252,7 @@ module Export = struct
       (SymbolMap.bindings sign.preds |> List.split |> snd) in
     { env_prp; env_fun; env_var = []; env_tvar; env_handles = [] }
 
-  let env ({ env = coq_env; evd; sign } as e : destenv) : Logic_t.env * FOSign.t =
-    let add_var name ty (env, sign) =
-      let e = { e with sign } in
-      try
-        let sort = find_sort (e, ty) in
-        Vars.push env (name, (`TVar (sort, 0), None)), sign
-      with Constr.DestKO ->
-        env, sign in
-    
+  let env ({ env = coq_env; evd; sign } as e : destenv) : Logic_t.env * FOSign.t = 
     let add_sort name sy ty (env, sign) =
       try
         let sort = ty |> EConstr.destSort evd |> EConstr.ESorts.kind evd in
@@ -287,6 +276,20 @@ module Export = struct
       with Constr.DestKO ->
         env, sign in
 
+    let add_strict_func name sy ty (env, sign) =
+      let e = { e with sign } in
+      try
+        let sig_ = dest_functy (e, ty) in
+        if List.length (fst sig_) = 0 then
+          env, sign
+        else 
+          let ar = (name, sig_) in
+          let env_fun = ar :: env.Fo_t.env_fun in
+          let funcs = SymbolMap.add sy ar sign.FOSign.funcs in
+          { env with env_fun }, { sign with funcs }
+      with Constr.DestKO ->
+        env, sign in
+
     let add_pred name sy ty (env, sign) =
       let e = { e with sign } in
       try
@@ -295,6 +298,14 @@ module Export = struct
         let env_prp = ar :: env.Fo_t.env_prp in
         let preds = SymbolMap.add sy ar sign.FOSign.preds in
         { env with env_prp }, { sign with preds }
+      with Constr.DestKO ->
+        env, sign in
+
+    let add_var name ty (env, sign) =
+      let e = { e with sign } in
+      try
+        let sort = find_sort (e, ty) in
+        Vars.push env (name, (`TVar (sort, 0), None)), sign
       with Constr.DestKO ->
         env, sign in
     
@@ -313,13 +324,13 @@ module Export = struct
         add_pred name (Cst kname) ty
       end coq_env (env, sign) in
 
-    let env, sign = Environ.fold_named_context begin fun _ decl env ->
+    let env, sign = Environ.fold_named_context begin fun _ decl es ->
         let id = Context.Named.Declaration.get_id decl in
         let name = id |> Names.Id.to_string in
         let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
-        env |>
+        es |>
         add_sort name (Var id) ty |>
-        add_func name (Var id) ty |>
+        add_strict_func name (Var id) ty |>
         add_pred name (Var id) ty |>
         add_var name ty
       end coq_env ~init:(env, sign) in
