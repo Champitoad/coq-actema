@@ -22,3 +22,8 @@ Proof.
   intros.
   actema.
 Admitted.
+
+Lemma peano_inj : forall x : nat, 0 = S x.
+Proof.
+  actema.
+Admitted.

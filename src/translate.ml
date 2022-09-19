@@ -154,25 +154,31 @@ module Export = struct
   
   
   type edest = destarg -> Logic_t.expr
-  type fdest = destarg -> Logic_t.form
 
   let comp_edest (d1 : edest) (d2 : edest) : edest = fun et ->
     try d1 et with Constr.DestKO -> d2 et
-  let comp_fdest (d1 : fdest) (d2 : fdest) : fdest = fun et ->
-    try d1 et with Constr.DestKO -> d2 et
 
   let ( >>!! ) = comp_edest
-  let ( >>! ) = comp_fdest
     
   let rec dest_econst : edest = fun (e, t) ->
     match find_func (e, t) with
     | name, ([], _) ->
         `EFun (name, [])
     | _ -> raise Constr.DestKO
-
-  and dest_evar : edest = fun (e, t) ->
-    let id = EConstr.destVar e.evd t |> Names.Id.to_string in
+  
+  and dest_evar : edest = fun ({ env; evd; _ }, t) ->
+    let id = EConstr.destVar evd t |> Names.Id.to_string in
     `EVar (id, 0)
+
+  and dest_erel : edest = fun ({ env; evd; _ }, t) ->
+    let n = EConstr.destRel evd t in
+    let name =
+      EConstr.lookup_rel n env |>
+      EConstr.to_rel_decl evd |>
+      Context.Rel.Declaration.get_name in
+    match name with
+    | Name id -> `EVar (Names.Id.to_string id, 0)
+    | _ -> raise Constr.DestKO
 
   and dest_eapp : edest = fun ({ evd; _ } as e, t) ->
     let head, args = EConstr.destApp evd t in
@@ -180,8 +186,25 @@ module Export = struct
     | name, _ ->
         let targs = Array.map (fun u -> dest_expr (e, u)) args in
         `EFun (name, Array.to_list targs)
+
+  and dest_expr : edest = fun et ->
+    begin
+      dest_econst >>!!
+      dest_evar >>!!
+      dest_erel >>!!
+      dest_eapp >>!!
+      fun _ -> dummy_expr
+    end et
+
+
+  type fdest = destarg -> Logic_t.form
+
+  let comp_fdest (d1 : fdest) (d2 : fdest) : fdest = fun et ->
+    try d1 et with Constr.DestKO -> d2 et
+
+  let ( >>! ) = comp_fdest
   
-  and dest_pconst : fdest = fun ({ env; evd; _ }, t) ->
+  let rec dest_pconst : fdest = fun ({ env; evd; _ }, t) ->
     if not (is_prop env evd t) then raise Constr.DestKO;
     let name = name_of_const evd t in
     `FPred (name, [])
@@ -248,7 +271,7 @@ module Export = struct
     | name, _ ->
         raise Constr.DestKO
 
-  and dest_iff : fdest = fun ({ env; evd; _ } as e, t) ->
+  and dest_iff : fdest = fun ({ evd; _ } as e, t) ->
     let f, args  = EConstr.destApp evd t in
     match name_of_const evd f, Array.to_list args with
     | "iff", [t1; t2] ->
@@ -256,21 +279,26 @@ module Export = struct
     | name, _ ->
         raise Constr.DestKO
 
-  and dest_not : fdest = fun ({ env; evd; _; } as e, t) ->
+  and dest_not : fdest = fun ({ evd; _ } as e, t) ->
     let f, args  = EConstr.destApp evd t in
     match name_of_const evd f, Array.to_list args with
     | "not", [t1] ->
         `FConn (`Not, [dest_form (e, t1)])
     | name, _ ->
         raise Constr.DestKO
-
-  and dest_expr : edest = fun et ->
-    begin
-      dest_econst >>!!
-      dest_evar >>!!
-      dest_eapp >>!!
-      fun _ -> dummy_expr
-    end et
+  
+  and dest_forall : fdest = fun ({ env; evd; sign } as e, t) ->
+    let x, t1, t2 = EConstr.destProd evd t in
+    let sort = find_sort (e, t1) in
+    match Context.binder_name x with
+    | Name id ->
+        let name = Names.Id.to_string id in 
+        let ty = `TVar (sort, 0) in
+        let env =
+          (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env) in
+        let body = dest_form ({ e with env }, t2) in
+        `FBind (`Forall, name, ty, body)
+    | _ -> raise Constr.DestKO
   
   and dest_form : fdest = fun et ->
     begin
@@ -285,13 +313,15 @@ module Export = struct
       dest_or >>!
       dest_iff >>!
       dest_not >>!
+      dest_forall >>!
       fun _ -> dummy_form
     end et
+
 
   let empty_env (sign : FOSign.t) : Logic_t.env =
     let env_tvar =
       SymbolMap.bindings sign.sorts |> List.split |> snd |>
-      List.map (fun name -> (name, [])) in
+      List.map (fun name -> (name, [None])) in
     let env_fun =
       ("dummy", ([], `TVar ("unit", 0))) ::
       (SymbolMap.bindings sign.funcs |> List.split |> snd) in
@@ -305,7 +335,7 @@ module Export = struct
       try
         let sort = ty |> EConstr.destSort evd |> EConstr.ESorts.kind evd in
         if sort = Sorts.set then begin
-          let env_tvar = (name, []) :: env.Fo_t.env_tvar in
+          let env_tvar = (name, [None]) :: env.Fo_t.env_tvar in
           let sorts = SymbolMap.add sy name sign.FOSign.sorts in
           { env with env_tvar }, { sign with sorts }
         end else
