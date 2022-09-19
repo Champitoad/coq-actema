@@ -43,8 +43,7 @@ let kername (path : string list) (name : string) =
 let const_kname evd t =
   EConstr.destConst evd t |> fst |> Names.Constant.user
 
-let construct_kname env evd (t : EConstr.t) : Names.KerName.t =
-  let c = EConstr.destConstruct evd t |> fst in
+let kname_of_constructor env (c : Names.Construct.t) : Names.KerName.t =
   let ind = Names.inductive_of_constructor c in
   let spec = Inductive.lookup_mind_specif env ind in
   let Declarations.({ mind_packets; _ }, _) = spec in
@@ -53,6 +52,10 @@ let construct_kname env evd (t : EConstr.t) : Names.KerName.t =
   let i = Names.index_of_constructor c in
   let label = ind_body.mind_consnames.(i-1) |> Names.Label.of_id in
   Names.KerName.make modpath label
+
+let construct_kname env evd (t : EConstr.t) : Names.KerName.t =
+  let c = EConstr.destConstruct evd t |> fst in
+  kname_of_constructor env c
 
 let ind_kname evd t =
   EConstr.destInd evd t |> fst |> fst |> Names.MutInd.canonical
@@ -82,6 +85,9 @@ let calltac (tacname : string) (args : EConstr.constr list) : unit tactic =
 
 module Trm = struct
   open EConstr
+
+  let type_ =
+    EConstr.mkSort (Sorts.type1)
 
   let list_kname =
     kername ["Coq"; "Init"; "Datatypes"] "list"
@@ -113,8 +119,10 @@ module Trm = struct
   let ex_kname =
     kername ["Coq"; "Init"; "Logic"] "ex"
   
+  let nat_name : Names.inductive =
+    Names.MutInd.make1 nat_kname, 0
   let nat =
-    mkInd (Names.MutInd.make1 nat_kname, 0)
+    mkInd nat_name
 
   let bool =
     mkInd (Names.MutInd.make1 bool_kname, 0)
@@ -134,12 +142,22 @@ module Trm = struct
     let cons = mkConstruct ((Names.MutInd.make1 list_kname, 0), 2) in
     mkApp (cons, [|ty; x; l|])
   
+  let zero_name : Names.constructor =
+    (Names.MutInd.make1 nat_kname, 0), 1
   let zero =
-    mkConstruct ((Names.MutInd.make1 nat_kname, 0), 1)
+    mkConstruct zero_name
 
+  let succ_name : Names.constructor =
+    (Names.MutInd.make1 nat_kname, 0), 2
   let succ n =
-    let succ = mkConstruct ((Names.MutInd.make1 nat_kname, 0), 2) in
+    let succ = mkConstruct succ_name in
     mkApp (succ, [|n|])
+  
+  let add_name : Names.Constant.t =
+    Names.Constant.make1 add_kname
+
+  let mul_name : Names.Constant.t =
+    Names.Constant.make1 mul_kname
   
   let tt =
     mkConstruct ((Names.MutInd.make1 unit_kname, 0), 1)

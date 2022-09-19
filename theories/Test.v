@@ -31,5 +31,12 @@ Admitted.
 Lemma robinson_ind :
   forall x, x = 0 \/ exists y, x = S y.
 Proof.
-  actema_force.
+  actema.
+Admitted.
+
+Lemma exintro (A : Set) (P : A -> Prop) (t : A) :
+  P t -> exists x, P x.
+Proof.
+  intros.
+  actema.
 Admitted.

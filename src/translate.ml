@@ -7,7 +7,9 @@ module UidMap = Map.Make(Uid)
 type hidmap = Names.Id.t UidMap.t
 
 type symbol =
-| Cst of Names.KerName.t
+| Cst of Names.Constant.t
+| Ctr of Names.constructor
+| Ind of Names.inductive
 | Var of Names.Id.t
 
 module Symbol : sig
@@ -17,8 +19,14 @@ end with type t = symbol = struct
   type t = symbol
 
   let to_string = function
-    | Cst kn -> Names.KerName.to_string kn
-    | Var id -> Names.Id.to_string id
+    | Cst c ->
+        Names.Constant.to_string c
+    | Ctr ((mind, i), j) ->
+        Printf.sprintf "%s_%d_%d" (Names.MutInd.to_string mind) i j
+    | Ind (mind, i) ->
+        Printf.sprintf "%s_%d" (Names.MutInd.to_string mind) i
+    | Var id ->
+        Names.Id.to_string id
 
   let compare x y =
     compare (to_string x) (to_string y)
@@ -44,16 +52,17 @@ end
 
 let peano : FOSign.t =
   let open SymbolMap in
+  let open Trm in
   let nat : Fo_t.type_ = `TVar ("nat", 0) in
   let sorts =
     empty |>
-    add (Cst Trm.nat_kname) "nat" in
+    add (Ind nat_name) "nat" in
   let funcs =
     empty |>
-    add (Cst Trm.zero_kname) ("Z", ([], nat)) |>
-    add (Cst Trm.succ_kname) ("S", ([nat], nat)) |>
-    add (Cst Trm.add_kname) ("add", ([nat; nat], nat)) |>
-    add (Cst Trm.mul_kname) ("mult", ([nat; nat], nat)) in
+    add (Ctr zero_name) ("Z", ([], nat)) |>
+    add (Ctr succ_name) ("S", ([nat], nat)) |>
+    add (Cst add_name) ("add", ([nat; nat], nat)) |>
+    add (Cst mul_name) ("mult", ([nat; nat], nat)) in
   let preds =
     empty in
   { sorts; funcs; preds }
@@ -96,13 +105,13 @@ module Export = struct
   let ( >>!!! ) = sdest_compose
 
   let dest_sconst : sdest = fun ({ evd; _ }, t) ->
-    Cst (const_kname evd t)
+    Cst (EConstr.destConst evd t |> fst)
 
   let dest_sconstruct : sdest = fun ({ env; evd; _ }, t) ->
-    Cst (construct_kname env evd t)
+    Ctr (EConstr.destConstruct evd t |> fst)
   
   let dest_sind : sdest = fun ({ evd; _ }, t) ->
-    Cst (ind_kname evd t)
+    Ind (EConstr.destInd evd t |> fst)
   
   let dest_svar : sdest = fun ({ evd; _ }, t) ->
     Var (EConstr.destVar evd t)
@@ -413,14 +422,13 @@ module Export = struct
     let env, sign = Environ.fold_constants begin fun c _ es ->
         let t = EConstr.mkConst c in
         let name = name_of_const evd t in
-        let kname = const_kname evd t in
         let ty =
           Environ.constant_type_in coq_env (Univ.in_punivs c) |>
           EConstr.of_constr in
         es |>
-        add_sort (kname |> Names.KerName.to_string) (Cst kname) ty |>
-        add_func name (Cst kname) ty |>
-        add_pred name (Cst kname) ty
+        add_sort (c |> Names.Constant.to_string) (Cst c) ty |>
+        add_func name (Cst c) ty |>
+        add_pred name (Cst c) ty
       end coq_env (env, sign) in
 
     let env, sign = Environ.fold_named_context begin fun _ decl es ->
@@ -473,6 +481,17 @@ end
 (** Importing Actema actions as Coq tactics *)
 
 module Import = struct
+  let symbol (sy : symbol) : EConstr.t =
+    match sy with
+    | Cst c -> EConstr.mkConst c
+    | Ctr c -> EConstr.mkConstruct c
+    | Ind i -> EConstr.mkInd i
+    | Var x -> EConstr.mkVar x
+
+  let sorts (sm : string SymbolMap.t) : EConstr.t =
+    sm |> SymbolMap.bindings |> Stdlib.List.split |> fst |>
+    Trm.of_list Trm.type_ symbol
+
   let fosign (sign : FOSign.t) : EConstr.t =
     failwith "TODO"
 
