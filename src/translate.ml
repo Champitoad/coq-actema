@@ -264,6 +264,18 @@ module Export = struct
       with Constr.DestKO ->
         env, sign in
     
+    let add_sort name sy ty (env, sign) =
+      try
+        let sort = ty |> EConstr.destSort evd |> EConstr.ESorts.kind evd in
+        if sort = Sorts.set then begin
+          let env_tvar = (name, []) :: env.Fo_t.env_tvar in
+          let sorts = SymbolMap.add sy name sign.FOSign.sorts in
+          { env with env_tvar }, { sign with sorts }
+        end else
+          env, sign
+      with Constr.DestKO ->
+        env, sign in
+    
     let add_func name sy ty (env, sign) =
       let e = { e with sign } in
       try
@@ -296,6 +308,7 @@ module Export = struct
           Environ.constant_type_in coq_env (Univ.in_punivs c) |>
           EConstr.of_constr in
         es |>
+        add_sort (kname |> Names.KerName.to_string) (Cst kname) ty |>
         add_func name (Cst kname) ty |>
         add_pred name (Cst kname) ty
       end coq_env (env, sign) in
@@ -305,6 +318,7 @@ module Export = struct
         let name = id |> Names.Id.to_string in
         let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
         env |>
+        add_sort name (Var id) ty |>
         add_func name (Var id) ty |>
         add_pred name (Var id) ty |>
         add_var name ty
