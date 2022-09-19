@@ -10,7 +10,10 @@ type symbol =
 | Cst of Names.KerName.t
 | Var of Names.Id.t
 
-module Symbol : Map.OrderedType with type t = symbol = struct
+module Symbol : sig
+  include Map.OrderedType 
+  val to_string : t -> string
+end with type t = symbol = struct
   type t = symbol
 
   let to_string = function
@@ -21,7 +24,15 @@ module Symbol : Map.OrderedType with type t = symbol = struct
     compare (to_string x) (to_string y)
 end
 
-module SymbolMap = Map.Make(Symbol)
+module SymbolMap = struct
+  include Map.Make(Symbol)
+
+  let replace k v m =
+    add
+
+  let add k v m =
+    if mem k m then m else add k v m
+end
 
 module FOSign = struct
   type cstmap = (Fo_t.name * Fo_t.sig_) SymbolMap.t
@@ -77,14 +88,30 @@ module Export = struct
   
   type destarg = destenv * EConstr.types
 
-  let dest_symbol ({ evd; _}, t : destarg) : symbol =
-    try
-      Cst (const_kname evd t)
-    with Constr.DestKO ->
-      try
-        Cst (ind_kname evd t)
-      with Constr.DestKO ->
-        Var (EConstr.destVar evd t)
+  type sdest = destarg -> symbol
+
+  let sdest_compose (d1 : sdest) (d2 : sdest) : sdest =
+    fun et -> try d1 et with Constr.DestKO -> d2 et 
+  
+  let ( >>!!! ) = sdest_compose
+
+  let dest_sconst : sdest = fun ({ evd; _ }, t) ->
+    Cst (const_kname evd t)
+
+  let dest_sconstruct : sdest = fun ({ env; evd; _ }, t) ->
+    Cst (construct_kname env evd t)
+  
+  let dest_sind : sdest = fun ({ evd; _ }, t) ->
+    Cst (ind_kname evd t)
+  
+  let dest_svar : sdest = fun ({ evd; _ }, t) ->
+    Var (EConstr.destVar evd t)
+
+  let dest_symbol : sdest =
+    dest_sconst >>!!!
+    dest_sconstruct >>!!!
+    dest_sind >>!!!
+    dest_svar
 
   let find_sort ({ sign; _ }, _ as d : destarg) : string =
     try
@@ -98,7 +125,13 @@ module Export = struct
     with Not_found ->
       raise Constr.DestKO
 
-  let dest_functy ({ env; evd; sign } as e, t : destarg) : Fo_t.sig_ =
+  let find_pred ({ sign; _ }, _ as d : destarg) : Fo_t.name * Fo_t.arity =
+    try
+      SymbolMap.find (dest_symbol d) sign.preds
+    with Not_found ->
+      raise Constr.DestKO
+
+  let dest_functy ({ evd; _ } as e, t : destarg) : Fo_t.sig_ =
     let rec aux arity t =
       if EConstr.isProd evd t then
         let _, t1, t2 = EConstr.destProd evd t in
@@ -107,7 +140,7 @@ module Export = struct
         arity, `TVar (find_sort (e, t), 0) in
     aux [] t
 
-  let dest_predty ({ env; evd; sign } as e, t : destarg) : Fo_t.arity =
+  let dest_predty ({ evd; _ } as e, t : destarg) : Fo_t.arity =
     let rec aux arity t =
       if EConstr.isProd evd t then
         let _, t1, t2 = EConstr.destProd evd t in
@@ -157,6 +190,14 @@ module Export = struct
     if not (is_prop env evd t) then raise Constr.DestKO;
     let name = EConstr.destVar evd t |> Names.Id.to_string in
     `FPred (name, [])
+
+  and dest_papp : fdest = fun ({ env; evd; _ } as e, t) ->
+    if not (is_prop env evd t) then raise Constr.DestKO;
+    let head, args = EConstr.destApp evd t in
+    match find_pred (e, head) with
+    | name, _ ->
+        let targs = Array.map (fun u -> dest_expr (e, u)) args in
+        `FPred (name, Array.to_list targs)
 
   and dest_eq : fdest = fun ({ env; evd; _ } as e, t) ->
     if not (is_prop env evd t) then raise Constr.DestKO;
@@ -238,6 +279,7 @@ module Export = struct
       dest_false >>!
       dest_pconst >>!
       dest_pvar >>!
+      dest_papp >>!
       dest_imp >>!
       dest_and >>!
       dest_or >>!
