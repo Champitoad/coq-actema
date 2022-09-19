@@ -6,28 +6,43 @@ module UidMap = Map.Make(Uid)
 
 type hidmap = Names.Id.t UidMap.t
 
-module KNameMap = Map.Make(Names.KerName)
+type symbol =
+| Cst of Names.KerName.t
+| Var of Names.Id.t
+
+module Symbol : Map.OrderedType with type t = symbol = struct
+  type t = symbol
+
+  let to_string = function
+    | Cst kn -> Names.KerName.to_string kn
+    | Var id -> Names.Id.to_string id
+
+  let compare x y =
+    compare (to_string x) (to_string y)
+end
+
+module SymbolMap = Map.Make(Symbol)
 
 module FOSign = struct
-type cstmap = (Fo_t.name * Fo_t.sig_) KNameMap.t
-type pstmap = (Fo_t.name * Fo_t.arity) KNameMap.t
+  type cstmap = (Fo_t.name * Fo_t.sig_) SymbolMap.t
+  type pstmap = (Fo_t.name * Fo_t.arity) SymbolMap.t
 
-type t =
-  { sorts : string KNameMap.t; funcs : cstmap; preds : pstmap }
+  type t =
+    { sorts : string SymbolMap.t; funcs : cstmap; preds : pstmap }
 end
 
 let peano : FOSign.t =
-  let open KNameMap in
+  let open SymbolMap in
   let nat : Fo_t.type_ = `TVar ("nat", 0) in
   let sorts =
     empty |>
-    add Trm.nat_kname "nat" in
+    add (Cst Trm.nat_kname) "nat" in
   let funcs =
     empty |>
-    add Trm.zero_kname ("Z", ([], nat)) |>
-    add Trm.succ_kname ("S", ([nat], nat)) |>
-    add Trm.add_kname ("add", ([nat; nat], nat)) |>
-    add Trm.mul_kname ("mult", ([nat; nat], nat)) in
+    add (Cst Trm.zero_kname) ("Z", ([], nat)) |>
+    add (Cst Trm.succ_kname) ("S", ([nat], nat)) |>
+    add (Cst Trm.add_kname) ("add", ([nat; nat], nat)) |>
+    add (Cst Trm.mul_kname) ("mult", ([nat; nat], nat)) in
   let preds =
     empty in
   { sorts; funcs; preds }
@@ -69,7 +84,7 @@ module Export = struct
       with Constr.DestKO ->
         ind_kname evd t in
     try
-      KNameMap.find kname sign.sorts
+      SymbolMap.find (Cst kname) sign.sorts
     with Not_found ->
       raise Constr.DestKO
   
@@ -87,7 +102,7 @@ module Export = struct
       with Constr.DestKO ->
         construct_kname env evd t in
     try
-      KNameMap.find kname sign.funcs
+      SymbolMap.find (Cst kname) sign.funcs
     with Not_found ->
       raise Constr.DestKO
 
@@ -230,40 +245,43 @@ module Export = struct
 
   let empty_env (sign : FOSign.t) : Logic_t.env =
     let env_tvar =
-      KNameMap.bindings sign.sorts |> List.split |> snd |>
+      SymbolMap.bindings sign.sorts |> List.split |> snd |>
       List.map (fun name -> (name, [])) in
     let env_fun =
       ("dummy", ([], `TVar ("unit", 0))) ::
-      (KNameMap.bindings sign.funcs |> List.split |> snd) in
+      (SymbolMap.bindings sign.funcs |> List.split |> snd) in
     let env_prp =
       ("dummy", []) ::
-      (KNameMap.bindings sign.preds |> List.split |> snd) in
+      (SymbolMap.bindings sign.preds |> List.split |> snd) in
     { env_prp; env_fun; env_var = []; env_tvar; env_handles = [] }
 
   let env ({ env = coq_env; evd; sign } as e : destenv) : Logic_t.env * FOSign.t =
-    let add_var name ty env =
+    let add_var name ty (env, sign) =
+      let e = { e with sign } in
       try
         let sort = find_sort (e, ty) in
-        Vars.push env (name, (`TVar (sort, 0), None))
+        Vars.push env (name, (`TVar (sort, 0), None)), sign
       with Constr.DestKO ->
-        env in
-
-    let add_func name kname ty (env, sign) =
+        env, sign in
+    
+    let add_func name sy ty (env, sign) =
+      let e = { e with sign } in
       try
         let sig_ = dest_functy (e, ty) in
         let ar = (name, sig_) in
         let env_fun = ar :: env.Fo_t.env_fun in
-        let funcs = KNameMap.add kname ar sign.FOSign.funcs in
+        let funcs = SymbolMap.add sy ar sign.FOSign.funcs in
         { env with env_fun }, { sign with funcs }
       with Constr.DestKO ->
         env, sign in
 
-    let add_pred name kname ty (env, sign) =
+    let add_pred name sy ty (env, sign) =
+      let e = { e with sign } in
       try
         let arity = dest_predty (e, ty) in
         let ar = (name, arity) in
         let env_prp = ar :: env.Fo_t.env_prp in
-        let preds = KNameMap.add kname ar sign.FOSign.preds in
+        let preds = SymbolMap.add sy ar sign.FOSign.preds in
         { env with env_prp }, { sign with preds }
       with Constr.DestKO ->
         env, sign in
@@ -278,16 +296,19 @@ module Export = struct
           Environ.constant_type_in coq_env (Univ.in_punivs c) |>
           EConstr.of_constr in
         es |>
-        add_func name kname ty |>
-        add_pred name kname ty
+        add_func name (Cst kname) ty |>
+        add_pred name (Cst kname) ty
       end coq_env (env, sign) in
 
-    let env = Environ.fold_named_context begin fun _ decl env ->
-        let name = Context.Named.Declaration.get_id decl |> Names.Id.to_string in
+    let env, sign = Environ.fold_named_context begin fun _ decl env ->
+        let id = Context.Named.Declaration.get_id decl in
+        let name = id |> Names.Id.to_string in
         let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
         env |>
+        add_func name (Var id) ty |>
+        add_pred name (Var id) ty |>
         add_var name ty
-      end coq_env ~init:env in
+      end coq_env ~init:(env, sign) in
 
     env, sign
 
