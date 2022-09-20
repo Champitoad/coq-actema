@@ -17,6 +17,8 @@ src/logic_b.mli
 src/utils.ml
 src/utils.mli
 
+src/extlib.ml
+src/extlib.mli
 src/coqUtils.ml
 src/monads.ml
 src/translate.ml

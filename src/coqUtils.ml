@@ -1,13 +1,5 @@
 open Proofview
 
-module Array = struct
-  include Array
-
-  let get_opt a n =
-    try Some a.(n)
-    with Invalid_argument _ -> None
-end
-
 module Log = struct
   let str str =
     Feedback.msg_notice (Pp.str str)
@@ -101,6 +93,12 @@ module Trm = struct
   let unit_kname =
     kername ["Coq"; "Init"; "Datatypes"] "unit"
   
+  let prod_kname =
+    kername ["Coq"; "Init"; "Datatypes"] "prod"
+  
+  let option_kname =
+    kername ["Coq"; "Init"; "Datatypes"] "option"
+  
   let zero_kname =
     kername ["Coq"; "Init"; "Datatypes"] "O"
 
@@ -118,6 +116,9 @@ module Trm = struct
   
   let ex_kname =
     kername ["Coq"; "Init"; "Logic"] "ex"
+
+  let sigT_kname =
+    kername ["Coq"; "Init"; "Specif"] "sigT"
   
   let nat_name : Names.inductive =
     Names.MutInd.make1 nat_kname, 0
@@ -130,9 +131,33 @@ module Trm = struct
   let unit =
     mkInd (Names.MutInd.make1 unit_kname, 0)
   
+  let prod_name : Names.inductive =
+    Names.MutInd.make1 prod_kname, 0
+  let prod t1 t2 =
+    let prod = mkInd prod_name in
+    mkApp (prod, [| t1; t2 |])
+  
+  let sigT_name : Names.inductive =
+    Names.MutInd.make1 sigT_kname, 0
+  let sigT ty p =
+    let sigT = mkInd sigT_name in
+    mkApp (sigT, [| ty; p |])
+  
+  let option_name : Names.inductive =
+    Names.MutInd.make1 option_kname, 0
+  let option ty =
+    let option = mkInd option_name in
+    mkApp (option, [| ty |])
+  
   let eq ty =
     let eq = mkInd (Names.MutInd.make1 eq_kname, 0) in
     mkApp (eq, [|ty|])
+  
+  let list_name : Names.inductive =
+    Names.MutInd.make1 list_kname, 0
+  let list ty =
+    let list = mkInd list_name in
+    mkApp (list, [| ty |])
   
   let nil ty =
     let nil = mkConstruct ((Names.MutInd.make1 list_kname, 0), 1) in
@@ -141,6 +166,29 @@ module Trm = struct
   let cons ty x l =
     let cons = mkConstruct ((Names.MutInd.make1 list_kname, 0), 2) in
     mkApp (cons, [|ty; x; l|])
+
+  let pair_name : Names.constructor =
+    prod_name, 1
+  let pair ty1 ty2 t1 t2 =
+    let pair = mkConstruct pair_name in
+    mkApp (pair, [| ty1; ty2; t1; t2 |])
+  
+  let existT_name : Names.constructor =
+    sigT_name, 1
+  let existT ty p w t =
+    let existT = mkConstruct existT_name in
+    mkApp (existT, [| ty; p; w; t |])
+  
+  let none_name : Names.constructor =
+    option_name, 1
+  let none =
+    mkConstruct none_name
+
+  let some_name : Names.constructor =
+    option_name, 2
+  let some ty t =
+    let some = mkConstruct some_name in
+    mkApp (some, [|ty; t|])
   
   let zero_name : Names.constructor =
     (Names.MutInd.make1 nat_kname, 0), 1
@@ -180,4 +228,9 @@ module Trm = struct
   
   let boollist =
     of_list bool bool_of_bool
+  
+  let of_option ty cast o =
+    match o with
+    | None -> none
+    | Some x -> some ty (cast x)
 end

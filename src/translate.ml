@@ -1,6 +1,7 @@
 open Proofview
 open CoqUtils
 open Utils
+open Extlib
 
 module UidMap = Map.Make(Uid)
 
@@ -32,40 +33,45 @@ end with type t = symbol = struct
     compare (to_string x) (to_string y)
 end
 
-module SymbolMap = struct
-  include Map.Make(Symbol)
-
-  let replace k v m =
-    add
-
-  let add k v m =
-    if mem k m then m else add k v m
-end
-
 module FOSign = struct
-  type cstmap = (Fo_t.name * Fo_t.sig_) SymbolMap.t
-  type pstmap = (Fo_t.name * Fo_t.arity) SymbolMap.t
+  module SymbolMap = BiMap(Symbol)(String)
+  module NameMap = Map.Make(String)
 
+  type symbols =
+    { s_sorts : SymbolMap.t; s_funcs : SymbolMap.t; s_preds : SymbolMap.t }
+  
+  type typing =
+    { t_funcs : Fo_t.sig_ NameMap.t; t_preds : Fo_t.arity NameMap.t }
+  
   type t =
-    { sorts : string SymbolMap.t; funcs : cstmap; preds : pstmap }
+    { symbols : symbols; typing : typing }
 end
 
 let peano : FOSign.t =
-  let open SymbolMap in
+  let open FOSign in
   let open Trm in
   let nat : Fo_t.type_ = `TVar ("nat", 0) in
-  let sorts =
-    empty |>
-    add (Ind nat_name) "nat" in
-  let funcs =
-    empty |>
-    add (Ctr zero_name) ("Z", ([], nat)) |>
-    add (Ctr succ_name) ("S", ([nat], nat)) |>
-    add (Cst add_name) ("add", ([nat; nat], nat)) |>
-    add (Cst mul_name) ("mult", ([nat; nat], nat)) in
-  let preds =
-    empty in
-  { sorts; funcs; preds }
+  let symbols =
+    let open SymbolMap in
+    let s_sorts = empty |>
+      add (Ind nat_name) "nat" in
+    let s_funcs = empty |>
+      add (Ctr zero_name) "Z" |>
+      add (Ctr succ_name) "S" |>
+      add (Cst add_name) "add" |>
+      add (Cst mul_name) "mult" in
+    let s_preds = empty in
+    { s_sorts; s_funcs; s_preds } in
+  let typing =
+    let open NameMap in
+    let t_funcs = empty |>
+      add "Z" ([], nat) |>
+      add "S" ([nat], nat) |>
+      add "add" ([nat; nat], nat) |>
+      add "mult" ([nat; nat], nat) in
+    let t_preds = empty in
+    { t_funcs; t_preds } in
+  { symbols; typing }
 
 (* -------------------------------------------------------------------- *)
 (** Exporting Coq goals to Actema *)
@@ -124,19 +130,23 @@ module Export = struct
 
   let find_sort ({ sign; _ }, _ as d : destarg) : string =
     try
-      SymbolMap.find (dest_symbol d) sign.sorts
+      FOSign.SymbolMap.find (dest_symbol d) sign.symbols.s_sorts
     with Not_found ->
       raise Constr.DestKO
 
   let find_func ({ sign; _ }, _ as d : destarg) : Fo_t.name * Fo_t.sig_ =
     try
-      SymbolMap.find (dest_symbol d) sign.funcs
+      let name = FOSign.SymbolMap.find (dest_symbol d) sign.symbols.s_funcs in
+      let sig_ = FOSign.NameMap.find name sign.typing.t_funcs in
+      name, sig_
     with Not_found ->
       raise Constr.DestKO
 
   let find_pred ({ sign; _ }, _ as d : destarg) : Fo_t.name * Fo_t.arity =
     try
-      SymbolMap.find (dest_symbol d) sign.preds
+      let name = FOSign.SymbolMap.find (dest_symbol d) sign.symbols.s_preds in
+      let arity = FOSign.NameMap.find name sign.typing.t_preds in
+      name, arity
     with Not_found ->
       raise Constr.DestKO
 
@@ -349,25 +359,35 @@ module Export = struct
 
 
   let empty_env (sign : FOSign.t) : Logic_t.env =
+    let open FOSign in
     let env_tvar =
-      SymbolMap.bindings sign.sorts |> List.split |> snd |>
+      SymbolMap.values sign.symbols.s_sorts |>
       List.map (fun name -> (name, [None])) in
     let env_fun =
       ("dummy", ([], `TVar ("unit", 0))) ::
-      (SymbolMap.bindings sign.funcs |> List.split |> snd) in
+      begin
+        SymbolMap.values sign.symbols.s_funcs |>
+        List.map (fun f -> f, NameMap.find f sign.typing.t_funcs)
+      end in
     let env_prp =
       ("dummy", []) ::
-      (SymbolMap.bindings sign.preds |> List.split |> snd) in
+      begin
+        SymbolMap.values sign.symbols.s_preds |>
+        List.map (fun p -> p, NameMap.find p sign.typing.t_preds)
+      end in
     { env_prp; env_fun; env_var = []; env_tvar; env_handles = [] }
 
   let env ({ env = coq_env; evd; sign } as e : destenv) : Logic_t.env * FOSign.t = 
+    let open FOSign in
+
     let add_sort name sy ty (env, sign) =
       try
         let sort = ty |> EConstr.destSort evd |> EConstr.ESorts.kind evd in
         if sort = Sorts.set then begin
           let env_tvar = (name, [None]) :: env.Fo_t.env_tvar in
-          let sorts = SymbolMap.add sy name sign.FOSign.sorts in
-          { env with env_tvar }, { sign with sorts }
+          let s_sorts = SymbolMap.add sy name sign.symbols.s_sorts in
+          let symbols = { sign.symbols with s_sorts } in
+          { env with env_tvar }, { sign with symbols }
         end else
           env, sign
       with Constr.DestKO ->
@@ -377,10 +397,12 @@ module Export = struct
       let e = { e with sign } in
       try
         let sig_ = dest_functy (e, ty) in
-        let ar = (name, sig_) in
-        let env_fun = ar :: env.Fo_t.env_fun in
-        let funcs = SymbolMap.add sy ar sign.FOSign.funcs in
-        { env with env_fun }, { sign with funcs }
+        let env_fun = (name, sig_) :: env.Fo_t.env_fun in
+        let s_funcs = SymbolMap.add sy name sign.symbols.s_funcs in
+        let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
+        let symbols = { sign.symbols with s_funcs } in
+        let typing = { sign.typing with t_funcs } in
+        { env with env_fun }, { symbols; typing }
       with Constr.DestKO ->
         env, sign in
 
@@ -393,8 +415,11 @@ module Export = struct
         else 
           let ar = (name, sig_) in
           let env_fun = ar :: env.Fo_t.env_fun in
-          let funcs = SymbolMap.add sy ar sign.FOSign.funcs in
-          { env with env_fun }, { sign with funcs }
+          let s_funcs = SymbolMap.add sy name sign.symbols.s_funcs in
+          let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
+          let symbols = { sign.symbols with s_funcs } in
+          let typing = { sign.typing with t_funcs } in
+          { env with env_fun }, { symbols; typing }
       with Constr.DestKO ->
         env, sign in
 
@@ -402,10 +427,12 @@ module Export = struct
       let e = { e with sign } in
       try
         let arity = dest_predty (e, ty) in
-        let ar = (name, arity) in
-        let env_prp = ar :: env.Fo_t.env_prp in
-        let preds = SymbolMap.add sy ar sign.FOSign.preds in
-        { env with env_prp }, { sign with preds }
+        let env_prp = (name, arity) :: env.Fo_t.env_prp in
+        let s_preds = SymbolMap.add sy name sign.symbols.s_preds in
+        let t_preds = NameMap.add name arity sign.typing.t_preds in
+        let symbols = { sign.symbols with s_preds } in
+        let typing = { sign.typing with t_preds } in
+        { env with env_prp }, { symbols; typing }
       with Constr.DestKO ->
         env, sign in
 
@@ -487,10 +514,74 @@ module Import = struct
     | Ctr c -> EConstr.mkConstruct c
     | Ind i -> EConstr.mkInd i
     | Var x -> EConstr.mkVar x
+  
+  let rec expr (sign : FOSign.t) (e : Fo_t.expr) : EConstr.t =
+    match e with
+    | `EVar (x, i) ->
+        EConstr.mkVar (Names.Id.of_string x)
+    | `EFun (f, args) ->
+        let head = symbol (FOSign.SymbolMap.dnif f sign.symbols.s_funcs) in
+        let args = List.map (expr sign) args in
+        EConstr.mkApp (head, Array.of_list args)
 
-  let sorts (sm : string SymbolMap.t) : EConstr.t =
-    sm |> SymbolMap.bindings |> Stdlib.List.split |> fst |>
+  let sorts (sign : FOSign.t) : EConstr.t =
+    sign.symbols.s_sorts |> FOSign.SymbolMap.keys |>
     Trm.of_list Trm.type_ symbol
+
+  let sort (sign : FOSign.t) (n : int) : EConstr.t =
+    let sorts = sign.symbols.s_sorts |> FOSign.SymbolMap.keys in
+    match List.nth_opt sorts n with
+    | None -> Trm.unit
+    | Some sy -> symbol sy
+  
+  let ppp (sign : FOSign.t) (l : int list) : EConstr.t =
+    List.fold_right begin fun n t ->
+      Trm.(pair type_ type_ (sort sign n) t)
+    end l Trm.unit
+  
+  let itrace (sign : FOSign.t) (itr : Logic_t.itrace) : EConstr.t * EConstr.t =
+    let focus, inst = Stdlib.List.split itr in
+    let boollist_of_intlist =
+      Stdlib.List.map (fun n -> if n = 0 then false else true) in
+    let t = focus |> boollist_of_intlist |> Trm.boollist in
+    let i =
+      let open EConstr in
+      let pp n =
+        let pp = mkConst (Names.Constant.make1 (kername ["Actema"; "DnD"] "pp")) in
+        mkApp (pp, [| n |]) in
+      let tyw s n1 n2 =
+        mkArrowR (pp n1) (mkArrowR (ppp sign n2) (sort sign s)) in
+      let ty3 s n1 =
+        let n2 = Names.Id.of_string "n2" |> Context.nameR in
+        assert false in
+
+      let s : int =
+        sign.symbols.s_sorts |> FOSign.SymbolMap.size in
+
+      inst |> List.map begin fun w ->
+        Option.map begin fun (lenv, e) ->
+          let n1 : int list =
+            assert false in
+          let n2 : int list =
+            assert false in
+          let ty1 = ppp sign n1 in
+          let ty2 = ppp sign n2 in
+          let w_ty =
+            EConstr.(mkArrowR ty1 (mkArrowR ty2 (sort sign s))) in
+          let w : EConstr.t =
+            let env1 : Names.Name.t Context.binder_annot =
+              assert false in
+            let env2 : Names.Name.t Context.binder_annot =
+              assert false in
+            let w : EConstr.t =
+              assert false in
+            EConstr.(mkLambda (env1, ty1, mkLambda (env2, ty2, w))) in
+          Trm.(existT nat (sigT nat (sigT (list nat) (sigT (list nat) w_ty))) (nat_of_int s)
+                (existT (list nat) (sigT (list nat) (sigT (list nat) w_ty)) (natlist n1)
+                  (existT (list nat) (sigT (list nat) w_ty) (natlist n2) w)))
+        end w
+      end in
+    t, assert false
 
   let fosign (sign : FOSign.t) : EConstr.t =
     failwith "TODO"
