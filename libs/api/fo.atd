@@ -59,3 +59,5 @@ type env = {
   env_tvar    : (name * type_ option list) list;
   env_handles : (vname * uid             ) list;
 }
+
+type lenv = name list

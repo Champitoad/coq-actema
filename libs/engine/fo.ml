@@ -176,6 +176,7 @@ module LEnv : sig
 
   val empty : lenv
   val indices : lenv -> (name, int) Map.t
+  val bindings : lenv -> name list
   val get_index : lenv -> name -> int
   val exists : lenv -> vname -> bool
   val enter : lenv -> name -> lenv
@@ -193,6 +194,8 @@ end = struct
     { le_indices = Map.empty; le_bindings = []; }
 
   let indices lenv = lenv.le_indices
+  
+  let bindings lenv = lenv.le_bindings
 
   let get_index (lenv : lenv) (name : name) =
     Map.find name lenv.le_indices

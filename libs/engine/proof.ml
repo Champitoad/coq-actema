@@ -1486,14 +1486,17 @@ end = struct
         raise TacticNotApplicable
   
 
-  type choice = (int * expr option)
+  type choice = (int * (LEnv.lenv * expr) option)
   type itrace = choice list
 
   let print_choice ((side, witness) : choice) : string =
     let side = if side = 0 then "←" else "→" in
     let witness =
       witness |> Option.map_default
-        (fun e -> Printf.sprintf "{%s}" (Fo.Notation.e_tostring e)) "" in
+        (fun (lenv, e) ->
+          let lenv = List.to_string identity (LEnv.bindings lenv) in
+          let e = Fo.Notation.e_tostring e in
+          Printf.sprintf "%s{%s}" lenv e) "" in
     Printf.sprintf "%s%s" side witness
 
   let print_itrace : itrace -> string =
@@ -2006,7 +2009,7 @@ end = struct
             (* R∃i *)
             | Some Sbound e ->
               let f1 = Subst.f_apply1 (x, 0) e f1 in
-              None, (1, Some e), (h, (f1, sub))
+              None, (1, Some (env2, e)), (h, (f1, sub))
             (* R∃s *)
             | Some Sflex ->
               s := es1, (env2, s2);
@@ -2073,7 +2076,7 @@ end = struct
             (* L∀i *)
             | Some Sbound e ->
               let f1 = f_apply1 (x, 0) e f1 in
-              None, (0, Some e), ((f1, sub), c)
+              None, (0, Some (env1, e)), ((f1, sub), c)
             (* L∀s *)
             | Some Sflex ->
               s := (env1, s1), es2;
@@ -2199,7 +2202,7 @@ end = struct
             (* F∀i *)
             | Some Sbound e ->
               let f1 = Subst.f_apply1 (x, 0) e f1 in
-              witness := Some e;
+              witness := Some (env2, e);
               None, (h, (f1, sub))
             (* F∀s *)
             | Some Sflex ->
@@ -3108,8 +3111,13 @@ end = struct
     let of_ipath (p : ipath) : Logic_t.ipath =
       Logic_t.{ root = p.root; ctxt = of_ctxt (p.ctxt); sub = p.sub }
     
+    let of_lenv (lenv : LEnv.lenv) : Fo_t.lenv =
+      LEnv.bindings lenv
+    
     let of_itrace (itrace : itrace) : Logic_t.itrace =
-      List.map (fun (i, e) -> i, Option.map of_expr e) itrace
+      List.map begin fun (i, w) ->
+        i, Option.map (fun (lenv, e) -> of_lenv lenv, of_expr e) w
+      end itrace
 
     let action_of_pnode (p : pnode) : Logic_t.action =
       match p with
