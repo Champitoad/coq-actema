@@ -635,7 +635,7 @@ end = struct
     let g_env = goal.g_env in
 
     match variant, (Proof.byid pr id).g_goal with
-    | (0, None), FPred ("_EQ", [e1; e2]) when Form.e_equal g_env e1 e2 ->
+    | (0, None), FPred ("_EQ", [e1; e2]) when Form.e_equal_delta g_env e1 e2 ->
         Proof.progress pr id pterm []
 
     | (0, None), FConn (`And, [f1; f2]) ->
@@ -1939,7 +1939,7 @@ end = struct
         in fc_fill f (fc_rev ctx), itrace
       
       | (FPred ("_EQ", [e1; e2]), [i]), _
-        when e_equal goal.g_env (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
+        when e_equal_delta goal.g_env (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
         let res =
           (* L=₁ *)
           if i = 0 then e2
@@ -2117,7 +2117,7 @@ end = struct
         fc_fill f (fc_rev ctx), itrace
 
       | (FPred ("_EQ", [e1; e2]), [i]), _
-        when e_equal goal.g_env (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
+        when e_equal_delta goal.g_env (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
         let res =
           (* L=₁ *)
           if i = 0 then e2

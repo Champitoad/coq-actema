@@ -1234,7 +1234,8 @@ module Form : sig
   val recheck  : env -> form -> unit
 
   val t_equal : ?bds:VName.bds -> env -> type_ -> type_ -> bool
-  val e_equal : ?bds:VName.bds -> env -> expr  -> expr  -> bool
+  val e_equal : ?bds:VName.bds -> expr  -> expr  -> bool
+  val e_equal_delta : ?bds:VName.bds -> env -> expr  -> expr -> bool
   val f_equal : ?bds:VName.bds -> env -> form  -> form  -> bool
   val equal   : ?bds:VName.bds -> env -> term -> term -> bool
 
@@ -1390,13 +1391,25 @@ end = struct
     in fun ?(bds = VName.Map.empty) env ty1 ty2 -> eq bds env ty1 ty2
 
   let e_equal =
+    let rec aux bds e1 e2 =
+      match e1, e2 with
+      | EVar x1, EVar x2 -> VName.equal bds x1 x2
+      | EFun (f1, es1), EFun (f2, es2) 
+        when List.length es1 = List.length es2 ->
+          (f1 = f2) && List.for_all2 (aux bds) es1 es2
+      | _, _ ->
+          false
+    in
+    fun ?(bds = VName.Map.empty) e1 e2 -> aux bds e1 e2
+
+  let e_equal_delta =
     let rec aux bds env e1 e2 =
       match e1, e2 with
-	| EVar x1, EVar x2 when VName.equal bds x1 x2 -> true
-	| EVar x1, t | t, EVar x1 ->
-			 (match Vars.get env x1 with
-			   | Some (_, Some u) -> aux bds env t u
-			   | _ -> false)
+      | EVar x1, EVar x2 when VName.equal bds x1 x2 -> true
+      | EVar x1, t | t, EVar x1 ->
+          (match Vars.get env x1 with
+           | Some (_, Some u) -> aux bds env t u
+           | _ -> false)
       | EFun (f1, es1), EFun (f2, es2) 
         when List.length es1 = List.length es2 ->
           (f1 = f2) && List.for_all2 (aux bds env) es1 es2
@@ -1413,7 +1426,7 @@ end = struct
 
       | FPred (p1, es1), FPred (p2, es2)
         when List.length es1 = List.length es2
-        -> (p1 = p2)  && List.for_all2 (e_equal ~bds env) es1 es2 
+        -> (p1 = p2)  && List.for_all2 (e_equal ~bds) es1 es2 
 
       | FConn (c1, fs1), FConn (c2, fs2)
         when List.length fs1 = List.length fs2 
@@ -1432,7 +1445,7 @@ end = struct
   let equal ?bds (env : env) (t1 : term) (t2 : term) : bool =
     match t1, t2 with
     | `F f1, `F f2 -> f_equal ?bds env f1 f2
-    | `E e1, `E e2 -> e_equal ?bds env e1 e2
+    | `E e1, `E e2 -> e_equal ?bds e1 e2
     | _ -> false
     
   
@@ -1975,10 +1988,10 @@ end = struct
           e_unify venv lenv s (((Subst.fetch x s), t) :: eqns)
         in
         let is_const x  =
-	  match Vars.get venv x with
-	    | Some (_, Some _) -> true
-	    | _ -> false
-	in
+          match Vars.get venv x with
+            | Some (_, Some _) -> true
+            | _ -> false
+        in
 	
         match t, u with
 	    
@@ -2000,18 +2013,18 @@ end = struct
         | EFun (f, ts), EFun (g, us) when f = g ->
             e_unify venv lenv s ((List.combine ts us) @ eqns)
 
-	(*(expand)*)
+	(* (expand) *)
 	| t, EVar y when is_const y ->
 	    (match Vars.get venv y with
-	      | Some (_, Some ye) -> e_unify venv lenv s ((t,ye)::eqns)
-	      | _ -> raise Invalid_constant)
+	     | Some (_, Some ye) -> e_unify venv lenv s ((t, ye) :: eqns)
+	     | _ -> raise Invalid_constant)
 	| EVar x, u when is_const x ->
 	    (match Vars.get venv x with
-	      | Some (_, Some xe) -> e_unify venv lenv s ((xe, u)::eqns)
-	      | _ -> raise Invalid_constant)
+	     | Some (_, Some xe) -> e_unify venv lenv s ((xe, u) :: eqns)
+	     | _ -> raise Invalid_constant)
 
-        (* (fail) *)
-        | _ -> None
+  (* (fail) *)
+  | _ -> None
 	
 
   (** [f_unify env s eqns] does unification of a list of equations [eqns] between
