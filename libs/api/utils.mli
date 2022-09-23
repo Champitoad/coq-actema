@@ -10,8 +10,18 @@ module Uid : sig
 end with type t = uid
 
 module Vars : sig
+  val get : env -> vname -> bvar option
   val push : env -> name * bvar -> env
+  val push_lenv : env -> lenv -> env
 end
+
+module Funs : sig
+  val get : env -> name -> sig_ option
+end
+
+val t_equal : env -> type_ -> type_ -> bool
+
+val einfer : env -> expr -> type_
 
 val string_of_expr : expr -> string
 val string_of_form : form -> string
