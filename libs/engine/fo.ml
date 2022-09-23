@@ -175,17 +175,17 @@ module LEnv : sig
   exception EmptyLEnv
 
   val empty : lenv
-  val indices : lenv -> (name, int) Map.t
-  val bindings : lenv -> name list
+  val indices : lenv -> (name, int ) Map.t
+  val bindings : lenv -> (name * type_) list
   val get_index : lenv -> name -> int
   val exists : lenv -> vname -> bool
-  val enter : lenv -> name -> lenv
+  val enter : lenv -> name -> type_ -> lenv
   val exit  : lenv -> lenv
-  val fold  : lenv -> name -> 'a -> (lenv -> 'a -> 'b) -> 'b
+  val fold  : lenv -> name -> type_ -> 'a -> (lenv -> 'a -> 'b) -> 'b
 end = struct
   type lenv = {
-    le_indices  : (name, int) Map.t;
-    le_bindings : name list;
+    le_indices  : (name, type_ list) Map.t;
+    le_bindings : (name * type_) list;
   }
 
   exception EmptyLEnv
@@ -193,35 +193,36 @@ end = struct
   let empty =
     { le_indices = Map.empty; le_bindings = []; }
 
-  let indices lenv = lenv.le_indices
+  let indices lenv =
+    Map.map (List.length |>> (-)1) lenv.le_indices
   
   let bindings lenv = lenv.le_bindings
 
   let get_index (lenv : lenv) (name : name) =
-    Map.find name lenv.le_indices
+    Map.find name (indices lenv)
   
   let exists (lenv : lenv) (x : vname) =
-    List.mem x (Map.bindings lenv.le_indices)
+    List.mem x (Map.bindings (indices lenv))
 
-  let enter (lenv : lenv) (name : name) =
-    { le_indices  = Map.modify_def (-1) name ((+) 1) lenv.le_indices;
-      le_bindings = name :: lenv.le_bindings; }
+  let enter (lenv : lenv) (name : name) (ty : type_) =
+    { le_indices  = Map.modify_def [] name (List.cons ty) lenv.le_indices;
+      le_bindings = (name, ty) :: lenv.le_bindings; }
 
   let exit (lenv : lenv) =
     match lenv.le_bindings with
     | [] ->
         raise EmptyLEnv
 
-    | name :: names ->
-        let update i =
-          let i = Option.get i - 1 in
-          if i = 0 then None else Some i in
+    | (name, _) :: bds ->
+        let update bds =
+          let bds = Option.get bds |> List.tl in
+          if bds = [] then None else Some bds in
 
-        { le_bindings = names;
+        { le_bindings = bds;
           le_indices  = Map.modify_opt name update lenv.le_indices; }
 
-   let fold (lenv : lenv) (name : name) (x : 'a) (f : lenv -> 'a -> 'b) =
-     f (enter lenv name) x
+   let fold (lenv : lenv) (name : name) (ty : type_) (x : 'a) (f : lenv -> 'a -> 'b) =
+     f (enter lenv name ty) x
 end
 
 (* -------------------------------------------------------------------- *)
@@ -2059,7 +2060,7 @@ end = struct
           when b1 = b2 && ty1 = ty2 ->
 
             let f2 = Subst.f_apply1 (x2, 0) (EVar (x1, 0)) (f_shift (x1, 0) f2) in
-            f_unify venv (LEnv.enter lenv x1) s [f1, f2] >>= fun s ->
+            f_unify venv (LEnv.enter lenv x1 ty1) s [f1, f2] >>= fun s ->
             f_unify venv lenv s eqns
 
         | _ -> None

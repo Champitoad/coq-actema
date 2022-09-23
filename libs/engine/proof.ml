@@ -1486,17 +1486,20 @@ end = struct
         raise TacticNotApplicable
   
 
-  type choice = (int * (LEnv.lenv * expr) option)
+  type choice = (int * (LEnv.lenv * LEnv.lenv * expr) option)
   type itrace = choice list
 
   let print_choice ((side, witness) : choice) : string =
     let side = if side = 0 then "←" else "→" in
     let witness =
       witness |> Option.map_default
-        (fun (lenv, e) ->
-          let lenv = List.to_string identity (LEnv.bindings lenv) in
+        (fun (le1, le2, e) ->
+          let print (x, ty) =
+            Printf.sprintf "%s : %s" x (Notation.t_tostring ty) in
+          let le1 = List.to_string print (LEnv.bindings le1) in
+          let le2 = List.to_string print (LEnv.bindings le2) in
           let e = Fo.Notation.e_tostring e in
-          Printf.sprintf "%s{%s}" lenv e) "" in
+          Printf.sprintf "%s%s{%s}" le1 le2 e) "" in
     Printf.sprintf "%s%s" side witness
 
   let print_itrace : itrace -> string =
@@ -1869,8 +1872,8 @@ end = struct
     (** [instantiable lenv ctx s x] returns [true] if the variable [x] is
         either flex, or bound in substitution [s] to an expression [e] which is
         well-scoped. *)
-    let instantiable lenv ctx s x =
-      let lenv = LEnv.enter lenv x in
+    let instantiable lenv ctx s x ty =
+      let lenv = LEnv.enter lenv x ty in
       match get_tag (x, LEnv.get_index lenv x) s with
       | Some Sbound e -> well_scoped ctx e
       | Some Sflex -> true
@@ -2001,15 +2004,15 @@ end = struct
 
           | _, (FBind (`Exist, x, ty, f1), 0 :: sub)
             when no_prio `Left h &&
-            instantiable env2 ctx s2 x
+            instantiable env2 ctx s2 x ty
             ->
-            let env2 = LEnv.enter env2 x in
+            let env2 = LEnv.enter env2 x ty in
             s := es1, (env2, s2);
             begin match get_tag (x, LEnv.get_index env2 x) s2 with
             (* R∃i *)
             | Some Sbound e ->
               let f1 = Subst.f_apply1 (x, 0) e f1 in
-              None, (1, Some (env2, e)), (h, (f1, sub))
+              None, (1, Some (env1, env2, e)), (h, (f1, sub))
             (* R∃s *)
             | Some Sflex ->
               s := es1, (env2, s2);
@@ -2020,7 +2023,7 @@ end = struct
 
           (* R∀s *)
           | _, (FBind (`Forall, x, ty, f1), 0 :: sub) ->
-            s := es1, (LEnv.enter env2 x, s2);
+            s := es1, (LEnv.enter env2 x ty, s2);
             let h = (f_shift (x, 0) l), lsub in
             Some (CBind (`Forall, x, ty)), (1, None), (h, (f1, sub))
 
@@ -2062,21 +2065,21 @@ end = struct
           
           (* L∃s *)
           | (FBind (`Exist, x, ty, f1), 0 :: sub), _ ->
-            s := (LEnv.enter env1 x, s1), es2;
+            s := (LEnv.enter env1 x ty, s1), es2;
             let c = (f_shift (x, 0) r), rsub in
             Some (CBind (`Forall, x, ty)), (0, None), ((f1, sub), c)
 
           | (FBind (`Forall, x, ty, f1), 0 :: sub), _
             when no_prio `Right c &&
-            instantiable env1 ctx s1 x
+            instantiable env1 ctx s1 x ty
             ->
-            let env1 = LEnv.enter env1 x in
+            let env1 = LEnv.enter env1 x ty in
             s := (env1, s1), es2;
             begin match get_tag (x, LEnv.get_index env1 x) s1 with
             (* L∀i *)
             | Some Sbound e ->
               let f1 = f_apply1 (x, 0) e f1 in
-              None, (0, Some (env1, e)), ((f1, sub), c)
+              None, (0, Some (env1, env2, e)), ((f1, sub), c)
             (* L∀s *)
             | Some Sflex ->
               s := (env1, s1), es2;
@@ -2096,7 +2099,7 @@ end = struct
       
 
     and forward (ctx : fctx) (itrace : itrace) ?(side = 1)
-      (es1, (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
+      ((env1, _) as es1, (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       (((l, lsub as h), (r, rsub)) as linkage : (form * int list) * (form * int list)) : form * itrace =
 
       js_log (print_linkage `Forward linkage);
@@ -2188,25 +2191,25 @@ end = struct
           
           (* F∃s *)
           | _, (FBind (`Exist, x, ty, f1), 0 :: sub) ->
-            s := es1, (LEnv.enter env2 x, s2);
+            s := es1, (LEnv.enter env2 x ty, s2);
             let h = (f_shift (x, 0) l), lsub in
             Some (CBind (`Exist, x, ty)), (h, (f1, sub))
           
           | _, (FBind (`Forall, x, ty, f1), 0 :: sub)
             when no_prio `Forward h &&
-            instantiable env2 ctx s2 x
+            instantiable env2 ctx s2 x ty
             ->
-            let env2 = LEnv.enter env2 x in
+            let env2 = LEnv.enter env2 x ty in
             s := es1, (env2, s2);
             begin match get_tag (x, LEnv.get_index env2 x) s2 with
             (* F∀i *)
             | Some Sbound e ->
               let f1 = Subst.f_apply1 (x, 0) e f1 in
-              witness := Some (env2, e);
+              witness := Some (env1, env2, e);
               None, (h, (f1, sub))
             (* F∀s *)
             | Some Sflex ->
-              s := es1, (LEnv.enter env2 x, s2);
+              s := es1, (LEnv.enter env2 x ty, s2);
               let h = (f_shift (x, 0) l), lsub in
               Some (CBind (`Forall, x, ty)), (h, (f1, sub))
             | None -> assert false
@@ -2718,7 +2721,7 @@ end = struct
       let lenv, subt = List.fold_left
         (fun (lenv, t) i ->
           let lenv = match t with
-            | `F FBind (_, x, _, _) -> LEnv.enter lenv x
+            | `F FBind (_, x, ty, _) -> LEnv.enter lenv x ty
             | _ -> lenv in
           let t = direct_subterm t i in
           lenv, t)
@@ -3112,11 +3115,12 @@ end = struct
       Logic_t.{ root = p.root; ctxt = of_ctxt (p.ctxt); sub = p.sub }
     
     let of_lenv (lenv : LEnv.lenv) : Fo_t.lenv =
-      LEnv.bindings lenv
+      LEnv.bindings lenv |>
+      List.map (fun (x, ty) -> x, of_type_ ty)
     
     let of_itrace (itrace : itrace) : Logic_t.itrace =
       List.map begin fun (i, w) ->
-        i, Option.map (fun (lenv, e) -> of_lenv lenv, of_expr e) w
+        i, Option.map (fun (le1, le2, e) -> of_lenv le1, of_lenv le2, of_expr e) w
       end itrace
 
     let action_of_pnode (p : pnode) : Logic_t.action =

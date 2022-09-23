@@ -60,4 +60,4 @@ type env = {
   env_handles : (vname * uid             ) list;
 }
 
-type lenv = name list
+type lenv = (name * type_) list

@@ -59,7 +59,7 @@ type pkind = [Hyp | Concl | Var of [Head | Body]]
 type ctxt = { kind : pkind; handle : uid }
 type ipath = { root : uid; ctxt : ctxt; sub : int list }
 
-type choice = (int * (lenv * expr) option)
+type choice = (int * (lenv * lenv * expr) option)
 type itrace = choice list
 
 type action = [
