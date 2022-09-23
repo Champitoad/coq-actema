@@ -131,6 +131,14 @@ module Trm = struct
   let unit =
     mkInd (Names.MutInd.make1 unit_kname, 0)
   
+  let lambda x ty body =
+    let x = Context.nameR (Names.Id.of_string x) in
+    mkLambda (x, ty, body)
+  
+  let dprod x ty body =
+    let x = Context.nameR (Names.Id.of_string x) in
+    mkProd (x, ty, body)
+  
   let prod_name : Names.inductive =
     Names.MutInd.make1 prod_kname, 0
   let prod t1 t2 =
@@ -139,9 +147,9 @@ module Trm = struct
   
   let sigT_name : Names.inductive =
     Names.MutInd.make1 sigT_kname, 0
-  let sigT ty p =
+  let sigT x ty p =
     let sigT = mkInd sigT_name in
-    mkApp (sigT, [| ty; p |])
+    mkApp (sigT, [| ty; lambda x ty p |])
   
   let option_name : Names.inductive =
     Names.MutInd.make1 option_kname, 0
@@ -175,9 +183,9 @@ module Trm = struct
   
   let existT_name : Names.constructor =
     sigT_name, 1
-  let existT ty p w t =
+  let existT x ty p w t =
     let existT = mkConstruct existT_name in
-    mkApp (existT, [| ty; p; w; t |])
+    mkApp (existT, [| ty; lambda x ty p; w; t |])
   
   let none_name : Names.constructor =
     option_name, 1

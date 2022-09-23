@@ -515,13 +515,30 @@ module Import = struct
     | Ind i -> EConstr.mkInd i
     | Var x -> EConstr.mkVar x
   
-  let rec expr (sign : FOSign.t) (e : Fo_t.expr) : EConstr.t =
+  let sort_index (sign : FOSign.t) (s : string) : int =
+    let sorts = sign.symbols.s_sorts |> FOSign.SymbolMap.values in
+    List.nth_index 0 s sorts
+  
+  let infer_sort (sign : FOSign.t) (env : Logic_t.env) (e : Logic_t.expr) : string =
+    match einfer env e with
+    | `TVar (name, _) -> name
+    | _ -> failwith "Non-atomic sort type"
+  
+  let rec expr (sign : FOSign.t)
+      (env : Logic_t.env) (lenv : Logic_t.lenv) (side : int)
+      (e : Fo_t.expr) : EConstr.t =
     match e with
     | `EVar (x, i) ->
-        EConstr.mkVar (Names.Id.of_string x)
+        if LEnv.exists lenv (x, i) then
+          let s = sort_index sign (infer_sort sign (Vars.push_lenv env lenv) e) in
+          let index : int =
+            List.(lenv |> split |> fst |> nth_index i x) in
+          EConstr.(mkApp (mkRel side, Trm.[| nat_of_int s; nat_of_int index |]))
+        else
+          EConstr.mkVar (Names.Id.of_string x)
     | `EFun (f, args) ->
         let head = symbol (FOSign.SymbolMap.dnif f sign.symbols.s_funcs) in
-        let args = List.map (expr sign) args in
+        let args = List.map (expr sign env lenv side) args in
         EConstr.mkApp (head, Array.of_list args)
 
   let sorts (sign : FOSign.t) : EConstr.t =
@@ -533,55 +550,43 @@ module Import = struct
     match List.nth_opt sorts n with
     | None -> Trm.unit
     | Some sy -> symbol sy
+
+  let sort_ty (s : EConstr.t) : EConstr.t =
+    let sort_name = Names.Constant.make1 (kername ["Actema; DnD"] "sort") in
+    let sort = EConstr.mkConst sort_name in
+    EConstr.mkApp (sort, [| s |])
+
+  let env_ty : EConstr.t =
+    let open Trm in
+    let open EConstr in
+    dprod "s" nat (mkArrowR nat (sort_ty (mkRel 0)))
   
-  let ppp (sign : FOSign.t) (l : int list) : EConstr.t =
-    List.fold_right begin fun n t ->
-      Trm.(pair type_ type_ (sort sign n) t)
-    end l Trm.unit
+  let clos_ty : EConstr.t =
+    let open EConstr in
+    mkArrowR env_ty (mkArrowR env_ty (sort_ty (mkRel 0)))
   
-  let itrace (sign : FOSign.t) (itr : Logic_t.itrace) : EConstr.t * EConstr.t =
+  let inst1_ty : EConstr.t =
+    Trm.(sigT "s" nat clos_ty)
+
+  let itrace (sign : FOSign.t) (env : Fo_t.env) (itr : Logic_t.itrace) : EConstr.t * EConstr.t =
     let focus, inst = Stdlib.List.split itr in
     let boollist_of_intlist =
       Stdlib.List.map (fun n -> if n = 0 then false else true) in
     let t = focus |> boollist_of_intlist |> Trm.boollist in
     let i =
       let open EConstr in
-      let pp n =
-        let pp = mkConst (Names.Constant.make1 (kername ["Actema"; "DnD"] "pp")) in
-        mkApp (pp, [| n |]) in
-      let tyw s n1 n2 =
-        mkArrowR (pp n1) (mkArrowR (ppp sign n2) (sort sign s)) in
-      let ty3 s n1 =
-        let n2 = Names.Id.of_string "n2" |> Context.nameR in
-        assert false in
-
-      let s : int =
-        sign.symbols.s_sorts |> FOSign.SymbolMap.size in
-
-      inst |> List.map begin fun w ->
-        Option.map begin fun (lenv, e) ->
-          let n1 : int list =
-            assert false in
-          let n2 : int list =
-            assert false in
-          let ty1 = ppp sign n1 in
-          let ty2 = ppp sign n2 in
-          let w_ty =
-            EConstr.(mkArrowR ty1 (mkArrowR ty2 (sort sign s))) in
-          let w : EConstr.t =
-            let env1 : Names.Name.t Context.binder_annot =
-              assert false in
-            let env2 : Names.Name.t Context.binder_annot =
-              assert false in
-            let w : EConstr.t =
-              assert false in
-            EConstr.(mkLambda (env1, ty1, mkLambda (env2, ty2, w))) in
-          Trm.(existT nat (sigT nat (sigT (list nat) (sigT (list nat) w_ty))) (nat_of_int s)
-                (existT (list nat) (sigT (list nat) (sigT (list nat) w_ty)) (natlist n1)
-                  (existT (list nat) (sigT (list nat) w_ty) (natlist n2) w)))
-        end w
-      end in
-    t, assert false
+      let open Trm in
+      let i =
+        itr |> List.map begin fun (side, w) ->
+          Option.map begin fun (le1, le2, e) ->
+            let lenv = if side = 0 then le2 else le1 in
+            let ty = infer_sort sign (Utils.Vars.push_lenv env lenv) e in
+            let s = nat_of_int (sort_index sign ty) in
+            existT "s" nat clos_ty s (expr sign env lenv (1 - side) e)
+          end w
+        end in
+      of_list (option inst1_ty) (of_option inst1_ty (fun x -> x)) i in
+    t, i
 
   let fosign (sign : FOSign.t) : EConstr.t =
     failwith "TODO"
