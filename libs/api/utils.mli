@@ -27,6 +27,9 @@ val t_equal : env -> type_ -> type_ -> bool
 
 val einfer : env -> expr -> type_
 
+val direct_subforms : form -> form list
+val direct_subform : form -> int -> form
+
 val string_of_expr : expr -> string
 val string_of_form : form -> string
 val string_of_goal : goal -> string

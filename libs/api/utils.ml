@@ -93,6 +93,14 @@ let rec einfer (env : env) (e : expr) : type_ =
           fres
     end
 
+let direct_subforms = function
+  | `FTrue | `FFalse | `FPred _ -> []
+  | `FConn (_, fs) -> fs
+  | `FBind (_, _, _, f) -> [f]
+
+let direct_subform f i =
+  List.nth (direct_subforms f) i
+
 let biniou_unhash_dict = Bi_io.make_unhash [
   "TVar"; "TUnit"; "TProd"; "TOr"; "TRec";
   "EVar"; "EFun";
