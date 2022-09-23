@@ -83,7 +83,7 @@ let actema_tac (action_name : string) : unit tactic =
       | Some t -> t
     in
 
-    Import.proof hm proof
+    Import.proof sign hm proof
   end
 
 let actema_force_tac (action_name : string) : unit tactic =
@@ -95,10 +95,8 @@ let actema_force_tac (action_name : string) : unit tactic =
     let proof = Lwt_main.run (Client.action goal) in
     save_proof id proof;
 
-    Import.proof hm proof
+    Import.proof sign hm proof
   end
-
-let calltac_tac = calltac
 
 let test_tac : unit tactic =
   let open EConstr in

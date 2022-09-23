@@ -552,23 +552,26 @@ module Import = struct
     | Some sy -> symbol sy
 
   let sort_ty (s : EConstr.t) : EConstr.t =
-    let sort_name = Names.Constant.make1 (kername ["Actema; DnD"] "sort") in
+    let sort_name = Names.Constant.make1 (kername ["Actema"; "DnD"] "sort") in
     let sort = EConstr.mkConst sort_name in
     EConstr.mkApp (sort, [| s |])
 
-  let env_ty : EConstr.t =
+  let env_ty () : EConstr.t =
     let open Trm in
     let open EConstr in
     dprod "s" nat (mkArrowR nat (sort_ty (mkRel 0)))
   
-  let clos_ty : EConstr.t =
+  let clos_ty () : EConstr.t =
     let open EConstr in
-    mkArrowR env_ty (mkArrowR env_ty (sort_ty (mkRel 0)))
+    mkArrowR (env_ty ()) (mkArrowR (env_ty ()) (sort_ty (mkRel 0)))
   
-  let inst1_ty : EConstr.t =
-    Trm.(sigT "s" nat clos_ty)
+  let inst1_ty () : EConstr.t =
+    Trm.(sigT "s" nat (clos_ty ()))
 
-  let itrace (sign : FOSign.t) (env : Fo_t.env) (itr : Logic_t.itrace) : EConstr.t * EConstr.t =
+  let itrace (sign : FOSign.t) (env : Fo_t.env)
+      (lp : int list) (rp : int list)
+      (lf : Logic_t.form) (rf : Logic_t.form)
+      (itr : Logic_t.itrace) : EConstr.t * EConstr.t =
     let focus, inst = Stdlib.List.split itr in
     let boollist_of_intlist =
       Stdlib.List.map (fun n -> if n = 0 then false else true) in
@@ -576,16 +579,35 @@ module Import = struct
     let i =
       let open EConstr in
       let open Trm in
+      let rec filtered_quant acc itr lp rp lf rf =
+        begin match itr with
+        | [] -> acc
+        | (side, _) as step :: subitr ->
+            let p, f = if side = 0 then lp, lf else rp, rf in
+            match p with [] -> acc | i :: subp ->
+            let subf = direct_subform f i in
+            let lp, rp, lf, rf =
+              if side = 0
+              then subp, subf, rp, rf
+              else lp, lf, subp, subf in
+            begin match f with
+            | `FBind _ ->
+                filtered_quant (acc @ [step]) subitr lp lf rp rf
+            | _ ->
+                filtered_quant acc subitr lp lf rp rf
+            end
+        end in
       let i =
-        itr |> List.map begin fun (side, w) ->
+        filtered_quant [] itr lp rp lf rf |>
+        List.map begin fun (side, w) ->
           Option.map begin fun (le1, le2, e) ->
             let lenv = if side = 0 then le2 else le1 in
             let ty = infer_sort sign (Utils.Vars.push_lenv env lenv) e in
             let s = nat_of_int (sort_index sign ty) in
-            existT "s" nat clos_ty s (expr sign env lenv (1 - side) e)
+            existT "s" nat (clos_ty ()) s (expr sign env lenv (1 - side) e)
           end w
         end in
-      of_list (option inst1_ty) (of_option inst1_ty (fun x -> x)) i in
+      of_list (option (inst1_ty ())) (of_option (inst1_ty ()) (fun x -> x)) i in
     t, i
 
   let fosign (sign : FOSign.t) : EConstr.t =
@@ -613,7 +635,7 @@ module Import = struct
   exception UnexpectedIntroVariant of int
   exception UnexpectedDnD
 
-  let action (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
+  let action (sign : FOSign.t) (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
              (ipat : Logic_t.intro_pat) (a : Logic_t.action) : hidmap tactic =
     let open Proofview.Monad in
     match a with
@@ -715,7 +737,7 @@ module Import = struct
         | _ ->
             raise (UnsupportedAction a)
         end
-    | `ALink (src, dst, itrace) ->
+    | `ALink (src, dst, itr) ->
         begin match (src, src.ctxt.kind), (dst, dst.ctxt.kind) with
 
         (* Forward DnD *)
@@ -737,16 +759,26 @@ module Import = struct
             let gp =
               concl.sub |> boollist_of_intlist |> Trm.boollist in
             
-            let t =
-              Stdlib.List.(itrace |> split |> fst
-                                  |> boollist_of_intlist |> Trm.boollist) in
-            
-            let i =
-              let kname = kername ["Actema"; "DnD"] "empty_inst" in
-              EConstr.mkConst (Names.Constant.make1 kname) in
+            let t, i =
+              let lp = hyp.sub in
+              let rp = concl.sub in
+              let lf = (Utils.get_hyp goal hyp.ctxt.handle).h_form in
+              let rf = goal.g_concl in
+              itrace sign goal.g_env lp rp lf rf itr in
+            Goal.enter begin fun cenv ->
+              let log = Log.econstr (Goal.env cenv) (Goal.sigma cenv) in
+              log h;
+              log hp;
+              log gp;
+              log t;
+              log i;
+              return ()
+            end >>= fun _ ->
 
             let open Proofview.Monad in
-            calltac "back" [h; hp; gp; t; i] >>= fun _ ->
+            let back = kername ["Actema"; "DnD"] "back" in
+            (* calltac back [h; hp; gp; t; i] >>= fun _ -> *)
+            calltac back [h; hp; gp; t; EConstr.mkConst (Names.Constant.make1 (kername ["Actema"; "DnD"] "empty_inst"))] >>= fun _ ->
             return hm
 
         | _ -> raise UnexpectedDnD
@@ -754,16 +786,16 @@ module Import = struct
     | _ ->
         raise (UnsupportedAction a)
 
-  let rec proof (hm : hidmap) (t : Logic_t.proof) : unit tactic =
+  let rec proof (sign : FOSign.t) (hm : hidmap) (t : Logic_t.proof) : unit tactic =
     let open Proofview.Monad in
     match t with
     | `PNode (a, goal, ipat, subs) ->
         Goal.enter begin fun coq_goal ->
-          action hm goal coq_goal ipat a >>= fun hm ->
+          action sign hm goal coq_goal ipat a >>= fun hm ->
           if subs = [] then 
             Tacticals.tclIDTAC
           else
-            let subs_tacs = Stdlib.List.map (proof hm) subs in
+            let subs_tacs = Stdlib.List.map (proof sign hm) subs in
             Proofview.tclDISPATCH subs_tacs
         end
 end

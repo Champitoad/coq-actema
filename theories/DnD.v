@@ -64,8 +64,6 @@ Defined.
 Definition FOsign :=
   {ts : ls & (list (cst ts) * (list (pst ts)))%type}.
 
-Section FO.
-
 (* ce qui est donné *)
 Definition sfo : FOsign.
 exists lsar.
@@ -2237,5 +2235,4 @@ Lemma sf3_corr :
  by intros l ist h1 h2 *; apply (sf3_corr_l l ist 0 h1 I).
 Qed.
  *)
-
-End FO.
+ 

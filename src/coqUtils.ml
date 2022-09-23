@@ -52,7 +52,7 @@ let construct_kname env evd (t : EConstr.t) : Names.KerName.t =
 let ind_kname evd t =
   EConstr.destInd evd t |> fst |> fst |> Names.MutInd.canonical
 
-let calltac (tacname : string) (args : EConstr.constr list) : unit tactic =
+let calltac (tacname : Names.KerName.t) (args : EConstr.constr list) : unit tactic =
   let open Ltac_plugin in
   let open Tacexpr in
   let open Tacinterp in
@@ -61,7 +61,7 @@ let calltac (tacname : string) (args : EConstr.constr list) : unit tactic =
   let ltac_call tac (args:glob_tactic_arg list) =
     CAst.make @@ TacArg (TacCall (CAst.make (ArgArg(Loc.tag @@ Lazy.force tac),args)))
   in
-  let f = lazy (kername ["Actema"; "DnD"] tacname) in
+  let f = lazy tacname in
   let fold arg (i, vars, lfun) =
     let id = Id.of_string ("x" ^ string_of_int i) in
     let x = Reference (ArgVar CAst.(make id)) in
@@ -72,7 +72,8 @@ let calltac (tacname : string) (args : EConstr.constr list) : unit tactic =
   try
     Tacinterp.eval_tactic_ist ist (ltac_call f args)
   with Not_found ->
-    let _ = Log.error (Printf.sprintf "Could not find tactic \"%s\"" tacname) in
+    let name = Names.KerName.to_string tacname in
+    let _ = Log.error (Printf.sprintf "Could not find tactic \"%s\"" name) in
     Proofview.Monad.return ()
 
 module Trm = struct
@@ -188,12 +189,13 @@ module Trm = struct
     mkApp (existT, [| ty; lambda x ty p; w; t |])
   
   let none_name : Names.constructor =
-    option_name, 1
-  let none =
-    mkConstruct none_name
+    option_name, 2
+  let none ty =
+    let none = mkConstruct none_name in
+    mkApp (none, [| ty |])
 
   let some_name : Names.constructor =
-    option_name, 2
+    option_name, 1
   let some ty t =
     let some = mkConstruct some_name in
     mkApp (some, [|ty; t|])
@@ -239,6 +241,6 @@ module Trm = struct
   
   let of_option ty cast o =
     match o with
-    | None -> none
+    | None -> none ty
     | Some x -> some ty (cast x)
 end

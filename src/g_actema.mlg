@@ -21,11 +21,6 @@ TACTIC EXTEND actema_force_tactic
   { Actema_main.actema_force_tac "default" }
 END
 
-TACTIC EXTEND calltac_tactic
-| [ "calltac" string(tacname) constr_list(args) ] ->
-  { Actema_main.calltac_tac tacname args }
-END
-
 TACTIC EXTEND test_tactic
 | [ "test" ] ->
   { Actema_main.test_tac }
