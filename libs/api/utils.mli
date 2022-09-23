@@ -9,6 +9,10 @@ module Uid : sig
   val fresh : unit -> unit -> t
 end with type t = uid
 
+module LEnv : sig
+  val exists : lenv -> vname -> bool
+end
+
 module Vars : sig
   val get : env -> vname -> bvar option
   val push : env -> name * bvar -> env

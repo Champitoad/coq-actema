@@ -14,6 +14,13 @@ end with type t = Logic_t.uid = struct
     fun () -> incr count; !count
 end
 
+module LEnv = struct
+  let exists lenv (x, i) =
+    (lenv |>
+     List.filter (fun (y, _) -> x = y) |>
+     List.length) > i
+end
+
 module Vars = struct
   let fresh = Uid.fresh ()
 
