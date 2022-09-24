@@ -244,3 +244,17 @@ module Trm = struct
     | None -> none ty
     | Some x -> some ty (cast x)
 end
+
+module Goal = struct
+  include Goal
+
+  let hyps_names (goal : Goal.t) =
+    hyps goal |> Context.Named.to_vars
+  
+  let fresh_name ?(basename = "H") =
+    let base_name = Names.Id.of_string basename in
+    fun goal ->
+      let hyps_names = hyps_names goal in
+      fun () ->
+        Namegen.next_ident_away base_name hyps_names
+end

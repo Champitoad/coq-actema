@@ -618,9 +618,6 @@ module Import = struct
   let fosign (sign : FOSign.t) : EConstr.t =
     failwith "TODO"
 
-  let get_hyps_names (coq_goal : Goal.t) =
-    Goal.hyps coq_goal |> Context.Named.to_vars
-
   let mk_or_and_intro_pattern (pat : Names.variable list list) : Tactypes.or_and_intro_pattern =
     let open Tactypes in
     let disj_conj =
@@ -658,9 +655,7 @@ module Import = struct
             return hm
         | `FConn (`Imp, _) | `FConn (`Not, _) ->
             (* Generate fresh Coq identifier for intro *)
-            let base_name = Names.Id.of_string "H" in
-            let hyps_names = get_hyps_names coq_goal in
-            let name = Namegen.next_ident_away base_name hyps_names in
+            let name = Goal.fresh_name coq_goal () in
             (* Apply intro *)
             let pat = mk_intro_patterns [name] in
             Tactics.intro_patterns false pat >>= fun _ ->
@@ -699,7 +694,7 @@ module Import = struct
             (dest_ipat : Logic_t.intro_pat -> Logic_t.uid * Logic_t.uid)
             : hidmap tactic =
           (* Generate fresh Coq identifiers for destruct *)
-          let hyps_names = get_hyps_names coq_goal in
+          let hyps_names = Goal.hyps_names coq_goal in
           let name1 = Namegen.next_ident_away name hyps_names in
           let name2 = Namegen.next_ident_away name (Names.Id.Set.add name1 hyps_names) in
           (* Apply destruct *)
@@ -743,11 +738,54 @@ module Import = struct
             raise (UnsupportedAction a)
         end
     | `ALink (src, dst, itr) ->
+
+        let boollist_of_intlist =
+          Stdlib.List.map (fun n -> if n = 0 then false else true) in
+
         begin match (src, src.ctxt.kind), (dst, dst.ctxt.kind) with
 
         (* Forward DnD *)
-        | (_, `Hyp), (_, `Hyp) ->
-            raise (UnsupportedAction a)
+        | (hyp1, `Hyp), (hyp2, `Hyp) ->
+            let h1 =
+              let name = UidMap.find hyp1.ctxt.handle hm in
+              EConstr.mkVar name in
+            let h2 =
+              let name = UidMap.find hyp2.ctxt.handle hm in
+              EConstr.mkVar name in
+            let h3, hm =
+              let name = Goal.fresh_name ~basename:"F" coq_goal () in
+              let id = match ipat with
+                       | [[id]] -> id
+                       | _ -> raise (UnexpectedIntroPattern ipat) in
+              EConstr.mkVar name, UidMap.add id name hm in
+
+            let hp1 =
+              hyp1.sub |> boollist_of_intlist |> Trm.boollist in
+            let hp2 =
+              hyp2.sub |> boollist_of_intlist |> Trm.boollist in
+            
+            let t, i =
+              let lp = hyp1.sub in
+              let rp = hyp2.sub in
+              let lf = (Utils.get_hyp goal hyp1.ctxt.handle).h_form in
+              let rf = (Utils.get_hyp goal hyp2.ctxt.handle).h_form in
+              itrace sign goal.g_env lp rp lf rf itr in
+            
+            let log_trace () =
+              let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+              log h1;
+              log h2;
+              log h3;
+              log hp1;
+              log hp2;
+              log t;
+              log i in
+            log_trace ();
+
+            let open Proofview.Monad in
+            let forw = kername ["Actema"; "DnD"] "forward" in
+            calltac forw [h1; h2; h3; hp1; hp2; t; i] >>= fun _ ->
+            return hm
 
         (* Backward DnD *)
         | (hyp, `Hyp), (concl, `Concl)
@@ -755,9 +793,6 @@ module Import = struct
             let h =
               let id = UidMap.find hyp.ctxt.handle hm in
               EConstr.mkVar id in
-
-            let boollist_of_intlist =
-              Stdlib.List.map (fun n -> if n = 0 then false else true) in
 
             let hp =
               hyp.sub |> boollist_of_intlist |> Trm.boollist in
@@ -771,17 +806,14 @@ module Import = struct
               let rf = goal.g_concl in
               itrace sign goal.g_env lp rp lf rf itr in
             
-            let log_trace =
-              Goal.enter begin fun cenv ->
-                let log t = Log.econstr (Goal.env cenv) (Goal.sigma cenv) t; Log.str "" in
-                log h;
-                log hp;
-                log gp;
-                log t;
-                log i;
-                return ()
-              end in
-            log_trace >>= fun _ ->
+            let log_trace () =
+              let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+              log h;
+              log hp;
+              log gp;
+              log t;
+              log i; in
+            (* log_trace (); *)
 
             let open Proofview.Monad in
             let back = kername ["Actema"; "DnD"] "back" in

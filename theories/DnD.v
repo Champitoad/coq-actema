@@ -1807,7 +1807,8 @@ last  assumption;
           try exact tt; rewrite /= /cT /cB ;
           rereify_goal; apply simpl_corr; rewrite /simpl /cT /cB /coerce ?ppce;
           try exact tt ]);
-  rewrite /trs /sl /ts /sfo ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym
+  rewrite /trs /sl /ts /sfo ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym;
+  try by apply I
   end. 
 
 
@@ -1821,7 +1822,7 @@ Ltac forward h1 h2 h3 hp1 hp2 t i :=
   reify_hyp hp2 h2';
   match goal with
   |  h1' : (coerce (@nil nat) ?hc1 _) ,
-     h2' :  (coerce (@nil nat) ?hc2 _) |- _  =>
+     h2' : (coerce (@nil nat) ?hc2 _) |- _  =>
            move:
            (f3_corr t i (@nil nat) hc1 tt
                     (@nil nat) hc2 tt h1' h2') => h3
@@ -1851,7 +1852,7 @@ Goal (A -> B) ->(B/\A) ->  B /\ A.
   intros b c.
 
 
-  forward b c d (cons false nil)  (cons true nil) (cons true (cons false nil)) empty.
+  forward c b d   (cons true nil) (cons false nil) (cons true (cons false nil)) empty.
 Abort.
 
 
