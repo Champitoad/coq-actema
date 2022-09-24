@@ -72,7 +72,7 @@ let sign = Translate.peano
 
 let actema_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
-    let goal, hm = Export.goal sign coq_goal in
+    let sign, goal, hm = Export.goal sign coq_goal in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
 
     let proof =
@@ -88,7 +88,7 @@ let actema_tac (action_name : string) : unit tactic =
 
 let actema_force_tac (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
-    let goal, hm = Export.goal sign coq_goal in
+    let sign, goal, hm = Export.goal sign coq_goal in
     Log.str (Utils.string_of_goal goal);
     let id = action_name, (goal.g_hyps, goal.g_concl) in
 
@@ -102,7 +102,6 @@ let test_tac : unit tactic =
   let open EConstr in
   Goal.enter begin fun g ->
     let env, sigma = Goal.(env g, sigma g) in
-    Log.econstr env sigma (Trm.natlist [0;1;2;3;7]);
-    Log.econstr env sigma (Trm.boollist [true;false;true]);
+    Log.econstr env sigma EConstr.(Trm.lambda "x" Trm.unit (mkRel 1));
     Proofview.Monad.return ()
   end

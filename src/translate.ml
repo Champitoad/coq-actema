@@ -453,7 +453,7 @@ module Export = struct
           Environ.constant_type_in coq_env (Univ.in_punivs c) |>
           EConstr.of_constr in
         es |>
-        add_sort (c |> Names.Constant.to_string) (Cst c) ty |>
+        (* add_sort (c |> Names.Constant.to_string) (Cst c) ty |> *)
         add_func name (Cst c) ty |>
         add_pred name (Cst c) ty
       end coq_env (env, sign) in
@@ -463,7 +463,7 @@ module Export = struct
         let name = id |> Names.Id.to_string in
         let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
         es |>
-        add_sort name (Var id) ty |>
+        (* add_sort name (Var id) ty |> *)
         add_strict_func name (Var id) ty |>
         add_pred name (Var id) ty |>
         add_var name ty
@@ -485,7 +485,7 @@ module Export = struct
         (hyps, hm)
     end coq_env ~init:([], UidMap.empty)
 
-  let goal (sign : FOSign.t) (goal : Goal.t) : Logic_t.goal * hidmap =
+  let goal (sign : FOSign.t) (goal : Goal.t) : FOSign.t * Logic_t.goal * hidmap =
     let coq_env = Goal.env goal in
     let evd = Goal.sigma goal in
     let concl = Goal.concl goal in
@@ -501,7 +501,7 @@ module Export = struct
     let g_concl : Logic_t.form =
       dest_form ({ e with sign }, concl) in
     
-    Logic_t.{ g_env; g_hyps; g_concl }, hm
+    sign, Logic_t.{ g_env; g_hyps; g_concl }, hm
 end
 
 (* -------------------------------------------------------------------- *)
@@ -523,27 +523,6 @@ module Import = struct
     match einfer env e with
     | `TVar (name, _) -> name
     | _ -> failwith "Non-atomic sort type"
-  
-  let rec expr (sign : FOSign.t)
-      (env : Logic_t.env) (lenv : Logic_t.lenv) (side : int)
-      (e : Fo_t.expr) : EConstr.t =
-    match e with
-    | `EVar (x, i) ->
-        if LEnv.exists lenv (x, i) then
-          let s = sort_index sign (infer_sort sign (Vars.push_lenv env lenv) e) in
-          let index : int =
-            List.(lenv |> split |> fst |> nth_index i x) in
-          EConstr.(mkApp (mkRel side, Trm.[| nat_of_int s; nat_of_int index |]))
-        else
-          EConstr.mkVar (Names.Id.of_string x)
-    | `EFun (f, args) ->
-        let head = symbol (FOSign.SymbolMap.dnif f sign.symbols.s_funcs) in
-        let args = List.map (expr sign env lenv side) args in
-        EConstr.mkApp (head, Array.of_list args)
-
-  let sorts (sign : FOSign.t) : EConstr.t =
-    sign.symbols.s_sorts |> FOSign.SymbolMap.keys |>
-    Trm.of_list Trm.type_ symbol
 
   let sort (sign : FOSign.t) (n : int) : EConstr.t =
     let sorts = sign.symbols.s_sorts |> FOSign.SymbolMap.keys in
@@ -552,21 +531,47 @@ module Import = struct
     | Some sy -> symbol sy
 
   let sort_ty (s : EConstr.t) : EConstr.t =
-    let sort_name = Names.Constant.make1 (kername ["Actema"; "DnD"] "sort") in
-    let sort = EConstr.mkConst sort_name in
-    EConstr.mkApp (sort, [| s |])
+    let name = Names.Constant.make1 (kername ["Actema"; "DnD"] "sort") in
+    let ty = EConstr.mkConst name in
+    EConstr.mkApp (ty, [| s |])
 
   let env_ty () : EConstr.t =
-    let open Trm in
-    let open EConstr in
-    dprod "s" nat (mkArrowR nat (sort_ty (mkRel 0)))
+    let name = Names.Constant.make1 (kername ["Actema"; "DnD"] "env") in
+    let ty = EConstr.mkConst name in
+    ty
   
   let clos_ty () : EConstr.t =
     let open EConstr in
-    mkArrowR (env_ty ()) (mkArrowR (env_ty ()) (sort_ty (mkRel 0)))
+    let sort_s = sort_ty (mkVar (Names.Id.of_string "s")) in
+    mkArrowR (env_ty ()) (mkArrowR (env_ty ()) sort_s)
   
   let inst1_ty () : EConstr.t =
-    Trm.(sigT "s" nat (clos_ty ()))
+    let name = Names.Constant.make1 (kername ["Actema"; "DnD"] "inst1") in
+    let ty = EConstr.mkConst name in
+    ty
+  
+  let rec expr (sign : FOSign.t)
+      (env : Logic_t.env) (lenv : Logic_t.lenv) (side : int)
+      (e : Fo_t.expr) : EConstr.t =
+    match e with
+    | `EVar (x, i) ->
+        let body =
+          if LEnv.exists lenv (x, i) then
+            let s = sort_index sign (infer_sort sign (Vars.push_lenv env lenv) e) in
+            let index : int =
+              List.(lenv |> split |> fst |> nth_index i x) in
+            EConstr.(mkApp (mkRel (side + 1), Trm.[| nat_of_int s; nat_of_int index |]))
+          else
+            EConstr.mkVar (Names.Id.of_string x) in
+        Trm.(lambda "env1" (env_ty ()) (lambda "env2" (env_ty ()) body))
+    | `EFun (f, args) ->
+        let head = symbol (FOSign.SymbolMap.dnif f sign.symbols.s_funcs) in
+        let args = List.map (expr sign env lenv side) args in
+        EConstr.mkApp (head, Array.of_list args)
+
+  let sorts (sign : FOSign.t) : EConstr.t =
+    sign.symbols.s_sorts |> FOSign.SymbolMap.keys |>
+    Trm.of_list Trm.type_ symbol
 
   let itrace (sign : FOSign.t) (env : Fo_t.env)
       (lp : int list) (rp : int list)
@@ -592,7 +597,7 @@ module Import = struct
               else lp, lf, subp, subf in
             begin match f with
             | `FBind _ ->
-                filtered_quant (acc @ [step]) subitr lp lf rp rf
+                filtered_quant (step :: acc) subitr lp lf rp rf
             | _ ->
                 filtered_quant acc subitr lp lf rp rf
             end
@@ -765,20 +770,22 @@ module Import = struct
               let lf = (Utils.get_hyp goal hyp.ctxt.handle).h_form in
               let rf = goal.g_concl in
               itrace sign goal.g_env lp rp lf rf itr in
-            Goal.enter begin fun cenv ->
-              let log = Log.econstr (Goal.env cenv) (Goal.sigma cenv) in
-              log h;
-              log hp;
-              log gp;
-              log t;
-              log i;
-              return ()
-            end >>= fun _ ->
+            
+            let log_trace =
+              Goal.enter begin fun cenv ->
+                let log t = Log.econstr (Goal.env cenv) (Goal.sigma cenv) t; Log.str "" in
+                log h;
+                log hp;
+                log gp;
+                log t;
+                log i;
+                return ()
+              end in
+            log_trace >>= fun _ ->
 
             let open Proofview.Monad in
             let back = kername ["Actema"; "DnD"] "back" in
-            (* calltac back [h; hp; gp; t; i] >>= fun _ -> *)
-            calltac back [h; hp; gp; t; EConstr.mkConst (Names.Constant.make1 (kername ["Actema"; "DnD"] "empty_inst"))] >>= fun _ ->
+            calltac back [h; hp; gp; t; i] >>= fun _ ->
             return hm
 
         | _ -> raise UnexpectedDnD

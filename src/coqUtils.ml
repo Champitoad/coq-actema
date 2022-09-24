@@ -133,8 +133,8 @@ module Trm = struct
     mkInd (Names.MutInd.make1 unit_kname, 0)
   
   let lambda x ty body =
-    let x = Context.nameR (Names.Id.of_string x) in
-    mkLambda (x, ty, body)
+    let x = Context.annotR (Names.Id.of_string x) in
+    mkNamedLambda x ty body
   
   let dprod x ty body =
     let x = Context.nameR (Names.Id.of_string x) in

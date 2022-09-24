@@ -16,12 +16,12 @@ Lemma test_eq (n m : nat) : (A -> A) /\ 3 + 4 * 5 < 25.
   lia.
 Qed.
 
-Lemma yolo (U : Set) (t u : U) (R : Prop) (P : U -> Prop) (f : U -> U -> U) :
+(* Lemma yolo (U : Set) (t u : U) (R : Prop) (P : U -> Prop) (f : U -> U -> U) :
   P(t) -> f t u = f u t -> t = u -> P(u) /\ R.
 Proof.
   intros.
   actema.
-Admitted.
+Admitted. *)
 
 Lemma peano_inj : forall x : nat, 0 = S x.
 Proof.
@@ -34,9 +34,10 @@ Proof.
   actema.
 Admitted.
 
-Lemma exintro (A : Set) (P : A -> Prop) (t : A) :
-  P t -> exists x, P x.
+Lemma fa_ex (A : Set) (P : nat -> Prop) (t : nat) :
+  (forall y, P y) -> exists x, P x.
 Proof.
   intros.
-  actema.
-Admitted.
+  actema; simpl.
+  exists 0; auto.
+Qed.

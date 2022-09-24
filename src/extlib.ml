@@ -1,3 +1,7 @@
+let identity = fun x -> x
+let (|>>) f g = fun x -> g (f x)
+let (<<|) f g = fun x -> f (g x)
+
 module BiMap (S : Map.OrderedType) (T : Map.OrderedType) = struct
   module SMap = Map.Make(S)
   module TMap = Map.Make(T)
@@ -64,4 +68,7 @@ module List = struct
       | [] -> raise Not_found
       end
     in aux 0 n x l
+
+  let to_string ?(sep = "; ") ?(left = "[") ?(right = "]") print =
+    List.map print |>> String.concat sep |>> fun s -> left ^ s ^ right
 end

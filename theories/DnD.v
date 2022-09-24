@@ -1844,7 +1844,6 @@ move: (simpl_fstep (@nil nat) r tt h3) => {h3} h3; simpl in h3 end end.
 Definition empty : inst'.
 apply nil.
 Defined.
-Ltac test x  := move: x => x.
 
 Parameter A B C D : Prop.
 
@@ -2141,7 +2140,7 @@ Ltac reify_hyp_eq l h :=
   For that we need to translate the o3 back into a cx *)
 
 
-
+  
 Definition empty_inst : inst'.
 apply nil.
 Defined.

@@ -1,3 +1,7 @@
+val identity : 'a -> 'a
+val (|>>) : ('a -> 'b) -> ('b -> 'c) -> 'a -> 'c
+val (<<|) : ('b -> 'c) -> ('a -> 'b) -> 'a -> 'c
+
 module BiMap (K : Map.OrderedType) (V : Map.OrderedType) : sig
   type t
 
@@ -22,4 +26,8 @@ module List : sig
   include module type of Stdlib.List
 
   val nth_index : int -> 'a -> 'a t -> int
+
+  val to_string :
+    ?sep : string -> ?left : string -> ?right : string ->
+    ('a -> string) -> 'a t -> string 
 end
