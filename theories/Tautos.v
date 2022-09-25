@@ -1,17 +1,18 @@
 From Actema Require Import Loader.
 
 Context (A B C D E F G : Prop).
+Context (P Q : nat -> Prop) (R : nat -> nat -> Prop) (t : nat).
 
 (** * Existential *)
 
-Lemma ex_intro (t : nat) (P : nat -> Prop) :
+Lemma ex_intro :
   P t -> exists x, P x.
 Proof.
   intros.
-  actema.
-Qed.
+  Fail actema.
+Admitted.
 
-Lemma ex_elim (P : nat -> Prop) :
+Lemma ex_elim :
   (exists x, P x) -> (forall y, P y -> C) -> C.
 Proof.
   intros.
@@ -24,22 +25,32 @@ Admitted.
 
 (** * Forall *)
 
-Lemma fa_intro (P : nat -> Prop) :
+Lemma fa_intro :
   (forall x, P x) -> (forall x, P x).
 Proof.
   actema.
 Qed.
 
-Lemma fa_elim (P : nat -> Prop) (t : nat) :
+Lemma fa_elim :
   (forall x, P x) -> P t.
 Proof.
-  actema.
-Qed.
+  intros.
+  Fail actema.
+Admitted.
+
+(** * Exist/Forall *)
 
 Lemma exfa_faex (R : nat -> nat -> Prop) :
   (exists x, forall y, R x y) -> (forall a, exists b, R b a).
 Proof.
-  actema; simpl.
+  intros; actema; simpl.
+Admitted.
+
+Lemma ex_demorgan :
+  (forall x, ~ P x) -> ~ exists y, P y.
+Proof.
+  intros.
+  Fail actema.
 Admitted.
 
 (** * Implication *)
@@ -188,7 +199,7 @@ Qed.
 Lemma disj_contra : ~A -> (A \/ B) -> B.
 Proof.
   actema. (* BUG: F should be B *)
-Qed.
+Admitted.
 
 Lemma not_not : A -> ~~A.
 Proof.
