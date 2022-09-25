@@ -40,7 +40,7 @@ Lemma exfa_faex (R : nat -> nat -> Prop) :
   (exists x, forall y, R x y) -> (forall a, exists b, R b a).
 Proof.
   actema; simpl.
-Admitted.ss
+Admitted.
 
 (** * Implication *)
 
