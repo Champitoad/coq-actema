@@ -2,6 +2,46 @@ From Actema Require Import Loader.
 
 Context (A B C D E F G : Prop).
 
+(** * Existential *)
+
+Lemma ex_intro (t : nat) (P : nat -> Prop) :
+  P t -> exists x, P x.
+Proof.
+  intros.
+  actema.
+Qed.
+
+Lemma ex_elim (P : nat -> Prop) :
+  (exists x, P x) -> (forall y, P y -> C) -> C.
+Proof.
+  intros.
+  back H0
+    (false :: true :: nil)%list
+    (@nil bool)
+    (false :: false :: nil)%list
+    (@None inst1 :: nil )%list.
+Admitted.
+
+(** * Forall *)
+
+Lemma fa_intro (P : nat -> Prop) :
+  (forall x, P x) -> (forall x, P x).
+Proof.
+  actema.
+Qed.
+
+Lemma fa_elim (P : nat -> Prop) (t : nat) :
+  (forall x, P x) -> P t.
+Proof.
+  actema.
+Qed.
+
+Lemma exfa_faex (R : nat -> nat -> Prop) :
+  (exists x, forall y, R x y) -> (forall a, exists b, R b a).
+Proof.
+  actema; simpl.
+Admitted.ss
+
 (** * Implication *)
 
 Lemma id : A -> A.

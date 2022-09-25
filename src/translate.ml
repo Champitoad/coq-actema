@@ -813,7 +813,7 @@ module Import = struct
               log gp;
               log t;
               log i; in
-            (* log_trace (); *)
+            log_trace ();
 
             let open Proofview.Monad in
             let back = kername ["Actema"; "DnD"] "back" in
