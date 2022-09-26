@@ -271,7 +271,9 @@ module Export = struct
   and dest_imp : fdest = fun ({ env; evd; _ } as e, t) ->
     let x, t1, t2 = EConstr.destProd evd t in
     if not (is_imp (env, evd) x t1 t2) then raise Constr.DestKO;
-    `FConn (`Imp, [dest_form (e, t1); dest_form (e, t2)])
+    let env =
+      (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env) in
+    `FConn (`Imp, [dest_form (e, t1); dest_form ({ e with env }, t2)])
 
   and dest_and : fdest = fun ({ env; evd; _ } as e, t) ->
     let f, args  = EConstr.destApp evd t in

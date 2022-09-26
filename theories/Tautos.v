@@ -1,7 +1,19 @@
 From Actema Require Import Loader.
 
 Context (A B C D E F G : Prop).
-Context (P Q : nat -> Prop) (R : nat -> nat -> Prop) (t : nat).
+Context (P Q : nat -> Prop) (R S : nat -> nat -> Prop) (t : nat).
+
+(** * Kaustuv's challenge *)
+
+Lemma kchal :
+  (forall x y, R x y \/ R y x) ->
+  (forall x y, S x y -> S y x -> x = y) ->
+  (forall x y, R x y -> S x y) ->
+  forall x y, S x y -> R x y.
+Proof.
+  intros.
+  Fail actema.
+Admitted.
 
 (** * Existential *)
 
