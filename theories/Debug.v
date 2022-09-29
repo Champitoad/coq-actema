@@ -14,19 +14,19 @@ Defined.
 
 Goal (forall x : nat, x = 3) -> 2 = 3.
   intro h.
+  Set Printing All.
   back h (cons false nil)(@nil bool)(cons false nil)
        (cons (Some instc2) nil).
 Undo.
-Fail actema_force.
+actema.
 Abort.
-
 
 Goal 2=3 -> (exists x : nat, x = 3).
   intro h.
   back h (@nil bool)(cons false nil)(cons true nil)
        (cons (Some instc2) nil).
   Undo.
-  Fail actema_force.
+  actema.
 Abort.
 
 Definition instremap : inst1.
@@ -36,12 +36,12 @@ apply f1.
 exact 0.
 Defined.
 
-Goal (exists x : nat, x = 3) -> (exists x : nat, x = 3).
+Goal (exists x : nat, x = 3) -> (exists y : nat, y = 3).
 intro h.
 back h (cons false nil)(cons false nil)(cons false (cons true nil))
      (cons (Some instremap) nil).
 Undo.
-actema_force.
+actema.
 Abort.
 
 
@@ -51,5 +51,5 @@ Goal  (exists x : nat, x = 3)-> (exists (x:nat) y, x = y).
      (cons false (cons true (cons true nil)))
      (cons (Some instremap) (cons (Some instc3) nil)).
 Undo.
-Fail actema_force.  
+actema.  
 Abort.

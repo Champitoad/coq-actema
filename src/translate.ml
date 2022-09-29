@@ -552,24 +552,25 @@ module Import = struct
     let ty = EConstr.mkConst name in
     ty
   
-  let rec expr (sign : FOSign.t)
+  let expr (sign : FOSign.t)
       (env : Logic_t.env) (lenv : Logic_t.lenv) (side : int)
       (e : Fo_t.expr) : EConstr.t =
-    match e with
-    | `EVar (x, i) ->
-        let body =
-          if LEnv.exists lenv (x, i) then
-            let s = sort_index sign (infer_sort sign (Vars.push_lenv env lenv) e) in
-            let index : int =
-              List.(lenv |> split |> fst |> nth_index i x) in
-            EConstr.(mkApp (mkRel (side + 1), Trm.[| nat_of_int s; nat_of_int index |]))
-          else
-            EConstr.mkVar (Names.Id.of_string x) in
-        Trm.(lambda "env1" (env_ty ()) (lambda "env2" (env_ty ()) body))
-    | `EFun (f, args) ->
-        let head = symbol (FOSign.SymbolMap.dnif f sign.symbols.s_funcs) in
-        let args = List.map (expr sign env lenv side) args in
-        EConstr.mkApp (head, Array.of_list args)
+    let rec aux e =
+      match e with
+      | `EVar (x, i) ->
+            if LEnv.exists lenv (x, i) then
+              let s = sort_index sign (infer_sort sign (Vars.push_lenv env lenv) e) in
+              let index : int =
+                List.(lenv |> split |> fst |> nth_index i x) in
+              EConstr.(mkApp (mkRel (if side = 0 then 2 else 1), Trm.[| nat_of_int s; nat_of_int index |]))
+            else
+              EConstr.mkVar (Names.Id.of_string x)
+      | `EFun (f, args) ->
+          let head = symbol (FOSign.SymbolMap.dnif f sign.symbols.s_funcs) in
+          let args = List.map aux args in
+          EConstr.mkApp (head, Array.of_list args) in
+    let body = aux e in
+    Trm.(lambda "env1" (env_ty ()) (lambda "env2" (env_ty ()) body))
 
   let sorts (sign : FOSign.t) : EConstr.t =
     sign.symbols.s_sorts |> FOSign.SymbolMap.keys |>

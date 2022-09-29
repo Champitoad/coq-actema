@@ -21,8 +21,8 @@ Lemma ex_intro :
   P t -> exists x, P x.
 Proof.
   intros.
-  Fail actema.
-Admitted.
+  actema.
+Qed.
 
 Lemma ex_elim :
   (exists x, P x) -> (forall y, P y -> C) -> C.
@@ -32,7 +32,7 @@ Proof.
     (false :: true :: nil)%list
     (@nil bool)
     (false :: false :: nil)%list
-    (@None inst1 :: nil )%list.
+    (@None inst1 :: nil)%list.
 Admitted.
 
 (** * Forall *)
