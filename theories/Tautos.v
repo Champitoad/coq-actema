@@ -12,7 +12,20 @@ Lemma kchal :
   forall x y, S x y -> R x y.
 Proof.
   intros.
+  actema.
+  actema.
   Fail actema.
+  forward
+    H3
+    H1
+    f
+    (@nil bool)
+    (false :: false :: false :: nil)%list
+    (true :: true :: true :: nil)%list
+    (Some (existT (fun s : nat => env -> env -> sort s) 0 (fun _ _ : env => y))
+     :: Some
+    	  (existT (fun s : nat => env -> env -> sort s) 0 (fun _ _ : env => x))
+        :: nil)%list.
 Admitted.
 
 (** * Existential *)
@@ -28,12 +41,9 @@ Lemma ex_elim :
   (exists x, P x) -> (forall y, P y -> C) -> C.
 Proof.
   intros.
-  back H0
-    (false :: true :: nil)%list
-    (@nil bool)
-    (false :: false :: nil)%list
-    (@None inst1 :: nil)%list.
-Admitted.
+  actema.
+  auto.
+Qed.
 
 (** * Forall *)
 
@@ -41,14 +51,14 @@ Lemma fa_intro :
   (forall x, P x) -> (forall x, P x).
 Proof.
   actema.
-Qed.
+Admitted.
 
 Lemma fa_elim :
   (forall x, P x) -> P t.
 Proof.
   intros.
-  Fail actema.
-Admitted.
+  actema.
+Qed.
 
 (** * Exist/Forall *)
 
