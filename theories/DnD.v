@@ -590,6 +590,14 @@ Fixpoint b3 (l:trace)(ist:inst')(nh:ct)(hyp : cx nh)(hi : pp nh)
                          (cons s nh) (cons s n)
                          ((appist s f nh hi ng gi),hi))
                   ng goal gi)
+          | cons None ist =>
+              ex3 s
+                  (fun p =>
+                     (b3 l ist
+                         (cons s n) h
+                         (convert (cons s nh)(cons s n)
+                                  (p, hi))
+                         ng goal gi))
           | _ => bot3
           end
       | ex n s h =>
@@ -954,100 +962,74 @@ Lemma bf3_corr :
           (tr3 (f3 l ist n1 h1 i1 n2 h2 i2))).
 
 
+
 elim => [//=|[|] l hl]/=; split; try done;
-   try move: hl => [hl1 hl2].
+          try move: hl => [hl1 hl2].
 
-move => _ 
-[|s2 n2]
-[nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
-        |nh' P h|nh' h P|s' nh' h|s' nh' h|nh' t u|nh P v]//= hi
- [|sg ng]
- [ng'|ng'|ng' Q|ng' Q g|ng' g Q|ng' Q g|ng' g Q
- |ng' Q g|ng' g Q|sg' ng' g|sg' ng' g|ng' t' u'|ng' P' v'] gi //=;
- rewrite  /= ?convert_corr ?ppce//=; move => [-> h2] e//=.
-
-
-
-move => ist nh hyp hi ng
-            
-            [ng'|ng'|ng' Q|ng' Q g|ng' g Q|ng' Q g|ng' g Q
-            |ng' Q g|ng' g Q|ng' sg' g|ng' sg' g
-            |ng' sg' t u|ng' s P v] gi //=;
-rewrite /= ?ppce ?convert_corr //=; eauto;
-        try (by move => [h|h]; eauto);
-        try (by  move => [h1 h2]; split ; eauto).
-
-case: ist => [//=|[f|] ist]; first by eauto.
-by move => [w hw]; eauto.
-
-
-induction hyp; try done; rewrite /= convert_corr.
-move => [[ss e] p] tt.
-move: v  s1 s2 e tt p.
-rewrite -ss => v t t0; rewrite !trs_corr.
-by move => -> ->.
-
-
-move => ist n1 h1 i1 n2 h2 i2 hr1 hr2.
-move: h2 i2 hr2.
-move=>
+- move => _ 
+   [|s2 n2]
+   [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
+       |nh' P h|nh' h P|s' nh' h|s' nh' h|nh' t u|nh P v]//= hi
+   [|sg ng]
+   [ng'|ng'|ng' Q|ng' Q g|ng' g Q|ng' Q g|ng' g Q
+       |ng' Q g|ng' g Q|sg' ng' g|sg' ng' g|ng' t' u'|ng' P' v']
+   gi //=;
+  rewrite /= ?convert_corr ?ppce//=; move => [-> h2] e//=.
+- move => ist nh hyp hi ng
+          [ng'|ng'|ng' Q|ng' Q g|ng' g Q|ng' Q g|ng' g Q
+              |ng' Q g|ng' g Q|ng' sg' g|ng' sg' g
+              |ng' sg' t u|ng' s P v] gi //=;
+  rewrite /= ?ppce ?convert_corr //=; eauto;
+  try (by move => [h|h]; eauto);
+  try (by  move => [h1 h2]; split ; eauto).
+  * case: ist => [//=|[f|] ist]; first by eauto.
+    by move => [w hw]; eauto.
+  * induction hyp; rewrite //= convert_corr.
+    move => [[ss e] p] tt.
+    move: v  s1 s2 e tt p.
+    by rewrite -ss => v t t0; rewrite !trs_corr => -> ->.
+- move => ist n1 h1 i1 n2 h2 i2 hr1 hr2.
+  move: h2 i2 hr2 =>
         [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
         |nh' P h|nh' h P|nh' s h|nh' s h|nh' s t u
         |nh' s P v] //=P2 i2;
       rewrite ?convert_corr; eauto;
-try (by case: i2; eauto).
-move: P2 i2 hr1 => i2 pv.
-induction h1; try done; rewrite /= convert_corr.
-move: P v pv s1 s2; case: s; case: s0; try done;
+   try (by case: i2; eauto).
+  move: P2 i2 hr1 => i2 pv.
+  induction h1; try done; rewrite /= convert_corr.
+  move: P v pv s1 s2; case: s; case: s0; try done;
   rewrite /trs ?convert_corr ?eqnqtdec_refl; auto.
+      by   move => P v pv t t' <- _ <-.
+  move => m1 m2 P v p s1 s2 -> [mm].
+  by move : s1 s2; rewrite mm {m1 mm} eqnqtdec_refl /= => w s2 <-.
+- move => ist nh
+          [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
+              |nh' P h|nh' h P|nh' s h|nh' s h|nh' s t u
+              |nh' s P v] i1 //=;
+   rewrite ?convert_corr ?ppce  ?trs_corr //= => ng goal gi;
+   try (by intuition; eauto).
 
-by   move => P v pv t t' <- _ <-.
-move => m1 m2 P v p s1 s2 -> [mm].
-move : s1 s2; rewrite mm {m1 mm} eqnqtdec_refl /=.
-by move => w s2 <-.
+case: ist => [//=|[f|] ist]; first by eauto.
+  move => [p hp]; eauto.
+  move => hh [w hw]; apply (hl1 ist (s::nh') h (w,i1)); eauto.
+     by move: (hh w); rewrite trs_corr.
 
-
-move => ist nh [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
-               |nh' P h|nh' h P|nh' s h|nh' s h|nh' s t u
-               |nh' s P v] i1 //=;
- rewrite ?convert_corr ?ppce  ?trs_corr //= => ng goal gi;
-             try (by intuition; eauto).
-
-by case: ist => [//=|[f|] ist]; eauto.
-
-
-
-rewrite ?trs_corr.
-
-move => hh.
-
- move => [w hw]; eauto.
-
-apply (hl1 ist (s::nh') h (w,i1)); eauto.
-by move: (hh w); rewrite trs_corr.
-
-
-induction goal; try done;simpl.
-move => [[e h2] h3] h4.
-move: P s1 h2 h3 h4 ; rewrite -e ?trs_corr.
-move => P t0.
-rewrite trs_corr convert_corr.
-move => <- p -> //=.
-
-
-move => ist n1 [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h
-               |nh' h P|nh' P h|nh' h P|nh' s h|nh' s h
-               |nh' s t u|nh' s P v] /= 
+   induction goal; try done; move => /= [[e h2] h3] h4.
+  move: P s1 h2 h3 h4 ; rewrite -e ?trs_corr => P t0.
+  rewrite trs_corr convert_corr => <- p -> //=.
+- move => ist n1
+          [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h
+              |nh' h P|nh' P h|nh' h P|nh' s h|nh' s h
+              |nh' s t u|nh' s P v] /= 
          i1 n2 h2 i2 p1 p2 //=;
- rewrite ?convert_corr; try (by intuition; eauto).
-induction h2; try done; simpl.
-move => ss; move: P s1 p2; rewrite -ss; move: {ss} t u p1; case: s;
-        rewrite /trs /= ?trs_corr convert_corr ?eqnqtdec_refl.
-          by move =>t u -> P t0 h <-.
-by move => m t u ->P s1 h;
- rewrite ?eqnqtdec_refl /eq_rect_r /= => <-.
+  rewrite ?convert_corr; try (by intuition; eauto).
+  induction h2; try done; move => /= ss; move: P s1 p2.
+  rewrite -ss; move: {ss} t u p1; case: s;
+  rewrite /trs /= ?trs_corr convert_corr ?eqnqtdec_refl;
+    first by move =>t u -> P t0 h <-.
+  by move => m t u ->P s1 h;
+  rewrite ?eqnqtdec_refl /eq_rect_r /= => <-.
 Qed.
-
 
 
 
