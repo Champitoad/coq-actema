@@ -475,8 +475,284 @@ Eval compute in
     - A->B  for the focused formulas (meant to be A->A in practice)
     - two equalites for equality rewrites which should be two trivial
       reflexive equalities
-*)
+ *)
 
+
+Fixpoint b3 (l:trace)(ist:inst')(nh:ct)(hyp : cx nh)(hi : pp nh)
+         (ng : ct)(goal : cx ng)(gi : pp ng) : o3 :=
+  match l  with
+  | nil =>
+      match hyp, goal with
+      | (Hole nh' h), (Hole ng' g) =>
+          (Hol3  ((h (convert nh nh' hi))->
+                  (g (convert ng ng' gi))))
+      | _,_ => bot3
+      end
+  | (cons true l) =>
+      match goal return o3 with
+      | (property ng' s P v) =>
+          match hyp with
+          | (equality nh' s' t u) =>
+              andl3  
+                (Hol3 (s = s'/\((u (convert nh nh' hi))
+                       =(trs s s' (v (convert ng ng' gi))))))
+                (P (trs s' s (t (convert nh nh' hi)),
+                     (convert ng ng' gi)))
+          | _ => bot3
+          end
+
+      | (impl ng' h B) =>
+          (impl3 (f3 l ist nh hyp hi ng' h (convert ng ng' gi))
+                 (B (convert ng ng' gi)))
+
+      | (impr ng'  B g) =>
+          (impr3 (B (convert ng ng' gi))
+                 (b3 l ist nh hyp hi ng' g (convert ng ng' gi)))
+      | orl ng' g B =>
+          orl3 (b3 l ist nh hyp hi ng' g (convert ng ng' gi))
+               (B (convert ng ng' gi))
+      | orr ng' B g =>
+          orr3  (B (convert ng ng' gi))
+                (b3 l ist nh hyp hi ng' g (convert ng ng' gi))
+      | andl ng' g B =>
+          andl3 (b3 l ist nh hyp hi ng' g (convert ng ng' gi))
+               (B (convert ng ng' gi))
+      | andr ng' B g =>
+          andr3  (B (convert ng ng' gi))
+                 (b3 l ist nh hyp hi ng' g (convert ng ng' gi)) 
+      |  (fa ng' s g) =>
+               fa3 s (fun n=>
+                  (b3 l ist nh hyp hi (cons s ng') g
+                      (n, convert ng ng' gi))) 
+      | ex ng' s g =>
+          match ist with
+          | cons (Some f) ist =>
+              b3 l ist
+                 nh hyp hi
+                 (cons s ng') g
+                 (appist s f nh hi ng gi,
+                   (convert ng ng' gi))
+          |  cons None ist =>
+               ex3 s
+                 (fun p =>
+                    b3 l ist nh hyp hi
+                       (cons s ng') g
+                       (p, convert ng ng' gi))
+          | nil => bot3
+          end  
+                
+      | cTop _ => top3
+                     
+      | cBot _ => bot3  
+      | Hole _ _ => bot3
+      | _ => bot3
+      end
+  | (cons false l) =>
+      match hyp with
+          | (equality nh' s t u) =>
+              match goal with
+              | (property ng' s' P v) =>
+                  andl3
+                    (Hol3
+                    (s=s' /\ ((t (convert nh nh' hi))
+                     =(trs s' s (v (convert ng ng' gi))))))
+                    (P ((trs s s' (u (convert nh nh' hi))),
+                         (convert ng ng' gi)))
+          | _ => bot3
+              end
+
+        
+      | andl nh' h B =>
+           (b3 l ist nh' h (convert nh nh' hi)
+                    ng goal gi)
+      | andr nh' B h =>
+                 (b3 l ist nh' h (convert nh nh' hi)
+                     ng goal gi)
+      | orl nh' h B =>
+          andl3 (b3 l ist nh' h (convert nh nh' hi)
+                   ng goal gi)
+               ((B (convert nh nh' hi))->
+                (coerce ng goal gi))
+      | orr nh' B h =>
+          andr3 ((B (convert nh nh' hi))->
+                (coerce ng goal gi))
+               (b3 l ist nh' h (convert nh nh' hi)
+                   ng goal gi) 
+      | impr nh' B h =>
+          andr3 (B (convert nh nh' hi))
+                (b3 l ist nh' h (convert nh nh' hi)
+                   ng goal gi)
+      | fa n s h =>
+          match ist with
+          | cons (Some f) ist =>
+              (b3 l ist
+                  (cons s n) h (convert
+                         (cons s nh) (cons s n)
+                         ((appist s f nh hi ng gi),hi))
+                  ng goal gi)
+          | cons None ist =>
+              ex3 s
+                  (fun p =>
+                     (b3 l ist
+                         (cons s n) h
+                         (convert (cons s nh)(cons s n)
+                                  (p, hi))
+                         ng goal gi))
+          | _ => bot3
+          end
+      | ex n s h =>
+          fa3 s
+            (fun p =>
+               (b3 l ist
+                   (cons s n) h
+                   (convert (cons s nh)(cons s n)
+                            (p, hi))
+                   ng goal gi))
+      | impl  _ _ _  => bot3
+      | cTop _ => bot3
+      | cBot _ => top3
+      | Hole _ _ => bot3
+      | _ => bot3
+      end
+  end
+with f3 (l:trace)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
+        (n2 : ct)(h2 : cx n2)(i2 : pp n2) :
+      o3 :=
+  match l with
+  | nil => top3
+  | cons false l =>
+      match h1 with
+      | equality n1' s1 t u =>
+          match h2 with
+          | property n2' s2 P v =>
+              Hol3 (s1 = s2 ->
+                ((v (convert n2 n2' i2)  =
+                    (trs s1 s2 (u (convert n1 n1' i1)))
+                ->
+                  P (convert (cons s2 n2)(cons s2 n2')
+                             ((trs s1 s2 (t (convert n1 n1' i1))),
+                               i2)))))
+          | _ => top3
+          end
+      | andl n1' h1' B =>
+          f3 l ist n1' h1' (convert n1 n1' i1) n2 h2 i2
+      | andr n1' B h1' =>
+          f3 l ist n1' h1' (convert n1 n1' i1) n2 h2 i2
+     | orl  n1' h1' B =>
+          orl3  (f3 l ist n1' h1' (convert n1 n1' i1) n2 h2 i2)
+                (B (convert n1 n1' i1))
+      | orr n1' B h1' =>
+          orr3 (B (convert n1 n1' i1))
+               (f3 l ist n1' h1' (convert n1 n1' i1) n2 h2 i2) 
+      | impl n1' h1' B =>
+          impl3 (b3 l ist n2 h2 i2 n1' h1'
+                    (convert n1 n1' i1))
+                (B (convert n1 n1' i1))
+      | impr n1' B h1' =>
+          impr3  (B (convert n1 n1' i1))
+                 (f3 l ist n1' h1' (convert n1 n1' i1) n2 h2 i2)
+      | fa n1' s1 h1' =>
+          fa3 s1 (fun n =>
+                    (f3 l ist (cons s1 n1') h1'
+                        (convert (cons s1 n1)(cons s1 n1') (n, i1))
+                          n2 h2 i2)) 
+          
+      | _ => top3
+      end
+   | cons true l =>
+       match h2 with
+                     
+       | property n2' s2 P v =>
+           match h1 with
+          | equality n1' s1 t u =>
+              Hol3  (s1=s2 -> 
+                     ((v (convert n2 n2' i2)=
+                         (trs s1 s2 (t (convert n1 n1' i1))))->
+                 P (convert (cons s2 n2)(cons s2 n2')
+                            ((trs s1 s2 (u (convert n1 n1' i1))),
+                              i2))))
+          | _ => top3
+          end
+    
+
+      | andl n2' h2' B =>
+          f3 l ist n1 h1 i1  n2' h2' (convert n2 n2' i2)
+      | andr n2' B h2' =>
+          f3 l ist n1 h1 i1 n2' h2' (convert n2 n2' i2)
+     | orl  n2' h2' B =>
+          orl3 
+               (f3 l ist n2' h2' (convert n2 n2' i2)
+                n1 h1 i1) (B (convert n2 n2' i2)) 
+      | orr n2' B h2' =>
+          orr3 (B (convert n2 n2' i2))
+               (f3 l ist n1 h1 i1 n2' h2' (convert n2 n2' i2)) 
+      | impl n2' h2' B =>
+          impl3 (b3 l ist n1 h1 i1 n2' h2' (convert n2 n2' i2))
+                (B (convert n2 n2' i2))
+      | impr n2' B h2' =>
+          impr3  (B (convert n2 n2' i2))
+                 (f3 l ist n1 h1 i1 n2' h2' (convert n2 n2' i2) )
+      | fa n2' s2 h2' =>
+          fa3 s2 (fun n =>
+                 (f3 l ist n2 h2 i2
+                     (cons s2 n2') h2'
+                     (convert (cons s2 n2)(cons s2 n2') (n, i2))
+                 )) 
+          
+      | _ => top3
+      end
+  end   .
+
+
+
+(* The main lemma *)
+Lemma bf3_corr :
+  forall l,
+    (forall ist nh hyp hi ng goal gi,
+         (tr3 (b3 l ist nh hyp hi ng goal gi))
+            -> (coerce _ hyp hi) -> (coerce _ goal gi))
+    /\
+      (forall ist n1 h1 i1 n2 h2 i2,
+          (coerce _ h1 i1) -> (coerce _ h2 i2) ->
+          (tr3 (f3 l ist n1 h1 i1 n2 h2 i2))).
+
+
+elim => [//=|[|] l hl]/=; split; try done;
+          try move: hl => [hl1 hl2].
+
+- move => _ 
+   [|s2 n2]
+   [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
+       |nh' P h|nh' h P|s' nh' h|s' nh' h|nh' t u|nh P v]//= hi
+   [|sg ng]
+   [ng'|ng'|ng' Q|ng' Q g|ng' g Q|ng' Q g|ng' g Q
+       |ng' Q g|ng' g Q|sg' ng' g|sg' ng' g|ng' t' u'|ng' P' v']
+   gi //=;
+  rewrite /= ?convert_corr ?ppce//=; move => [-> h2] e//=.
+- move => ist nh hyp hi ng
+          [ng'|ng'|ng' Q|ng' Q g|ng' g Q|ng' Q g|ng' g Q
+              |ng' Q g|ng' g Q|ng' sg' g|ng' sg' g
+              |ng' sg' t u|ng' s P v] gi //=;
+  rewrite /= ?ppce ?convert_corr //=; eauto;
+  try (by move => [h|h]; eauto);
+  try (by  move => [h1 h2]; split ; eauto).
+  * case: ist => [//=|[f|] ist]; first by eauto.
+    by move => [w hw]; eauto.
+  * induction hyp; rewrite //= convert_corr.
+    move => [[ss e] p] tt.
+    move: v  s1 s2 e tt p.
+    by rewrite -ss => v t t0; rewrite !trs_corr => -> ->.
+- move => ist n1 h1 i1 n2 h2 i2 hr1 hr2.
+  move: h2 i2 hr2 =>
+        [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
+        |nh' P h|nh' h P|nh' s h|nh' s h|nh' s t u
+        |nh' s P v] //=P2 i2;
+      rewrite ?convert_corr; eauto;
+   try (by case: i2; eauto).
+  move: P2 i2 hr1 => i2 pv.
+  induction h1; try done; rewrite /= convert_corr.
+  move: P v pv s1 s2; case: s; case: s0; try done;
+  rewrite /trs ?convert_corr ?eqnqtdec_refl; auto.
       by   move => P v pv t t' <- _ <-.
   move => m1 m2 P v p s1 s2 -> [mm].
   by move : s1 s2; rewrite mm {m1 mm} eqnqtdec_refl /= => w s2 <-.
