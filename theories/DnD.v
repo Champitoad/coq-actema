@@ -478,6 +478,9 @@ Eval compute in
  *)
 
 
+
+
+
 Fixpoint b3 (l:trace)(ist:inst')(nh:ct)(hyp : cx nh)(hi : pp nh)
          (ng : ct)(goal : cx ng)(gi : pp ng) : o3 :=
   match l  with
@@ -652,11 +655,25 @@ with f3 (l:trace)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
           impr3  (B (convert n1 n1' i1))
                  (f3 l ist n1' h1' (convert n1 n1' i1) n2 h2 i2)
       | fa n1' s1 h1' =>
-          fa3 s1 (fun n =>
+          match ist with
+            | cons None ist =>
+                fa3 s1 (fun n =>
                     (f3 l ist (cons s1 n1') h1'
                         (convert (cons s1 n1)(cons s1 n1') (n, i1))
-                          n2 h2 i2)) 
-          
+                        n2 h2 i2))
+          | cons (Some f) ist =>
+              (f3 l ist (cons s1 n1') h1'
+                  (convert (cons s1 n1)(cons s1 n1')
+                           ((appist s1 f n1 i1 n2 i2),i1))
+                  n2 h2 i2)
+          | _ => top3
+          end
+      | ex n1' s1 h1' =>
+          ex3 s1
+              (fun n =>
+                 (f3 l ist (cons s1 n1') h1'
+                     (convert (cons s1 n1)(cons s1 n1') (n, i1))
+                        n2 h2 i2))
       | _ => top3
       end
    | cons true l =>
@@ -692,18 +709,32 @@ with f3 (l:trace)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
       | impr n2' B h2' =>
           impr3  (B (convert n2 n2' i2))
                  (f3 l ist n1 h1 i1 n2' h2' (convert n2 n2' i2) )
-      | fa n2' s2 h2' =>
-          fa3 s2 (fun n =>
-                 (f3 l ist n2 h2 i2
+       | fa n2' s2 h2' =>
+          match ist with
+            | cons None ist =>
+                fa3 s2 (fun n =>
+                 (f3 l ist n1 h1 i1
                      (cons s2 n2') h2'
                      (convert (cons s2 n2)(cons s2 n2') (n, i2))
                  )) 
-          
+          | cons (Some f) ist =>
+              (f3 l ist n1 h1 i1
+                  (cons s2 n2') h2'
+                  (convert (cons s2 n2)(cons s2 n2')
+                           ((appist s2 f n2 i2 n1 i1),i2))
+                  )
+          | _ => top3
+         end
+       | ex n2' s2 h2' =>
+           ex3 s2
+               (fun n =>
+                  (f3 l ist n1 h1 i1
+                      (cons s2 n2') h2'
+                   (convert (cons s2 n2)(cons s2 n2') (n, i2))
+                 )) 
       | _ => top3
       end
   end   .
-
-
 
 (* The main lemma *)
 Lemma bf3_corr :
@@ -742,20 +773,29 @@ elim => [//=|[|] l hl]/=; split; try done;
     move => [[ss e] p] tt.
     move: v  s1 s2 e tt p.
     by rewrite -ss => v t t0; rewrite !trs_corr => -> ->.
+
+
+
+
 - move => ist n1 h1 i1 n2 h2 i2 hr1 hr2.
   move: h2 i2 hr2 =>
         [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
         |nh' P h|nh' h P|nh' s h|nh' s h|nh' s t u
         |nh' s P v] //=P2 i2;
       rewrite ?convert_corr; eauto;
-   try (by case: i2; eauto).
-  move: P2 i2 hr1 => i2 pv.
-  induction h1; try done; rewrite /= convert_corr.
-  move: P v pv s1 s2; case: s; case: s0; try done;
-  rewrite /trs ?convert_corr ?eqnqtdec_refl; auto.
-      by   move => P v pv t t' <- _ <-.
-  move => m1 m2 P v p s1 s2 -> [mm].
-  by move : s1 s2; rewrite mm {m1 mm} eqnqtdec_refl /= => w s2 <-.
+   try (by case: i2; eauto);
+  move: P2 i2 hr1 => i2 pv;
+  induction h1; try done;
+    try (by case:  ist => [|[f|] ist] //=; eauto);
+    try (by move: IHh1; case:  ist => [|[f|] ist] //=; eauto);
+    try (by case: pv => [p hp] c; exists p;
+         eapply hl2; auto; rewrite trs_corr; auto).
+
+                     rewrite /= convert_corr.
+
+ by  move => ->;  rewrite trs_corr => e; move: P v pv s1 s2;
+  rewrite e => move => P v pv v1 ; rewrite trs_corr => <-.  
+
 - move => ist nh
           [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
               |nh' P h|nh' h P|nh' s h|nh' s h|nh' s t u
@@ -777,6 +817,8 @@ case: ist => [//=|[f|] ist]; first by eauto.
               |nh' s t u|nh' s P v] /= 
          i1 n2 h2 i2 p1 p2 //=;
   rewrite ?convert_corr; try (by intuition; eauto).
+    case: ist =>[//=|[f|] ist]; eauto; move => p; eauto.
+    move: p1 => [p1 hp]; exists p1; rewrite trs_corr; eauto.
   induction h2; try done; move => /= ss; move: P s1 p2.
   rewrite -ss; move: {ss} t u p1; case: s;
   rewrite /trs /= ?trs_corr convert_corr ?eqnqtdec_refl;
