@@ -1590,7 +1590,6 @@ last  assumption;
   end. 
 
 
-
 Ltac forward h1 h2 h3 hp1 hp2 t i :=
   let h1' := fresh h1 in
   let h2' := fresh h2 in
@@ -1600,7 +1599,7 @@ Ltac forward h1 h2 h3 hp1 hp2 t i :=
   reify_hyp hp2 h2';
   match goal with
   |  h1' : (coerce (@nil nat) ?hc1 _) ,
-     h2' : (coerce (@nil nat) ?hc2 _) |- _  =>
+     h2' :  (coerce (@nil nat) ?hc2 _) |- _  =>
            move:
            (f3_corr t i (@nil nat) hc1 tt
                     (@nil nat) hc2 tt h1' h2') => h3
@@ -1616,7 +1615,9 @@ Ltac forward h1 h2 h3 hp1 hp2 t i :=
       match goal with
         | h3 : ?dh |- _ =>
             let r := reify_rec_at p (@nil nat)  (@nil dyn) dh in
-move: (simpl_fstep (@nil nat) r tt h3) => {h3} h3; simpl in h3 end end.
+            move: (simpl_fstep (@nil nat) r tt h3) => {h3} h3;
+            rewrite /= ?trs_corr in h3 end end.
+
 
 
 
