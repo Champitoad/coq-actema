@@ -521,7 +521,7 @@ module Import = struct
     let sorts = sign.symbols.s_sorts |> FOSign.SymbolMap.values in
     List.nth_index 0 s sorts
   
-  let infer_sort (sign : FOSign.t) (env : Logic_t.env) (e : Logic_t.expr) : string =
+  let infer_sort (env : Logic_t.env) (e : Logic_t.expr) : string =
     match einfer env e with
     | `TVar (name, _) -> name
     | _ -> failwith "Non-atomic sort type"
@@ -559,10 +559,11 @@ module Import = struct
       match e with
       | `EVar (x, i) ->
             if LEnv.exists lenv (x, i) then
-              let s = sort_index sign (infer_sort sign (Vars.push_lenv env lenv) e) in
+              let s = sort_index sign (infer_sort (Vars.push_lenv env lenv) e) in
               let index : int =
                 List.(lenv |> split |> fst |> nth_index i x) in
-              EConstr.(mkApp (mkRel (if side = 0 then 2 else 1), Trm.[| nat_of_int s; nat_of_int index |]))
+              let env_index = if side = 0 then 2 else 1 in
+              EConstr.(mkApp (mkRel env_index, Trm.[| nat_of_int s; nat_of_int index |]))
             else
               EConstr.mkVar (Names.Id.of_string x)
       | `EFun (f, args) ->
@@ -600,7 +601,7 @@ module Import = struct
               else lp, lf, subp, subf in
             begin match f with
             | `FBind _ ->
-                filtered_quant (step :: acc) subitr lp lf rp rf
+                filtered_quant (acc @ [step]) subitr lp lf rp rf
             | _ ->
                 filtered_quant acc subitr lp lf rp rf
             end
@@ -610,7 +611,7 @@ module Import = struct
         List.map begin fun (side, w) ->
           Option.map begin fun (le1, le2, e) ->
             let lenv = if side = 0 then le2 else le1 in
-            let ty = infer_sort sign (Utils.Vars.push_lenv env lenv) e in
+            let ty = infer_sort (Utils.Vars.push_lenv env lenv) e in
             let s = nat_of_int (sort_index sign ty) in
             existT "s" nat (clos_ty ()) s (expr sign env lenv (1 - side) e)
           end w
