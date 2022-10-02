@@ -16,17 +16,16 @@ Proof.
   actema.
   Fail actema.
   forward
-    H3
-    H1
-    f
+    F
+    F0
+    F1
     (@nil bool)
-    (false :: false :: false :: nil)%list
-    (true :: true :: true :: nil)%list
-    (Some (existT (fun s : nat => env -> env -> sort s) 0 (fun _ _ : env => y))
-     :: Some
-    	  (existT (fun s : nat => env -> env -> sort s) 0 (fun _ _ : env => x))
-        :: nil)%list.
-Admitted.
+    (false :: nil)%list
+    (true :: nil)%list
+    (@nil (option inst1))%list.
+  rewrite F1 in H3 |- *.
+  assumption.
+Qed.
 
 (** * Existential *)
 
@@ -42,7 +41,7 @@ Lemma ex_elim :
 Proof.
   intros.
   actema.
-  auto.
+  assumption.
 Qed.
 
 (** * Forall *)
