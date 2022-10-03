@@ -16,14 +16,14 @@ Proof.
   actema.
   Fail actema.
   forward
-    F
-    F0
-    F1
+    fw
+    fw0
+    fw1
     (@nil bool)
     (false :: nil)%list
     (true :: nil)%list
     (@nil (option inst1))%list.
-  rewrite F1 in H3 |- *.
+  rewrite fw1 in H3 |- *.
   assumption.
 Qed.
 

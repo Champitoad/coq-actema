@@ -1516,15 +1516,16 @@ Ltac reify_goal_at l :=
  end.
 
 Ltac reify_hyp l h :=
-  move: h => h;
- lazymatch goal with
- | h : ?g |- _ =>
+ let o := type of h in
+ match o with
+ | ?g =>
      let r := reify_rec l (@nil nat)  (@nil dyn) g in (change (coerce (@nil nat) r tt) in h)
  end.
 
 Ltac reify_hyp_at l h :=
- lazymatch goal with
- | h : ?g |- _ =>
+ let o := type of h in
+ match o with
+ | ?g =>
      let r := reify_rec_at l (@nil nat)  (@nil dyn) g in (change (coerce (@nil nat) r tt) in h)
  end.
   
@@ -1563,23 +1564,22 @@ Ltac rereify_goal :=
   end.
 
 Ltac rereify_hyp h :=
-  match goal with
-  | h : (trl3 ?o) |- _ =>
+  let oo := type of h in
+  match oo with
+  | trl3 ?o =>
         let r := (find_path constr:(o)) in
       rewrite /trl3 /= in h; reify_hyp_at r h
   end.
 
 
 Ltac back h hp gp t i :=
-  let h' := fresh h in
-  move:(h) => h';
   reify_goal gp;
-  reify_hyp hp h';
-  match goal with
-    | h' : (coerce (@nil nat) ?hc _) |- _ =>
+  reify_hyp hp h;
+  let o := type of h in
+  match o with
+    | coerce (@nil nat) ?hc _ =>
         apply (b3_corr t i (@nil nat) tt (@nil nat) tt hc);
 last  assumption;
-        clear h'  ;
         (apply trex_norm_apply; [simpl; try done; auto|
           rewrite /b3 /o3_norm ;
           try exact tt; rewrite /= /cT /cB ;
@@ -1591,25 +1591,25 @@ last  assumption;
 
 
 Ltac forward h1 h2 h3 hp1 hp2 t i :=
-  let h1' := fresh h1 in
-  let h2' := fresh h2 in
-  move: (h1) => h1';
-  move: (h2) => h2';
-  reify_hyp hp1 h1';
-  reify_hyp hp2 h2';
-  match goal with
-  |  h1' : (coerce (@nil nat) ?hc1 _) ,
-     h2' :  (coerce (@nil nat) ?hc2 _) |- _  =>
+  reify_hyp hp1 h1;
+  reify_hyp hp2 h2;
+  let o1 := type of h1 in
+  let o2 := type of h2 in
+  match o1 with
+  | coerce (@nil nat) ?hc1 _ =>
+    match o2 with
+    | coerce (@nil nat) ?hc2 _  =>
            move:
            (f3_corr t i (@nil nat) hc1 tt
-                    (@nil nat) hc2 tt h1' h2') => h3
+                    (@nil nat) hc2 tt h1 h2) => h3
+    end
   end;
-  clear h1' h2';
     apply trex_norm_fapply in h3;
   [ | simpl; try done; auto];
   rewrite /f3 /o3_norm /= /cT /cB in h3;
-    match goal with
-  | h3 : (trl3 ?o) |- _ =>
+    let oo := type of h3 in
+    match oo with
+    | trl3 ?o =>
       let p := (find_path o) in
       rewrite /trl3 /= in h3 ;
       match goal with

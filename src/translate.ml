@@ -757,7 +757,7 @@ module Import = struct
               let name = UidMap.find hyp2.ctxt.handle hm in
               EConstr.mkVar name in
             let h3, hm =
-              let name = Goal.fresh_name ~basename:"F" coq_goal () in
+              let name = Goal.fresh_name ~basename:"fw" coq_goal () in
               let id = match ipat with
                        | [[id]] -> id
                        | _ -> raise (UnexpectedIntroPattern ipat) in
