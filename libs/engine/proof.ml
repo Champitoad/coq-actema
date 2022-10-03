@@ -2205,7 +2205,10 @@ end = struct
             (* F∀i *)
             | Some Sbound e ->
               let f1 = Subst.f_apply1 (x, 0) e f1 in
-              witness := Some (env1, env2, e);
+              witness :=
+                if side = 1
+                then Some (env1, env2, e)
+                else Some (env2, env1, e);
               None, (h, (f1, sub))
             (* F∀s *)
             | Some Sflex ->
@@ -2218,7 +2221,7 @@ end = struct
           (* Fcomm *)
           | h, h' ->
             s := (es2, es1);
-            new_side := 0;
+            new_side := 1 - side;
             None, (h', h)
           end
         in

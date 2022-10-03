@@ -25,6 +25,8 @@ end
 
 val t_equal : env -> type_ -> type_ -> bool
 
+exception TypingError
+
 val einfer : env -> expr -> type_
 
 val direct_subforms : form -> form list
