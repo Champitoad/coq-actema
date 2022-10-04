@@ -582,7 +582,7 @@ module Import = struct
     Trm.of_list Trm.type_ symbol
 
   let itrace (sign : FOSign.t) (env : Fo_t.env)
-      (lp : int list) (rp : int list)
+      (mode : [`Back | `Forw]) (lp : int list) (rp : int list)
       (lf : Logic_t.form) (rf : Logic_t.form)
       (itr : Logic_t.itrace) : EConstr.t * EConstr.t =
     let focus, inst = Stdlib.List.split itr in
@@ -604,8 +604,18 @@ module Import = struct
               then subp, subf, rp, rf
               else lp, lf, subp, subf in
             begin match f with
-            | `FBind _ ->
-                filtered_quant (acc @ [step]) subitr lp lf rp rf
+            | `FBind (q, _, _, _) ->
+                let instantiable =
+                  begin match mode, side, q with
+                  | `Back, 0, `Forall
+                  | `Back, 1, `Exist
+                  | `Forw, _, `Forall -> true
+                  | _ -> false
+                  end in
+                if instantiable then
+                  filtered_quant (acc @ [step]) subitr lp lf rp rf
+                else
+                  filtered_quant acc subitr lp lf rp rf
             | _ ->
                 filtered_quant acc subitr lp lf rp rf
             end
@@ -779,7 +789,7 @@ module Import = struct
               let rp = hyp2.sub in
               let lf = (Utils.get_hyp goal hyp1.ctxt.handle).h_form in
               let rf = (Utils.get_hyp goal hyp2.ctxt.handle).h_form in
-              itrace sign goal.g_env lp rp lf rf itr in
+              itrace sign goal.g_env `Forw lp rp lf rf itr in
             
             let log_trace () =
               let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
@@ -814,7 +824,7 @@ module Import = struct
               let rp = concl.sub in
               let lf = (Utils.get_hyp goal hyp.ctxt.handle).h_form in
               let rf = goal.g_concl in
-              itrace sign goal.g_env lp rp lf rf itr in
+              itrace sign goal.g_env `Back lp rp lf rf itr in
             
             let log_trace () =
               let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in

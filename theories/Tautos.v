@@ -34,17 +34,11 @@ apply e1; exact 0.
   apply nil.
 Defined.
 
-  Lemma ex_elim :
+Lemma ex_elim :
   (exists x, P x) -> (forall y, P y -> C) -> C.
 Proof.
   intros.
-  forward  H H0 h
-           (cons false nil)
-           (cons false (cons false nil))
-           (cons false (cons true (cons true nil)))
-           iin.
-  case h; intros.  
-  assumption.
+  actema "forward".
 Qed.
 
 (** * Forall *)
@@ -53,9 +47,7 @@ Lemma fa_intro :
   (forall x, P x) -> (forall x, P x).
 Proof.
   actema.
-simpl.
-
-Admitted.
+Qed.
 
 Lemma fa_elim :
   (forall x, P x) -> P t.
@@ -69,8 +61,8 @@ Qed.
 Lemma exfa_faex (R : nat -> nat -> Prop) :
   (exists x, forall y, R x y) -> (forall a, exists b, R b a).
 Proof.
-  intros; actema; simpl.
-Admitted.
+  actema.
+Qed.
 
 Lemma ex_demorgan :
   (forall x, ~ P x) -> ~ exists y, P y.
