@@ -68,6 +68,8 @@ Lemma ex_demorgan :
   (forall x, ~ P x) -> ~ exists y, P y.
 Proof.
   intros.
+  unfold not in *.
+  intro.
   actema.
 Admitted.
 

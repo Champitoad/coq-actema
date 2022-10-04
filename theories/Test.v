@@ -41,3 +41,9 @@ Proof.
   actema; simpl.
   exists 0; auto.
 Qed.
+
+Lemma test_rew t u f :
+  t = u -> f (S t) 5 = 42.
+Proof.
+  Fail actema.
+Admitted.

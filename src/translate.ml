@@ -774,10 +774,10 @@ module Import = struct
               EConstr.mkVar name in
             let h3, hm =
               let name = Goal.fresh_name ~basename:"fw" coq_goal () in
-              let id = match ipat with
-                       | [[id]] -> id
-                       | _ -> raise (UnexpectedIntroPattern ipat) in
-              EConstr.mkVar name, UidMap.add id name hm in
+              let hm = match ipat with
+                       | [[id]] -> UidMap.add id name hm
+                       | _ -> hm in
+              EConstr.mkVar name, hm in
 
             let hp1 =
               hyp1.sub |> boollist_of_intlist |> Trm.boollist in
