@@ -13,18 +13,7 @@ Lemma kchal :
 Proof.
   intros.
   actema.
-  actema.
-  Fail actema.
-  forward
-    fw
-    fw0
-    fw1
-    (@nil bool)
-    (false :: nil)%list
-    (true :: nil)%list
-    (@nil (option inst1))%list.
-  rewrite fw1 in H3 |- *.
-  assumption.
+  generalize H3; rewrite fw1; trivial.
 Qed.
 
 (** * Existential *)
@@ -36,11 +25,25 @@ Proof.
   actema.
 Qed.
 
-Lemma ex_elim :
+Definition iin : (list (option inst1)).
+  apply cons.
+  apply Some.
+  exists 0.
+intros e1 e2.  
+apply e1; exact 0.
+  apply nil.
+Defined.
+
+  Lemma ex_elim :
   (exists x, P x) -> (forall y, P y -> C) -> C.
 Proof.
   intros.
-  actema.
+  forward  H H0 h
+           (cons false nil)
+           (cons false (cons false nil))
+           (cons false (cons true (cons true nil)))
+           iin.
+  case h; intros.  
   assumption.
 Qed.
 
@@ -50,6 +53,8 @@ Lemma fa_intro :
   (forall x, P x) -> (forall x, P x).
 Proof.
   actema.
+simpl.
+
 Admitted.
 
 Lemma fa_elim :
