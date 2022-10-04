@@ -133,6 +133,7 @@ Defined.
 Inductive cx : (seq nat)  -> Type :=
 | cTop : forall n,  cx n
 | cBot : forall n,  cx n
+| cNot : forall n,  cx n -> cx n
 | Hole : forall n,  ((pp n) -> Prop) -> (cx n)
 | impr : forall n, ((pp n) -> Prop) -> (cx n) -> (cx n)
 | impl : forall n, (cx n) -> ((pp n) -> Prop) -> (cx n)
@@ -170,7 +171,8 @@ Qed.
 Fixpoint coerce  n (c:cx n) : (pp n) -> Prop :=
   match c with
 | cTop _ => ppc True _
-| cBot _ => ppc False _
+  | cBot _ => ppc False _
+  | cNot _ c => fun x => ~(coerce _ c x)
 | Hole _ P => P
 | impl _ c P => fun x => ((coerce _ c x)  -> (P x))
 | impr _ P c => fun x =>  (P x) -> (coerce _ c x)
@@ -265,7 +267,13 @@ Fixpoint simpl l (c : cx l) : cx l :=
       match (cB (cons s n') (simpl (cons s n') A)) with
       | true => cBot n'
       | _ => ex n' s (simpl (cons s n') A)
-       end  
+      end
+  | n, cNot _ c =>
+      match (simpl _ c) with
+      | cTop _ => cBot _
+      | cBot _ => cTop _
+      | c' => cNot _ c'
+      end
   | n, cBot _ => cBot _
   | n, cTop _ => cTop _
   | n, h => h
@@ -278,7 +286,7 @@ Lemma simpl_corr : forall n c i,
 Proof.
 move=> m c.
 elim: {m} c  =>
-        [n|n|n P|n A B hB|n A hA B|n A  B hB|n A hA  B
+        [n|n|n B hB|n P|n A B hB|n A hA B|n A  B hB|n A hA  B
         |n A B hB|n A hA B|n s A hA |n s A hA|n t u|n P t] i //=;
   split => h; try (move: (hA i) => [hA1 hA2]);
   try (move: (hB i) => [hB1 hB2]);           
@@ -347,6 +355,7 @@ Inductive o3 : Type :=
   Hol3 : Prop -> o3
 | top3
 | bot3
+| not3 : o3 -> o3
 | impl3 : o3 -> Prop -> o3
 | impr3 : Prop -> o3 -> o3
 | orl3 : o3 -> Prop -> o3
@@ -371,6 +380,7 @@ Fixpoint tr3 o :=
   | ex3 s p => exists n, (tr3 (p n))
   | top3 => True
   | bot3 => False
+  | not3 p => ~tr3 p
   end.
 
 
@@ -507,7 +517,11 @@ Fixpoint b3 (l:trace)(ist:inst')(nh:ct)(hyp : cx nh)(hi : pp nh)
       | (impl ng' h B) =>
           (impl3 (f3 l ist nh hyp hi ng' h (convert ng ng' gi))
                  (B (convert ng ng' gi)))
-
+      | cNot ng' h =>
+          not3
+            (f3 l ist nh hyp hi
+                ng' h
+                (convert ng ng' gi))
       | (impr ng'  B g) =>
           (impr3 (B (convert ng ng' gi))
                  (b3 l ist nh hyp hi ng' g (convert ng ng' gi)))
@@ -612,6 +626,7 @@ Fixpoint b3 (l:trace)(ist:inst')(nh:ct)(hyp : cx nh)(hi : pp nh)
                             (p, hi))
                    ng goal gi))
       | impl  _ _ _  => bot3
+      | cNot _ _ => bot3
       | cTop _ => bot3
       | cBot _ => top3
       | Hole _ _ => bot3
@@ -651,6 +666,10 @@ with f3 (l:trace)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
           impl3 (b3 l ist n2 h2 i2 n1' h1'
                     (convert n1 n1' i1))
                 (B (convert n1 n1' i1))
+      | cNot n1' h1' =>
+          not3
+            (b3 l ist n2 h2 i2 n1' h1'
+                (convert n1 n1' i1))
       | impr n1' B h1' =>
           impr3  (B (convert n1 n1' i1))
                  (f3 l ist n1' h1' (convert n1 n1' i1) n2 h2 i2)
@@ -706,6 +725,10 @@ with f3 (l:trace)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
       | impl n2' h2' B =>
           impl3 (b3 l ist n1 h1 i1 n2' h2' (convert n2 n2' i2))
                 (B (convert n2 n2' i2))
+       | cNot n2' h2' =>
+           not3
+             (b3 l ist n1 h1 i1 n2' h2'
+                 (convert n2 n2' i2))
       | impr n2' B h2' =>
           impr3  (B (convert n2 n2' i2))
                  (f3 l ist n1 h1 i1 n2' h2' (convert n2 n2' i2) )
@@ -753,15 +776,15 @@ elim => [//=|[|] l hl]/=; split; try done;
 
 - move => _ 
    [|s2 n2]
-   [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
+   [nh'|nh'|nh' P|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
        |nh' P h|nh' h P|s' nh' h|s' nh' h|nh' t u|nh P v]//= hi
    [|sg ng]
-   [ng'|ng'|ng' Q|ng' Q g|ng' g Q|ng' Q g|ng' g Q
+   [ng'|ng'|ng' Q| ng' Q|ng' Q g|ng' g Q|ng' Q g|ng' g Q
        |ng' Q g|ng' g Q|sg' ng' g|sg' ng' g|ng' t' u'|ng' P' v']
    gi //=;
   rewrite /= ?convert_corr ?ppce//=; move => [-> h2] e//=.
 - move => ist nh hyp hi ng
-          [ng'|ng'|ng' Q|ng' Q g|ng' g Q|ng' Q g|ng' g Q
+          [ng'|ng'|ng' Q|ng' Q|ng' Q g|ng' g Q|ng' Q g|ng' g Q
               |ng' Q g|ng' g Q|ng' sg' g|ng' sg' g
               |ng' sg' t u|ng' s P v] gi //=;
   rewrite /= ?ppce ?convert_corr //=; eauto;
@@ -779,7 +802,7 @@ elim => [//=|[|] l hl]/=; split; try done;
 
 - move => ist n1 h1 i1 n2 h2 i2 hr1 hr2.
   move: h2 i2 hr2 =>
-        [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
+        [nh'|nh'|nh' P|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
         |nh' P h|nh' h P|nh' s h|nh' s h|nh' s t u
         |nh' s P v] //=P2 i2;
       rewrite ?convert_corr; eauto;
@@ -797,7 +820,7 @@ elim => [//=|[|] l hl]/=; split; try done;
   rewrite e => move => P v pv v1 ; rewrite trs_corr => <-.  
 
 - move => ist nh
-          [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
+          [nh'|nh'|nh' P|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
               |nh' P h|nh' h P|nh' s h|nh' s h|nh' s t u
               |nh' s P v] i1 //=;
    rewrite ?convert_corr ?ppce  ?trs_corr //= => ng goal gi;
@@ -812,7 +835,7 @@ case: ist => [//=|[f|] ist]; first by eauto.
   move: P s1 h2 h3 h4 ; rewrite -e ?trs_corr => P t0.
   rewrite trs_corr convert_corr => <- p -> //=.
 - move => ist n1
-          [nh'|nh'|nh' P|nh' P h|nh' h P|nh' P h
+          [nh'|nh'|nh' P|nh' P|nh' P h|nh' h P|nh' P h
               |nh' h P|nh' P h|nh' h P|nh' s h|nh' s h
               |nh' s t u|nh' s P v] /= 
          i1 n2 h2 i2 p1 p2 //=;
@@ -919,6 +942,7 @@ Qed.
  Fixpoint trex o :=
   match o with
   | Hol3 P => P
+  | not3 o => trex o
   | impl3 o P =>
       (trex o)
   | impr3 P o => (trex o)
@@ -935,6 +959,7 @@ Qed.
  Fixpoint trexe o :=
   match o with
   | Hol3 P => False
+  | not3 o => trexe o
   | impl3 o P =>
       (trexe o)
   | impr3 P o => (trexe o)
@@ -953,6 +978,7 @@ Qed.
 Fixpoint o3_norm (o:o3) : o3 :=
   match o with
   | Hol3 P => top3
+  | not3 o => not3 (o3_norm o)
   | impr3 B o => impr3 B (o3_norm o)
   | impl3 o B => impl3 (o3_norm o) B
   | andr3 B o => andr3 B (o3_norm o)
@@ -968,6 +994,7 @@ Fixpoint o3_norm (o:o3) : o3 :=
 Fixpoint o3_norme (o:o3) : o3 :=
   match o with
   | Hol3 P => top3
+  | not3 o => not3 (o3_norme o)
   | impr3 B o => impr3 B (o3_norme o)
   | impl3 o B => impl3 (o3_norme o) B
   | andr3 B o => andr3 B (o3_norme o)
@@ -983,6 +1010,7 @@ Fixpoint o3_norme (o:o3) : o3 :=
 Fixpoint o3_id (o:o3) (Q:Prop) : Type :=
   match o with
   | Hol3 P => P = (Q->Q)
+  | not3 o => o3_id o Q
   | impr3 _ o => o3_id o Q
   | impl3 o _ => o3_id o Q
   | andr3 _ o => o3_id o Q
@@ -998,7 +1026,7 @@ Fixpoint o3_id (o:o3) (Q:Prop) : Type :=
 Lemma o3_norm_corr :
   forall Q o, (o3_id o Q) -> (tr3 o)<->(tr3(o3_norm o)).
   move=> Q.
-  elim => [P|||o ho B|B o ho|o ho B|B o ho|o ho B|B o ho
+  elim => [P|||o|o ho B|B o ho|o ho B|B o ho|o ho B|B o ho
           |s f hf|s f hf]=>/= h; split; auto; first (by rewrite h);
 try          move: (ho h) => [h1 h2];
 auto; try (by intuition);
@@ -1010,7 +1038,7 @@ Qed.
 
 Lemma trex_norm_corr : forall o, (trex o) ->
                                  (tr3 o)<->(tr3(o3_norm o)).
-elim => [P|||o ho B|B o ho|o ho B|B o ho|o ho B|B o ho
+elim => [P|||o|o ho B|B o ho|o ho B|B o ho|o ho B|B o ho
         |s f hf|s f hf]=>/= h; split;
         (try case (ho h) => h1 h2); auto;
         try  tauto;
@@ -1022,7 +1050,7 @@ Qed.
 Lemma trex_norme_corr :
   forall o, (trexe o) -> (tr3 o)<->(tr3(o3_norme o)).
 Proof.
-elim => [P|||o ho B|B o ho|o ho B|B o ho|o ho B|B o ho
+elim => [P|||o|o ho B|B o ho|o ho B|B o ho|o ho B|B o ho
         |s f hf|s f hf]=>/= h; split;
         (try case (ho h) => h1 h2); auto;
         try  tauto;
@@ -1276,6 +1304,9 @@ Ltac reify_rec l n env t :=
        end
   | cons false ?l' =>
       lazymatch t with
+      | not ?a =>
+          let ra := reify_rec l' n  env a in
+          constr:(cNot n ra)
        | forall x: (sort ?s), @?body' x =>
           let y := fresh "y" in
           lazymatch constr:(fun y: (sort s) => ltac:(
@@ -1365,6 +1396,9 @@ Ltac reify_rec_at l n env t :=
        end
   | cons false ?l' =>
       lazymatch t with
+      | ~ ?a =>
+           let ra := reify_rec_at l' n  env a in
+          constr:(cNot n ra)
 
        | forall x: (sort ?s), @?body' x =>
           let y := fresh "y" in
@@ -1539,6 +1573,7 @@ Ltac reify_hyp_at l h :=
 Ltac find_path p :=
   lazymatch p with
   | Hol3 _ => constr:(@nil bool)
+  | not3 ?q => let rq :=(find_path q) in constr:(cons false rq)
   | impl3 ?q _ =>  let rq :=(find_path q) in constr:(cons false rq)
   | impr3 _ ?q => let rq := (find_path q) in constr:(cons true rq)
   | orl3 ?q _ => let rq := (find_path q) in constr:(cons false rq)
@@ -1619,7 +1654,12 @@ Ltac forward h1 h2 h3 hp1 hp2 t i :=
         | h3 : ?dh |- _ =>
             let r := reify_rec_at p (@nil nat)  (@nil dyn) dh in
             move: (simpl_fstep (@nil nat) r tt h3) => {h3} h3;
-            rewrite /= ?trs_corr in h3 end end.
+                                                      rewrite /= ?trs_corr in h3 end end;
+      match goal with
+      | h3 : False |- _ => case h3
+      | _ => idtac
+                                end.
+
 
 
 
@@ -1638,6 +1678,15 @@ Goal (A -> B) ->(B/\A) ->  B /\ A.
 
 Abort.
 
+Goal ~A -> A -> B.
+  move => na a.
+  
+forward na a ff
+        (cons false nil)
+        (@nil bool)
+        (cons false nil)
+        (@nil ( (option inst1))).
+Abort.
 
 Definition ii : inst'.
 apply cons.
