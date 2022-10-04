@@ -721,7 +721,7 @@ with f3 (l:trace)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
               (f3 l ist n1 h1 i1
                   (cons s2 n2') h2'
                   (convert (cons s2 n2)(cons s2 n2')
-                           ((appist s2 f n2 i2 n1 i1),i2))
+                           ((appist s2 f n1 i1 n2 i2),i2))
                   )
           | _ => top3
          end
@@ -1528,7 +1528,7 @@ Ltac reify_hyp_at l h :=
  | ?g =>
      let r := reify_rec_at l (@nil nat)  (@nil dyn) g in (change (coerce (@nil nat) r tt) in h)
  end.
-  
+
 
 
 (* Once a back or forward steps is performed, we want to apply simplification
@@ -1579,6 +1579,7 @@ Ltac back h hp gp t i :=
   match o with
     | coerce (@nil nat) ?hc _ =>
         apply (b3_corr t i (@nil nat) tt (@nil nat) tt hc);
+        rewrite /coerce /sl /= in h;
 last  assumption;
         (apply trex_norm_apply; [simpl; try done; auto|
           rewrite /b3 /o3_norm ;
@@ -1604,7 +1605,9 @@ Ltac forward h1 h2 h3 hp1 hp2 t i :=
                     (@nil nat) hc2 tt h1 h2) => h3
     end
   end;
-    apply trex_norm_fapply in h3;
+  apply trex_norm_fapply in h3;
+  rewrite /coerce /sl /= in h1;
+  rewrite /coerce /sl /= in h2;
   [ | simpl; try done; auto];
   rewrite /f3 /o3_norm /= /cT /cB in h3;
     let oo := type of h3 in
@@ -1620,7 +1623,6 @@ Ltac forward h1 h2 h3 hp1 hp2 t i :=
 
 
 
-
 Definition empty : inst'.
 apply nil.
 Defined.
@@ -1632,6 +1634,8 @@ Goal (A -> B) ->(B/\A) ->  B /\ A.
 
 
   forward c b d   (cons true nil) (cons false nil) (cons true (cons false nil)) empty.
+
+
 Abort.
 
 
@@ -1666,9 +1670,6 @@ Goal (forall z:bool, true=z) -> forall x:bool,forall y,(true=x \/ y=2).
   
   back h (cons false nil) (cons false (cons false (cons false nil))) (cons true (cons true (cons false (cons true nil)))) ii.
 Abort.
-
-
-
 
 
 (* Similar but focusing on equalities *)
@@ -1966,7 +1967,7 @@ Goal (exists x, x=2 /\ 3=3) -> exists y, y=2 /\ 3=3.
 
   back xx  [::false; true]  [::false; true]
        [::true; false; false ; true] ex_ex.
- back xx  [::false; false]  [::false]
+  back xx  [::false; false]  [::false]
       [::false; true; false] ex_ex'.
 Abort.
 
