@@ -71,7 +71,7 @@ Lemma ex_demorgan :
   (forall x, ~ P x) -> ~ exists y, P y.
 Proof.
   intros.
-  Fail actema.
+  actema.
 Admitted.
 
 (** * Implication *)

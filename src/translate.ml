@@ -522,9 +522,13 @@ module Import = struct
     List.nth_index 0 s sorts
   
   let infer_sort (env : Logic_t.env) (e : Logic_t.expr) : string =
-    match einfer env e with
-    | `TVar (name, _) -> name
-    | _ -> failwith "Non-atomic sort type"
+    try
+      match einfer env e with
+      | `TVar (name, _) -> name
+      | _ -> failwith "Non-atomic sort type"
+    with TypingError ->
+      Log.str (string_of_expr e);
+      failwith "pouet"
 
   let sort (sign : FOSign.t) (n : int) : EConstr.t =
     let sorts = sign.symbols.s_sorts |> FOSign.SymbolMap.keys in
@@ -558,13 +562,13 @@ module Import = struct
     let rec aux e =
       match e with
       | `EVar (x, i) ->
-            if LEnv.exists lenv (x, i) then
+            if LEnv.exists lenv (x, i) then begin
               let s = sort_index sign (infer_sort (Vars.push_lenv env lenv) e) in
               let index : int =
                 List.(lenv |> split |> fst |> nth_index i x) in
               let env_index = if side = 0 then 2 else 1 in
               EConstr.(mkApp (mkRel env_index, Trm.[| nat_of_int s; nat_of_int index |]))
-            else
+            end else
               EConstr.mkVar (Names.Id.of_string x)
       | `EFun (f, args) ->
           let head = symbol (FOSign.SymbolMap.dnif f sign.symbols.s_funcs) in
@@ -611,6 +615,8 @@ module Import = struct
         List.map begin fun (side, w) ->
           Option.map begin fun (le1, le2, e) ->
             let lenv = if side = 0 then le2 else le1 in
+            Log.str (List.to_string (fun (x, _) -> x) le1);
+            Log.str (List.to_string (fun (x, _) -> x) le2);
             let ty = infer_sort (Utils.Vars.push_lenv env lenv) e in
             let s = nat_of_int (sort_index sign ty) in
             existT "s" nat (clos_ty ()) s (expr sign env lenv (1 - side) e)
