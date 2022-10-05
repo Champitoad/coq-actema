@@ -130,6 +130,9 @@ let string_of_form f =
 let string_of_goal goal =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_goal goal)
 
+let string_of_itrace itr =
+  Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_itrace itr)
+
 let string_of_proof prf =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_proof prf)
 
