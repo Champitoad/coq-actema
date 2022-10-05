@@ -70,6 +70,22 @@ Proof.
   intros.
   unfold not in *.
   intro.
+  (* actema. *)
+  forward
+    H0
+    H
+    fw
+    (false :: nil)%list
+    (false :: false :: nil)%list
+    (false :: true :: true :: nil)%list
+    (Some (existT (fun s : nat => env -> env -> sort s) 0 (fun env1 _ : env => env1 0 0))
+    :: nil)%list.
+Admitted.
+
+Lemma bw :
+  A -> (~ exists n : nat, A) -> False.
+Proof.
+  intros.
   actema.
 Admitted.
 

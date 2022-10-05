@@ -592,19 +592,19 @@ module Import = struct
     let i =
       let open EConstr in
       let open Trm in
-      let rec filtered_quant acc itr lp rp lf rf =
+      let rec filtered_quant acc mode itr lp lf rp rf =
         begin match itr with
         | [] -> acc
         | (side, _) as step :: subitr ->
             let p, f = if side = 0 then lp, lf else rp, rf in
             match p with [] -> acc | i :: subp ->
             let subf = direct_subform f i in
-            let lp, rp, lf, rf =
+            let lp, lf, rp, rf =
               if side = 0
               then subp, subf, rp, rf
               else lp, lf, subp, subf in
-            begin match f with
-            | `FBind (q, _, _, _) ->
+            begin match f, (mode, side, i) with
+            | `FBind (q, _, _, _), _ ->
                 let instantiable =
                   begin match mode, side, q with
                   | `Back, 0, `Forall
@@ -613,15 +613,25 @@ module Import = struct
                   | _ -> false
                   end in
                 if instantiable then
-                  filtered_quant (acc @ [step]) subitr lp lf rp rf
+                  filtered_quant (acc @ [step]) mode subitr lp lf rp rf
                 else
-                  filtered_quant acc subitr lp lf rp rf
+                  filtered_quant acc mode subitr lp lf rp rf
+            | `FConn ((`Not | `Imp), _), ((`Forw, _, 0) | (`Back, 1, 0)) ->
+                let mode, (lp, lf, rp, rf) =
+                  begin match mode with
+                  | `Back -> `Forw, (lp, lf, rp, rf)
+                  | `Forw -> `Back,
+                      (if side = 0
+                       then (rp, rf, lp, lf)
+                       else (lp, lf, rp, rf))
+                  end in
+                filtered_quant acc mode subitr lp lf rp rf
             | _ ->
-                filtered_quant acc subitr lp lf rp rf
+                filtered_quant acc mode subitr lp lf rp rf
             end
         end in
       let i =
-        filtered_quant [] itr lp rp lf rf |>
+        filtered_quant [] mode itr lp lf rp rf |>
         List.map begin fun (side, w) ->
           Option.map begin fun (le1, le2, e) ->
             let lenv = if side = 0 then le2 else le1 in
