@@ -717,8 +717,8 @@ with f3 (l:trace)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
           f3 l ist n1 h1 i1 n2' h2' (convert n2 n2' i2)
      | orl  n2' h2' B =>
           orl3 
-               (f3 l ist n2' h2' (convert n2 n2' i2)
-                n1 h1 i1) (B (convert n2 n2' i2)) 
+               (f3 l ist n1 h1 i1 n2' h2' (convert n2 n2' i2))
+               (B (convert n2 n2' i2)) 
       | orr n2' B h2' =>
           orr3 (B (convert n2 n2' i2))
                (f3 l ist n1 h1 i1 n2' h2' (convert n2 n2' i2)) 
