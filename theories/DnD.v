@@ -1453,95 +1453,264 @@ Ltac reify_rec_at l n env t :=
                                ltac:(let r := wrap env z t in exact r)))
      
 end
-end.
+  end.
 
-(*
-Ltac reify_rec_at l n env t :=  
-  lazymatch constr:(l) with
-  | nil =>
-       match t with
-      | True => constr:(cTop n)
-      | False => constr:(cBot n)
-      | _ =>
-          constr:(Hole n (fun (z: pp n) =>
-                               ltac:(let r := wrap env z t in exact r)))
+
+Inductive s3 : (seq nat) -> Type :=
+  | box : forall n, (pp n -> Prop) -> s3 n
+  | t3 : forall n, s3 n
+  | bo3 : forall n, s3 n
+  | n3 : forall n, s3 n -> s3 n
+  | i3 : forall n, s3 n -> s3 n -> s3 n
+  | d3 : forall n, s3 n -> s3 n -> s3 n
+  | c3 : forall n, s3 n -> s3 n -> s3 n
+  | fs3 : forall s n, s3 (cons s n) -> s3 n
+  | e3 : forall s n, s3 (cons s n) -> s3 n
+.
+
+Fixpoint cs3 n (e: s3 n)(i:pp n) : Prop :=
+  match e,i with
+  | box n p, i => p i
+  | t3 _, i => True
+  | bo3 _, i => False
+  | n3 _ e, i => ~(cs3 _ e i)
+  | i3 _ a b, i => (cs3 _ a i)->(cs3 _ b i)
+  | c3 _ a b, i => (cs3 _ a i)/\(cs3 _ b i)
+  | d3 _ a b, i => (cs3 _ a i)\/(cs3 _ b i)
+  | fs3 s n' e, i => forall x: (sort s),
+      cs3 (cons s n') e (x,i)
+  | e3 s n' e, i => exists x: (sort s),
+      cs3 (cons s n') e (x,i)
+  end.
+
+Definition eT n (c:s3 n) :=
+  match n, c with
+  | _, t3 _ => true
+  | _, _ => false
+  end.
+
+Definition eB  n (c:s3 n) :=
+  match n, c with
+  | _, bo3 _ => true
+  | _, _ => false
+  end.
+
+
+Lemma eTc : forall n c,
+    eT n c = true -> c = t3 n.
+by induction c.
+Qed.
+Lemma eBc : forall n c,
+    eB n c = true -> c = bo3 n.
+by induction c.
+Qed.
+Fixpoint simplc n (e : s3 n) : s3 n :=
+  match e with
+  | c3 _ a b =>
+   match (simplc _ a) with
+    | t3 _ => simplc _ b
+    | bo3 _ => bo3 _
+    | a' =>
+        match simplc _ b with
+        | t3 _ => a'
+        | bo3 _ => bo3 _
+        | b' => c3 _ a' b'
+        end
+   end
+  | d3 _ a b =>
+       match (simplc _ a) with
+       | t3 _ => t3 _                    
+       | bo3 _ => simplc _ b
+       | a' =>
+           match simplc _ b with
+           | t3 _ => t3 _
+        | bo3 _ => a' 
+        | b' => d3 _ a' b'
+        end
        end
-  | cons true ?l' =>
-      lazymatch t with
-      | ?a -> ?b => 
-          let ra := constr:(fun (z: pp n) =>
-                      ltac:(let r := wrap env z a in exact r)) in
-          let rb := reify_rec_at l' n  env b in
-          constr:(impr n ra rb) 
-    | ?a /\ ?b => 
-          let ra := constr:(fun (z: pp n) =>
-                      ltac:(let r := wrap env z a in exact r)) in
-          let rb := reify_rec_at l' n  env b in
-          constr:(andr n ra rb) 
-    | ?a \/ ?b => 
-          let ra := constr:(fun (z: pp n) =>
-                      ltac:(let r := wrap env z a in exact r)) in
-          let rb := reify_rec_at l' n  env b in
-          constr:(orr n ra rb) 
-       end
-  | cons false ?l' =>
-      lazymatch t with
-      | forall x: ?T, @?body' x =>
+  | i3 _ a b =>
+      match (simplc _ a) with
+      | bo3 _ => t3 _
+      | t3 _ => (simplc _ b)
+      | a' =>
+          match (simplc _ b) with
+          | t3 _ => t3 _
+          | b' => i3 _ a' b'
+          end
+      end
+  | fs3 s n' a =>
+      if (eT _ (simplc (s::n') a))
+      then t3 n'
+      else fs3 _ _ (simplc _ a)
+  | e3 s n' a =>
+           if (eB _ (simplc (s::n') a))
+      then bo3 n'
+      else e3 _ _ (simplc _ a)
+  | n3 c' a =>
+      match simplc _ a with
+      | t3 _ => bo3 _
+      | bo3 _ => t3 _
+      | a' => n3 c' a'
+      end
+  | box c p => box c p
+  | t3 n' => t3 n'
+  | bo3 n' => bo3 n'
+  end.
+
+
+Lemma simplc_corr : forall n e i,
+    cs3 n e i <-> cs3 n (simplc _ e) i.
+fix hr 2.
+move => m.
+move =>
+       [n p|n|n|n a|n a b|n a b|n a b
+       |s n a|s n a] i //= ;split => h;
+                                     try (move: (hr _ a i) => [ha1 ha2]);
+                                     try (move: (hr _ b i) => [hb1 hb2]);
+                                     try (by
+induction (simplc n a); move: ha1 ha2 h; simpl; try tauto);
+try (by
+move: h;
+induction (simplc n a);
+  induction (simplc n b);
+  move: ha1 ha2 hb1 hb2; simpl; try tauto).
+case e : eT => //= x;
+move:  (hr _ a (x,i))
+     => [ha1 ha2]; auto.
+move: h; case e : eT => //= h x;
+                        move: (hr _ a (x,i))=>[ha1 ha2];
+                        auto.
+move: (eTc _ _ e) ha1 ha2=> ->; auto.
+
+move: h=>[x hx].
+case e : eB;
+                        move: (hr _ a (x,i))=>[ha1 ha2];
+                        auto.
+move: (eBc _ _ e) ha1 ha2=> ->; eauto.
+exists x; auto.
+
+move: h; case e : eB => //=.
+move => [x hx].
+exists x.
+move: (hr _ a (x,i)) => [ha1 ha2]; eauto.
+Qed.
+
+
+
+Lemma simplc_corrh n e i :
+    cs3 n e i -> cs3 n (simplc _ e) i.
+by case : (simplc_corr n e i).
+Qed.
+
+
+Lemma simplc_corrg n e i :
+  cs3 n (simplc _ e) i ->  cs3 n e i.
+by case : (simplc_corr n e i).
+Qed.
+
+Ltac sreify_rec n env t :=
+  match t with
+  | True => constr:(t3 n)
+  | False => constr:(bo3 n)
+  | ?a -> ?b =>
+     let ra := ltac:(sreify_rec n env a) in
+      let rb := ltac:(sreify_rec n env b) in
+      constr:(i3 n ra rb) 
+  | ?a /\ ?b => 
+     let ra := (sreify_rec n env a) in
+      let rb := (sreify_rec n env b) in
+      constr:(c3 n ra rb) 
+  | ?a \/ ?b =>
+      let ra := ltac:(sreify_rec n env a) in
+      let rb := ltac:(sreify_rec n env b) in
+      constr:(d3 n ra rb)
+  | ~ ?a =>
+      let ra := ltac:(sreify_rec n env a) in
+      constr:(n3 n ra)
+
+  | forall x: ?T, @?body' x =>
           let y := fresh "y" in
           lazymatch constr:(fun y: T => ltac:(
            let body := beta1 body' y in
            let s := ltac:(tst T) in                                  
-              let r := reify_rec_at l' (cons s n) (cons y env) body in
+           let r := sreify_rec
+                      (cons s n)
+                      (cons (@existT Type (fun x => x) T y) env)
+                      body
+           in
               exact r))
      with
-     | (fun _: T => ?r) => constr:(fa n ltac:(let s := tst T in exact s) r) 
+     | (fun _: T => ?r) => constr:(fs3 ltac:(let s := tst T in exact s) n r) 
      end
-      | exists x: ?T, @?body' x =>
-     let y := fresh "y" in
-     lazymatch constr:(fun y: T => ltac:(
-          let body := beta1 body' y in
-          let s := ltac:(let s:= tst T in exact s) in
-       let r := reify_rec_at l' (cons
-                               s
-                               n) (cons y env) body in
-       exact r))
+  | exists x: ?T, @?body' x =>
+          let y := fresh "y" in
+          lazymatch constr:(fun y: T => ltac:(
+           let body := beta1 body' y in
+           let s := ltac:(tst T) in                                  
+           let r := sreify_rec
+                      (cons s n)
+                      (cons (@existT Type (fun x => x) T y) env)
+                      body
+           in
+              exact r))
      with
-     | (fun _: T => ?r) => constr:(ex n
-                                      ltac:(let s := tst T in exact s)
-                                             r)
-     end   
+     | (fun _: T => ?r) => constr:(e3 ltac:(let s := tst T in exact s) n r) 
+     end
+(*
+  | exists x: (sort ?s), @?body' x =>
+          let y := fresh "y" in
+          lazymatch constr:(fun y: (sort s) => ltac:(
+           let body := beta1 body' y in
+           let r := sreify_rec
+                      (cons s n)
+                      (cons (@existT Type (fun x => x) (sort s) y) env)
+                      body in
+              exact r))
+     with
+     | (fun _: (sort s) => ?r) => constr:(e3 s n r) 
+     end
+*)
+  | _ =>
+          constr:(box n (fun (z: pp n) =>
+                   ltac:(let r := wrap env z t in
+                                  exact r))) 
 
-      | ?a -> ?b => 
-          let rb := constr:(fun (z: pp n) =>
-                      ltac:(let r := wrap env z b in exact r)) in
-          let ra := reify_rec_at l' n  env a in
-          constr:(impl n ra rb) 
-      | ?a /\ ?b => 
-          let rb := constr:(fun (z: pp n) =>
-                      ltac:(let r := wrap env z b in exact r)) in
-          let ra := reify_rec_at l' n  env a in
-          constr:(andl n ra rb) 
-      | ?a \/ ?b => 
-          let rb := constr:(fun (z: pp n) =>
-                      ltac:(let r := wrap env z b in exact r)) in
-          let ra := reify_rec_at l' n  env a in
-          constr:(orl n ra rb) 
-     
-        | _ => constr:(Hole n (fun (z: pp n) =>
-                               ltac:(let r := wrap env z t in exact r)))
-     
-end
 end.
 
-Check coerce.
-*)
+Ltac sreify_goal :=
+  match goal with
+  | |- ?g =>
+      let r := sreify_rec  (@nil nat)  (@nil dyn)  g in
+     change (cs3 (@nil nat) r tt)
+  end.
+
+Ltac simplify_goal :=
+  sreify_goal;
+  apply simplc_corrg;
+  rewrite /simplc /eB /eT /cs3.
+
+
+Ltac sreify_hyp h :=
+  match goal with
+  | h : ?g |- _ =>
+         let r := sreify_rec  (@nil nat)  (@nil dyn)  g in
+     change (cs3 (@nil nat) r tt) in h
+  end.
+
+Ltac simplify_hyp h :=
+  sreify_hyp h;
+  move: (simplc_corrh _ _ _ h);
+  clear h;
+  rewrite /simplc /eB /eT /cs3;
+  move => h.
+
+
 Ltac reify_goal l :=
  lazymatch goal with
  | |- ?g =>
      let r := reify_rec l  (@nil nat)  (@nil dyn)  g in
      change (coerce (@nil nat) r tt)
  end.
-
 
 Ltac reify_goal_at l :=
  lazymatch goal with
@@ -1606,7 +1775,27 @@ Ltac rereify_hyp h :=
       rewrite /trl3 /= in h; reify_hyp_at r h
   end.
 
+Check trex_norm_apply.
 
+
+Ltac back h hp gp t i :=
+  reify_goal gp;
+  reify_hyp hp h;
+  let o := type of h in
+  match o with
+    | coerce (@nil nat) ?hc _ =>
+        apply (b3_corr t i (@nil nat) tt (@nil nat) tt hc);
+        rewrite /coerce /sl /= in h;
+        last  assumption;
+        (apply trex_norm_apply; [simpl; try done; auto|
+          rewrite /b3 /o3_norm ;
+          try exact tt; rewrite /= /trl3 /= /cT /cB /=;
+          simplify_goal
+        ]);
+  try by apply I
+  end. 
+
+(*
 Ltac back h hp gp t i :=
   reify_goal gp;
   reify_hyp hp h;
@@ -1618,14 +1807,40 @@ Ltac back h hp gp t i :=
 last  assumption;
         (apply trex_norm_apply; [simpl; try done; auto|
           rewrite /b3 /o3_norm ;
-          try exact tt; rewrite /= /cT /cB ;
+          try exact tt; rewrite /trl3 /= /cT /cB ;
           rereify_goal; apply simpl_corr; rewrite /simpl /cT /cB /coerce ?ppce;
           try exact tt ]);
   rewrite /trs /sl /ts /sfo ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym;
   try by apply I
   end. 
+*)
 
+Ltac forward h1 h2 h3 hp1 hp2 t i :=
+  reify_hyp hp1 h1;
+  reify_hyp hp2 h2;
+  let o1 := type of h1 in
+  let o2 := type of h2 in
+  match o1 with
+  | coerce (@nil nat) ?hc1 _ =>
+    match o2 with
+    | coerce (@nil nat) ?hc2 _  =>
+           move:
+           (f3_corr t i (@nil nat) hc1 tt
+                    (@nil nat) hc2 tt h1 h2) => h3
+    end
+  end;
+  apply trex_norm_fapply in h3;
+  rewrite /coerce /sl /= in h1;
+  rewrite /coerce /sl /= in h2;
+  [ | simpl; try done; auto];
+  rewrite /trl3 /f3 /o3_norm /= /cT /cB in h3;
+  simplify_hyp h3;
+      match goal with
+      | h3 : False |- _ => case h3
+      | _ => idtac
+      end.
 
+(*
 Ltac forward h1 h2 h3 hp1 hp2 t i :=
   reify_hyp hp1 h1;
   reify_hyp hp2 h2;
@@ -1660,7 +1875,7 @@ Ltac forward h1 h2 h3 hp1 hp2 t i :=
       | _ => idtac
                                 end.
 
-
+*)
 
 
 Definition empty : inst'.
@@ -2007,8 +2222,6 @@ apply nil.
 Defined.
 
 
-Print cons.
-
 Goal (exists x, x=2 /\ 3=3) -> exists y, y=2 /\ 3=3.
   move => xx.
 
@@ -2016,6 +2229,8 @@ Goal (exists x, x=2 /\ 3=3) -> exists y, y=2 /\ 3=3.
 
   back xx  [::false; true]  [::false; true]
        [::true; false; false ; true] ex_ex.
+
+
   back xx  [::false; false]  [::false]
       [::false; true; false] ex_ex'.
 Abort.
