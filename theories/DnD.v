@@ -1789,7 +1789,9 @@ Ltac back h hp gp t i :=
         last  assumption;
         (apply trex_norm_apply; [simpl; try done; auto|
           rewrite /b3 /o3_norm ;
-          try exact tt; rewrite /= /trl3 /= /cT /cB /=;
+          try exact tt;
+          rewrite /= /trl3 /= /cT /cB /=;
+            rewrite /trs /sl /ts /sfo ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym;
           simplify_goal
         ]);
   try by apply I
@@ -1834,6 +1836,7 @@ Ltac forward h1 h2 h3 hp1 hp2 t i :=
   rewrite /coerce /sl /= in h2;
   [ | simpl; try done; auto];
   rewrite /trl3 /f3 /o3_norm /= /cT /cB in h3;
+  rewrite /trs /sl /ts /sfo ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym in h3;
   simplify_hyp h3;
       match goal with
       | h3 : False |- _ => case h3
