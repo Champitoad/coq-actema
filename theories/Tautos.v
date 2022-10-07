@@ -68,9 +68,13 @@ Lemma ex_demorgan :
   (forall x, ~ P x) -> ~ exists y, P y.
 Proof.
   intros.
+  actema.
+  Restart.
   unfold not in *.
   intro.
-  (* actema. *)
+actema.
+Qed.
+(*
   forward
     H0
     H
@@ -79,8 +83,7 @@ Proof.
     (false :: false :: nil)%list
     (false :: true :: true :: nil)%list
     (Some (existT (fun s : nat => env -> env -> sort s) 0 (fun env1 _ : env => env1 0 0))
-    :: nil)%list.
-Admitted.
+    :: nil)%list.*)
 
 Lemma bw :
   A -> (~ exists n : nat, A) -> False.
@@ -195,7 +198,7 @@ Proof.
   actema.
 Qed.
 
-Lemma imp_or_distr : (A -> B) \/ (A -> C) -> A -> B \/ C.
+Lemma imp_or_distr : ((A -> B) \/ (A -> C)) -> A -> B \/ C.
 Proof.
   actema.
 Qed.
@@ -234,8 +237,8 @@ Qed.
 
 Lemma disj_contra : ~A -> (A \/ B) -> B.
 Proof.
-  actema. (* BUG: F should be B *)
-Admitted.
+  actema. 
+Qed.
 
 Lemma not_not : A -> ~~A.
 Proof.
