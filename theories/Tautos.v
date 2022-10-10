@@ -289,3 +289,43 @@ Lemma efq : False -> A.
 Proof.
   actema.
 Qed.
+
+Parameter Rich : nat -> Prop.
+Parameter mother : nat -> nat.
+Parameter h : nat.
+
+Definition imm0 : inst1.
+exists 0.
+intros; exact (mother (mother 0)).
+Defined.
+Definition im0 : inst1.
+exists 0.
+intros; exact (mother 0).
+Defined.
+
+
+Lemma eduk1 :
+  (forall x : nat, ~Rich(x) -> Rich(mother(x))) ->
+  (forall x : nat,  ~Rich(mother(mother(x))) \/ ~Rich(x))->
+  False.
+Proof.
+ intros h1 h2.
+case (h2 0) => [h3|h3].
+        forward h1 h3 h4
+                (cons false (cons false nil))
+                      (@nil bool)
+                      (cons false (cons false nil))
+                      (cons (Some imm0) nil).
+                                                  forward h4 h2 h5
+                                                          (@nil bool)
+                                                          (cons false (cons false (cons false nil)))
+                                                          (cons true (cons true (cons true nil)))
+                      (cons (Some im0) nil).
+forward h1 h5 h6 (cons false (cons false(nil)))(@nil bool)(cons false (cons false (nil)))                      (cons (Some im0) nil).
+elim (h3 h6).  
+Admitted.
+
+                                                  
+
+
+                                                          
