@@ -1,5 +1,5 @@
-(* -------------------------------------------------------------------- *)
 open Utils
+(* -------------------------------------------------------------------- *)
 open Fo
 
 (* ------------------------------------------------------------------- *)
@@ -1234,12 +1234,10 @@ end = struct
   (** [rewrite_at p t targ] rewrites the subterm at path [p] in the goal
       into [t]. It automatically shifts variables in [t] to avoid capture by
       binders. *)
-  let rewrite_at (t : term) (p : ipath) : tactic =
+  let rewrite_at (t : term) (p : ipath) ?(pnode = TRewriteAt(t, p)) : tactic =
     let open Proof in fun (proof, _) ->
 
     let { g_id; g_pregoal = goal }, item, (sub, _) = of_ipath proof p in
-    
-    let pnode = TRewriteAt (t, p) in
     
     match item with
     | `C f ->
@@ -1466,6 +1464,8 @@ end = struct
     fun (src, dst) -> [src], [dst]
   
 
+  type pnode += TInstantiate of expr * ipath
+
   (** [instantiate wit tgt targ] instantiates the quantifier at path [tgt] with
       the expression [wit]. If the quantifier occurs in a hypothesis, the
       hypothesis is duplicated before instantiation. *)
@@ -1481,7 +1481,8 @@ end = struct
         in targ |> then_tac first
           (fun (pr, id) ->
             let tgt = { tgt with root = Handle.toint id } in
-            rewrite_at (`F (Form.Subst.f_apply1 (x, 0) wit f)) tgt (pr, id))
+            let pnode = TInstantiate (wit, tgt) in
+            rewrite_at ~pnode (`F (Form.Subst.f_apply1 (x, 0) wit f)) tgt (pr, id))
     | _ ->
         raise TacticNotApplicable
   
@@ -3142,6 +3143,8 @@ end = struct
           `AElim (Handle.toint hd)
       | TLink (src, dst, itrace) ->
           `ALink (of_ipath src, of_ipath dst, of_itrace itrace)
+      | TInstantiate (wit, tgt) ->
+          `AInstantiate (of_expr wit, of_ipath tgt)
       | _ -> raise (UnsupportedAction p)
 
     let export_proof (proof : Proof.proof) : Logic_t.proof =

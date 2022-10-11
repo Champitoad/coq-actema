@@ -74,6 +74,7 @@ type action = [
   | AMove of (uid * uid option)
   | ADuplicate of uid
   | ALink of (ipath * ipath * itrace)
+  | AInstantiate of (expr * ipath)
 ]
 
 type aident = (string * lgoal)
