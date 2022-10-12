@@ -1869,7 +1869,7 @@ Ltac reify_hyp_at l h :=
    s : number of instantiated sort
    o : instantiating object (of type (sort s) *)
 
-Ltac instp_hyp l h h' s o :=
+Ltac inst_hyp l h h' s o :=
   let x := fresh "x" in
   move: (h) => x;
                reify_hyp l x;
@@ -1883,13 +1883,34 @@ Ltac instp_hyp l h h' s o :=
 
 Lemma toto :  hs -> hm -> gs.
 unfold hs, hm, gs; move => h1 h2.
-instp_hyp (cons false nil) h2 h3 0 0.
+inst_hyp (cons false nil) h2 h3 0 0.
 Abort.
 
 
+Lemma toto : ((exists x, H x) -> False) -> False.
+move => h.
+inst_hyp (cons false (cons false nil)) h h' 0 0.
+Abort.
 
 
-        
+Ltac inst_goal l s o :=
+  reify_goal l;
+   match goal with
+   | |- coerce (@nil nat) ?hc _ =>
+      apply (instn_corr (pred (length l))  s o (@nil nat) hc tt);
+       rewrite /= ?trs_corr
+   end.
+
+Lemma toto : 4=3 -> exists x, H x.
+inst_goal (cons true (cons false nil)) 0 99.
+Abort.
+
+
+Lemma toto : (forall x, H x) -> False.
+inst_goal (cons false (cons false nil)) 0 99.
+Abort.
+
+
 (* Once a back or forward steps is performed, we want to apply simplification
    (simpl function).
   For that we need to translate the o3 back into a cx *)
