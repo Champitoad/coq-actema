@@ -875,14 +875,139 @@ Lemma f3_corr :
 move => l ist n1 h1 i1 n2 h2 i2.
 case: (bf3_corr l) => [_ h]; apply h.
 Qed.
-  
+
+
+Print o3.
+
+
+Check (forall l, (cons 3 l) = l).
+Check fa.
+Fixpoint instp (t:nat)(s : nat)(o : sort s)(n : seq nat)
+         (c : pp n)(h : cx n) : Prop :=
+  match t with
+  | 0 =>
+      match h with
+      | fa n' s' h' =>
+          (coerce (s'::n')
+                   h'
+                   (convert (s::n)(s'::n')(o,c)))
+      | _ => True
+      end
+  | S t =>
+      match h with
+      | impl n' h' B =>
+           (instn t s o n' (convert n n' c) h')->
+              (B (convert n n' c))
+      | impr n' B h' =>
+          (B (convert n n' c)) -> (instp t s o n' (convert n n' c) h')
+      | orl n' h' B =>
+          ( instp t s o n' (convert n n' c) h') \/(B (convert n n' c))
+      | orr n' B h' =>
+           (B (convert n n' c)) \/(instp t s o n' (convert n n' c) h')
+      |  andl n' h' B =>
+          ( instp t s o n' (convert n n' c) h') /\(B (convert n n' c))
+      | andr n' B h' =>
+          (B (convert n n' c)) /\(instp t s o n' (convert n n' c) h')
+      | fa n' s' h' =>
+          forall x : sort s',
+            ( instp t s o (s'::n') (convert (s'::n)(s'::n') (x,c)) h')
+     | ex n' s' h' =>
+          exists x : sort s',
+            ( instp t s o (s'::n') (convert (s'::n)(s'::n') (x,c)) h')
+      | X => True
+      end
+  end
+with
+instn (t:nat)(s : nat)(o : sort s)(n : seq nat)
+         (c : pp n)(h : cx n) : Prop :=
+  match t with
+  | 0 =>
+      match h with
+      | ex n' s' h' =>
+          (coerce (s'::n')
+                   h'
+                   (convert (s::n)(s'::n')(o,c)))
+      | _ => False  
+      end
+  | S t =>
+         match h with
+      | impl n' h' B =>
+           (instp t s o n' (convert n n' c) h')->
+              (B (convert n n' c))
+      | impr n' B h' =>
+          (B (convert n n' c)) -> (instn t s o n' (convert n n' c) h')
+      | orl n' h' B =>
+          ( instn t s o n' (convert n n' c) h') \/(B (convert n n' c))
+      | orr n' B h' =>
+           (B (convert n n' c)) \/(instn t s o n' (convert n n' c) h')
+      |  andl n' h' B =>
+          ( instn t s o n' (convert n n' c) h') /\(B (convert n n' c))
+      | andr n' B h' =>
+          (B (convert n n' c)) /\(instn t s o n' (convert n n' c) h')
+      | fa n' s' h' =>
+          forall x : sort s',
+            ( instn t s o (s'::n') (convert (s'::n)(s'::n') (x,c)) h')
+      | ex n' s' h' =>
+          exists x : sort s',
+            ( instn t s o (s'::n') (convert (s'::n)(s'::n') (x,c)) h')
+      | X => False
+      end
+  end.
+   
+
+Lemma inst_corr :
+  forall t s o n h c,
+ ((coerce n h c) ->  (instp t s o n c h))/\
+   ((instn t s o n c h) -> (coerce n h c)).
+  elim => [/=|t ht] s o n h.
+- case h; try done.
+     clear h n.  
+      move => n s' h c; split; last done.
+      intro h'; rewrite convert_corr; apply h'.
+     clear h n.  
+     move => n s' h c; split; first done.
+     rewrite convert_corr.
+     by move => h'; exists (trs s s' o).
+- case: h =>    
+          [n'|n'|n' h'|n' Q|n' Q h'|n' h' Q|n' Q h'|n' h' Q|
+            n' Q h'|n' h' Q| n' s' h'|n' s' h'|n' s' t1 t2|
+            n' s' Q t1] c; split; try (simpl; rewrite ?ppce; done);
+   try (by move: (ht _ o _ h' c)=> [ht1 ht2]; rewrite /= convert_corr; auto; try tauto).  
+ * move => h''; simpl in h''. move => x; move: (ht _ o _ h' (x,c)) => [ht1 ht2].
+   rewrite convert_corr; auto.
+ * move => h''; simpl in h''; move => x; move: (h'' x) => h2;
+   move: (ht _ o _ h' (x,c)) => [ht1 ht2]; apply ht2.
+   by move: h2; rewrite convert_corr trs_corr.
+ * move => [x hx].
+   exists x.
+   rewrite convert_corr.
+   by move: (ht _ o _ h' (x,c)) => [ht1 ht2]; auto.
+ * move => [x hx].
+   exists x.
+   move: (ht _ o _ h' (x,c)) => [ht1 ht2]; auto.
+   apply ht2.
+   by rewrite convert_corr in hx.
+Qed.
+
+Lemma instp_corr t s o n h c:
+ (coerce n h c) ->  (instp t s o n c h).
+by case (inst_corr t s o n h c).
+Qed.
+
+Lemma instn_corr t s o n h c:
+ (instn t s o n c h) ->  (coerce n h c).
+by case (inst_corr t s o n h c).
+Qed.
+
+
+
+
 
 (* Socrates example *)
 Parameter H M : nat -> Prop.
 
 Definition hm := forall x,  H x -> M x.
 Definition hs := H 0.
-
 Definition gs := M 0.
 
 Definition fhs := Hole (nil)  (fun _ => gs).
@@ -1189,11 +1314,14 @@ Abort.
 Notation "'subst!' y 'for' x 'in' f" :=
  (match y with x => f end) (at level 10, f at level 200).
 
+Check (subst! 4 for x in (2=x)).
+
 Ltac beta1 func arg :=
  lazymatch func with
  | (fun a => ?f) => constr:(subst! arg for a in f)
  end.
 
+Check ltac:(let r := beta1 (fun x =>  x+3) 4 in exact r).
 
 Ltac wrap names vals t :=
  lazymatch names with
@@ -1207,22 +1335,6 @@ Ltac wrap names vals t :=
             | ?f y => let t'' := beta1 f v0 in exact t''
                         end))
  end.
-
-(*
-Ltac wrap names vals t :=
- lazymatch names with
- | nil => t
- | cons ?y ?ys =>
-     constr:(
-       let (v0, rest0) := vals
-       in ltac:(
-            let t' := wrap ys rest0 t in
-            lazymatch eval pattern y in t' with
-            | ?f y => let t'' := beta1 f v0 in exact t''
-                        end))
- end.
-
-*)
 
 Fixpoint ncnat n :=
   match n with
@@ -1279,6 +1391,25 @@ Print dyn.
 Print sigT.
 istT : forall (x : A) (_ : P x), @sigT A P.
 *)
+
+
+Ltac nbargs t :=
+  match t with
+  | ?f _ => 1 + (nbargs f)
+  | _ => 0
+  end.
+
+Ltac strip_arg t :=
+  match t with
+  | ?f _ => f
+  end.
+
+(*
+     
+Ltac mkprop l n env p :=
+  match constr:(l) with
+    | nil => 
+ *)
 
 Ltac reify_rec l n env t :=  
   lazymatch constr:(l) with
@@ -1732,8 +1863,33 @@ Ltac reify_hyp_at l h :=
      let r := reify_rec_at l (@nil nat)  (@nil dyn) g in (change (coerce (@nil nat) r tt) in h)
  end.
 
+(* l : path to instantiation (go below instantiated quantifier
+   h : name of instantiated hypothesis
+   h' : name of resulting hypothesis
+   s : number of instantiated sort
+   o : instantiating object (of type (sort s) *)
+
+Ltac instp_hyp l h h' s o :=
+  let x := fresh "x" in
+  move: (h) => x;
+               reify_hyp l x;
+  let sy := type of x in
+   match sy with
+   | coerce (@nil nat) ?hc _ =>
+       move: (instp_corr (pred (length l))  s o (@nil nat) hc tt h) => h';
+       rewrite /= ?trs_corr in h'; clear x
+   end.
 
 
+Lemma toto :  hs -> hm -> gs.
+unfold hs, hm, gs; move => h1 h2.
+instp_hyp (cons false nil) h2 h3 0 0.
+Abort.
+
+
+
+
+        
 (* Once a back or forward steps is performed, we want to apply simplification
    (simpl function).
   For that we need to translate the o3 back into a cx *)
@@ -1790,7 +1946,7 @@ Ltac back h hp gp t i :=
         (apply trex_norm_apply; [simpl; try done; auto|
           rewrite /b3 /o3_norm ;
           try exact tt;
-          rewrite /= /trl3 /= /cT /cB /=;
+          rewrite /= /trl3 /= /cT /cB /= /trad1 /nthc /list_rect /sort;
             rewrite /trs /sl /ts /sfo ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym;
           simplify_goal
         ]);
