@@ -861,15 +861,13 @@ module Import = struct
           begin match tgt.ctxt.kind with
           (* Forward instantiate *)
           | `Hyp ->
-            let id = UidMap.find tgt.ctxt.handle hm in
-            let h = EConstr.mkVar id in
-            let h', hm =
-              let name = Goal.fresh_name ~basename:(Names.Id.to_string id) coq_goal () in
-              let hm = match ipat with
-                       | [[id]] -> UidMap.add id name hm
-                       | _ -> raise (UnexpectedIntroPattern ipat) in
-              EConstr.mkVar name, hm in
-            hm, kername ["Actema"; "DnD"] "inst_hyp", [l; h; h'; s; o]
+            let name = UidMap.find tgt.ctxt.handle hm in
+            let h = EConstr.mkVar name in
+            let hm =
+              match ipat with
+              | [[uid]] -> UidMap.add uid name hm
+              | _ -> raise (UnexpectedIntroPattern ipat) in
+            hm, kername ["Actema"; "DnD"] "inst_hyp_nd", [l; h; s; o]
           (* Backward instantiate *)
           | `Concl ->
               hm, kername ["Actema"; "DnD"] "inst_goal", [l; s; o]

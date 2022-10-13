@@ -51,6 +51,6 @@ Admitted.
 Lemma test_instantiate (n : nat) (P : nat -> Prop) (A : Prop) :
   (forall x, P x) \/ A -> A /\ exists x, P x.
 Proof.
-  actema. actema.
+  intros. actema. admit.
 Admitted.
   
