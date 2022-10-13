@@ -1869,7 +1869,7 @@ Ltac reify_hyp_at l h :=
    s : number of instantiated sort
    o : instantiating object (of type (sort s) *)
 
-Ltac inst_hyp l h h' s o :=
+Ltac inst_hyp_d l h h' s o :=
   let x := fresh "x" in
   move: (h) => x;
                reify_hyp l x;
@@ -1881,15 +1881,27 @@ Ltac inst_hyp l h h' s o :=
    end.
 
 
+
+Ltac inst_hyp l h s o :=
+  reify_hyp l h;
+  let sy := type of h in
+   match sy with
+   | coerce (@nil nat) ?hc _ =>
+       move: (instp_corr (pred (length l))  s o (@nil nat) hc tt h);
+       clear h; move => h;
+       rewrite /= ?trs_corr in h
+   end.
+
+
 Lemma toto :  hs -> hm -> gs.
 unfold hs, hm, gs; move => h1 h2.
-inst_hyp (cons false nil) h2 h3 0 0.
+inst_hyp (cons false nil) h2  0 0.
 Abort.
 
 
 Lemma toto : ((exists x, H x) -> False) -> False.
 move => h.
-inst_hyp (cons false (cons false nil)) h h' 0 0.
+inst_hyp (cons false (cons false nil)) h 0 0.
 Abort.
 
 
