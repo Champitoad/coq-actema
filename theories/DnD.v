@@ -1877,7 +1877,9 @@ Ltac inst_hyp l h h' s o :=
    match sy with
    | coerce (@nil nat) ?hc _ =>
        move: (instp_corr (pred (length l))  s o (@nil nat) hc tt h) => h';
-       rewrite /= ?trs_corr in h'; clear x
+       rewrite /= ?trs_corr in h';
+       rewrite /trs /eqnqtdec /eq_rect_r /eq_rect /nat_rec /eq_sym  /nat_rect /sort /sl /ts /sfo in h';
+       clear x
    end.
 
 
@@ -1889,7 +1891,8 @@ Ltac inst_hyp_nd l h s o :=
    | coerce (@nil nat) ?hc _ =>
        move: (instp_corr (pred (length l))  s o (@nil nat) hc tt h);
        clear h; move => h;
-       rewrite /= ?trs_corr in h
+       rewrite /= ?trs_corr in h;
+        rewrite /trs /eqnqtdec /eq_rect_r /eq_rect /nat_rec /eq_sym  /nat_rect /sort /sl /ts /sfo in h
    end.
 
 
