@@ -3145,6 +3145,8 @@ end = struct
           `ALink (of_ipath src, of_ipath dst, of_itrace itrace)
       | TInstantiate (wit, tgt) ->
           `AInstantiate (of_expr wit, of_ipath tgt)
+      | TDuplicate uid ->
+          `ADuplicate (Handle.toint uid)
       | _ -> raise (UnsupportedAction p)
 
     let export_proof (proof : Proof.proof) : Logic_t.proof =
