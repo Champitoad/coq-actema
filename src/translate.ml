@@ -556,26 +556,23 @@ module Import = struct
     let ty = EConstr.mkConst name in
     ty
   
-  let expr (sign : FOSign.t)
+  let rec expr (sign : FOSign.t)
       (env : Logic_t.env) (lenv : Logic_t.lenv) (side : int)
       (e : Fo_t.expr) : EConstr.t =
-    let rec aux e =
-      match e with
-      | `EVar (x, i) ->
-            if LEnv.exists lenv (x, i) then begin
-              let s = sort_index sign (infer_sort (Vars.push_lenv env lenv) e) in
-              let index : int =
-                List.(lenv |> split |> fst |> nth_index i x) in
-              let env_index = if side = 0 then 2 else 1 in
-              EConstr.(mkApp (mkRel env_index, Trm.[| nat_of_int s; nat_of_int index |]))
-            end else
-              EConstr.mkVar (Names.Id.of_string x)
-      | `EFun (f, args) ->
-          let head = symbol (FOSign.SymbolMap.dnif f sign.symbols.s_funcs) in
-          let args = List.map aux args in
-          EConstr.mkApp (head, Array.of_list args) in
-    let body = aux e in
-    Trm.(lambda "env1" (env_ty ()) (lambda "env2" (env_ty ()) body))
+    match e with
+    | `EVar (x, i) ->
+          if LEnv.exists lenv (x, i) then begin
+            let s = sort_index sign (infer_sort (Vars.push_lenv env lenv) e) in
+            let index : int =
+              List.(lenv |> split |> fst |> nth_index i x) in
+            let env_index = if side = 0 then 2 else 1 in
+            EConstr.(mkApp (mkRel env_index, Trm.[| nat_of_int s; nat_of_int index |]))
+          end else
+            EConstr.mkVar (Names.Id.of_string x)
+    | `EFun (f, args) ->
+        let head = symbol (FOSign.SymbolMap.dnif f sign.symbols.s_funcs) in
+        let args = List.map (expr sign env lenv side) args in
+        EConstr.mkApp (head, Array.of_list args)
 
   let sorts (sign : FOSign.t) : EConstr.t =
     sign.symbols.s_sorts |> FOSign.SymbolMap.keys |>
@@ -639,7 +636,10 @@ module Import = struct
             Log.str (List.to_string (fun (x, _) -> x) le2);
             let ty = infer_sort (Utils.Vars.push_lenv env lenv) e in
             let s = nat_of_int (sort_index sign ty) in
-            existT "s" nat (clos_ty ()) s (expr sign env lenv (1 - side) e)
+            let e =
+              let body = expr sign env lenv (1 - side) e in
+              Trm.(lambda "env1" (env_ty ()) (lambda "env2" (env_ty ()) body)) in
+            existT "s" nat (clos_ty ()) s e
           end w
         end in
       of_list (option (inst1_ty ())) (of_option (inst1_ty ()) (fun x -> x)) i in
@@ -661,11 +661,17 @@ module Import = struct
   let mk_intro_patterns (names : Names.variable list) : Tactypes.intro_patterns =
     let open Tactypes in
     List.map (fun name -> CAst.make (IntroNaming (Namegen.IntroIdentifier name))) names
+  
+  let path (sub : int list) : EConstr.t =
+    let boollist_of_intlist =
+      Stdlib.List.map (fun n -> if n = 0 then false else true) in
+    sub |> boollist_of_intlist |> Trm.boollist
 
   exception UnsupportedAction of Logic_t.action
   exception UnexpectedIntroPattern of Logic_t.intro_pat
   exception UnexpectedIntroVariant of int
   exception UnexpectedDnD
+  exception InvalidInstantiatePath
 
   let action (sign : FOSign.t) (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
              (ipat : Logic_t.intro_pat) (a : Logic_t.action) : hidmap tactic =
@@ -691,8 +697,8 @@ module Import = struct
             Tactics.intro_patterns false pat >>= fun _ ->
             (* Retrieve associated Actema identifier from intro pattern *)
             let id = match ipat with
-                    | [[id]] -> id
-                    | _ -> raise (UnexpectedIntroPattern ipat) in
+                     | [[id]] -> id
+                     | _ -> raise (UnexpectedIntroPattern ipat) in
             (* Add it to the hidmap *)
             return (UidMap.add id name hm)
         | `FConn (`And, _) | `FConn (`Equiv, _) ->
@@ -713,6 +719,8 @@ module Import = struct
             in
             aux (iv = 0) (arity 0 f - iv - 1) >>= fun _ ->
             return hm
+        | `FBind (`Exist, x, ty, f) ->
+            raise (UnsupportedAction a)
         | _ ->
             raise (UnsupportedAction a)
         end
@@ -768,10 +776,6 @@ module Import = struct
             raise (UnsupportedAction a)
         end
     | `ALink (src, dst, itr) ->
-
-        let boollist_of_intlist =
-          Stdlib.List.map (fun n -> if n = 0 then false else true) in
-
         begin match (src, src.ctxt.kind), (dst, dst.ctxt.kind) with
 
         (* Forward DnD *)
@@ -786,13 +790,11 @@ module Import = struct
               let name = Goal.fresh_name ~basename:"fw" coq_goal () in
               let hm = match ipat with
                        | [[id]] -> UidMap.add id name hm
-                       | _ -> hm in
+                       | _ -> raise (UnexpectedIntroPattern ipat) in
               EConstr.mkVar name, hm in
 
-            let hp1 =
-              hyp1.sub |> boollist_of_intlist |> Trm.boollist in
-            let hp2 =
-              hyp2.sub |> boollist_of_intlist |> Trm.boollist in
+            let hp1 = path hyp1.sub in
+            let hp2 = path hyp2.sub in
             
             let t, i =
               let lp = hyp1.sub in
@@ -824,10 +826,8 @@ module Import = struct
               let id = UidMap.find hyp.ctxt.handle hm in
               EConstr.mkVar id in
 
-            let hp =
-              hyp.sub |> boollist_of_intlist |> Trm.boollist in
-            let gp =
-              concl.sub |> boollist_of_intlist |> Trm.boollist in
+            let hp = path hyp.sub in
+            let gp = path concl.sub in
             
             let t, i =
               let lp = hyp.sub in
@@ -852,6 +852,47 @@ module Import = struct
 
         | _ -> raise UnexpectedDnD
         end
+    | `AInstantiate (wit, tgt) ->
+        let l = path (tgt.sub @ [0]) in
+        let s = infer_sort goal.g_env wit |> sort_index sign |> Trm.nat_of_int in
+        let o = expr sign goal.g_env [] 0 wit in
+
+        let hm, tac, args =
+          begin match tgt.ctxt.kind with
+          (* Forward instantiate *)
+          | `Hyp ->
+            let id = UidMap.find tgt.ctxt.handle hm in
+            let h = EConstr.mkVar id in
+            let h', hm =
+              let name = Goal.fresh_name ~basename:(Names.Id.to_string id) coq_goal () in
+              let hm = match ipat with
+                       | [[id]] -> UidMap.add id name hm
+                       | _ -> raise (UnexpectedIntroPattern ipat) in
+              EConstr.mkVar name, hm in
+            hm, kername ["Actema"; "DnD"] "inst_hyp", [l; h; h'; s; o]
+          (* Backward instantiate *)
+          | `Concl ->
+              hm, kername ["Actema"; "DnD"] "inst_goal", [l; s; o]
+          | _ ->
+              raise InvalidInstantiatePath
+          end in
+
+          let open Proofview.Monad in
+          calltac tac args >>= fun _ ->
+          return hm
+    | `ADuplicate uid ->
+        let id = UidMap.find uid hm in
+        let name, hm =
+          let name = Goal.fresh_name ~basename:(Names.Id.to_string id) coq_goal () in
+          let hm = match ipat with
+                   | [[id]] -> UidMap.add id name hm
+                   | _ -> raise (UnexpectedIntroPattern ipat) in
+          Names.Name.mk_name name, hm in
+        let prf = EConstr.mkVar id in
+
+        let open Proofview.Monad in
+        Tactics.pose_proof name prf >>= fun _ ->
+        return hm
     | _ ->
         raise (UnsupportedAction a)
 

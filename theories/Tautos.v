@@ -16,7 +16,54 @@ Proof.
   generalize H3; rewrite fw1; trivial.
 Qed.
 
+Require Import ssreflect.
+
 (** * Existential *)
+Definition gx : (pp (cons 0 nil)) -> nat.
+  move => [x _].
+  exact x.
+Defined.
+
+Definition itest : option inst1.
+  apply Some; exists 0; move => e1 e2.
+  apply e2; exact 0.
+Defined.
+
+Lemma test_inst :
+  (forall x, x = t) -> exists x, P x.
+Proof.
+  intros.
+  change (coerce (@nil nat)
+    (fa _ 0
+      (equality _ 0
+        gx (fun _ => t))) tt) in H.
+  change (coerce (@nil nat)
+    (ex _ 0 
+    (property _ 0
+      (fun c => 
+        P (let (x,_):=c in x))
+        gx)) tt).
+
+        apply 
+        (b3_corr 
+        (cons true (cons false (cons false nil))) 
+        (cons None (cons itest nil))
+      (@nil nat) 
+      tt
+      (@nil nat)
+      tt
+      (fa nil 0
+      (equality (0 :: nil) 0 gx (fun _ : pp (0 :: nil) => t)))
+      (ex nil 0
+      (property (0 :: nil) 0
+          (fun c : pp (0 :: 0 :: nil) => P (let (x, _) := c in x)) gx))
+        ).
+
+  simpl.
+  rewrite /trl3 /=.
+
+  cbn.
+Abort.
 
 Lemma ex_intro :
   P t -> exists x, P x.
@@ -72,7 +119,7 @@ Proof.
   Restart.
   unfold not in *.
   intro.
-actema.
+  actema.
 Qed.
 (*
   forward
@@ -237,7 +284,7 @@ Qed.
 
 Lemma disj_contra : ~A -> (A \/ B) -> B.
 Proof.
-  actema. 
+  actema.
 Qed.
 
 Lemma not_not : A -> ~~A.
