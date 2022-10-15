@@ -208,6 +208,9 @@ module BiMap : sig
   val domain      : ('a, 'b) t -> 'a list
   val codomain    : ('a, 'b) t -> 'b list
 
+  val kdiff       : ('a, 'b) t -> ('a, 'b) t -> ('a, 'b) t
+  val vdiff       : ('a, 'b) t -> ('a, 'b) t -> ('a, 'b) t
+
   val of_enum     : ('a * 'b) Enum.t -> ('a, 'b) t
   val of_seq      : ('a * 'b) Seq.t -> ('a, 'b) t
 end = struct
@@ -240,6 +243,20 @@ end = struct
 
   let codomain (_, l) =
     Map.keys l |> List.of_enum
+
+  let kdiff (r1, _) (r2, _) =
+    let r = r1 |> Map.filter begin fun k _ ->
+        not (Map.exists (fun k' _ -> k = k') r2)
+      end in
+    let l = r |> Map.enum |> Enum.map (fun (x, y) -> y, x) |> Map.of_enum in
+    r, l
+
+  let vdiff (_, l1) (_, l2) =
+    let l = l1 |> Map.filter begin fun k _ ->
+        not (Map.exists (fun k' _ -> k = k') l2)
+      end in
+    let r = l |> Map.enum |> Enum.map (fun (x, y) -> y, x) |> Map.of_enum in
+    r, l
   
   let of_enum e =
     Map.of_enum e, Map.of_enum (e |> Enum.map (fun (x, y) -> (y, x)))

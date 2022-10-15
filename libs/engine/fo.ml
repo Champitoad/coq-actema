@@ -1001,6 +1001,7 @@ module Vars : sig
   val exists    : env -> vname -> bool
   val byid      : env -> uid -> (vname * bvar) option
   val getid     : env -> vname -> uid option
+  val diff      : env -> env -> uid list
   val map       : env -> (expr option -> expr option) -> env
   val all       : env -> (name, bvar list) Map.t
   val to_string : env -> name -> string
@@ -1070,6 +1071,10 @@ end = struct
     (env.env_handles |> BiMap.inverse |> BiMap.find_opt id) >>= fun x ->
     get env x >>= fun body ->
     return (x, body)
+  
+  let diff env1 env2 =
+    BiMap.vdiff env1.env_handles env2.env_handles |>
+    BiMap.bindings |> List.split |> snd
   
   let map (env : env) (f : expr option -> expr option) =
     { env with env_var = Map.map (List.map (snd_map f)) env.env_var }

@@ -64,7 +64,7 @@ type itrace = choice list
 
 type action = [
   | AId
-  | ADef of ((type_ * expr option) * uid)
+  | ADef of ((name * type_ * expr) * uid)
   | AIntro of (int * (expr * type_) option)
   | AElim of uid
   | AExact of uid

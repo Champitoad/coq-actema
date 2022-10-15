@@ -334,7 +334,8 @@ end = struct
       with Invalid_argument _ -> raise (SubgoalNotOpened id) in
 
     let new_hyps = Hyps.diff sub.g_pregoal.g_hyps _goal.g_hyps in
-    let d_ndn = pn, [Hyps.ids new_hyps] in
+    let new_defs = Vars.diff sub.g_pregoal.g_env _goal.g_env in
+    let d_ndn = pn, [Hyps.ids new_hyps @ List.map Handle.ofint new_defs] in
     let dep = { d_src = id; d_dst = [g_id]; d_ndn; } in
 
     let meta =
@@ -372,8 +373,11 @@ end = struct
       try  List.pivot (Handle.eq id) pr.p_crts
       with Invalid_argument _ -> raise (SubgoalNotOpened id) in
 
-    let ipat = subs |> List.map (fun sub ->
-        Hyps.(diff sub.g_pregoal.g_hyps _goal.g_hyps |> ids)) in
+    let ipat =
+      subs |> List.map (fun sub ->
+        let new_hyps = Hyps.diff sub.g_pregoal.g_hyps _goal.g_hyps in
+        let new_defs = Vars.diff sub.g_pregoal.g_env _goal.g_env in
+        Hyps.ids new_hyps @ List.map Handle.ofint new_defs) in
     let d_ndn = pn, ipat in
     let dep = { d_src = id; d_dst = sids; d_ndn; } in
 
@@ -482,15 +486,15 @@ module CoreLogic : sig
 
   type pol = Pos | Neg | Sup
 
-  val cut        : Fo.form -> tactic
-  val assume     : Fo.form -> tactic
-  val add_local  : string * Fo.type_ * Fo.expr option -> tactic
-  val generalize : Handle.t -> tactic
-  val move       : Handle.t -> Handle.t option -> tactic
-  val intro      : ?variant:(int * (expr * type_) option) -> tactic
-  val elim       : ?clear:bool -> Handle.t -> tactic
-  val ivariants  : targ -> string list
-  val forward    : (Handle.t * Handle.t * int list * Form.Subst.subst) -> tactic
+  val cut            : Fo.form -> tactic
+  val assume         : Fo.form -> tactic
+  val add_local_def  : string * Fo.type_ * Fo.expr -> tactic
+  val generalize     : Handle.t -> tactic
+  val move           : Handle.t -> Handle.t option -> tactic
+  val intro          : ?variant:(int * (expr * type_) option) -> tactic
+  val elim           : ?clear:bool -> Handle.t -> tactic
+  val ivariants      : targ -> string list
+  val forward        : (Handle.t * Handle.t * int list * Form.Subst.subst) -> tactic
 
   type asource =
     { kind : asource_kind; selection : selection; }
@@ -605,11 +609,9 @@ end = struct
       | g::l when Form.f_equal env g f -> l
       | g::l -> g::(remove_form env f l)
   
-  
-  type pnode += TDef of (Fo.type_ * Fo.expr option) * Handle.t
 
-  let add_local ((name, ty, body) : string * Fo.type_ * Fo.expr option) ((proof, hd) : targ) =
-    let goal = Proof.byid proof hd in
+  let add_local ((name, ty, body) : string * Fo.type_ * Fo.expr option)
+      (goal : Proof.pregoal) : Proof.pregoal =
 
     Option.map_default (Fo.Form.erecheck goal.g_env ty) () body;
 
@@ -623,8 +625,13 @@ end = struct
     
     let g_goal = Form.f_shift (name, 0) goal.g_goal in
     
-    Proof.xprogress proof hd (TDef ((ty, body), hd))
-      [{ g_env; g_hyps; g_goal }]
+    { g_env; g_hyps; g_goal }
+
+  type pnode += TDef of (Fo.name * Fo.type_ * Fo.expr) * Handle.t
+
+  let add_local_def ((name, ty, body) : string * Fo.type_ * Fo.expr) ((proof, hd) : targ) =
+    let new_goal = add_local (name, ty, Some body) (Proof.byid proof hd) in
+    Proof.xprogress proof hd (TDef ((name, ty, body), hd)) [new_goal]
 
 
   type pnode += TIntro of (int * (expr * type_) option)
@@ -661,10 +668,9 @@ end = struct
         Proof.progress pr id pterm []
 
     | (0, None), FBind (`Forall, x, xty, body) ->
-        (pr, id) |> then_tac
-          (add_local (x, xty, None))
-          (fun (pr, id) ->
-            Proof.progress pr id pterm [body])
+        let new_goal = add_local (x, xty, None) goal in
+        let new_goal = Proof.{ new_goal with g_goal = body } in
+        Proof.xprogress pr id pterm [new_goal]
 
     | (0, Some (e, ety)), FBind (`Exist, x, xty, body) -> begin
         let goal = Proof.byid pr id in
@@ -736,15 +742,11 @@ end = struct
         | FFalse -> result := ((TElim h), `S subs) :: !result
         | FTrue -> result := ((TElim h), `S (subs @ [[Some h, []], gl.g_goal])) :: !result
         | FBind (`Exist, x, ty, f) ->
-            let _ = (pr, id) |> then_tac
-              (add_local (x, ty, None))
-              (fun (pr, id) ->
-                let goal = Proof.byid pr id in
-                let g_hyps = Proof.Hyps.remove goal.g_hyps h in
-                let g_hyps = Proof.(Hyps.add g_hyps h (mk_hyp f)) in
-                let goal = Proof.{ goal with g_hyps } in
-                result := ((TElim h), `X [goal]) :: !result; pr)
-            in ()
+            let goal = add_local (x, ty, None) gl in
+            let g_hyps = Proof.Hyps.remove goal.g_hyps h in
+            let g_hyps = Proof.(Hyps.add g_hyps h (mk_hyp f)) in
+            let goal = Proof.{ goal with g_hyps } in
+            result := ((TElim h), `X [goal]) :: !result
         | _ -> ()
         end;
         (* let _ , goal, s = prune_premisses_ex gl.g_goal in
@@ -3133,6 +3135,8 @@ end = struct
           `AId
       | TExact hd ->
           `AExact (Handle.toint hd)
+      | TDef ((name, ty, body), hd) ->
+          `ADef ((name, of_type_ ty, of_expr body), Handle.toint hd)
       | TIntro (i, wit) ->
           let wit' = wit |>
             Option.map begin fun (e, t) ->

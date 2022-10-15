@@ -358,7 +358,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       let expr = String.trim (Js.to_string expr) in
       let expr = Io.parse_expr (Io.from_string expr) in
       let expr, ty = Fo.Form.echeck goal.g_env expr in
-      CoreLogic.add_local (Js.to_string name, ty, Some expr) (parent##.proof, _self##.handle)
+      CoreLogic.add_local_def (Js.to_string name, ty, expr) (parent##.proof, _self##.handle)
 
     in js_proof_engine (!!doit ())
 
@@ -370,7 +370,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       let expr = String.trim (Js.to_string expr) in
       let name, expr = Io.parse_nexpr (Io.from_string expr) in
       let expr, ty = Fo.Form.echeck goal.g_env expr in
-      CoreLogic.add_local (Location.unloc name, ty, Some expr) (parent##.proof, _self##.handle)
+      CoreLogic.add_local_def (Location.unloc name, ty, expr) (parent##.proof, _self##.handle)
 
     in js_proof_engine (!!doit ())
 
