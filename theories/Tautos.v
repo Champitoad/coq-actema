@@ -11,6 +11,7 @@ Lemma kchal :
   (forall x y, R x y -> S x y) ->
   forall x y, S x y -> R x y.
 Proof.
+  actema. actema. actema.
   intros.
   actema.
   generalize H3; rewrite fw1; trivial.

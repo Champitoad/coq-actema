@@ -684,6 +684,13 @@ module Import = struct
         let name = UidMap.find id hm in
         Tactics.exact_check (EConstr.mkVar name) >>= fun _ ->
         return hm
+    | `ADef ((x, _, e), uid) ->
+        let id = Names.Id.of_string x in
+        let name = Names.Name.Name id in
+        let body = expr sign goal.g_env [] 0 e in
+
+        Tactics.pose_tac name body >>= fun _ ->
+        return (UidMap.add uid id hm)
     | `AIntro (iv, wit) ->
         begin match goal.g_concl with
         | `FTrue ->
@@ -691,16 +698,16 @@ module Import = struct
             return hm
         | `FConn (`Imp, _) | `FConn (`Not, _) ->
             (* Generate fresh Coq identifier for intro *)
-            let name = Goal.fresh_name coq_goal () in
+            let id = Goal.fresh_name coq_goal () in
             (* Apply intro *)
-            let pat = mk_intro_patterns [name] in
+            let pat = mk_intro_patterns [id] in
             Tactics.intro_patterns false pat >>= fun _ ->
             (* Retrieve associated Actema identifier from intro pattern *)
-            let id = match ipat with
-                     | [[id]] -> id
+            let uid = match ipat with
+                     | [[uid]] -> uid
                      | _ -> raise (UnexpectedIntroPattern ipat) in
             (* Add it to the hidmap *)
-            return (UidMap.add id name hm)
+            return (UidMap.add uid id hm)
         | `FConn (`And, _) | `FConn (`Equiv, _) ->
             Tactics.split Tactypes.NoBindings >>= fun _ ->
               return hm
@@ -719,54 +726,65 @@ module Import = struct
             in
             aux (iv = 0) (arity 0 f - iv - 1) >>= fun _ ->
             return hm
-        | `FBind (`Exist, x, ty, f) ->
+        | `FBind (`Forall, x, _, _) ->
+            let id = Names.Id.of_string x in
+            let pat = mk_intro_patterns [id] in
+
+            Tactics.intro_patterns false pat >>= fun _ ->
+            let uid = match ipat with
+                      | [[uid]] -> uid
+                      | _ ->
+                         Log.str (Extlib.List.to_string (Extlib.List.to_string string_of_int) ipat);
+                         raise (UnexpectedIntroPattern ipat) in
+            return (UidMap.add uid id hm)
+        | `FBind (`Exist, x, ty, f) -> 
             raise (UnsupportedAction a)
         | _ ->
             raise (UnsupportedAction a)
         end
-    | `AElim id ->
-        let name = UidMap.find id hm in
-        let hyp = Utils.get_hyp goal id in
+    | `AElim uid ->
+        let id = UidMap.find uid hm in
+        let hyp = Utils.get_hyp goal uid in
         let mk_destruct2
             (mk_ipat : Names.variable * Names.variable -> Names.variable list list)
             (dest_ipat : Logic_t.intro_pat -> Logic_t.uid * Logic_t.uid)
             : hidmap tactic =
           (* Generate fresh Coq identifiers for destruct *)
-          let hyps_names = Goal.hyps_names coq_goal in
-          let name1 = Namegen.next_ident_away name hyps_names in
-          let name2 = Namegen.next_ident_away name (Names.Id.Set.add name1 hyps_names) in
+          let hyps_ids = Goal.hyps_names coq_goal in
+          let id1 = Namegen.next_ident_away id hyps_ids in
+          let id2 = Namegen.next_ident_away id (Names.Id.Set.add id1 hyps_ids) in
           (* Apply destruct *)
-          let h = EConstr.mkVar name in
-          let pat = mk_or_and_intro_pattern (mk_ipat (name1, name2)) in
+          let h = EConstr.mkVar id in
+          let pat = mk_or_and_intro_pattern (mk_ipat (id1, id2)) in
           Tactics.destruct false None h (Some pat) None >>= fun _ ->
           (* Retrieve associated Actema identifiers from intro pattern *)
-          let id1, id2 = dest_ipat ipat in
+          let uid1, uid2 = dest_ipat ipat in
           (* Add them to the hidmap *)
-          return (UidMap.(hm |> add id1 name1 |> add id2 name2))
+          return (UidMap.(hm |> add uid1 id1 |> add uid2 id2))
         in
         let destruct_and =
           let mk_ipat (x, y) = [[x; y]] in
           let dest_ipat = function
-                          | [[id2; id1]] -> id1, id2
+                          | [[uid2; uid1]] -> uid1, uid2
                           | _ -> raise (UnexpectedIntroPattern ipat) in
           mk_destruct2 mk_ipat dest_ipat
         in
         let destruct_or =
           let mk_ipat (x, y) = [[x]; [y]] in
           let dest_ipat = function
-                          | [[id1]; [id2]] -> id1, id2
+                          | [[uid1]; [uid2]] -> uid1, uid2
                           | _ -> raise (UnexpectedIntroPattern ipat) in
           mk_destruct2 mk_ipat dest_ipat
         in
         begin match hyp.h_form with
         | `FTrue | `FFalse ->
-            Tactics.destruct false None (EConstr.mkVar name) None None >>= fun _ ->
+            Tactics.destruct false None (EConstr.mkVar id) None None >>= fun _ ->
             return hm
         | `FConn (`Not, _) ->
-            Tactics.simplest_case (EConstr.mkVar name) >>= fun _ ->
+            Tactics.simplest_case (EConstr.mkVar id) >>= fun _ ->
             return hm
         | `FConn (`Imp, _) ->
-            Tactics.apply (EConstr.mkVar name) >>= fun _ ->
+            Tactics.apply (EConstr.mkVar id) >>= fun _ ->
             return hm
         | `FConn (`And, _) | `FConn (`Equiv, _) ->
             destruct_and
@@ -781,17 +799,17 @@ module Import = struct
         (* Forward DnD *)
         | (hyp1, `Hyp), (hyp2, `Hyp) ->
             let h1 =
-              let name = UidMap.find hyp1.ctxt.handle hm in
-              EConstr.mkVar name in
+              let id = UidMap.find hyp1.ctxt.handle hm in
+              EConstr.mkVar id in
             let h2 =
-              let name = UidMap.find hyp2.ctxt.handle hm in
-              EConstr.mkVar name in
+              let id = UidMap.find hyp2.ctxt.handle hm in
+              EConstr.mkVar id in
             let h3, hm =
-              let name = Goal.fresh_name ~basename:"fw" coq_goal () in
+              let id = Goal.fresh_name ~basename:"fw" coq_goal () in
               let hm = match ipat with
-                       | [[id]] -> UidMap.add id name hm
+                       | [[uid]] -> UidMap.add uid id hm
                        | _ -> raise (UnexpectedIntroPattern ipat) in
-              EConstr.mkVar name, hm in
+              EConstr.mkVar id, hm in
 
             let hp1 = path hyp1.sub in
             let hp2 = path hyp2.sub in
@@ -861,11 +879,11 @@ module Import = struct
           begin match tgt.ctxt.kind with
           (* Forward instantiate *)
           | `Hyp ->
-            let name = UidMap.find tgt.ctxt.handle hm in
-            let h = EConstr.mkVar name in
+            let id = UidMap.find tgt.ctxt.handle hm in
+            let h = EConstr.mkVar id in
             let hm =
               match ipat with
-              | [[uid]] -> UidMap.add uid name hm
+              | [[uid]] -> UidMap.add uid id hm
               | _ -> raise (UnexpectedIntroPattern ipat) in
             hm, kername ["Actema"; "DnD"] "inst_hyp_nd", [l; h; s; o]
           (* Backward instantiate *)
@@ -883,7 +901,7 @@ module Import = struct
         let name, hm =
           let name = Goal.fresh_name ~basename:(Names.Id.to_string id) coq_goal () in
           let hm = match ipat with
-                   | [[id]] -> UidMap.add id name hm
+                   | [[uid]] -> UidMap.add uid name hm
                    | _ -> raise (UnexpectedIntroPattern ipat) in
           Names.Name.mk_name name, hm in
         let prf = EConstr.mkVar id in
