@@ -806,14 +806,13 @@ module Import = struct
             let h1 =
               let id = UidMap.find hyp1.ctxt.handle hm in
               EConstr.mkVar id in
-            let h2 =
-              let id = UidMap.find hyp2.ctxt.handle hm in
-              EConstr.mkVar id in
+            let id2 = UidMap.find hyp2.ctxt.handle hm in
+            let h2 = EConstr.mkVar id2 in
             let h3, hm =
-              let id = Goal.fresh_name ~basename:"fw" coq_goal () in
+              let id = Goal.fresh_name ~basename:(Names.Id.to_string id2) coq_goal () in
               let hm = match ipat with
                        | [[uid]] -> UidMap.add uid id hm
-                       | _ -> raise (UnexpectedIntroPattern ipat) in
+                       | _ -> hm in
               EConstr.mkVar id, hm in
 
             let hp1 = path hyp1.sub in

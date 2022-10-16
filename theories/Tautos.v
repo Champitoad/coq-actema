@@ -14,57 +14,10 @@ Proof.
   actema. actema. actema.
   intros.
   actema.
-  generalize H3; rewrite fw1; trivial.
+  generalize H3; rewrite H6; trivial.
 Qed.
 
 Require Import ssreflect.
-
-(** * Existential *)
-Definition gx : (pp (cons 0 nil)) -> nat.
-  move => [x _].
-  exact x.
-Defined.
-
-Definition itest : option inst1.
-  apply Some; exists 0; move => e1 e2.
-  apply e2; exact 0.
-Defined.
-
-Lemma test_inst :
-  (forall x, x = t) -> exists x, P x.
-Proof.
-  intros.
-  change (coerce (@nil nat)
-    (fa _ 0
-      (equality _ 0
-        gx (fun _ => t))) tt) in H.
-  change (coerce (@nil nat)
-    (ex _ 0 
-    (property _ 0
-      (fun c => 
-        P (let (x,_):=c in x))
-        gx)) tt).
-
-        apply 
-        (b3_corr 
-        (cons true (cons false (cons false nil))) 
-        (cons None (cons itest nil))
-      (@nil nat) 
-      tt
-      (@nil nat)
-      tt
-      (fa nil 0
-      (equality (0 :: nil) 0 gx (fun _ : pp (0 :: nil) => t)))
-      (ex nil 0
-      (property (0 :: nil) 0
-          (fun c : pp (0 :: 0 :: nil) => P (let (x, _) := c in x)) gx))
-        ).
-
-  simpl.
-  rewrite /trl3 /=.
-
-  cbn.
-Abort.
 
 Lemma ex_intro :
   P t -> exists x, P x.
@@ -72,15 +25,6 @@ Proof.
   intros.
   actema.
 Qed.
-
-Definition iin : (list (option inst1)).
-  apply cons.
-  apply Some.
-  exists 0.
-intros e1 e2.  
-apply e1; exact 0.
-  apply nil.
-Defined.
 
 Lemma ex_elim :
   (exists x, P x) -> (forall y, P y -> C) -> C.
@@ -122,23 +66,13 @@ Proof.
   intro.
   actema.
 Qed.
-(*
-  forward
-    H0
-    H
-    fw
-    (false :: nil)%list
-    (false :: false :: nil)%list
-    (false :: true :: true :: nil)%list
-    (Some (existT (fun s : nat => env -> env -> sort s) 0 (fun env1 _ : env => env1 0 0))
-    :: nil)%list.*)
 
 Lemma bw :
   A -> (~ exists n : nat, A) -> False.
 Proof.
   intros.
   actema.
-Admitted.
+Qed.
 
 (** * Implication *)
 
@@ -305,8 +239,6 @@ Qed.
 
 Lemma double_neg_imp : (~~A -> ~~B) -> ~~(A -> B).
 Proof.
-  (* actema_force "bug". *)
-  (* BUG: some DnD proofs do not work out correctly *)
   actema.
 Qed.
 
@@ -372,9 +304,6 @@ case (h2 0) => [h3|h3].
                       (cons (Some im0) nil).
 forward h1 h5 h6 (cons false (cons false(nil)))(@nil bool)(cons false (cons false (nil)))                      (cons (Some im0) nil).
 elim (h3 h6).  
-Admitted.
-
-                                                  
-
-
-                                                          
+Restart.
+  actema.
+Qed.
