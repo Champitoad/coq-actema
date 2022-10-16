@@ -704,8 +704,8 @@ module Import = struct
             Tactics.intro_patterns false pat >>= fun _ ->
             (* Retrieve associated Actema identifier from intro pattern *)
             let uid = match ipat with
-                     | [[uid]] -> uid
-                     | _ -> raise (UnexpectedIntroPattern ipat) in
+                      | [[uid]] -> uid
+                      | _ -> raise (UnexpectedIntroPattern ipat) in
             (* Add it to the hidmap *)
             return (UidMap.add uid id hm)
         | `FConn (`And, _) | `FConn (`Equiv, _) ->
@@ -727,54 +727,57 @@ module Import = struct
             aux (iv = 0) (arity 0 f - iv - 1) >>= fun _ ->
             return hm
         | `FBind (`Forall, x, _, _) ->
-            let id = Names.Id.of_string x in
+            let id = Goal.fresh_name ~basename:x coq_goal () in
             let pat = mk_intro_patterns [id] in
 
             Tactics.intro_patterns false pat >>= fun _ ->
             let uid = match ipat with
                       | [[uid]] -> uid
-                      | _ ->
-                         Log.str (Extlib.List.to_string (Extlib.List.to_string string_of_int) ipat);
-                         raise (UnexpectedIntroPattern ipat) in
+                      | _ -> raise (UnexpectedIntroPattern ipat) in
             return (UidMap.add uid id hm)
-        | `FBind (`Exist, x, ty, f) -> 
-            raise (UnsupportedAction a)
         | _ ->
             raise (UnsupportedAction a)
         end
     | `AElim uid ->
         let id = UidMap.find uid hm in
         let hyp = Utils.get_hyp goal uid in
-        let mk_destruct2
-            (mk_ipat : Names.variable * Names.variable -> Names.variable list list)
-            (dest_ipat : Logic_t.intro_pat -> Logic_t.uid * Logic_t.uid)
+        let mk_destruct
+            (ids : Names.variable list)
+            (mk_pat : Names.variable list -> Names.variable list list)
+            (dest_ipat : Logic_t.intro_pat -> Logic_t.uid list)
             : hidmap tactic =
-          (* Generate fresh Coq identifiers for destruct *)
+          (* Apply destruct *)
+          let h = EConstr.mkVar id in
+          let pat = mk_or_and_intro_pattern (mk_pat ids) in
+          Tactics.destruct false None h (Some pat) None >>= fun _ ->
+          (* Retrieve associated Actema identifiers from intro pattern *)
+          let uids = dest_ipat ipat in
+          (* Add them to the hidmap *)
+          return (Stdlib.List.fold_left2 (fun hm uid id -> UidMap.add uid id hm) hm uids ids)
+        in
+        let destruct_and =
           let hyps_ids = Goal.hyps_names coq_goal in
           let id1 = Namegen.next_ident_away id hyps_ids in
           let id2 = Namegen.next_ident_away id (Names.Id.Set.add id1 hyps_ids) in
-          (* Apply destruct *)
-          let h = EConstr.mkVar id in
-          let pat = mk_or_and_intro_pattern (mk_ipat (id1, id2)) in
-          Tactics.destruct false None h (Some pat) None >>= fun _ ->
-          (* Retrieve associated Actema identifiers from intro pattern *)
-          let uid1, uid2 = dest_ipat ipat in
-          (* Add them to the hidmap *)
-          return (UidMap.(hm |> add uid1 id1 |> add uid2 id2))
-        in
-        let destruct_and =
-          let mk_ipat (x, y) = [[x; y]] in
+          let mk_ipat = function [x; y] -> [[x; y]] | _ -> assert false in
           let dest_ipat = function
-                          | [[uid2; uid1]] -> uid1, uid2
+                          | [[uid2; uid1]] -> [uid1; uid2]
                           | _ -> raise (UnexpectedIntroPattern ipat) in
-          mk_destruct2 mk_ipat dest_ipat
+          mk_destruct [id1; id2] mk_ipat dest_ipat
         in
+        let destruct_ex x =
+          let idx = Goal.fresh_name ~basename:x coq_goal () in
+          let mk_ipat = function [x; y] -> [[x; y]] | _ -> assert false in
+          let dest_ipat = function
+                          | [[uidx]] -> [uidx; uid]
+                          | _ -> raise (UnexpectedIntroPattern ipat) in
+          mk_destruct [idx; id] mk_ipat dest_ipat in
         let destruct_or =
-          let mk_ipat (x, y) = [[x]; [y]] in
+          let mk_ipat = function [x; y] -> [[x]; [y]] | _ -> assert false in
           let dest_ipat = function
-                          | [[uid1]; [uid2]] -> uid1, uid2
+                          | [[uid1]; [uid2]] -> [uid1; uid2]
                           | _ -> raise (UnexpectedIntroPattern ipat) in
-          mk_destruct2 mk_ipat dest_ipat
+          mk_destruct [id; id] mk_ipat dest_ipat
         in
         begin match hyp.h_form with
         | `FTrue | `FFalse ->
@@ -790,6 +793,8 @@ module Import = struct
             destruct_and
         | `FConn (`Or, _) ->
             destruct_or
+        | `FBind (`Exist, x, _, _) ->
+            destruct_ex x
         | _ ->
             raise (UnsupportedAction a)
         end

@@ -86,7 +86,7 @@ Lemma ex_elim :
   (exists x, P x) -> (forall y, P y -> C) -> C.
 Proof.
   intros.
-  actema "forward".
+  actema.
 Qed.
 
 (** * Forall *)
@@ -305,6 +305,7 @@ Qed.
 
 Lemma double_neg_imp : (~~A -> ~~B) -> ~~(A -> B).
 Proof.
+  (* actema_force "bug". *)
   (* BUG: some DnD proofs do not work out correctly *)
   actema.
 Qed.
