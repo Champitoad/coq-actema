@@ -652,6 +652,18 @@ with f3 (l:trace)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
                                i2)))
           | _ => top3
           end
+      | property n1' s1 P v =>
+          match h2 with
+         | equality n2' s2 t u =>
+              impl3
+                (Hol3 (s1 = s2 /\
+                ((v (convert n1 n1' i1)  =
+                    (trs s2 s1 (u (convert n2 n2' i2)))))))
+                  (P (convert (cons s1 n1)(cons s1 n1')
+                             ((trs s2 s1 (t (convert n2 n2' i2))),
+                               i1)))
+          | _ => top3
+          end
       | andl n1' h1' B =>
           f3 l ist n1' h1' (convert n1 n1' i1) n2 h2 i2
       | andr n1' B h1' =>
@@ -711,7 +723,19 @@ with f3 (l:trace)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
           | _ => top3
           end
     
+       | equality n2' s2 t u =>
+           match h1 with
+           | property n1' s1 P v =>
+              impl3
+                (Hol3 (s1=s2 /\
+                     ((v (convert n1 n1' i1)=
+                         (trs s2 s1 (t (convert n2 n2' i2)))))))
+               (P (convert (cons s1 n1)(cons s1 n1')
+                            ((trs s2 s1 (u (convert n2 n2' i2))),
+                              i1)))
 
+           |_ => top3
+           end
       | andl n2' h2' B =>
           f3 l ist n1 h1 i1  n2' h2' (convert n2 n2' i2)
       | andr n2' B h2' =>
@@ -815,6 +839,19 @@ elim => [//=|[|] l hl]/=; split; try done;
     try (by case: pv => [p hp] c; exists p;
          eapply hl2; auto; rewrite trs_corr; auto).
 
+move => h [e1 e2].
+rewrite trs_corr.
+move:  t u pv s1  e2 h.  
+rewrite -e1.
+move => h1 h2 s1 s2.
+
+rewrite !trs_corr convert_corr s1.
+simpl. by move <-.
+
+
+
+
+  
   by rewrite /= convert_corr; move => [e1  [e3 e2]];
       rewrite trs_corr -e1 -e2.
   (*
@@ -851,7 +888,16 @@ case: ist => [//=|[f|] ist]; first by eauto.
  move: i1 p1 P s1; rewrite -e1; move => i1 -> P s1.
  rewrite trs_corr.
 by move ->.  
+
+  induction h2; try done.
+move => [e1 e2].
+rewrite trs_corr.
+move: s1 s2 e2 p2 p1.  
+rewrite -e1.
+move => s1 s2; rewrite !trs_corr convert_corr.
+by move => -> ->.
 Qed.
+
 
 Definition trl3 := nosimpl tr3.
 
@@ -2521,6 +2567,57 @@ intro h.
 rew_dnd h (@nil bool)(cons 1 nil)(@nil bool)(cons true nil)(@nil (option inst1)).
 Abort.
   
+
+Ltac rew_dnd' h hp hp' gp t i' :=
+  let i := eval compute in i' in
+  reify_eq gp; 
+  let h' := fresh "h" in
+  reify_prop_hyp h h' hp' hp;
+  let ec :=
+    match type of h' with
+    | coerce _ ?e _ => e
+    end in 
+ let gc :=
+    match goal with
+    | |- coerce _ ?g _  => g
+    end in 
+  apply (b3_corr t i  (@nil nat) tt (@nil nat) tt
+                 ec gc);
+  [idtac| try assumption];
+  (apply trex_norm_apply ; [try split; try reflexivity|idtac]);
+     rewrite  /b3 /trl3 /tr3 /o3_norm /convert /cT /cB  /appist /sort /trad1 /nth /nthc /list_rect /sort;
+  rewrite /trs /sl /ts /sfo ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym;
+  clear h';
+  simplify_goal;
+  rewrite  /sort /sl /ts /sfo.
+
+(*
+Definition iin  : nat -> list (option inst1).
+  intro n.
+apply cons; last apply nil.
+apply Some; exists 0.
+move => *; exact n.
+Defined.
+
+Parameter P : nat -> Prop.
+Goal P 0 -> 0=2 -> P 2.
+intro h.
+rew_dnd' h (@nil bool)(cons 0 nil)
+         (cons false nil)
+         (cons true (cons true nil)) (@nil (option inst1)).
+Abort.
+
+
+
+Goal P 0 -> 2=0 -> P 2.
+intro h.
+rew_dnd' h (@nil bool)(cons 0 nil)
+         (cons false nil)
+         (cons true (cons false nil)) (@nil (option inst1)).
+Abort.
+*)
+
+
 
 (* rewrite with hypothesis h1 in hyp h2 to yield new hyp h3 
  hp1 : list bool = path to the equality
