@@ -2619,7 +2619,7 @@ back h (cons false (cons true nil))(cons false nil)
      idd.
 Abort.
 
-*)
+
 
 Ltac forward h1 h2 h3 hp1 hp2 t i :=
   reify_hyp hp1 h1;
