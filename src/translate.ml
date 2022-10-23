@@ -578,14 +578,15 @@ module Import = struct
     sign.symbols.s_sorts |> FOSign.SymbolMap.keys |>
     Trm.of_list Trm.type_ symbol
 
+  let boollist_of_intlist =
+    Stdlib.List.map (fun n -> if n = 0 then false else true)
+
   let itrace (sign : FOSign.t) (env : Fo_t.env)
       (mode : [`Back | `Forw]) (lp : int list) (rp : int list)
       (lf : Logic_t.form) (rf : Logic_t.form)
-      (itr : Logic_t.itrace) : EConstr.t * EConstr.t =
+      (itr : Logic_t.itrace) : bool list * EConstr.t =
     let focus, inst = Stdlib.List.split itr in
-    let boollist_of_intlist =
-      Stdlib.List.map (fun n -> if n = 0 then false else true) in
-    let t = focus |> boollist_of_intlist |> Trm.boollist in
+    let t = focus |> boollist_of_intlist in
     let i =
       let open EConstr in
       let open Trm in
@@ -799,6 +800,56 @@ module Import = struct
             raise (UnsupportedAction a)
         end
     | `ALink (src, dst, itr) ->
+        let get_eq (p : Logic_t.ipath) : (bool list * bool) option =
+          match Stdlib.List.rev p.sub with
+          | side :: rsub ->
+              begin
+                let p = { p with sub = Stdlib.List.rev rsub } in
+                try
+                  let t = term_of_ipath goal p in
+                  begin match t |> form_of_term with
+                  | `FPred ("_EQ", [_; _]) ->
+                      let hp = rsub |> Stdlib.List.rev |> boollist_of_intlist in
+                      let bside = match side with 0 -> false | _ -> true in
+                      Some (hp, bside)
+                  | _ ->
+                      None
+                  end
+                with Invalid_argument _ -> None
+              end
+          | _ -> None in
+
+        let get_term (p : Logic_t.ipath) : (bool list * int list) option =
+          let rec aux fsub esub t sub =
+            match sub with
+            | [] -> Some (fsub, esub)
+            | i :: sub ->
+                try
+                  let subt = direct_subterm t i in
+                  let fsub, esub =
+                    begin match subt with
+                    | `F _ -> fsub @ [i], esub
+                    | `E _ -> fsub, esub @ [i]
+                    end in
+                  aux fsub esub subt sub
+                with InvalidSubFormPath s | InvalidSubExprPath s ->
+                  None in
+          let open Monads.Option in
+          let t = term_of_ipath goal { p with sub = [] } in
+          let* fsub, esub = aux [] [] t p.sub in
+          Some (boollist_of_intlist fsub, esub) in
+        
+        let rewrite_data =
+          begin match get_eq src, get_term dst with
+          | Some (hsub, side), Some (fsub, esub) ->
+              Some (hsub, side, fsub, esub)
+          | _ ->
+              begin match get_eq dst, get_term src with
+              | Some (hsub, side), Some (fsub, esub) -> Some (hsub, side, fsub, esub)
+              | _ -> None
+              end
+          end in
+        
         begin match (src, src.ctxt.kind), (dst, dst.ctxt.kind) with
 
         (* Forward DnD *)
@@ -815,9 +866,6 @@ module Import = struct
                        | _ -> hm in
               EConstr.mkVar id, hm in
 
-            let hp1 = path hyp1.sub in
-            let hp2 = path hyp2.sub in
-            
             let t, i =
               let lp = hyp1.sub in
               let rp = hyp2.sub in
@@ -825,21 +873,40 @@ module Import = struct
               let rf = (Utils.get_hyp goal hyp2.ctxt.handle).h_form in
               itrace sign goal.g_env `Forw lp rp lf rf itr in
             
-            let log_trace () =
-              let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
-              log h1;
-              log h2;
-              log h3;
-              log hp1;
-              log hp2;
-              log t;
-              log i in
-            log_trace ();
+            begin match rewrite_data with
+            | Some (hsub, side, fsub, esub) ->
+                let t = Trm.boollist (t @ [side]) in
+                
+                let hp1 = Trm.boollist hsub in
+                let hp2 = Trm.boollist fsub in
+                let hp2' = Trm.natlist esub in
 
-            let open Proofview.Monad in
-            let forw = kername ["Actema"; "DnD"] "forward" in
-            calltac forw [h1; h2; h3; hp1; hp2; t; i] >>= fun _ ->
-            return hm
+                let open Proofview.Monad in
+                let forw = kername ["Actema"; "DnD"] "rew_dnd_hyp" in
+                calltac forw [h1; h2; h3; hp1; hp2; hp2'; t; i] >>= fun _ ->
+                return hm
+            | None ->
+                let t = Trm.boollist t in
+
+                let hp1 = path hyp1.sub in
+                let hp2 = path hyp2.sub in
+                
+                let log_trace () =
+                  let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                  log h1;
+                  log h2;
+                  log h3;
+                  log hp1;
+                  log hp2;
+                  log t;
+                  log i in
+                log_trace ();
+
+                let open Proofview.Monad in
+                let forw = kername ["Actema"; "DnD"] "forward" in
+                calltac forw [h1; h2; h3; hp1; hp2; t; i] >>= fun _ ->
+                return hm
+            end
 
         (* Backward DnD *)
         | (hyp, `Hyp), (concl, `Concl)
@@ -847,9 +914,6 @@ module Import = struct
             let h =
               let id = UidMap.find hyp.ctxt.handle hm in
               EConstr.mkVar id in
-
-            let hp = path hyp.sub in
-            let gp = path concl.sub in
             
             let t, i =
               let lp = hyp.sub in
@@ -858,19 +922,48 @@ module Import = struct
               let rf = goal.g_concl in
               itrace sign goal.g_env `Back lp rp lf rf itr in
             
-            let log_trace () =
-              let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
-              log h;
-              log hp;
-              log gp;
-              log t;
-              log i; in
-            log_trace ();
+            begin match rewrite_data with
+            | Some (hsub, side, fsub, esub) ->
+                let t = Trm.boollist (t @ [side]) in
+                
+                let hp = Trm.boollist hsub in
+                let gp = Trm.boollist fsub in
+                let gp' = Trm.natlist esub in
 
-            let open Proofview.Monad in
-            let back = kername ["Actema"; "DnD"] "back" in
-            calltac back [h; hp; gp; t; i] >>= fun _ ->
-            return hm
+                let log_trace () =
+                  let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                  log h;
+                  log hp;
+                  log gp;
+                  log gp';
+                  log t;
+                  log i; in
+                log_trace ();
+
+                let open Proofview.Monad in
+                let back = kername ["Actema"; "DnD"] "rew_dnd" in
+                calltac back [h; hp; gp; gp'; t; i] >>= fun _ ->
+                return hm
+            | None ->
+                let t = Trm.boollist t in
+
+                let hp = path hyp.sub in
+                let gp = path concl.sub in
+                
+                let log_trace () =
+                  let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                  log h;
+                  log hp;
+                  log gp;
+                  log t;
+                  log i; in
+                log_trace ();
+
+                let open Proofview.Monad in
+                let back = kername ["Actema"; "DnD"] "back" in
+                calltac back [h; hp; gp; t; i] >>= fun _ ->
+                return hm
+            end
 
         | _ -> raise UnexpectedDnD
         end

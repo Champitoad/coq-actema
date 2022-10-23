@@ -112,6 +112,9 @@ module Trm = struct
   let mul_kname =
     kername ["Coq"; "Init"; "Nat"] "mul"
   
+  let app_kname =
+    kername ["Coq"; "Init"; "Datatypes"] "app"
+  
   let eq_kname =
     kername ["Coq"; "Init"; "Logic"] "eq"
   
@@ -216,6 +219,10 @@ module Trm = struct
 
   let mul_name : Names.Constant.t =
     Names.Constant.make1 mul_kname
+
+  let app_name : Names.Constant.t =
+    Names.Constant.make1 app_kname
+  
   
   let tt =
     mkConstruct ((Names.MutInd.make1 unit_kname, 0), 1)
