@@ -1,3 +1,4 @@
+open Fo_t
 open Logic_t
 
 module Uid : sig
@@ -45,6 +46,12 @@ module Vars = struct
     List.fold_left begin fun env (x, ty) ->
         push env (x, (ty, None))
       end env lenv
+
+  let byid env id =
+    let open Monads.Option in
+    (env.env_handles |> List.map (fun (x, y) -> y, x) |> List.assoc_opt id) >>= fun x ->
+    get env x >>= fun body ->
+    return (x, body)
 end
 
 module Funs = struct
@@ -93,13 +100,120 @@ let rec einfer (env : env) (e : expr) : type_ =
           fres
     end
 
+let term_of_expr e : term = `E e
+let term_of_form f : term = `F f
+
+let expr_of_term (t : term) =
+  match t with
+  | `E e -> e
+  | _ -> raise (Invalid_argument "Expected an expression")
+
+let form_of_term (t : term) =
+  match t with
+  | `F f -> f
+  | _ -> raise (Invalid_argument "Expected a formula")
+
+exception InvalidPath of ipath
+exception InvalidSubFormPath of int list
+exception InvalidSubExprPath of int list
+
 let direct_subforms = function
   | `FTrue | `FFalse | `FPred _ -> []
   | `FConn (_, fs) -> fs
   | `FBind (_, _, _, f) -> [f]
 
-let direct_subform f i =
-  List.nth (direct_subforms f) i
+let direct_subexprs = function
+  | `EVar _ -> []
+  | `EFun (_, es) -> es
+
+let direct_subterms : term -> term list = function
+  | `F `FPred (_, es) -> List.map term_of_expr es
+  | `F f -> List.map term_of_form (direct_subforms f)
+  | `E e -> List.map term_of_expr (direct_subexprs e)
+
+let direct_subterm (t : term) (i : int) : term =
+  try List.nth (direct_subterms t) i
+  with Failure _ ->
+    match t with
+    | `F `FPred _ | `E _ -> raise (InvalidSubExprPath [i])
+    | `F _ -> raise (InvalidSubFormPath [i])
+
+let direct_subform (f : form) (i : int) =
+  match direct_subterm (`F f) i with
+  | `F f -> f
+  | _ -> raise (InvalidSubFormPath [i])
+
+let direct_subexpr (e : expr) (i : int) =
+  match direct_subterm (`E e) i with
+  | `E e -> e
+  | _ -> raise (InvalidSubExprPath [i])
+
+let subterm (t : term) (p : int list) =
+  try List.fold_left direct_subterm t p
+  with InvalidSubFormPath _ -> raise (InvalidSubFormPath p)
+      | InvalidSubExprPath _ -> raise (InvalidSubExprPath p)
+
+let subform (f : form) (p : int list) =
+  match subterm (`F f) p with
+  | `F f -> f
+  | _ -> raise (InvalidSubFormPath p)
+
+let subexpr (e : expr) (p : int list) =
+  match subterm (`E e) p with
+  | `E e -> e
+  | _ -> raise (InvalidSubExprPath p)
+
+type item = [
+  | `C of form
+  | `H of uid * hyp
+  | `V of vname * bvar
+]
+
+exception InvalidHypId of uid
+
+let byid (hyps : hyp list) (id : uid) =
+  try List.find (fun { h_id; _ } -> h_id = id) hyps
+  with Not_found ->
+    raise (InvalidHypId id)
+
+let of_ipath (goal : goal) (p : ipath)
+  : goal * item * (uid list * term)
+=
+  let exn = InvalidPath p in
+
+  let { ctxt; sub; _ } = p in
+
+  let item, t_item =
+    match ctxt.kind, ctxt.handle with
+    | `Concl, 0 ->
+        let f = goal.g_concl in
+        (`C f, `F f)
+
+    | `Hyp, hd ->
+        let { h_form = hf; _ } as hyd =
+          byid goal.g_hyps hd in
+        (`H (hd, hyd), `F hf)
+
+    | `Var part, hd ->
+        let (x, (_, body)) as def =
+          match Vars.byid goal.g_env hd with
+          | Some v -> v | None -> raise exn in
+        let expr = match part with
+          | `Head -> `EVar x
+          | `Body ->
+          match body with
+          | Some b -> b | None -> raise exn in
+        `V def, `E expr
+    
+    | _ -> raise exn
+  in
+  let target = subterm t_item sub in
+
+  (goal, item, (sub, target))
+
+let term_of_ipath (goal : goal) (p : ipath) : term =
+  let (_, _, (_, t)) = of_ipath goal p in
+  t
 
 let biniou_unhash_dict = Bi_io.make_unhash [
   "TVar"; "TUnit"; "TProd"; "TOr"; "TRec";
@@ -126,6 +240,9 @@ let string_of_expr e =
 
 let string_of_form f =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_form f)
+
+let string_of_term t =
+  Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_term t)
 
 let string_of_goal goal =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_goal goal)

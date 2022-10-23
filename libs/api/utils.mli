@@ -29,11 +29,28 @@ exception TypingError
 
 val einfer : env -> expr -> type_
 
+val form_of_term : term -> form
+val expr_of_term : term -> expr
+
+exception InvalidPath of ipath
+exception InvalidSubFormPath of int list
+exception InvalidSubExprPath of int list
+
 val direct_subforms : form -> form list
 val direct_subform : form -> int -> form
+val subform : form -> int list -> form
+val direct_subexprs : expr -> expr list
+val direct_subexpr : expr -> int -> expr
+val subexpr : expr -> int list -> expr
+val direct_subterms : term -> term list
+val direct_subterm : term -> int -> term
+val subterm : term -> int list -> term
+
+val term_of_ipath : goal -> ipath -> term
 
 val string_of_expr : expr -> string
 val string_of_form : form -> string
+val string_of_term : term -> string
 val string_of_goal : goal -> string
 val string_of_itrace : itrace -> string
 val string_of_proof : proof -> string
