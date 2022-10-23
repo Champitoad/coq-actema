@@ -43,16 +43,9 @@ Proof.
 Qed.
 
 Lemma test_rew t u f :
-  t = u -> f (S t) 5 = 42.
+  t = u -> S (S (f t t)) = f u u -> f (S t) 5 = 42.
 Proof.
-  actema. Fail actema.
-  Fail rew_dnd
-    H
-    (@nil bool)
-    (@nil bool)
-    (0 :: 0 :: 0 :: nil)%list
-    (false :: nil)%list
-    (@nil (option inst1)).
+  intros. actema.
 Admitted.
 
 Lemma test_instantiate (n : nat) (P : nat -> Prop) (A : Prop) :

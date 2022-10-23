@@ -1,9 +1,24 @@
 From Actema Require Import Loader.
 
-Context (A B C D E F G : Prop).
-Context (P Q : nat -> Prop) (R S : nat -> nat -> Prop) (t : nat).
+(** * Peano arithmetic *)
+
+Lemma add_comm :
+  forall n m, n + m = m + n.
+Proof.
+  intros.
+  pose proof PeanoNat.Nat.add_0_r.
+  pose proof PeanoNat.Nat.add_succ_r.
+  induction n; induction m.
+  * actema.
+  * Fail actema. simpl. rewrite <- IHm. reflexivity.
+  * Fail actema. simpl. rewrite IHn. reflexivity.
+  * Fail actema. simpl. rewrite IHn. rewrite PeanoNat.Nat.add_succ_r. reflexivity.
+Qed.
 
 (** * Kaustuv's challenge *)
+
+Context (A B C D E F G : Prop).
+Context (P Q : nat -> Prop) (R S : nat -> nat -> Prop) (t : nat).
 
 Lemma kchal :
   (forall x y, R x y \/ R y x) ->
@@ -11,10 +26,7 @@ Lemma kchal :
   (forall x y, R x y -> S x y) ->
   forall x y, S x y -> R x y.
 Proof.
-  actema. actema. actema.
-  intros.
   actema.
-  generalize H3; rewrite H6; trivial.
 Qed.
 
 Require Import ssreflect.

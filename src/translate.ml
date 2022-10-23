@@ -736,6 +736,10 @@ module Import = struct
                       | [[uid]] -> uid
                       | _ -> raise (UnexpectedIntroPattern ipat) in
             return (UidMap.add uid id hm)
+        | `FPred ("_EQ", _) ->
+            let open Proofview.Monad in
+            Tactics.reflexivity >>= fun _ ->
+            return hm
         | _ ->
             raise (UnsupportedAction a)
         end
@@ -828,8 +832,15 @@ module Import = struct
                   let subt = direct_subterm t i in
                   let fsub, esub =
                     begin match subt with
-                    | `F _ -> fsub @ [i], esub
-                    | `E _ -> fsub, esub @ [i]
+                    | `F _ ->
+                        fsub @ [i], esub
+                    | `E _ ->
+                        let i =
+                          begin match t with
+                          | `F (`FPred ("_EQ", _)) -> i + 1
+                          | _ -> i
+                          end in
+                        fsub, esub @ [i]
                     end in
                   aux fsub esub subt sub
                 with InvalidSubFormPath s | InvalidSubExprPath s ->
@@ -875,11 +886,23 @@ module Import = struct
             
             begin match rewrite_data with
             | Some (hsub, side, fsub, esub) ->
-                let t = Trm.boollist (t @ [side]) in
+                let t = Trm.boollist (t @ [not side]) in
                 
                 let hp1 = Trm.boollist hsub in
                 let hp2 = Trm.boollist fsub in
                 let hp2' = Trm.natlist esub in
+
+                let log_trace () =
+                  let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                  log h1;
+                  log h2;
+                  log h3;
+                  log hp1;
+                  log hp2;
+                  log hp2';
+                  log t;
+                  log i in
+                log_trace ();
 
                 let open Proofview.Monad in
                 let forw = kername ["Actema"; "DnD"] "rew_dnd_hyp" in
@@ -942,7 +965,7 @@ module Import = struct
 
                 let open Proofview.Monad in
                 let back = kername ["Actema"; "DnD"] "rew_dnd" in
-                calltac back [h; hp; gp; gp'; t; i] >>= fun _ ->
+                calltac back [h; hp; gp'; gp; t; i] >>= fun _ ->
                 return hm
             | None ->
                 let t = Trm.boollist t in
