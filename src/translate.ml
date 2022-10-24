@@ -811,15 +811,19 @@ module Import = struct
                 let p = { p with sub = Stdlib.List.rev rsub } in
                 try
                   let t = term_of_ipath goal p in
-                  begin match t |> form_of_term with
-                  | `FPred ("_EQ", [_; _]) ->
+                  let pol = pol_of_ipath goal p in
+                  begin match pol, t |> form_of_term with
+                  | Neg, `FPred ("_EQ", [_; _]) ->
                       let hp = rsub |> Stdlib.List.rev |> boollist_of_intlist in
                       let bside = match side with 0 -> false | _ -> true in
                       Some (hp, bside)
                   | _ ->
                       None
                   end
-                with Invalid_argument _ -> None
+                with
+                (* path does not lead to a formula *)
+                | Invalid_argument _
+                | InvalidSubFormPath _ -> None
               end
           | _ -> None in
 
@@ -957,8 +961,8 @@ module Import = struct
                   let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
                   log h;
                   log hp;
-                  log gp;
                   log gp';
+                  log gp;
                   log t;
                   log i; in
                 log_trace ();

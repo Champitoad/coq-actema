@@ -23,11 +23,13 @@ Proof.
             (@nil bool)
             (cons false (cons false nil))
             (icl1 0).
+    Undo. actema.
     rew_dnd H (cons false nil)
             (cons 2 nil)
             (@nil bool)
             (cons false (cons false nil))
             (icl1 0).
+    Undo. actema.
     reflexivity.    
   * rew_dnd H0
             (cons false (cons false nil))
@@ -35,24 +37,28 @@ Proof.
             (@nil bool)
             (cons false (cons false (cons false nil)))
             (cons (ic 0) (cons (ic m) nil)).
+    Undo. actema.
     rew_dnd IHm
             (@nil bool)
             (cons 1 (cons 0 nil))
             (@nil bool)
             (cons false nil)
             (@nil (option inst1)).
+    Undo. actema.
     rew_dnd H
             (cons false nil)
             (cons 1 (cons 0 nil))
             (@nil bool)
             (cons false (cons false nil))
             (icl1 m).
+    Undo. actema.
     rew_dnd H
             (cons false nil)
             (cons 2 nil)
             (@nil bool)
             (cons false (cons false nil))
             (icl1 (S m)).
+    Undo. actema.
     reflexivity.
   * rew_dnd H
             (cons false nil)
@@ -60,16 +66,16 @@ Proof.
             (@nil bool)
             (cons false (cons false nil))
             (icl1 (S n)).
+    Undo. actema.
     reflexivity. (* utilise un simpl *)
-  * simpl.
-    rewrite IHn.
-    simpl.
+  * simpl. actema. simpl.
     rew_dnd H0
             (cons false (cons false nil))
             (cons 2 (cons 0 nil))
             (@ nil bool)
             (cons false (cons false (cons false nil)))
             (cons (ic m)(cons (ic n) nil)).
+    Undo. actema.
     reflexivity.
 Qed.
 
