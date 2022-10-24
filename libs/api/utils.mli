@@ -46,7 +46,10 @@ val direct_subterms : term -> term list
 val direct_subterm : term -> int -> term
 val subterm : term -> int list -> term
 
+type pol = Pos | Neg | Sup
+
 val term_of_ipath : goal -> ipath -> term
+val pol_of_ipath : goal -> ipath -> pol
 
 val string_of_expr : expr -> string
 val string_of_form : form -> string

@@ -215,6 +215,54 @@ let term_of_ipath (goal : goal) (p : ipath) : term =
   let (_, _, (_, t)) = of_ipath goal p in
   t
 
+
+type pol = Pos | Neg | Sup
+
+(** [opp p] returns the opposite polarity of [p] *)
+let opp = function
+  | Pos -> Neg
+  | Neg -> Pos
+  | Sup -> Sup
+
+(** [direct_subform_pol (p, f) i] returns the [i]th direct subformula of [f]
+    together with its polarity, given that [f]'s polarity is [p] *)
+let direct_subform_pol (p, f : pol * form) (i : int) =
+  match f with
+  | `FConn (c, fs) ->
+    let subp =
+      match c, i with
+      | `Imp, 0 | `Not, 0 -> opp p
+      | `Equiv, _ -> Sup
+      | _, _ -> p
+    in
+    let subf =
+      try List.nth fs i
+      with Invalid_argument _ -> raise (InvalidSubFormPath [i])
+    in
+    subp, subf
+  | `FBind (_, _, _, subf) ->
+    p, subf
+  | _ -> raise (InvalidSubFormPath [i])
+
+(** [subform_pol (p, f) sub] returns the subformula of [f] at path [sub] together
+    with its polarity, given that [f]'s polarity is [p] *)
+let subform_pol (p, f) sub =
+  try List.fold_left direct_subform_pol (p, f) sub
+  with InvalidSubFormPath _ -> raise (InvalidSubFormPath sub)
+
+(** [pol_of_ipath goal p] returns the polarity of the subformula
+    at path [p] in [goal] *)
+let pol_of_ipath (goal : goal) (p : ipath) : pol =
+  let _, item, (sub, _) = of_ipath goal p in
+  let pol, form =
+    match item with
+    | `H (_, { h_form = f; _ }) -> Neg, f
+    | `C f -> Pos, f
+    | `V _ -> raise (InvalidSubFormPath sub)
+  in
+  subform_pol (pol, form) sub |> fst
+
+
 let biniou_unhash_dict = Bi_io.make_unhash [
   "TVar"; "TUnit"; "TProd"; "TOr"; "TRec";
   "EVar"; "EFun";
