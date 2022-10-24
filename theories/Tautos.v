@@ -62,7 +62,12 @@ Proof.
             (icl1 (S n)).
     reflexivity. (* utilise un simpl *)
   * simpl.
-    rewrite IHn.
+    rew_dnd IHn
+            (@nil bool)
+            (cons 1 (cons 0 nil))
+            (@nil bool)
+            (cons false nil)
+            (@nil (option inst1)).
     simpl.
     rew_dnd H0
             (cons false (cons false nil))
