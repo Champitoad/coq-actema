@@ -1,6 +1,15 @@
 From Actema Require Import Loader.
 
 (** * Peano arithmetic *)
+Definition icl1 : nat -> (list (option inst1)).
+intro n; apply cons; try apply nil.
+apply Some; exists 0.
+intros; exact n.
+Defined.
+Definition ic : nat -> (option inst1).
+intro n; apply Some; exists 0.
+intros; exact n.
+Defined.
 
 Lemma add_comm :
   forall n m, n + m = m + n.
@@ -9,10 +18,59 @@ Proof.
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
   induction n; induction m.
-  * actema.
-  * Fail actema. simpl. rewrite <- IHm. reflexivity.
-  * Fail actema. simpl. rewrite IHn. reflexivity.
-  * Fail actema. simpl. rewrite IHn. rewrite PeanoNat.Nat.add_succ_r. reflexivity.
+  * rew_dnd H (cons false nil)
+            (cons 1 nil)
+            (@nil bool)
+            (cons false (cons false nil))
+            (icl1 0).
+    rew_dnd H (cons false nil)
+            (cons 2 nil)
+            (@nil bool)
+            (cons false (cons false nil))
+            (icl1 0).
+    reflexivity.    
+  * rew_dnd H0
+            (cons false (cons false nil))
+            (cons 1 nil)
+            (@nil bool)
+            (cons false (cons false (cons false nil)))
+            (cons (ic 0) (cons (ic m) nil)).
+    rew_dnd IHm
+            (@nil bool)
+            (cons 1 (cons 0 nil))
+            (@nil bool)
+            (cons false nil)
+            (@nil (option inst1)).
+    rew_dnd H
+            (cons false nil)
+            (cons 1 (cons 0 nil))
+            (@nil bool)
+            (cons false (cons false nil))
+            (icl1 m).
+    rew_dnd H
+            (cons false nil)
+            (cons 2 nil)
+            (@nil bool)
+            (cons false (cons false nil))
+            (icl1 (S m)).
+    reflexivity.
+  * rew_dnd H
+            (cons false nil)
+            (cons 1 nil)
+            (@nil bool)
+            (cons false (cons false nil))
+            (icl1 (S n)).
+    reflexivity. (* utilise un simpl *)
+  * simpl.
+    rewrite IHn.
+    simpl.
+    rew_dnd H0
+            (cons false (cons false nil))
+            (cons 2 (cons 0 nil))
+            (@ nil bool)
+            (cons false (cons false (cons false nil)))
+            (cons (ic m)(cons (ic n) nil)).
+    reflexivity.
 Qed.
 
 (** * Kaustuv's challenge *)
