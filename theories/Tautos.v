@@ -14,70 +14,11 @@ Defined.
 Lemma add_comm :
   forall n m, n + m = m + n.
 Proof.
-  intros.
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
-  induction n; induction m.
-  * rew_dnd H (cons false nil)
-            (cons 1 nil)
-            (@nil bool)
-            (cons false (cons false nil))
-            (icl1 0).
-    Undo. actema.
-    rew_dnd H (cons false nil)
-            (cons 2 nil)
-            (@nil bool)
-            (cons false (cons false nil))
-            (icl1 0).
-    Undo. actema.
-    reflexivity.    
-  * rew_dnd H0
-            (cons false (cons false nil))
-            (cons 1 nil)
-            (@nil bool)
-            (cons false (cons false (cons false nil)))
-            (cons (ic 0) (cons (ic m) nil)).
-    Undo. actema.
-    rew_dnd IHm
-            (@nil bool)
-            (cons 1 (cons 0 nil))
-            (@nil bool)
-            (cons false nil)
-            (@nil (option inst1)).
-    Undo. actema.
-    rew_dnd H
-            (cons false nil)
-            (cons 1 (cons 0 nil))
-            (@nil bool)
-            (cons false (cons false nil))
-            (icl1 m).
-    Undo. actema.
-    rew_dnd H
-            (cons false nil)
-            (cons 2 nil)
-            (@nil bool)
-            (cons false (cons false nil))
-            (icl1 (S m)).
-    Undo. actema.
-    reflexivity.
-  * rew_dnd H
-            (cons false nil)
-            (cons 1 nil)
-            (@nil bool)
-            (cons false (cons false nil))
-            (icl1 (S n)).
-    Undo. actema.
-    reflexivity. (* utilise un simpl *)
-  * simpl. actema. simpl.
-    rew_dnd H0
-            (cons false (cons false nil))
-            (cons 2 (cons 0 nil))
-            (@ nil bool)
-            (cons false (cons false (cons false nil)))
-            (cons (ic m)(cons (ic n) nil)).
-    Undo. actema.
-    reflexivity.
+  induction n; induction m; actema.
 Qed.
+
 
 (** * Kaustuv's challenge *)
 
@@ -360,7 +301,13 @@ exists 0.
 intros; exact (mother 0).
 Defined.
 
-
+(* algebra *)
+Parameter f g : nat -> nat.
+Lemma inv_d : (forall y, f (g y) = y) -> (forall x, exists y,  x = g y) ->
+              forall x,  g (f x) = x.
+actema.
+Qed.
+  
 Lemma eduk1 :
   (forall x : nat, ~Rich(x) -> Rich(mother(x))) ->
   (forall x : nat,  ~Rich(mother(mother(x))) \/ ~Rich(x))->
