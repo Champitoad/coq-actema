@@ -1490,10 +1490,6 @@ Ltac patt n p :=
       constr:((fun x => f) a)
   end.
 
-Check dyn.
-Print dyn.
-Print sigT.
-
 Ltac list_args_r t l :=
   match t with
   | (?f ?a) =>
@@ -1654,7 +1650,66 @@ Ltac vabst v T t p :=
 
 Check (fun x => ltac:(let r := vabst zz  nat  (x+3) ( (cons 0 nil)) in exact r)).
 
+(*
+  nil*t -> t'
+  (cons 0 l)*(f a1 ... ak) -> l*f a1 ... ak
+  (cons n l)*(f a1 ... ak) -> (f a1 ... l*an ... ak)
+  (cons 0 l)*(bind x . t) => bind x . (l * t)
+ *)
 
+Ltac simpl_path_r p t :=
+  match p with
+  | nil =>  eval compute in t
+  | cons ?n ?p' =>
+      match t with
+      |  forall x: ?T, @?body' x => 
+          constr:(forall x : T,
+                     ltac:(let body := beta1 body' x in
+                           let r := simpl_path_r p' body in
+                           exact r))
+      |  exists x: ?T, @?body' x => 
+          constr:(exists x : T,
+                     ltac:(let body := beta1 body' x in
+                           let r := simpl_path_r p' body in
+                           exact r))
+      | (?f0 _) =>
+          let l := list_args t in
+          let u := simpl_path_r p' ltac:(extract ltac:(tnth l (S n))) in
+          let l' := ttreplace constr:(@existT Type (fun X => X) _ u) (S n) l in
+          let r := rebuild l'
+          in r
+      end
+  end.
+
+Check (
+          ltac:(let r := simpl_path_r (cons 0 (cons 1 (cons 0 nil))) (exists z,(2+2)+1=z) in exact r)).
+
+Ltac simpl_path p :=
+  match goal with
+  | |- ?g =>
+      let g' := simpl_path_r p g in
+      change g'
+  end.
+
+
+Goal exists z,(2+2)+1=z.
+simpl_path (cons 0 (cons 1 (cons 0 nil))).
+Abort.
+
+Ltac simpl_path_hyp h p :=
+  let g := type of h in
+  let g' := simpl_path_r p g in
+  change g' in h.
+
+Goal (exists z,(2+2)+1=z) -> True.
+intro a.
+simpl_path_hyp a (cons 0 (cons 1 (cons 0 nil))).
+Abort.
+
+Goal (2+2+1 = 0 /\ True).
+simpl_path (cons 0 (cons 1 (cons 0 nil))).
+Abort.
+  
 (*
 Ltac mkprop n env P p :=
   let t := find_pat P p in
@@ -1667,7 +1722,7 @@ Ltac mkprop n env P p :=
   let obj := constr:(fun z : pp n =>
                        ltac:(let r := wrap env z t in exact r)) in
   match prop with
-    | fun ?x : _ =>  ?body 
+    | fun ?x : _, ?body =>  
   constr:(property n s prop obj).
                    
  *)
