@@ -1659,7 +1659,7 @@ Check (fun x => ltac:(let r := vabst zz  nat  (x+3) ( (cons 0 nil)) in exact r))
 
 Ltac simpl_path_r p t :=
   match p with
-  | nil =>  eval compute in t
+  | nil =>  eval simpl in t
   | cons ?n ?p' =>
       match t with
       |  forall x: ?T, @?body' x => 
@@ -1669,6 +1669,11 @@ Ltac simpl_path_r p t :=
                            exact r))
       |  exists x: ?T, @?body' x => 
           constr:(exists x : T,
+                     ltac:(let body := beta1 body' x in
+                           let r := simpl_path_r p' body in
+                           exact r))
+      | fun x : ?T => @?body' x => 
+          constr:(fun x : T =>
                      ltac:(let body := beta1 body' x in
                            let r := simpl_path_r p' body in
                            exact r))
@@ -1696,6 +1701,10 @@ Goal exists z,(2+2)+1=z.
 simpl_path (cons 0 (cons 1 (cons 0 nil))).
 Abort.
 
+Goal ((fun z =>  (1+(2+2)) * (1 * z)) = (fun x => x)). 
+  simpl_path (cons 1 (cons 0 (cons 1 ( nil)))).
+Abort.
+  
 Ltac simpl_path_hyp h p :=
   let g := type of h in
   let g' := simpl_path_r p g in
@@ -2446,9 +2455,8 @@ Ltac simplify_hyp h :=
   sreify_hyp h;
   move: (simplc_corrh _ _ _ h);
   clear h;
-  rewrite /simplc /eB /eT /cs3 /sort /sl /ts /sfo;
-  move => h.
-
+  move => h;
+  rewrite /simplc /eB /eT /cs3 /sort /sl /ts /sfo in h.
 
 
 Ltac reify_goal l :=
