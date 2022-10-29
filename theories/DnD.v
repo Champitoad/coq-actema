@@ -1701,10 +1701,10 @@ Goal exists z,(2+2)+1=z.
 simpl_path (cons 0 (cons 1 (cons 0 nil))).
 Abort.
 
-Goal ((fun z =>  (1+(2+2)) * (1 * z)) = (fun x => x)). 
+Goal ((fun z =>  (1+(2+2)) * (1 * z)) = (fun x => x)).
   simpl_path (cons 1 (cons 0 (cons 1 ( nil)))).
 Abort.
-  
+
 Ltac simpl_path_hyp h p :=
   let g := type of h in
   let g' := simpl_path_r p g in
@@ -1718,7 +1718,95 @@ Abort.
 Goal (2+2+1 = 0 /\ True).
 simpl_path (cons 0 (cons 1 (cons 0 nil))).
 Abort.
-  
+Print Nat.add.
+
+
+Ltac beta_head t l :=
+    lazymatch t with
+    | fun x : ?T => @?body x =>
+        match l with
+        | cons ?a ?l' =>
+            let b := extract a in
+          let t' := beta1 body b in
+          beta_head t' l'
+        end
+    | _ =>
+        rebuild constr:(cons (@existT Type (fun X => X) _ t) l)
+    end.
+
+
+Ltac unfold_path_r p t :=
+  match p with
+  | nil =>
+      let l := list_args t in
+      match l with
+      | cons ?f ?l' =>
+          let r := constr:(
+                       fun x : unit =>
+                         ltac:(
+                         let g := extract f in
+                         let g' := (eval unfold g in g) in
+                         match g' with
+                         | _ =>
+                             ltac:(
+                             is_fix g';
+              let r := rebuild constr:(cons (@existT Type (fun X => X) _ g') l') in
+                      let r'' := (eval compute in r) in
+                      exact r'')
+                         | _ => ltac:(
+                                        let r := (  beta_head g' l') in exact r)
+                         end))
+                         in beta1 r tt
+       end
+  | cons ?n ?p' =>
+      match t with
+      |  forall x: ?T, @?body' x => 
+          constr:(forall x : T,
+                     ltac:(let body := beta1 body' x in
+                           let r := unfold_path_r p' body in
+                           exact r))
+      |  exists x: ?T, @?body' x => 
+          constr:(exists x : T,
+                     ltac:(let body := beta1 body' x in
+                           let r := unfold_path_r p' body in
+                           exact r))
+      | fun x : ?T => @?body' x => 
+          constr:(fun x : T =>
+                     ltac:(let body := beta1 body' x in
+                           let r := unfold_path_r p' body in
+                           exact r))
+      | (?f0 _) =>
+          let l := list_args t in
+          let u := unfold_path_r p' ltac:(extract ltac:(tnth l (S n))) in
+          let l' := ttreplace constr:(@existT Type (fun X => X) _ u) (S n) l in
+          let r := rebuild l'
+          in r
+      end
+  end.
+
+Ltac unfold_path p :=
+  match goal with
+  | |- ?g =>
+      let g' := unfold_path_r p g in
+      change g'
+  end.
+
+Ltac unfold_path_hyp h p :=
+  let g := type of h in
+  let g' := unfold_path_r p g in
+  change g' in h.
+
+
+
+Definition fn := fun x => x + 3.
+Goal (2+(2 + (fn 1))) = fn 4 ->  (2+(2 + (fn 1))) = fn 4.
+  intro h.
+  unfold_path (cons 1 (cons 1 (cons 1 nil))).
+  unfold_path ( (cons 2 ( nil))).
+  unfold_path (cons 1  (cons 1 (cons 1 nil))).
+unfold_path_hyp h (cons 1 (cons 1 (cons 1 nil))).
+Abort.
+
 (*
 Ltac mkprop n env P p :=
   let t := find_pat P p in
@@ -1736,28 +1824,6 @@ Ltac mkprop n env P p :=
                    
  *)
 
-
-
-Check ltac:(let t' := find_pat (2+3) (cons 0 nil) in
-            let T := type of t' in
-                  let s := tst T in
-                  let y := fresh "y" in
-                  
-     let Q := abst nat  (2+3) (cons 0 nil)  in
-     let Q' := constr:(fun y : T =>
-                       fun z : (pp (cons O nil))=>
-                         ltac:(
-                                 let b := beta1 Q y in
-                                 let r :=
-                                   wrap (cons (ww y) nil) z
-                                        b in exact r)) in
-     let Q'' := match Q' with
-                | (fun _: _ => ?r) => r 
-                end
-                   in                             
-                   exact Q'').
-
-Check ltac:(let r:=find_pat (2+3)(cons 0 nil) in exact r).
 
 Ltac preify_rec p l n env t :=  
   lazymatch constr:(l) with
@@ -1863,28 +1929,6 @@ Ltac preify_rec p l n env t :=
      
 end
 end.
-
-Check ltac:(let r :=
-              preify_rec (cons 1 nil)(cons false nil)
-                         (@nil nat)(@nil dyn)
-                         (forall x:nat, x+0=0+x)
-                         in exact r).
-
-                                     
-Eval compute in (coerce (@nil _)  ltac:(let r := preify_rec
-                       (cons 1 nil)
-                       (cons true nil)
-                       (@nil nat)
-                       (@nil dyn)
-                       (True ->  44=3)
-            in exact r) tt).
-Eval compute in (coerce (@nil _) ltac:(let r := preify_rec
-                       (cons 2 nil)
-                       (cons false nil)
-                       (@nil nat)
-                       (@nil dyn)
-                       (forall x : nat, x = 3)
-            in exact r) tt).
 
 Ltac reify_prop p l :=
   match goal with
