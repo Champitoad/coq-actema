@@ -70,30 +70,18 @@ let load_proof (id : aident) : Logic_t.proof option =
 
 let sign = Translate.peano
 
-let actema_tac (action_name : string) : unit tactic =
+let actema_tac ?(force = false) (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
     let sign, goal, hm = Export.goal sign coq_goal in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
 
     let proof =
       match load_proof id with
-      | None ->
+      | Some t when not force -> t
+      | _ ->
           let proof = Lwt_main.run (Client.action goal) in
           save_proof id proof; proof
-      | Some t -> t
     in
-
-    Import.proof sign hm proof
-  end
-
-let actema_force_tac (action_name : string) : unit tactic =
-  Goal.enter begin fun coq_goal ->
-    let sign, goal, hm = Export.goal sign coq_goal in
-    Log.str (Utils.string_of_goal goal);
-    let id = action_name, (goal.g_hyps, goal.g_concl) in
-
-    let proof = Lwt_main.run (Client.action goal) in
-    save_proof id proof;
 
     Import.proof sign hm proof
   end
