@@ -1,3 +1,2 @@
-val actema_tac : string -> unit Proofview.tactic
-val actema_force_tac : string -> unit Proofview.tactic
+val actema_tac : ?force:bool -> string -> unit Proofview.tactic
 val test_tac : unit Proofview.tactic
