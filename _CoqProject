@@ -1,4 +1,5 @@
 -R theories/ Actema
+-R theories/fundamental-arithmetics FundamentalArithmetics
 -I src
 
 theories/Loader.v

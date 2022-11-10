@@ -1,3 +1,6 @@
 [submodule "actema-desktop"]
 	path = actema-desktop
 	url = git@github.com:Champitoad/actema-desktop.git
+[submodule "theories/fundamental-arithmetics"]
+	path = theories/fundamental-arithmetics
+	url = git@github.com:coq-contribs/fundamental-arithmetics.git
