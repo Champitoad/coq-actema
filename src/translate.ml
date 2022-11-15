@@ -675,43 +675,32 @@ module Import = struct
   exception InvalidInstantiatePath
 
   let action (sign : FOSign.t) (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
-             (ipat : Logic_t.intro_pat) (a : Logic_t.action) : hidmap tactic =
+             (a : Logic_t.action) : unit tactic =
     let open Proofview.Monad in
     match a with
     | `AId ->
-        Tacticals.tclIDTAC >>= fun () ->
-        return hm
+        Tacticals.tclIDTAC
     | `AExact id ->
         let name = UidMap.find id hm in
-        Tactics.exact_check (EConstr.mkVar name) >>= fun _ ->
-        return hm
+        Tactics.exact_check (EConstr.mkVar name)
     | `ADef ((x, _, e), uid) ->
         let id = Names.Id.of_string x in
         let name = Names.Name.Name id in
         let body = expr sign goal.g_env [] 0 e in
 
-        Tactics.pose_tac name body >>= fun _ ->
-        return (UidMap.add uid id hm)
+        Tactics.pose_tac name body
     | `AIntro (iv, wit) ->
         begin match goal.g_concl with
         | `FTrue ->
-            Tactics.one_constructor 1 Tactypes.NoBindings >>= fun _ ->
-            return hm
+            Tactics.one_constructor 1 Tactypes.NoBindings
         | `FConn (`Imp, _) | `FConn (`Not, _) ->
             (* Generate fresh Coq identifier for intro *)
             let id = Goal.fresh_name coq_goal () in
             (* Apply intro *)
             let pat = mk_intro_patterns [id] in
-            Tactics.intro_patterns false pat >>= fun _ ->
-            (* Retrieve associated Actema identifier from intro pattern *)
-            let uid = match ipat with
-                      | [[uid]] -> uid
-                      | _ -> raise (UnexpectedIntroPattern ipat) in
-            (* Add it to the hidmap *)
-            return (UidMap.add uid id hm)
+            Tactics.intro_patterns false pat
         | `FConn (`And, _) | `FConn (`Equiv, _) ->
-            Tactics.split Tactypes.NoBindings >>= fun _ ->
-              return hm
+            Tactics.split Tactypes.NoBindings
         | `FConn (`Or, _) as f ->
             let rec arity acc f =
               match f with
@@ -725,21 +714,13 @@ module Import = struct
               | n ->
                   Tactics.left Tactypes.NoBindings >>= fun _ -> aux zero (n-1)
             in
-            aux (iv = 0) (arity 0 f - iv - 1) >>= fun _ ->
-            return hm
+            aux (iv = 0) (arity 0 f - iv - 1)
         | `FBind (`Forall, x, _, _) ->
             let id = Goal.fresh_name ~basename:x coq_goal () in
             let pat = mk_intro_patterns [id] in
-
-            Tactics.intro_patterns false pat >>= fun _ ->
-            let uid = match ipat with
-                      | [[uid]] -> uid
-                      | _ -> raise (UnexpectedIntroPattern ipat) in
-            return (UidMap.add uid id hm)
+            Tactics.intro_patterns false pat
         | `FPred ("_EQ", _) ->
-            let open Proofview.Monad in
-            Tactics.reflexivity >>= fun _ ->
-            return hm
+            Tactics.reflexivity
         | _ ->
             raise (UnsupportedAction a)
         end
@@ -749,51 +730,34 @@ module Import = struct
         let mk_destruct
             (ids : Names.variable list)
             (mk_pat : Names.variable list -> Names.variable list list)
-            (dest_ipat : Logic_t.intro_pat -> Logic_t.uid list)
-            : hidmap tactic =
+            : unit tactic =
           (* Apply destruct *)
           let h = EConstr.mkVar id in
           let pat = mk_or_and_intro_pattern (mk_pat ids) in
-          Tactics.destruct false None h (Some pat) None >>= fun _ ->
-          (* Retrieve associated Actema identifiers from intro pattern *)
-          let uids = dest_ipat ipat in
-          (* Add them to the hidmap *)
-          return (Stdlib.List.fold_left2 (fun hm uid id -> UidMap.add uid id hm) hm uids ids)
+          Tactics.destruct false None h (Some pat) None
         in
         let destruct_and =
           let hyps_ids = Goal.hyps_names coq_goal in
           let id1 = Namegen.next_ident_away id hyps_ids in
           let id2 = Namegen.next_ident_away id (Names.Id.Set.add id1 hyps_ids) in
           let mk_ipat = function [x; y] -> [[x; y]] | _ -> assert false in
-          let dest_ipat = function
-                          | [[uid2; uid1]] -> [uid1; uid2]
-                          | _ -> raise (UnexpectedIntroPattern ipat) in
-          mk_destruct [id1; id2] mk_ipat dest_ipat
+          mk_destruct [id1; id2] mk_ipat
         in
         let destruct_ex x =
           let idx = Goal.fresh_name ~basename:x coq_goal () in
           let mk_ipat = function [x; y] -> [[x; y]] | _ -> assert false in
-          let dest_ipat = function
-                          | [[uidx]] -> [uidx; uid]
-                          | _ -> raise (UnexpectedIntroPattern ipat) in
-          mk_destruct [idx; id] mk_ipat dest_ipat in
+          mk_destruct [idx; id] mk_ipat in
         let destruct_or =
           let mk_ipat = function [x; y] -> [[x]; [y]] | _ -> assert false in
-          let dest_ipat = function
-                          | [[uid1]; [uid2]] -> [uid1; uid2]
-                          | _ -> raise (UnexpectedIntroPattern ipat) in
-          mk_destruct [id; id] mk_ipat dest_ipat
+          mk_destruct [id; id] mk_ipat
         in
         begin match hyp.h_form with
         | `FTrue | `FFalse ->
-            Tactics.destruct false None (EConstr.mkVar id) None None >>= fun _ ->
-            return hm
+            Tactics.destruct false None (EConstr.mkVar id) None None
         | `FConn (`Not, _) ->
-            Tactics.simplest_case (EConstr.mkVar id) >>= fun _ ->
-            return hm
+            Tactics.simplest_case (EConstr.mkVar id)
         | `FConn (`Imp, _) ->
-            Tactics.apply (EConstr.mkVar id) >>= fun _ ->
-            return hm
+            Tactics.apply (EConstr.mkVar id)
         | `FConn (`And, _) | `FConn (`Equiv, _) ->
             destruct_and
         | `FConn (`Or, _) ->
@@ -874,12 +838,9 @@ module Import = struct
               EConstr.mkVar id in
             let id2 = UidMap.find hyp2.ctxt.handle hm in
             let h2 = EConstr.mkVar id2 in
-            let h3, hm =
+            let h3 =
               let id = Goal.fresh_name ~basename:(Names.Id.to_string id2) coq_goal () in
-              let hm = match ipat with
-                       | [[uid]] -> UidMap.add uid id hm
-                       | _ -> hm in
-              EConstr.mkVar id, hm in
+              EConstr.mkVar id in
 
             let t, i =
               let lp = hyp1.sub in
@@ -908,10 +869,8 @@ module Import = struct
                   log i in
                 log_trace ();
 
-                let open Proofview.Monad in
                 let forw = kername ["Actema"; "DnD"] "rew_dnd_hyp" in
-                calltac forw [h1; h2; h3; hp1; hp2; hp2'; t; i] >>= fun _ ->
-                return hm
+                calltac forw [h1; h2; h3; hp1; hp2; hp2'; t; i]
             | None ->
                 let t = Trm.boollist t in
 
@@ -929,10 +888,8 @@ module Import = struct
                   log i in
                 log_trace ();
 
-                let open Proofview.Monad in
                 let forw = kername ["Actema"; "DnD"] "forward" in
-                calltac forw [h1; h2; h3; hp1; hp2; t; i] >>= fun _ ->
-                return hm
+                calltac forw [h1; h2; h3; hp1; hp2; t; i]
             end
 
         (* Backward DnD *)
@@ -967,10 +924,8 @@ module Import = struct
                   log i; in
                 log_trace ();
 
-                let open Proofview.Monad in
                 let back = kername ["Actema"; "DnD"] "rew_dnd" in
-                calltac back [h; hp; gp'; gp; t; i] >>= fun _ ->
-                return hm
+                calltac back [h; hp; gp'; gp; t; i]
             | None ->
                 let t = Trm.boollist t in
 
@@ -986,10 +941,8 @@ module Import = struct
                   log i; in
                 log_trace ();
 
-                let open Proofview.Monad in
                 let back = kername ["Actema"; "DnD"] "back" in
-                calltac back [h; hp; gp; t; i] >>= fun _ ->
-                return hm
+                calltac back [h; hp; gp; t; i]
             end
 
         | _ -> raise UnexpectedDnD
@@ -999,44 +952,33 @@ module Import = struct
         let s = infer_sort goal.g_env wit |> sort_index sign |> Trm.nat_of_int in
         let o = expr sign goal.g_env [] 0 wit in
 
-        let hm, tac, args =
+        let tac, args =
           begin match tgt.ctxt.kind with
           (* Forward instantiate *)
           | `Hyp ->
             let id = UidMap.find tgt.ctxt.handle hm in
             let h = EConstr.mkVar id in
-            let hm =
-              match ipat with
-              | [[uid]] -> UidMap.add uid id hm
-              | _ -> raise (UnexpectedIntroPattern ipat) in
-            hm, kername ["Actema"; "DnD"] "inst_hyp_nd", [l; h; s; o]
+            kername ["Actema"; "DnD"] "inst_hyp_nd", [l; h; s; o]
           (* Backward instantiate *)
           | `Concl ->
-              hm, kername ["Actema"; "DnD"] "inst_goal", [l; s; o]
+              kername ["Actema"; "DnD"] "inst_goal", [l; s; o]
           | _ ->
               raise InvalidInstantiatePath
           end in
 
-          let open Proofview.Monad in
-          calltac tac args >>= fun _ ->
-          return hm
+          calltac tac args
     | `ADuplicate uid ->
         let id = UidMap.find uid hm in
-        let name, hm =
+        let name =
           let name = Goal.fresh_name ~basename:(Names.Id.to_string id) coq_goal () in
-          let hm = match ipat with
-                   | [[uid]] -> UidMap.add uid name hm
-                   | _ -> raise (UnexpectedIntroPattern ipat) in
-          Names.Name.mk_name name, hm in
+          Names.Name.mk_name name in
         let prf = EConstr.mkVar id in
 
-        let open Proofview.Monad in
-        Tactics.pose_proof name prf >>= fun _ ->
-        return hm
+        Tactics.pose_proof name prf
     | _ ->
         raise (UnsupportedAction a)
 
-  let rec proof (sign : FOSign.t) (hm : hidmap) (t : Logic_t.proof) : unit tactic =
+  (* let rec proof (sign : FOSign.t) (hm : hidmap) (t : Logic_t.proof) : unit tactic =
     let open Proofview.Monad in
     match t with
     | `PNode (a, goal, ipat, subs) ->
@@ -1047,5 +989,5 @@ module Import = struct
           else
             let subs_tacs = Stdlib.List.map (proof sign hm) subs in
             Proofview.tclDISPATCH subs_tacs
-        end
+        end *)
 end

@@ -24,6 +24,8 @@ open CoqUtils
     *)
 type aident = Logic_t.aident
 
+type proof = (int * Logic_t.action) list
+
 let hash_of (s : string) : string =
   s |> Sha512.string |> Sha512.to_bin |>
   Base64.encode_string ~alphabet:Base64.uri_safe_alphabet
@@ -47,7 +49,7 @@ let proofs_path : string =
 let path_of_proof (id : aident) : string =
   Printf.sprintf "%s/%s" proofs_path (hash_of_aident id)
 
-let save_proof (id : aident) (t : Logic_t.proof) : unit =
+let save_proof (id : aident) (prf : proof) : unit =
   let path = path_of_proof id in
 
   if not (CUnix.file_readable_p proofs_path) then begin
@@ -59,31 +61,55 @@ let save_proof (id : aident) (t : Logic_t.proof) : unit =
           "Could not create directory %s" proofs_path in
         raise (Sys_error err_msg)
   end;
-  Atdgen_runtime.Util.Biniou.to_file Logic_b.write_proof path t
+  let oc = open_out path in
+  prf |> List.iter begin fun (subgoalIndex, action) ->
+    Printf.fprintf oc "%d\n" subgoalIndex;
+    Atdgen_runtime.Util.Biniou.to_channel Logic_b.write_action oc action;
+    Printf.fprintf oc "\n"
+  end;
+  close_out oc
 
-let load_proof (id : aident) : Logic_t.proof option =
+let load_proof (id : aident) : proof option =
   let path = path_of_proof id in
-  try
-    Some (Atdgen_runtime.Util.Biniou.from_file Logic_b.read_proof path)
-  with _ ->
+  if not (CUnix.file_readable_p path) then
     None
+  else begin
+    let ic = open_in path in
+    let prf : proof ref = ref [] in
+    begin try
+      while true; do
+        let subgoalIndex = input_line ic |> int_of_string in
+        let action = Atdgen_runtime.Util.Biniou.from_channel Logic_b.read_action ic in
+        prf := (subgoalIndex, action) :: !prf
+      done
+    with End_of_file ->
+      close_in ic
+    end;
+    Some (List.rev !prf)
+  end
 
 let sign = Translate.peano
 
+let compile_proof (prf : proof) : unit tactic =
+  assert false
+
+let interactive_proof (coq_goal : Goal.t) : proof =
+  let sign, goal, hm = Export.goal sign coq_goal in
+  let action = Lwt_main.run (Client.action goal) in
+  assert false
+
 let actema_tac ?(force = false) (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
-    let sign, goal, hm = Export.goal sign coq_goal in
+    let _, goal, _ = Export.goal sign coq_goal in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
-
     let proof =
       match load_proof id with
-      | Some t when not force -> t
+      | Some prf when not force -> prf
       | _ ->
-          let proof = Lwt_main.run (Client.action goal) in
+          let proof = interactive_proof coq_goal in
           save_proof id proof; proof
     in
-
-    Import.proof sign hm proof
+    compile_proof proof
   end
 
 let test_tac : unit tactic =

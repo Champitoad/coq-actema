@@ -13,7 +13,7 @@ exception ActemaError of string
 exception UnsupportedRequestMethod of string
 exception UnsupportedHttpResponseCode of int
 
-let action (goal : Logic_t.goal) : Logic_t.proof t =
+let action (goal : Logic_t.goal) : (int * Logic_t.action) option t =
   (* Send request with goal *)
 
   let goalb =
@@ -33,7 +33,14 @@ let action (goal : Logic_t.goal) : Logic_t.proof t =
   | 200 ->
       body |>
       Base64.decode_exn |>
-      Logic_b.proof_of_string
+      String.split_on_char '\n' |>
+      begin function
+      | [subgoalIndex; actionb] ->
+          Some (int_of_string subgoalIndex, Logic_b.action_of_string actionb)
+      | _ -> failwith "Unexpected response body for 'action' request"
+      end
+  | 201 ->
+      None
   | 501 ->
       raise (UnsupportedRequestMethod body)
   | 550 ->
