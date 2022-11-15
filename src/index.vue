@@ -195,7 +195,7 @@ export default {
             }
         },
 
-        updateClient() {
+        sendProof() {
             try {
                 let proofb = window.goal.getproofb();
                 window.ipcRenderer.send('action', proofb);
@@ -206,7 +206,12 @@ export default {
         },
 
         done() {
-            this.updateClient();
+            try {
+                window.ipcRenderer.send('done');
+            } catch (e) {
+                this.$refs.proofCanvas.showErrorMessage(e);
+                window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
+            }
             this.setProofMode("draft");
         },
 

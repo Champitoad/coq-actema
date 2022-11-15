@@ -21,10 +21,15 @@ export default {
           case "/action":
             let goal = data;
             win.webContents.send('action', goal);
-            ipcMain.on('action', (_, proofb) => {
+            ipcMain.on('action', (_, actionb, subgoalIndex) => {
               rcode = 200;
               res.writeHead(rcode, { 'Content-Type': 'text/plain' });
-              res.end(proofb);
+              res.end(subgoalIndex + "\n" + actionb);
+            });
+            ipcMain.on('done', _ => {
+              rcode = 201;
+              res.writeHead(rcode, { 'Content-Type': 'text/plain' });
+              res.end('');
             });
             ipcMain.on('error', (_, msg) => {
               rcode = 550;

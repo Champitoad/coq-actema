@@ -1270,7 +1270,7 @@ export default {
 
         // apply an action, with error handling
         apply(actionCode) {
-            this.$proofCanvas.apply(actionCode);
+            this.$proofCanvas.sendAction(actionCode);
         },
 
         setMetadata(metadata) {

@@ -477,6 +477,17 @@ export default {
             }
         },
 
+        sendAction(actionCode) {
+            try {
+                let actionb = window.goal.getactionb();
+                let subgoalIndex = this.getActiveSubgoal();
+                window.ipcRenderer.send('action', actionb, subgoalIndex);
+            } catch (e) {
+                this.$refs.proofCanvas.showErrorMessage(e);
+                window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
+            }
+        },
+
         generalize(predicate) {
             let subgoal = predicate.parent;
 
