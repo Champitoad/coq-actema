@@ -557,6 +557,7 @@ module CoreLogic : sig
 
   module Translate : sig
     exception UnsupportedAction of pnode
+    val export_action : Proof.proof -> action -> Api.Logic_t.action
     val export_proof : Proof.proof -> Api.Logic_t.proof
   end
 end = struct
@@ -3152,6 +3153,11 @@ end = struct
       | TDuplicate uid ->
           `ADuplicate (Handle.toint uid)
       | _ -> raise (UnsupportedAction p)
+
+    let export_action (prf : Proof.proof) (action : action) : Api.Logic_t.action =
+      match Proof.get_ptree (apply prf action) with
+      | PNode (pn, _, _, []) -> action_of_pnode pn
+      | _ -> failwith "Proof tree must contain exactly one node"
 
     let export_proof (proof : Proof.proof) : Logic_t.proof =
       let rec aux (p : Proof.ptree) : Logic_t.proof =
