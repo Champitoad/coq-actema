@@ -522,13 +522,9 @@ module Import = struct
     List.nth_index 0 s sorts
   
   let infer_sort (env : Logic_t.env) (e : Logic_t.expr) : string =
-    try
-      match einfer env e with
-      | `TVar (name, _) -> name
-      | _ -> failwith "Non-atomic sort type"
-    with TypingError ->
-      Log.str (string_of_expr e);
-      failwith "pouet"
+    match einfer env e with
+    | `TVar (name, _) -> name
+    | _ -> failwith "Non-atomic sort type"
 
   let sort (sign : FOSign.t) (n : int) : EConstr.t =
     let sorts = sign.symbols.s_sorts |> FOSign.SymbolMap.keys in

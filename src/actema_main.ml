@@ -24,7 +24,14 @@ open CoqUtils
     *)
 type aident = Logic_t.aident
 
-type proof = (int * Logic_t.action) list
+type action = int * Logic_t.action
+type proof = action list
+
+let string_of_proof (prf : proof) : string =
+  Extlib.List.to_string ~sep:"\n" ~left:"PROOF\n" ~right:"\nQED"
+  begin fun (idx, action) ->
+    Printf.sprintf "%d: %s" idx (Utils.string_of_action action)
+  end prf
 
 let hash_of (s : string) : string =
   s |> Sha512.string |> Sha512.to_bin |>
@@ -62,10 +69,10 @@ let save_proof (id : aident) (prf : proof) : unit =
         raise (Sys_error err_msg)
   end;
   let oc = open_out path in
-  prf |> List.iter begin fun (subgoalIndex, action) ->
-    Printf.fprintf oc "%d\n" subgoalIndex;
+  prf |> List.iter begin fun (idx, action) ->
+    Printf.fprintf oc "%d\n" idx;
     Atdgen_runtime.Util.Biniou.to_channel Logic_b.write_action oc action;
-    Printf.fprintf oc "\n"
+    Printf.fprintf oc "\n";
   end;
   close_out oc
 
@@ -78,9 +85,9 @@ let load_proof (id : aident) : proof option =
     let prf : proof ref = ref [] in
     begin try
       while true; do
-        let subgoalIndex = input_line ic |> int_of_string in
+        let idx = int_of_string (input_line ic) in
         let action = Atdgen_runtime.Util.Biniou.from_channel Logic_b.read_action ic in
-        prf := (subgoalIndex, action) :: !prf
+        prf := (idx, action) :: !prf
       done
     with End_of_file ->
       close_in ic
@@ -90,26 +97,67 @@ let load_proof (id : aident) : proof option =
 
 let sign = Translate.peano
 
-let compile_proof (prf : proof) : unit tactic =
-  assert false
+let compile_action ((idx, a) : action) : unit tactic =
+  let open Proofview.Monad in
+  Goal.enter begin fun coq_goal ->
+    let sign, goal, hm = Export.goal sign coq_goal in
+    Import.action sign hm goal coq_goal a
+  end |>
+  let idx = idx + 1 in
+  tclFOCUS idx idx
 
-let interactive_proof (coq_goal : Goal.t) : proof =
-  let sign, goal, hm = Export.goal sign coq_goal in
-  let action = Lwt_main.run (Client.action goal) in
-  assert false
+let get_user_action () : action option tactic =
+  let open Proofview.Monad in
+  let action = ref None in
+  Goal.enter begin fun coq_goal ->
+    let sign, goal, hm = Export.goal sign coq_goal in
+    action := Lwt_main.run (Client.action goal);
+    return ()
+  end >>= fun _ ->
+  return !action
+
+let compile_proof (prf : proof) : unit tactic =
+  let rec aux prf =
+    let open Proofview.Monad in
+    begin match prf with
+    | action :: prf ->
+        compile_action action >>= fun _ ->
+        aux prf
+    | [] ->
+        return ()
+    end in
+  aux prf
+
+let interactive_proof () : proof tactic =
+  let rec aux prf =
+    let open Proofview.Monad in
+    Goal.goals >>= fun goals ->
+    if goals = [] then begin
+      Lwt_main.run (Client.qed ());
+      return (Stdlib.List.rev prf)
+    end else
+      get_user_action () >>= fun action ->
+      begin match action with
+      | Some action ->
+          compile_action action >>= fun _ ->
+          aux (action :: prf)
+      | None ->
+          return (Stdlib.List.rev prf)
+      end in
+  aux []
 
 let actema_tac ?(force = false) (action_name : string) : unit tactic =
+  let open Proofview.Monad in
   Goal.enter begin fun coq_goal ->
     let _, goal, _ = Export.goal sign coq_goal in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
-    let proof =
-      match load_proof id with
-      | Some prf when not force -> prf
-      | _ ->
-          let proof = interactive_proof coq_goal in
-          save_proof id proof; proof
-    in
-    compile_proof proof
+    match load_proof id with
+    | Some prf when not force ->
+        compile_proof prf
+    | _ ->
+        interactive_proof () >>= fun prf ->
+        save_proof id prf;
+        return ()
   end
 
 let test_tac : unit tactic =

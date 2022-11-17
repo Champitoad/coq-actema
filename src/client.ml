@@ -13,6 +13,18 @@ exception ActemaError of string
 exception UnsupportedRequestMethod of string
 exception UnsupportedHttpResponseCode of int
 
+let qed () : unit t =
+  let req = make_req "qed" "" in
+
+  req >>= fun (resp, _) ->
+
+  let code = resp |> Response.status |> Code.code_of_status in
+  match code with
+  | 200 ->
+      return ()
+  | _ ->
+      raise (UnsupportedHttpResponseCode code)
+
 let action (goal : Logic_t.goal) : (int * Logic_t.action) option t =
   (* Send request with goal *)
 
@@ -32,12 +44,17 @@ let action (goal : Logic_t.goal) : (int * Logic_t.action) option t =
   match code with
   | 200 ->
       body |>
-      Base64.decode_exn |>
       String.split_on_char '\n' |>
       begin function
-      | [subgoalIndex; actionb] ->
-          Some (int_of_string subgoalIndex, Logic_b.action_of_string actionb)
-      | _ -> failwith "Unexpected response body for 'action' request"
+      | [subgoal_idx; actionb] ->
+          let idx = int_of_string subgoal_idx in
+          let action =
+            actionb |>
+            Base64.decode_exn |>
+            Logic_b.action_of_string in
+          Some (idx, action)
+      | _ ->
+          failwith "Unexpected response body for 'action' request"
       end
   | 201 ->
       None

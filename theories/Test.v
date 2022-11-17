@@ -4,7 +4,6 @@ Lemma test A B : (A /\ B) -> A /\ B.
 Proof.
   intro H.
   actema.
-  actema "2steps".
 Qed.
 
 Require Import Lia.
