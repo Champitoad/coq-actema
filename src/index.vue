@@ -37,6 +37,7 @@ export default {
         ProofCanvas,
     },
     created() {
+        // update proof canvas with new goal when action request is received
         window.ipcRenderer.on("action", (_, goalb) => {
             try {
                 window.goal = window.goal.setgoalb(goalb);
@@ -46,7 +47,12 @@ export default {
                 this.$refs.proofCanvas.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
             }
-        })
+        });
+        // trigger fireworks when qed request is received
+        window.ipcRenderer.on("qed", _ => {
+            this.$refs.proofCanvas.QED();
+            this.setProofMode("draft");
+        });
     },
     updated() {
     },

@@ -21,10 +21,10 @@ export default {
           case "/action":
             let goal = data;
             win.webContents.send('action', goal);
-            ipcMain.on('action', (_, actionb, subgoalIndex) => {
+            ipcMain.on('action', (_, action) => {
               rcode = 200;
               res.writeHead(rcode, { 'Content-Type': 'text/plain' });
-              res.end(subgoalIndex + "\n" + actionb);
+              res.end(action.subgoalIndex.toString() + "\n" + action.repr);
             });
             ipcMain.on('done', _ => {
               rcode = 201;
@@ -37,9 +37,17 @@ export default {
               res.end(msg);
             });
             break;
+          case "/qed":
+            win.webContents.send('qed', '');
+            rcode = 200;
+            res.writeHead(rcode, { 'Content-Type': 'text/plain' });
+            res.end('');
+            break;
           default:
             rcode = 501;
             body = req.url;
+            res.writeHead(rcode, { 'Content-Type': 'text/plain' });
+            res.end(body);
             break;
         }
       });

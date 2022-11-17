@@ -175,7 +175,7 @@
         <div class="row" style="height: 100%;">
             <div class="col" style="padding: 0;" :key="renderIndex">
                 <template v-if="proofState">
-                    <template v-if="proofState.closed()">
+                    <template v-if="this.qed">
                         <fireworks></fireworks>
                     </template>
 
@@ -232,6 +232,7 @@ export default {
     },
     data: function() {
         return {
+            qed: false,
             proofState: null,
             errorMsg: null,
             warningMsg: null,
@@ -353,6 +354,7 @@ export default {
         },
 
         setGoal(proof) {
+            this.qed = false;
             this.$set(this, "proofState", proof);
             this.addToHistory(proof);
         },
@@ -479,11 +481,12 @@ export default {
 
         sendAction(actionCode) {
             try {
-                let actionb = window.goal.getactionb();
-                let subgoalIndex = this.getActiveSubgoal();
-                window.ipcRenderer.send('action', actionb, subgoalIndex);
+                let idx = this.getActiveSubgoal();
+                let actionb = window.goal.getactionb(actionCode);
+                let action = { subgoalIndex: idx, repr: actionb };
+                window.ipcRenderer.send('action', action);
             } catch (e) {
-                this.$refs.proofCanvas.showErrorMessage(e);
+                this.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
             }
         },
@@ -829,6 +832,10 @@ export default {
 
         getButton(path) {
             return this.pathButtonMap[path];
+        },
+
+        QED() {
+            this.qed = true;
         }
     }
 };
