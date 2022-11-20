@@ -37,8 +37,7 @@ Lemma fa_ex (A : Set) (P : nat -> Prop) (t : nat) :
   (forall y, P y) -> exists x, P x.
 Proof.
   intros.
-  actema; simpl.
-  exists 0; auto.
+  actema.
 Qed.
 
 Lemma test_rew t u f :
@@ -50,6 +49,6 @@ Admitted.
 Lemma test_instantiate (n : nat) (P : nat -> Prop) (A : Prop) :
   (forall x, P x) \/ A -> A /\ exists x, P x.
 Proof.
-  intros. actema. admit.
+  intros. actema.
 Admitted.
   

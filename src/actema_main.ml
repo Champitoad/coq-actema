@@ -70,9 +70,10 @@ let save_proof (id : aident) (prf : proof) : unit =
   end;
   let oc = open_out path in
   prf |> List.iter begin fun (idx, action) ->
-    Printf.fprintf oc "%d\n" idx;
-    Atdgen_runtime.Util.Biniou.to_channel Logic_b.write_action oc action;
-    Printf.fprintf oc "\n";
+    let actionb = action |>
+      Logic_b.string_of_action |>
+      Base64.encode_exn in
+    Printf.fprintf oc "%d\n%s\n" idx actionb;
   end;
   close_out oc
 
@@ -85,14 +86,21 @@ let load_proof (id : aident) : proof option =
     let prf : proof ref = ref [] in
     begin try
       while true; do
-        let idx = int_of_string (input_line ic) in
-        let action = Atdgen_runtime.Util.Biniou.from_channel Logic_b.read_action ic in
+        let line = input_line ic in
+        let idx = line |> int_of_string in
+
+        let line = input_line ic in
+        let action = line |>
+          Base64.decode_exn |>
+          Logic_b.action_of_string in
+
         prf := (idx, action) :: !prf
       done
     with End_of_file ->
       close_in ic
     end;
-    Some (List.rev !prf)
+    let prf = List.rev !prf in
+    Some prf
   end
 
 let sign = Translate.peano
@@ -108,13 +116,20 @@ let compile_action ((idx, a) : action) : unit tactic =
 
 let get_user_action () : action option tactic =
   let open Proofview.Monad in
-  let action = ref None in
-  Goal.enter begin fun coq_goal ->
-    let sign, goal, hm = Export.goal sign coq_goal in
-    action := Lwt_main.run (Client.action goal);
-    return ()
-  end >>= fun _ ->
-  return !action
+  Goal.goals >>= fun coq_goals_tacs ->
+  if coq_goals_tacs = [] then begin
+    Lwt_main.run (Client.qed ());
+    return None
+  end else
+    let goals_tac : Logic_t.goals tactic =
+      Stdlib.List.fold_right begin fun coq_goal_tac acc ->
+          coq_goal_tac >>= fun coq_goal ->
+          let _, goal, _ = Export.goal sign coq_goal in
+          acc >>= fun goals ->
+          return (goal :: goals)
+      end coq_goals_tacs (return []) in
+    goals_tac >>= fun goals ->
+    return (Lwt_main.run (Client.action goals))
 
 let compile_proof (prf : proof) : unit tactic =
   let rec aux prf =
@@ -131,19 +146,14 @@ let compile_proof (prf : proof) : unit tactic =
 let interactive_proof () : proof tactic =
   let rec aux prf =
     let open Proofview.Monad in
-    Goal.goals >>= fun goals ->
-    if goals = [] then begin
-      Lwt_main.run (Client.qed ());
-      return (Stdlib.List.rev prf)
-    end else
-      get_user_action () >>= fun action ->
-      begin match action with
-      | Some action ->
-          compile_action action >>= fun _ ->
-          aux (action :: prf)
-      | None ->
-          return (Stdlib.List.rev prf)
-      end in
+    get_user_action () >>= fun action ->
+    begin match action with
+    | Some action ->
+        compile_action action >>= fun _ ->
+        aux (action :: prf)
+    | None ->
+        return (Stdlib.List.rev prf)
+    end in
   aux []
 
 let actema_tac ?(force = false) (action_name : string) : unit tactic =

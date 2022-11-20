@@ -89,6 +89,7 @@ Lemma bw :
 Proof.
   intros.
   actema.
+  by exists 0.
 Qed.
 
 (** * Implication *)
@@ -329,4 +330,4 @@ forward h1 h5 h6 (cons false (cons false(nil)))(@nil bool)(cons false (cons fals
 elim (h3 h6).  
 Restart.
   actema.
-Qed.
+Admitted.

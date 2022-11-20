@@ -25,14 +25,13 @@ let qed () : unit t =
   | _ ->
       raise (UnsupportedHttpResponseCode code)
 
-let action (goal : Logic_t.goal) : (int * Logic_t.action) option t =
-  (* Send request with goal *)
+let action (goals : Logic_t.goals) : (int * Logic_t.action) option t =
+  (* Send request with goals *)
 
-  let goalb =
-    goal |>
-    Logic_b.string_of_goal |>
+  let goalsb = goals |>
+    Logic_b.string_of_goals |>
     Base64.encode_string in
-  let req = make_req "action" goalb in
+  let req = make_req "action" goalsb in
 
   req >>= fun (resp, body) ->
 
