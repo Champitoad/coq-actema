@@ -50,6 +50,8 @@ type goal = {
   g_concl : form;
 }
 
+type goals = goal list
+
 type lgoal = (hyp list * form)
 
 (* -------------------------------------------------------------------- *)
@@ -66,8 +68,9 @@ type action = [
   | AId
   | ADef of ((name * type_ * expr) * uid)
   | AIntro of (int * (expr * type_) option)
-  | AElim of uid
   | AExact of uid
+  | AElim of uid
+  | AInd of uid
   | ACut of (form * uid)
   | AAssume of (form * uid)
   | AGeneralize of uid

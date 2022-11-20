@@ -55,6 +55,7 @@ val string_of_expr : expr -> string
 val string_of_form : form -> string
 val string_of_term : term -> string
 val string_of_goal : goal -> string
+val string_of_goals : goals -> string
 val string_of_itrace : itrace -> string
 val string_of_action : action -> string
 val string_of_proof : proof -> string

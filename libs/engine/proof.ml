@@ -70,7 +70,7 @@ module Proof : sig
   and goal = { g_id: Handle.t; g_pregoal: pregoal; }
 
   val init      : env -> form list -> form -> proof
-  val ginit     : pregoal -> proof
+  val ginit     : pregoal list -> proof
   val closed    : proof -> bool
   val opened    : proof -> Handle.t list
   val after     : proof -> Handle.t -> Handle.t list option
@@ -91,16 +91,15 @@ module Proof : sig
   val set_meta : proof -> Handle.t -> meta option -> unit
   val get_meta : proof -> Handle.t -> meta option
 
-  val sgprogress :
-    pregoal -> ?clear:bool ->
-      ((Handle.t option * form list) list * form) list -> pregoals
+  type subgoal = (Handle.t option * form list) list * form
+
+  val sgprogress : pregoal -> ?clear:bool -> subgoal list -> pregoals
 
   val progress :
     proof -> Handle.t -> pnode -> form list -> proof
 
   val sprogress :
-    proof -> ?clear:bool -> Handle.t -> pnode ->
-      ((Handle.t option * form list) list * form) list -> proof
+    proof -> ?clear:bool -> Handle.t -> pnode -> subgoal list -> proof
 
   val hprogress :
     proof -> Handle.t -> pnode -> pregoal -> Handle.t * proof
@@ -251,20 +250,34 @@ end = struct
       p_meta = ref Map.empty;
       p_db   = LemmaDB.empty env; }
 
-  let ginit ({ g_env; g_hyps; g_goal } as g_pregoal : pregoal) : proof =
-    Form.recheck g_env g_goal;
-    Hyps.iter (fun hyp -> Form.recheck g_env hyp.h_form) g_hyps;
+  let ginit (pregoals : pregoal list) : proof =
+    let check { g_env; g_hyps; g_goal } =
+      Form.recheck g_env g_goal;
+      Hyps.iter (fun hyp -> Form.recheck g_env hyp.h_form) g_hyps; in
+    List.iter check pregoals;
+    
+    let root = 
+      let dummy_goal =
+        { g_env = Env.empty; g_hyps = Hyps.empty; g_goal = FTrue } in
+      let g_id = Handle.fresh () in
+      { g_id; g_pregoal = dummy_goal } in
 
-    let g_id = Handle.fresh () in
-    let root = { g_id; g_pregoal } in
+    let goals = List.map begin fun g_pregoal ->
+        let g_id = Handle.fresh () in
+        { g_id; g_pregoal }
+      end pregoals in
+    
+    let p_maps = List.fold_left
+      (fun m g -> Map.add g.g_id g m)
+      (Map.singleton root.g_id root) goals in
 
-    { p_root = g_id;
-      p_maps = Map.singleton g_id root;
-      p_crts = [g_id];
+    { p_root = root.g_id;
+      p_maps;
+      p_crts = List.map (fun g -> g.g_id) goals;
       p_frwd = Map.empty;
       p_bkwd = Map.empty;
       p_meta = ref Map.empty;
-      p_db   = LemmaDB.empty g_env; }
+      p_db   = LemmaDB.empty Env.empty; }
   
   let db (proof : proof) =
     proof.p_db
@@ -319,6 +332,8 @@ end = struct
       with Not_found ->
         PNode (TId, goal, [], [])
     in aux proof.p_root
+  
+  type subgoal = (Handle.t option * form list) list * form
 
   let hprogress (pr : proof) (id : Handle.t) (pn : pnode) (sub : pregoal) =
     let _goal = byid pr id in
@@ -404,7 +419,7 @@ end = struct
         p_bkwd = List.fold_right (Map.add^~ dep) sids pr.p_bkwd;
         p_meta = ref meta; }
 
-  let sgprogress (goal : pregoal) ?(clear = false) sub =
+  let sgprogress (goal : pregoal) ?(clear = false) (subs : subgoal list) =
     let for1 (newlc, concl) =
       let subfor1 hyps (hid, newlc) =
         let hyps =
@@ -422,11 +437,11 @@ end = struct
       let hyps = List.fold_left subfor1 goal.g_hyps newlc in
       { g_env = goal.g_env; g_hyps = hyps; g_goal = concl; }
 
-    in List.map for1 sub
+    in List.map for1 subs
 
-  let sprogress (pr : proof) ?(clear = false) (id : Handle.t) (pn : pnode) sub =
+  let sprogress (pr : proof) ?(clear = false) (id : Handle.t) (pn : pnode) (subs : subgoal list) =
     let goal = byid pr id in
-    let sub = sgprogress goal ~clear sub in
+    let sub = sgprogress goal ~clear subs in
     xprogress pr id pn sub
 
   let progress (pr : proof) (id : Handle.t) (pn : pnode) (sub : form list) =
@@ -528,7 +543,7 @@ module CoreLogic : sig
     | `Unfold of vname * ipath list
   ]
 
-  type action = Handle.t * [
+  type action_type = [
     | `Intro     of int
     | `Elim      of Handle.t
     | `Ind       of Handle.t
@@ -539,6 +554,8 @@ module CoreLogic : sig
     | `DisjDrop  of Handle.t * form list
     | `ConjDrop  of Handle.t
   ]
+
+  type action = Handle.t * action_type
 
   exception InvalidPath of path
   exception InvalidSubFormPath of int list
@@ -556,7 +573,7 @@ module CoreLogic : sig
   val apply   : Proof.proof -> action -> Proof.proof
 
   module Translate : sig
-    exception UnsupportedAction of pnode
+    exception UnsupportedAction of action_type
     val export_action : Proof.proof -> action -> Api.Logic_t.action
     val export_proof : Proof.proof -> Api.Logic_t.proof
   end
@@ -786,7 +803,7 @@ end = struct
     perform ?clear (core_elim h (pr, id)) pr id
   
   
-  type pnode += TInd
+  type pnode += TInd of Handle.t
 
   let induction (h : Handle.t) ((pr, id) : targ) =
     let goal = Proof.byid pr id in
@@ -809,7 +826,7 @@ end = struct
             let indh = Form.Subst.f_apply1 x (EVar (n, 0)) goal.g_goal in
             Proof.Hyps.add goal.g_hyps (Handle.fresh ()) (Proof.mk_hyp indh) } in
     
-    Proof.xprogress pr id TInd [base_case; ind_case]
+    Proof.xprogress pr id (TInd h) [base_case; ind_case]
 
     
   let ivariants ((pr, id) : targ) =
@@ -1848,9 +1865,9 @@ end = struct
   
   (** [dlink] stands for _d_eep linking, and implements the deep interaction phase
       à la Chaudhuri for intuitionistic logic. *)
-  let dlink (src, dst : link) (s_src, s_dst : Form.Subst.subst * Form.Subst.subst) : tactic =
-    fun (proof, g_id) ->
-
+  let dlink (src, dst : link) (s_src, s_dst : Form.Subst.subst * Form.Subst.subst)
+            (proof : Proof.proof) : Proof.subgoal * itrace =
+    
     let open Form in
     let open Subst in
     let open Proof in
@@ -2239,7 +2256,8 @@ end = struct
         cont ctx itrace !s linkage
     in
 
-    let subgoal, itrace = match (item_src, sub_src, s_src), (item_dst, sub_dst, s_dst) with
+    let subgoal, itrace =
+      match (item_src, sub_src, s_src), (item_dst, sub_dst, s_dst) with
       | (`H (hid, { h_form = h; _ }), subh, sh), (`C c, subc, sc)
       | (`C c, subc, sc), (`H (hid, { h_form = h; _ }), subh, sh) ->
         let form, itrace = backward ([]) [] ((LEnv.empty, sh), (LEnv.empty, sc)) ((h, subh), (c, subc)) in
@@ -2252,6 +2270,13 @@ end = struct
       | _ -> raise TacticNotApplicable
     in
     let itrace = List.rev itrace in
+
+    subgoal, itrace
+  
+  let dlink_tac (src, dst : link) (s_src, s_dst : Form.Subst.subst * Form.Subst.subst) : tactic =
+    fun (proof, g_id) ->
+
+    let subgoal, itrace = dlink (src, dst) (s_src, s_dst) proof in
 
     js_log (Printf.sprintf "itrace: %s" (print_itrace itrace));
 
@@ -2309,8 +2334,8 @@ end = struct
              tgts)
             red res
     in doit
-
-  type action = Handle.t * [
+  
+  type action_type = [
     | `Intro     of int
     | `Elim      of Handle.t
     | `Ind       of Handle.t
@@ -2321,6 +2346,8 @@ end = struct
     | `DisjDrop  of Handle.t * form list
     | `ConjDrop  of Handle.t
   ]
+
+  type action = Handle.t * action_type
   
   
   (* -------------------------------------------------------------------- *)
@@ -3096,7 +3123,7 @@ end = struct
     | `Hyperlink (lnk, actions) ->
         match lnk, actions with
         | ([src], [dst]), [`Subform substs] ->
-            dlink (src, dst) substs targ
+            dlink_tac (src, dst) substs targ
         | _, [`Instantiate (wit, tgt)] ->
             instantiate wit tgt targ
         | _, [`Rewrite (red, res, tgts)] ->
@@ -3113,7 +3140,8 @@ end = struct
     open Fo.Translate
     open Proof
 
-    exception UnsupportedAction of pnode
+    exception UnsupportedPNode of pnode
+    exception UnsupportedAction of action_type
 
     let of_ctxt (ctxt : ctxt) : Logic_t.ctxt =
       Logic_t.{ kind = ctxt.kind; handle = ctxt.handle }
@@ -3152,12 +3180,37 @@ end = struct
           `AInstantiate (of_expr wit, of_ipath tgt)
       | TDuplicate uid ->
           `ADuplicate (Handle.toint uid)
-      | _ -> raise (UnsupportedAction p)
+      | _ -> raise (UnsupportedPNode p)
 
-    let export_action (prf : Proof.proof) (action : action) : Api.Logic_t.action =
+    let export_action (proof : Proof.proof) (hd, a : action) : Logic_t.action =
+      match a with
+      | `Intro variant ->
+          `AIntro (variant, None)
+      | `Elim subhd ->
+          let goal = Proof.byid proof hd in
+          let hyp = (Proof.Hyps.byid goal.g_hyps subhd).h_form in 
+          let exact = Form.f_equal goal.g_env hyp goal.g_goal in
+          let uid = Handle.toint subhd in
+          if exact then `AExact uid else `AElim uid
+      | `Ind subhd ->
+          let uid = Handle.toint subhd in
+          `AInd uid
+      | `Hyperlink (lnk, actions) ->
+          begin match lnk, actions with
+          | ([src], [dst]), [`Subform substs] ->
+              let _, itrace = dlink (src, dst) substs proof in
+              `ALink (of_ipath src, of_ipath dst, of_itrace itrace)
+          | _, [`Instantiate (wit, tgt)] ->
+              `AInstantiate (of_expr wit, of_ipath tgt)
+          | _, _ :: _ :: _ -> failwith "Cannot handle multiple link actions yet"
+          | _, _ -> raise (UnsupportedAction a)
+          end
+      | _ -> raise (UnsupportedAction a)
+
+    (* let export_action (prf : Proof.proof) (action : action) : Api.Logic_t.action =
       match Proof.get_ptree (apply prf action) with
       | PNode (pn, _, _, []) -> action_of_pnode pn
-      | _ -> failwith "Proof tree must contain exactly one node"
+      | _ -> failwith "Proof tree must contain exactly one node" *)
 
     let export_proof (proof : Proof.proof) : Logic_t.proof =
       let rec aux (p : Proof.ptree) : Logic_t.proof =

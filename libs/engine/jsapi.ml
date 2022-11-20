@@ -119,15 +119,15 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
     Base64.encode_string |>
     Js.string
   
-  (* Return a new proof engine whose goal is the base64, binary decoding of [goalb]  *)
-  method setgoalb goalb =
-    let goal =
-      goalb |>
+  (* Return a new proof engine whose goals are the base64, binary decoding of [goalsb]  *)
+  method setgoalsb goalsb =
+    let goals =
+      goalsb |>
       Js.to_string |>
       Base64.decode_exn |>
-      Api.Logic_b.goal_of_string in
-    let gl = Proof.Translate.import_goal goal in
-    js_proof_engine (Proof.ginit gl)
+      Api.Logic_b.goals_of_string in
+    let gls = List.map Proof.Translate.import_goal goals in
+    js_proof_engine (Proof.ginit gls)
 
   (* Get the meta-data attached to this proof engine *)
   method getmeta =
