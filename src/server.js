@@ -19,8 +19,8 @@ export default {
         let query = parseQueryString(req);
         switch (query.pathname) {
           case "/action":
-            let goal = data;
-            win.webContents.send('action', goal);
+            let goals = data;
+            win.webContents.send('action', goals);
             ipcMain.on('action', (_, action) => {
               rcode = 200;
               res.writeHead(rcode, { 'Content-Type': 'text/plain' });

@@ -38,10 +38,10 @@ export default {
     },
     created() {
         // update proof canvas with new goal when action request is received
-        window.ipcRenderer.on("action", (_, goalb) => {
+        window.ipcRenderer.on("action", (_, goalsb) => {
             try {
-                window.goal = window.goal.setgoalb(goalb);
-                this.$refs.proofCanvas.setGoal(window.goal);
+                var proofState = window.goal.setgoalsb(goalsb);
+                this.$refs.proofCanvas.setProofState(proofState);
                 this.setProofMode("server");
             } catch (e) {
                 this.$refs.proofCanvas.showErrorMessage(e);

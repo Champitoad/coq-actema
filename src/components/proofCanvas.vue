@@ -546,6 +546,7 @@ export default {
                 this.addToHistory(this.proofState);
                 this.resetSelection();
                 this.$forceUpdate();
+                this.qed = false;
             } catch (e) {
                 this.showErrorMessage("Failed to apply new proof state");
             }
