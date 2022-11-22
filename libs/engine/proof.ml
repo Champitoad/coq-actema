@@ -3164,8 +3164,8 @@ end = struct
           `AId
       | TExact hd ->
           `AExact (Handle.toint hd)
-      | TDef ((name, ty, body), hd) ->
-          `ADef ((name, of_type_ ty, of_expr body), Handle.toint hd)
+      | TDef ((name, ty, body), _) ->
+          `ADef (name, of_type_ ty, of_expr body)
       | TIntro (i, wit) ->
           let wit' = wit |>
             Option.map begin fun (e, t) ->

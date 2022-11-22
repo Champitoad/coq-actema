@@ -349,6 +349,21 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       CoreLogic.cut form (parent##.proof, _self##.handle)
     in js_proof_engine (!!doit ())
   
+  (* [this#getcutb (form : string)] parses [form] in the current goal, and
+   * returns the base64-encoded string of the corresponding ACut action. *)
+  method getcutb form =
+      let goal = Proof.byid parent##.proof _self##.handle in
+      let form = form |>
+        Js.to_string |> String.trim |>
+        Io.from_string |> Io.parse_form |>
+        Fo.Form.check goal.g_env |>
+        Fo.Translate.of_form in
+    `ACut (form, Uid.fresh ()) |>
+    Api.Logic_b.string_of_action |>
+    Base64.encode_string |>
+    Js.string
+    
+  
   (* [this#addlemma (name : string)] retrieves the lemma [name] in the database,
      and adds it as a new hypothesis in the current goal. *)
   method addlemma name =
@@ -382,6 +397,21 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       CoreLogic.add_local_def (Location.unloc name, ty, expr) (parent##.proof, _self##.handle)
 
     in js_proof_engine (!!doit ())
+
+  (* [this#getaliasb (nexpr : string) parses [nexpr] as a named expression
+   * in the current goal, and returns the base64-encoded string of the
+   * corresponding ADef action. *)
+  method getaliasb expr =
+    let goal = Proof.byid parent##.proof _self##.handle in
+    let expr = String.trim (Js.to_string expr) in
+    let name, expr = Io.parse_nexpr (Io.from_string expr) in
+    let expr, ty = Fo.Form.echeck goal.g_env expr in
+    let name = Location.unloc name in
+    let expr, ty = Fo.Translate.(of_expr expr, of_type_ ty) in
+    `ADef (name, ty, expr) |>
+    Api.Logic_b.string_of_action |>
+    Base64.encode_string |>
+    Js.string
 
   (* [this#move_hyp (from : handle<js_hyp>) (before : handle<js_hyp> option)] move
    * hypothesis [from] before hypothesis [before]. Both hypothesis

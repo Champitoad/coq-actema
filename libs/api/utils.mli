@@ -11,6 +11,7 @@ end with type t = uid
 
 module LEnv : sig
   val exists : lenv -> vname -> bool
+  val enter : lenv -> name -> type_ -> lenv
 end
 
 module Vars : sig

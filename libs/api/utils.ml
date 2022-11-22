@@ -20,6 +20,9 @@ module LEnv = struct
     (lenv |>
      List.filter (fun (y, _) -> x = y) |>
      List.length) > i
+    
+  let enter lenv x ty =
+    (x, ty) :: lenv
 end
 
 module Vars = struct
