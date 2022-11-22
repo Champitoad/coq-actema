@@ -268,7 +268,7 @@ export default {
             });
 
             if (newHypothesisText) {
-                this.$parent.applyCutHypothesis(this.goal, newHypothesisText);
+                this.$parent.sendCutHypothesis(this.goal, newHypothesisText);
             }
         },
 
@@ -289,7 +289,7 @@ export default {
             });
 
             if (newExpressionText) {
-                this.$parent.applyNewExpression(this.goal, newExpressionText);
+                this.$parent.sendNewExpression(this.goal, newExpressionText);
             }
         },
 

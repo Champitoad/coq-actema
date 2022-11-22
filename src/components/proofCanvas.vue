@@ -479,16 +479,20 @@ export default {
             }
         },
 
-        sendAction(actionCode) {
+        sendAction(actionb) {
             try {
                 let idx = this.getActiveSubgoal();
-                let actionb = window.goal.getactionb(actionCode);
                 let action = { subgoalIndex: idx, repr: actionb };
                 window.ipcRenderer.send('action', action);
             } catch (e) {
                 this.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
             }
+        },
+
+        sendActionCode(actionCode) {
+            let action = window.goal.getactionb(actionCode);
+            this.sendAction(action);
         },
 
         generalize(predicate) {
@@ -513,6 +517,11 @@ export default {
             }
         },
 
+        sendCutHypothesis(subgoal, text) {
+            let action = subgoal.getcutb(text);
+            this.sendAction(action);
+        },
+
         applyAddLemma(subgoal, name) {
             try {
                 var proof = subgoal.addlemma(name);
@@ -531,6 +540,11 @@ export default {
             } catch (e) {
                 this.showErrorMessage(e);
             }
+        },
+
+        sendNewExpression(subgoal, text) {
+            let action = subgoal.getaliasb(text);
+            this.sendAction(action);
         },
 
         moveHyp(subgoal, fromHandle, toHandle) {
