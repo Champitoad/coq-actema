@@ -245,7 +245,7 @@ module Export = struct
     let head, args = EConstr.destApp evd t in
     let (mind, i), _ = EConstr.destInd evd head in
     let head_is_eq =
-      Names.(KerName.equal (MutInd.canonical mind) Trm.eq_kname) && i = 0 in
+      Names.(KerName.equal (MutInd.canonical mind) (Trm.Logic.kname "eq")) && i = 0 in
     match head_is_eq, args with
     | true, [| _; t1; t2 |] ->
         let e1 = dest_expr (e, t1) in
@@ -324,7 +324,7 @@ module Export = struct
     let head, args = EConstr.destApp evd t in
     let (mind, i), _ = EConstr.destInd evd head in
     let head_is_ex =
-      Names.(KerName.equal (MutInd.canonical mind) Trm.ex_kname) && i = 0 in
+      Names.(KerName.equal (MutInd.canonical mind) (Trm.Logic.kname "ex")) && i = 0 in
     match head_is_ex, args with
     | true, [| _; t2 |] ->
         let x, t1, t2 = EConstr.destLambda evd t2 in
@@ -552,23 +552,89 @@ module Import = struct
     let ty = EConstr.mkConst name in
     ty
   
-  let rec expr (sign : FOSign.t)
+  let rec type_ (sign : FOSign.t)
+      (ty : Fo_t.type_) : EConstr.t =
+    match ty with
+    | `TVar (x, _) ->
+        symbol (FOSign.SymbolMap.dnif x sign.symbols.s_sorts)
+    | `TUnit ->
+        Trm.unit
+    | _ ->
+        failwith "Unsupported type"
+  
+  let rec expr (sign : FOSign.t) (lenv : Logic_t.lenv)
+      (e : Fo_t.expr) : EConstr.t =
+    match e with
+    | `EVar (x, i) ->
+        if LEnv.exists lenv (x, i) then begin
+          let index : int =
+            List.(lenv |> split |> fst |> nth_index i x) in
+          EConstr.mkRel (index + 1)
+        end else
+          EConstr.mkVar (Names.Id.of_string x)
+    | `EFun (f, args) ->
+        let head = symbol (FOSign.SymbolMap.dnif f sign.symbols.s_funcs) in
+        let args = List.map (expr sign lenv) args in
+        EConstr.mkApp (head, Array.of_list args)
+
+  let rec expr_itrace (sign : FOSign.t)
       (env : Logic_t.env) (lenv : Logic_t.lenv) (side : int)
       (e : Fo_t.expr) : EConstr.t =
     match e with
     | `EVar (x, i) ->
-          if LEnv.exists lenv (x, i) then begin
-            let s = sort_index sign (infer_sort (Vars.push_lenv env lenv) e) in
-            let index : int =
-              List.(lenv |> split |> fst |> nth_index i x) in
-            let env_index = if side = 0 then 2 else 1 in
-            EConstr.(mkApp (mkRel env_index, Trm.[| nat_of_int s; nat_of_int index |]))
-          end else
-            EConstr.mkVar (Names.Id.of_string x)
+        if LEnv.exists lenv (x, i) then begin
+          let s = sort_index sign (infer_sort (Vars.push_lenv env lenv) e) in
+          let index : int =
+            List.(lenv |> split |> fst |> nth_index i x) in
+          let env_index = if side = 0 then 2 else 1 in
+          EConstr.(mkApp (mkRel env_index, Trm.[| nat_of_int s; nat_of_int index |]))
+        end else
+          EConstr.mkVar (Names.Id.of_string x)
     | `EFun (f, args) ->
         let head = symbol (FOSign.SymbolMap.dnif f sign.symbols.s_funcs) in
-        let args = List.map (expr sign env lenv side) args in
+        let args = List.map (expr_itrace sign env lenv side) args in
         EConstr.mkApp (head, Array.of_list args)
+  
+  let rec form (sign : FOSign.t)
+      (env : Logic_t.env) (lenv : Logic_t.lenv)
+      (f : Fo_t.form) : EConstr.t =
+    let form = form sign env in
+    match f with
+    | `FPred ("_EQ", [t1; t2]) ->
+        let ty =
+          einfer (Vars.push_lenv env lenv) t1 |>
+          type_ sign in
+        let t1 = expr sign lenv t1 in
+        let t2 = expr sign lenv t2 in
+        EConstr.mkApp (Trm.Logic.eq ty, [|t1; t2|])
+    | `FPred (p, args) ->
+        let head = symbol (FOSign.SymbolMap.dnif p sign.symbols.s_preds) in
+        let args = List.map (expr sign lenv) args in
+        EConstr.mkApp (head, Array.of_list args)
+    | `FTrue ->
+        Trm.Logic.true_
+    | `FFalse ->
+        Trm.Logic.false_
+    | `FConn (`And, [f1; f2]) ->
+        Trm.Logic.and_ (form lenv f1) (form lenv f2)
+    | `FConn (`Or, [f1; f2]) ->
+        Trm.Logic.or_ (form lenv f1) (form lenv f2)
+    | `FConn (`Imp, [f1; f2]) ->
+        Trm.Logic.imp (form lenv f1) (form lenv f2)
+    | `FConn (`Equiv, [f1; f2]) ->
+        Trm.Logic.iff (form lenv f1) (form lenv f2)
+    | `FConn (`Not, [f1]) ->
+        Trm.Logic.not (form lenv f1)
+    | `FBind (`Forall, x, typ, body) ->
+        let ty = type_ sign typ in
+        let lenv = LEnv.enter lenv x typ in
+        Trm.Logic.fa x ty (form lenv body)
+    | `FBind (`Exist, x, typ, body) ->
+        let ty = type_ sign typ in
+        let lenv = LEnv.enter lenv x typ in
+        Trm.Logic.ex x ty (form lenv body)
+    | _ ->
+        failwith "Unsupported formula"
 
   let sorts (sign : FOSign.t) : EConstr.t =
     sign.symbols.s_sorts |> FOSign.SymbolMap.keys |>
@@ -634,7 +700,7 @@ module Import = struct
             let ty = infer_sort (Utils.Vars.push_lenv env lenv) e in
             let s = nat_of_int (sort_index sign ty) in
             let e =
-              let body = expr sign env lenv (1 - side) e in
+              let body = expr_itrace sign env lenv (1 - side) e in
               Trm.(lambda "env1" (env_ty ()) (lambda "env2" (env_ty ()) body)) in
             existT "s" nat (clos_ty ()) s e
           end w
@@ -679,12 +745,15 @@ module Import = struct
     | `AExact id ->
         let name = UidMap.find id hm in
         Tactics.exact_check (EConstr.mkVar name)
-    | `ADef ((x, _, e), uid) ->
+    | `ADef (x, _, e) ->
         let id = Names.Id.of_string x in
         let name = Names.Name.Name id in
-        let body = expr sign goal.g_env [] 0 e in
-
+        let body = expr sign [] e in
         Tactics.pose_tac name body
+    | `ACut (f, _) ->
+        let id = Goal.fresh_name coq_goal () |> Names.Name.mk_name in
+        let form = form sign goal.g_env [] f in
+        Tactics.assert_before id form
     | `AIntro (iv, wit) ->
         begin match goal.g_concl with
         | `FTrue ->
@@ -946,7 +1015,7 @@ module Import = struct
     | `AInstantiate (wit, tgt) ->
         let l = path (tgt.sub @ [0]) in
         let s = infer_sort goal.g_env wit |> sort_index sign |> Trm.nat_of_int in
-        let o = expr sign goal.g_env [] 0 wit in
+        let o = expr sign [] wit in
 
         let tac, args =
           begin match tgt.ctxt.kind with

@@ -78,6 +78,55 @@ let calltac (tacname : Names.KerName.t) (args : EConstr.constr list) : unit tact
 
 module Trm = struct
   open EConstr
+  
+  let lambda x ty body =
+    let x = Context.annotR (Names.Id.of_string x) in
+    mkNamedLambda x ty body
+  
+  let dprod x ty body =
+    let x = Context.nameR (Names.Id.of_string x) in
+    mkProd (x, ty, body)
+
+  module Logic = struct
+    let kname = kername ["Coq"; "Init"; "Logic"]
+
+    let true_ =
+      mkInd (Names.MutInd.make1 (kname "True"), 0)
+
+    let false_ =
+      mkInd (Names.MutInd.make1 (kname "True"), 0)
+
+    let and_ f1 f2 =
+      let and_ = mkInd (Names.MutInd.make1 (kname "and"), 0) in
+      mkApp (and_, [|f1; f2|])
+
+    let or_ f1 f2 =
+      let or_ = mkInd (Names.MutInd.make1 (kname "or"), 0) in
+      mkApp (or_, [|f1; f2|])
+    
+    let imp f1 f2 =
+      dprod "dummy" f1 f2
+    
+    let not f =
+      let not = mkConst (Names.Constant.make1 (kname "not")) in
+      mkApp (not, [|f|])
+
+    let iff f1 f2 =
+      let iff = mkConst (Names.Constant.make1 (kname "iff")) in
+      mkApp (iff, [|f1; f2|])
+    
+    let ex x ty body =
+      let ex = mkInd (Names.MutInd.make1 (kname "ex"), 0) in
+      let p = lambda x ty body in
+      mkApp (ex, [|ty; p|])
+    
+    let fa x ty body =
+      dprod x ty body
+
+    let eq ty =
+      let eq = mkInd (Names.MutInd.make1 (kname "eq"), 0) in
+      mkApp (eq, [|ty|])
+  end
 
   let type_ =
     EConstr.mkSort (Sorts.type1)
@@ -114,12 +163,6 @@ module Trm = struct
   
   let app_kname =
     kername ["Coq"; "Init"; "Datatypes"] "app"
-  
-  let eq_kname =
-    kername ["Coq"; "Init"; "Logic"] "eq"
-  
-  let ex_kname =
-    kername ["Coq"; "Init"; "Logic"] "ex"
 
   let sigT_kname =
     kername ["Coq"; "Init"; "Specif"] "sigT"
@@ -134,14 +177,6 @@ module Trm = struct
 
   let unit =
     mkInd (Names.MutInd.make1 unit_kname, 0)
-  
-  let lambda x ty body =
-    let x = Context.annotR (Names.Id.of_string x) in
-    mkNamedLambda x ty body
-  
-  let dprod x ty body =
-    let x = Context.nameR (Names.Id.of_string x) in
-    mkProd (x, ty, body)
   
   let prod_name : Names.inductive =
     Names.MutInd.make1 prod_kname, 0
@@ -160,10 +195,6 @@ module Trm = struct
   let option ty =
     let option = mkInd option_name in
     mkApp (option, [| ty |])
-  
-  let eq ty =
-    let eq = mkInd (Names.MutInd.make1 eq_kname, 0) in
-    mkApp (eq, [|ty|])
   
   let list_name : Names.inductive =
     Names.MutInd.make1 list_kname, 0
