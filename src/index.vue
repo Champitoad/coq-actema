@@ -179,11 +179,11 @@ export default {
         },
 
         undo() {
-            this.$refs.proofCanvas.undo();
+            this.$refs.proofCanvas.sendUndo();
         },
 
         redo() {
-            this.$refs.proofCanvas.redo();
+            this.$refs.proofCanvas.sendRedo();
         },
 
         setProofMode(mode) {

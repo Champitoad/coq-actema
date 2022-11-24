@@ -459,12 +459,30 @@ export default {
             }
         },
 
+        sendUndo() {
+            try {
+                window.ipcRenderer.send('undo');
+            } catch (e) {
+                this.showErrorMessage(e);
+                window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
+            }
+        },
+
         redo() {
             if (this.historyIndex < this.history.length - 1) {
                 this.historyIndex++;
                 window.goal = this.proofState = this.history[this.historyIndex];
                 this.$forceUpdate();
                 this.resetSelection();
+            }
+        },
+
+        sendRedo() {
+            try {
+                window.ipcRenderer.send('redo');
+            } catch (e) {
+                this.showErrorMessage(e);
+                window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
             }
         },
 

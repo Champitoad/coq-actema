@@ -31,6 +31,16 @@ export default {
               res.writeHead(rcode, { 'Content-Type': 'text/plain' });
               res.end('');
             });
+            ipcMain.on('undo', _ => {
+              rcode = 202;
+              res.writeHead(rcode, { 'Content-Type': 'text/plain' });
+              res.end('');
+            });
+            ipcMain.on('redo', _ => {
+              rcode = 203;
+              res.writeHead(rcode, { 'Content-Type': 'text/plain' });
+              res.end('');
+            });
             ipcMain.on('error', (_, msg) => {
               rcode = 550;
               res.writeHead(rcode, { 'Content-Type': 'text/plain' });
