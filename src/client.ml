@@ -25,7 +25,11 @@ let qed () : unit t =
   | _ ->
       raise (UnsupportedHttpResponseCode code)
 
-let action (goals : Logic_t.goals) : (int * Logic_t.action) option t =
+type action =
+| Do of int * Logic_t.action
+| Done | Undo | Redo
+
+let action (goals : Logic_t.goals) : action t =
   (* Send request with goals *)
 
   let goalsb = goals |>
@@ -51,12 +55,13 @@ let action (goals : Logic_t.goals) : (int * Logic_t.action) option t =
             actionb |>
             Base64.decode_exn |>
             Logic_b.action_of_string in
-          Some (idx, action)
+          Do (idx, action)
       | _ ->
           failwith "Unexpected response body for 'action' request"
       end
-  | 201 ->
-      None
+  | 201 -> Done
+  | 202 -> Undo
+  | 203 -> Redo
   | 501 ->
       raise (UnsupportedRequestMethod body)
   | 550 ->

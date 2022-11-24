@@ -24,8 +24,7 @@ open CoqUtils
     *)
 type aident = Logic_t.aident
 
-type action = int * Logic_t.action
-type proof = action list
+type proof = (int * Logic_t.action) list
 
 let string_of_proof (prf : proof) : string =
   Extlib.List.to_string ~sep:"\n" ~left:"PROOF\n" ~right:"\nQED"
@@ -105,7 +104,7 @@ let load_proof (id : aident) : proof option =
 
 let sign = Translate.peano
 
-let compile_action ((idx, a) : action) : unit tactic =
+let compile_action ((idx, a) : int * Logic_t.action) : unit tactic =
   let open Proofview.Monad in
   Goal.enter begin fun coq_goal ->
     let sign, goal, hm = Export.goal sign coq_goal in
@@ -113,23 +112,6 @@ let compile_action ((idx, a) : action) : unit tactic =
   end |>
   let idx = idx + 1 in
   tclFOCUS idx idx
-
-let get_user_action () : action option tactic =
-  let open Proofview.Monad in
-  Goal.goals >>= fun coq_goals_tacs ->
-  if coq_goals_tacs = [] then begin
-    Lwt_main.run (Client.qed ());
-    return None
-  end else
-    let goals_tac : Logic_t.goals tactic =
-      Stdlib.List.fold_right begin fun coq_goal_tac acc ->
-          coq_goal_tac >>= fun coq_goal ->
-          let _, goal, _ = Export.goal sign coq_goal in
-          acc >>= fun goals ->
-          return (goal :: goals)
-      end coq_goals_tacs (return []) in
-    goals_tac >>= fun goals ->
-    return (Lwt_main.run (Client.action goals))
 
 let compile_proof (prf : proof) : unit tactic =
   let rec aux prf =
@@ -143,18 +125,70 @@ let compile_proof (prf : proof) : unit tactic =
     end in
   aux prf
 
+let export_goals () : Logic_t.goals tactic =
+  let open Proofview.Monad in
+  Goal.goals >>= fun coq_goals_tacs ->
+  Stdlib.List.fold_right begin fun coq_goal_tac acc ->
+      coq_goal_tac >>= fun coq_goal ->
+      let _, goal, _ = Export.goal sign coq_goal in
+      acc >>= fun goals ->
+      return (goal :: goals)
+  end coq_goals_tacs (return [])
+
+let get_user_action (goals : Logic_t.goals) : Client.action =
+  let open Proofview.Monad in
+  if goals = [] then begin
+    Lwt_main.run (Client.qed ());
+    Client.Done
+  end else
+    Lwt_main.run (Client.action goals)
+
+type history = { mutable before : proof; mutable after : proof }
+exception ApplyUndo
+
 let interactive_proof () : proof tactic =
-  let rec aux prf =
+  let hist = ref { before = []; after = [] } in
+
+  let rec aux () =
     let open Proofview.Monad in
-    get_user_action () >>= fun action ->
-    begin match action with
-    | Some action ->
-        compile_action action >>= fun _ ->
-        aux (action :: prf)
-    | None ->
-        return (Stdlib.List.rev prf)
+    let open Client in
+
+    let continue idx a =
+      let cont =
+        compile_action (idx, a) >>= fun _ ->
+        aux () in
+      tclOR cont (fun _ -> aux ()) in
+
+    export_goals () >>= fun goals ->
+    begin match get_user_action goals with
+
+    | Do (idx, a) ->
+        !hist.before <- (idx, a) :: !hist.before;
+        continue idx a
+
+    | Done ->
+        return (Stdlib.List.rev !hist.before)
+
+    | Undo ->
+        begin match !hist.before with
+        | a :: before ->
+            !hist.before <- before;
+            !hist.after <- a :: !hist.after;
+            tclZERO ApplyUndo
+        | [] -> aux ()
+        end
+
+    | Redo ->
+        begin match !hist.after with
+        | (idx, a) :: after ->
+            !hist.after <- after;
+            !hist.before <- (idx, a) :: !hist.before;
+            continue idx a
+        | [] -> aux ()
+        end
     end in
-  aux []
+
+  aux ()
 
 let actema_tac ?(force = false) (action_name : string) : unit tactic =
   let open Proofview.Monad in
