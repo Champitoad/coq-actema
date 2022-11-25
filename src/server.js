@@ -8,45 +8,38 @@ function parseQueryString(req) {
 
 export default {
   launch: function (win) {
-    let flushListeners = function () {
+    // Create a local server to receive data from
+    const server = http.createServer((req, res) => {
       ipcMain.removeAllListeners('action');
       ipcMain.removeAllListeners('done');
       ipcMain.removeAllListeners('undo');
       ipcMain.removeAllListeners('redo');
       ipcMain.removeAllListeners('error');
-    };
-    // Create a local server to receive data from
-    const server = http.createServer((req, res) => {
-      flushListeners();
+
       ipcMain.once('action', (_, action) => {
         let rcode = 200;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end(action.subgoalIndex.toString() + "\n" + action.repr);
-        flushListeners();
       });
       ipcMain.once('done', _ => {
         let rcode = 201;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end('');
-        flushListeners();
       });
       ipcMain.once('undo', _ => {
         let rcode = 202;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end('');
-        flushListeners();
       });
       ipcMain.once('redo', _ => {
         let rcode = 203;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end('');
-        flushListeners();
       });
       ipcMain.once('error', (_, msg) => {
         rcode = 550;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end(msg);
-        flushListeners();
       });
 
       let data = '';
