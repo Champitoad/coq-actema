@@ -10,6 +10,32 @@ export default {
   launch: function (win) {
     // Create a local server to receive data from
     const server = http.createServer((req, res) => {
+      ipcMain.on('action', (_, action) => {
+        let rcode = 200;
+        res.writeHead(rcode, { 'Content-Type': 'text/plain' });
+        res.end(action.subgoalIndex.toString() + "\n" + action.repr);
+      });
+      ipcMain.on('done', _ => {
+        let rcode = 201;
+        res.writeHead(rcode, { 'Content-Type': 'text/plain' });
+        res.end('');
+      });
+      ipcMain.on('undo', _ => {
+        let rcode = 202;
+        res.writeHead(rcode, { 'Content-Type': 'text/plain' });
+        res.end('');
+      });
+      ipcMain.on('redo', _ => {
+        let rcode = 203;
+        res.writeHead(rcode, { 'Content-Type': 'text/plain' });
+        res.end('');
+      });
+      ipcMain.on('error', (_, msg) => {
+        rcode = 550;
+        res.writeHead(rcode, { 'Content-Type': 'text/plain' });
+        res.end(msg);
+      });
+
       let data = '';
       req.on('data', chunk => {
         data += chunk;
@@ -21,31 +47,6 @@ export default {
           case "/action":
             let goals = data;
             win.webContents.send('action', goals);
-            ipcMain.on('action', (_, action) => {
-              rcode = 200;
-              res.writeHead(rcode, { 'Content-Type': 'text/plain' });
-              res.end(action.subgoalIndex.toString() + "\n" + action.repr);
-            });
-            ipcMain.on('done', _ => {
-              rcode = 201;
-              res.writeHead(rcode, { 'Content-Type': 'text/plain' });
-              res.end('');
-            });
-            ipcMain.on('undo', _ => {
-              rcode = 202;
-              res.writeHead(rcode, { 'Content-Type': 'text/plain' });
-              res.end('');
-            });
-            ipcMain.on('redo', _ => {
-              rcode = 203;
-              res.writeHead(rcode, { 'Content-Type': 'text/plain' });
-              res.end('');
-            });
-            ipcMain.on('error', (_, msg) => {
-              rcode = 550;
-              res.writeHead(rcode, { 'Content-Type': 'text/plain' });
-              res.end(msg);
-            });
             break;
           case "/qed":
             win.webContents.send('qed', '');
