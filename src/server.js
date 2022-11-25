@@ -10,30 +10,42 @@ export default {
   launch: function (win) {
     // Create a local server to receive data from
     const server = http.createServer((req, res) => {
-      ipcMain.on('action', (_, action) => {
+      let flushListeners = function () {
+        ipcMain.removeAllListeners('action');
+        ipcMain.removeAllListeners('done');
+        ipcMain.removeAllListeners('undo');
+        ipcMain.removeAllListeners('redo');
+        ipcMain.removeAllListeners('error');
+      };
+      ipcMain.once('action', (_, action) => {
         let rcode = 200;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end(action.subgoalIndex.toString() + "\n" + action.repr);
+        flushListeners();
       });
-      ipcMain.on('done', _ => {
+      ipcMain.once('done', _ => {
         let rcode = 201;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end('');
+        flushListeners();
       });
-      ipcMain.on('undo', _ => {
+      ipcMain.once('undo', _ => {
         let rcode = 202;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end('');
+        flushListeners();
       });
-      ipcMain.on('redo', _ => {
+      ipcMain.once('redo', _ => {
         let rcode = 203;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end('');
+        flushListeners();
       });
-      ipcMain.on('error', (_, msg) => {
+      ipcMain.once('error', (_, msg) => {
         rcode = 550;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end(msg);
+        flushListeners();
       });
 
       let data = '';
