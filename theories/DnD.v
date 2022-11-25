@@ -2823,13 +2823,15 @@ back h (cons false (cons true nil))(cons false nil)
      idd.
 Abort.
 
-
-
 Ltac forward h1 h2 h3 hp1 hp2 t i :=
-  reify_hyp hp1 h1;
-  reify_hyp hp2 h2;
-  let o1 := type of h1 in
-  let o2 := type of h2 in
+ let h1' := fresh "h1" in
+  let h2' := fresh "h2" in
+  move: (h1) => h1';
+  move: (h2) => h2';
+  reify_hyp hp1 h1';
+  reify_hyp hp2 h2';
+  let o1 := type of h1' in
+  let o2 := type of h2' in
   match o1 with
   | coerce (@nil nat) ?hc1 _ =>
     match o2 with
@@ -2840,11 +2842,9 @@ Ltac forward h1 h2 h3 hp1 hp2 t i :=
     end
   end;
   apply trex_norm_fapply in h3;
-  rewrite /coerce /sl /= in h1;
-  rewrite /coerce /sl /= in h2;
   [ | simpl; try done; auto];
   rewrite /trl3 /f3 /o3_norm /= /cT /cB in h3;
-  rewrite /trs /sl /ts /sfo ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym in h3;
+  rewrite /trs /sl /ts /sfo ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym in h3; clear h1' h2';
   simplify_hyp h3;
       match goal with
       | h3 : False |- _ => case h3
@@ -2852,32 +2852,16 @@ Ltac forward h1 h2 h3 hp1 hp2 t i :=
       end.
 
 (*
-Definition iin  : nat -> list (option inst1).
-  intro n.
-apply cons; last apply nil.
-apply Some; exists 0.
-move => *; exact n.
-Defined.
-
-
-Definition idd : list (option inst1).
-apply cons; try apply nil.
-apply Some.
-exists 0.
-intros e1 e2.
-apply e2.
-exact 0.
-Defined.
 
 Definition empty : inst'.
 apply nil.
 Defined.
 
+
 Parameter A B C D : Prop.
 
-Goal (A -> B) ->(B/\A) ->  B /\ A.
-  intros b c.
-
+Goal (A->A)->(A -> B) ->(B/\A) ->  B /\ A.
+  intros aa b c.
 
   forward c b d   (cons true nil) (cons false nil) (cons true (cons false nil)) empty.
 Abort.
