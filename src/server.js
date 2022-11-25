@@ -37,7 +37,7 @@ export default {
         res.end('');
       });
       ipcMain.once('error', (_, msg) => {
-        rcode = 550;
+        let rcode = 550;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end(msg);
       });
