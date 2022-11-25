@@ -8,15 +8,16 @@ function parseQueryString(req) {
 
 export default {
   launch: function (win) {
+    let flushListeners = function () {
+      ipcMain.removeAllListeners('action');
+      ipcMain.removeAllListeners('done');
+      ipcMain.removeAllListeners('undo');
+      ipcMain.removeAllListeners('redo');
+      ipcMain.removeAllListeners('error');
+    };
     // Create a local server to receive data from
     const server = http.createServer((req, res) => {
-      let flushListeners = function () {
-        ipcMain.removeAllListeners('action');
-        ipcMain.removeAllListeners('done');
-        ipcMain.removeAllListeners('undo');
-        ipcMain.removeAllListeners('redo');
-        ipcMain.removeAllListeners('error');
-      };
+      flushListeners();
       ipcMain.once('action', (_, action) => {
         let rcode = 200;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
