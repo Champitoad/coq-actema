@@ -510,6 +510,8 @@ end
 (** Importing Actema actions as Coq tactics *)
 
 module Import = struct
+  let kname = kername ["Actema"; "DnD"]
+
   let symbol (sy : symbol) : EConstr.t =
     match sy with
     | Cst c -> EConstr.mkConst c
@@ -533,12 +535,12 @@ module Import = struct
     | Some sy -> symbol sy
 
   let sort_ty (s : EConstr.t) : EConstr.t =
-    let name = Names.Constant.make1 (kername ["Actema"; "DnD"] "sort") in
+    let name = Names.Constant.make1 (kname "sort") in
     let ty = EConstr.mkConst name in
     EConstr.mkApp (ty, [| s |])
 
   let env_ty () : EConstr.t =
-    let name = Names.Constant.make1 (kername ["Actema"; "DnD"] "env") in
+    let name = Names.Constant.make1 (kname "env") in
     let ty = EConstr.mkConst name in
     ty
   
@@ -548,7 +550,7 @@ module Import = struct
     mkArrowR (env_ty ()) (mkArrowR (env_ty ()) sort_s)
   
   let inst1_ty () : EConstr.t =
-    let name = Names.Constant.make1 (kername ["Actema"; "DnD"] "inst1") in
+    let name = Names.Constant.make1 (kname "inst1") in
     let ty = EConstr.mkConst name in
     ty
   
@@ -934,7 +936,7 @@ module Import = struct
                   log i in
                 log_trace ();
 
-                let forw = kername ["Actema"; "DnD"] "rew_dnd_hyp" in
+                let forw = kname "rew_dnd_hyp" in
                 calltac forw [h1; h2; h3; hp1; hp2; hp2'; t; i]
             | None ->
                 let t = Trm.boollist t in
@@ -953,7 +955,7 @@ module Import = struct
                   log i in
                 log_trace ();
 
-                let forw = kername ["Actema"; "DnD"] "forward" in
+                let forw = kname "forward" in
                 calltac forw [h1; h2; h3; hp1; hp2; t; i]
             end
 
@@ -989,7 +991,7 @@ module Import = struct
                   log i; in
                 log_trace ();
 
-                let back = kername ["Actema"; "DnD"] "rew_dnd" in
+                let back = kname "rew_dnd" in
                 calltac back [h; hp; gp'; gp; t; i]
             | None ->
                 let t = Trm.boollist t in
@@ -1006,7 +1008,7 @@ module Import = struct
                   log i; in
                 log_trace ();
 
-                let back = kername ["Actema"; "DnD"] "back" in
+                let back = kname "back" in
                 calltac back [h; hp; gp; t; i]
             end
 
@@ -1023,10 +1025,10 @@ module Import = struct
           | `Hyp ->
             let id = UidMap.find tgt.ctxt.handle hm in
             let h = EConstr.mkVar id in
-            kername ["Actema"; "DnD"] "inst_hyp_nd", [l; h; s; o]
+            kname "inst_hyp_nd", [l; h; s; o]
           (* Backward instantiate *)
           | `Concl ->
-              kername ["Actema"; "DnD"] "inst_goal", [l; s; o]
+              kname "inst_goal", [l; s; o]
           | _ ->
               raise InvalidInstantiatePath
           end in
