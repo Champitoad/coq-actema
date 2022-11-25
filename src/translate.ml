@@ -1025,7 +1025,9 @@ module Import = struct
           | `Hyp ->
             let id = UidMap.find tgt.ctxt.handle hm in
             let h = EConstr.mkVar id in
-            kname "inst_hyp_nd", [l; h; s; o]
+            let id' = Goal.fresh_name ~basename:(Names.Id.to_string id) coq_goal () in
+            let h' = EConstr.mkVar id' in
+            kname "inst_hyp", [l; h; h'; s; o]
           (* Backward instantiate *)
           | `Concl ->
               kname "inst_goal", [l; s; o]
