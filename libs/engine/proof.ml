@@ -517,6 +517,7 @@ module CoreLogic : sig
   and asource_kind = [
     | `Click of ipath
     | `DnD   of adnd
+    | `Ctxt
   ]
 
   and adnd = {
@@ -529,6 +530,7 @@ module CoreLogic : sig
   type osource = [
     | `Click of ipath
     | `DnD   of link
+    | `Ctxt
   ]
 
   val path_of_ipath : ipath -> path
@@ -547,6 +549,8 @@ module CoreLogic : sig
     | `Intro     of int
     | `Elim      of Handle.t
     | `Ind       of Handle.t
+    | `Simpl     of ipath
+    | `Red       of ipath
     | `Fold      of vname
     | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
@@ -561,8 +565,14 @@ module CoreLogic : sig
   exception InvalidSubFormPath of int list
   exception InvalidSubExprPath of int list
 
-  val actions : Proof.proof -> asource ->
-                  (string * ipath list * osource * action) list
+  type aoutput =
+    { description : string;
+      icon : string option;
+      highlights : ipath list;
+      kind : osource;
+      action : action; }
+
+  val actions : Proof.proof -> asource -> aoutput list
  (* string : doc
     ipath list : surbrillance
     osource 
@@ -1221,6 +1231,9 @@ end = struct
   let goal_of_ipath (proof : Proof.proof) (p : ipath) : Proof.goal =
     let (g, _, _) = of_ipath proof p in
     g
+  
+  let gid_of_ipath (proof : Proof.proof) (p : ipath) : Handle.t =
+    (goal_of_ipath proof p).g_id
 
   let term_of_ipath (proof : Proof.proof) (p : ipath) : term =
     let (_, _, (_, t)) = of_ipath proof p in
@@ -2339,6 +2352,8 @@ end = struct
     | `Intro     of int
     | `Elim      of Handle.t
     | `Ind       of Handle.t
+    | `Simpl     of ipath
+    | `Red       of ipath
     | `Fold      of vname
     | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
@@ -2419,7 +2434,6 @@ end = struct
            |> List.concat
 
     in f_aux [] f
-
   
   (** The type of hyperlink predicates [hlpred] captures functions which
       map a hyperlink in a proof to a list of possible link actions.
@@ -2923,6 +2937,7 @@ end = struct
   and asource_kind = [
     | `Click of ipath
     | `DnD   of adnd
+    | `Ctxt
   ]
 
   and adnd = {
@@ -2935,6 +2950,7 @@ end = struct
   type osource = [
     | `Click of ipath
     | `DnD   of link
+    | `Ctxt
   ]
 
   (** [lemmas ?selection proof] returns all lemmas for which there is a DnD
@@ -2973,6 +2989,12 @@ end = struct
           not (List.is_empty linkactions)
         end
 
+  type aoutput =
+    { description : string;
+      icon : string option;
+      highlights : ipath list;
+      kind : osource;
+      action : action; }
 
   (** [dnd_actions (dnd, selection)] computes all possible proof actions
       associated with the DnD action [dnd], and packages them as an array of
@@ -2987,7 +3009,7 @@ end = struct
       [dnd.source] (resp. [dnd.destination]). If [dnd.destination] is [None], it
       will search for destinations everywhere in the current goal.
  *)
-  let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) =
+  let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) : aoutput list =
     let Proof.{ g_id; _ } as goal = goal_of_ipath proof dnd.source in
     
     let srcsel : selection =
@@ -3041,11 +3063,51 @@ end = struct
     let actions = remove_nothing actions in
     srcs >>= fun src ->
     dsts >>= fun dst ->
-    return ("Hyperlink", srcs @ dsts, `DnD (src, dst), (g_id, `Hyperlink (lnk, actions)))
+    return {
+      description = "Hyperlink";
+      icon = None;
+      highlights = srcs @ dsts;
+      kind = `DnD (src, dst);
+      action = (g_id, `Hyperlink (lnk, actions))
+    }
+  
+  type selpred = Proof.proof -> selection -> aoutput list
 
-      
-  let actions (proof : Proof.proof) (p : asource)
-      : (string * ipath list * osource * action) list
+  let selpred_add : selpred list -> selpred =
+    fun ps -> fun pr sel ->
+      List.map (fun p -> p pr sel) ps |>
+      List.concat
+
+  let single_subterm_sel : selpred = fun proof sel ->
+    match sel with
+    | [tgt] ->
+        begin match tgt.ctxt.kind with 
+        | `Var `Head -> []
+        | _ -> [
+            { description = "Simplify";
+               icon = Some "wand-magic-sparkles";
+               highlights = sel;
+               kind = `Ctxt;
+               action = (gid_of_ipath proof tgt, `Simpl tgt) };
+
+            { description = "Unfold";
+               icon = Some "magnifying-glass";
+               highlights = sel;
+               kind = `Ctxt;
+               action = (gid_of_ipath proof tgt, `Red tgt) };
+          ]
+        end
+    | _ -> []
+
+  let ctxt_actions (sel : selection) (proof : Proof.proof) : aoutput list =
+
+    let selpred = selpred_add [
+      single_subterm_sel
+    ] in
+
+    selpred proof sel
+
+  let actions (proof : Proof.proof) (p : asource) : aoutput list
   =
     match p.kind with
       | `Click path -> begin
@@ -3063,20 +3125,26 @@ end = struct
                           then [] 
                           else rebuild_pathd (List.length iv) i)
                   in
-                  (x, [hg], `Click hg, (hd, `Intro i)))
+                  { description = x; icon = None;
+                    highlights = [hg]; kind = `Click hg;
+                    action = (hd, `Intro i) })
                 iv
             end 
 
           | `H (rp, _) ->
               let hg = mk_ipath (Handle.toint hd)
                 ~ctxt:{ kind = `Hyp; handle = Handle.toint rp } in
-              ["Elim", [hg], `Click hg, (hd, `Elim rp)]
+              [{ description = "Elim"; icon = None;
+                 highlights = [hg]; kind = `Click hg;
+                 action = (hd, `Elim rp) }]
 
           | `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
               let rp = Vars.getid goal.g_env x |> Option.get in
               let hg = mk_ipath (Handle.toint hd)
                 ~ctxt:{ kind = `Var `Head; handle = rp } in
-              ["Induction", [hg], `Click hg, (hd, `Ind (Handle.ofint rp))]
+              [{ description = "Induction"; icon = None;
+                 highlights = [hg]; kind = `Click hg;
+                 action = (hd, `Ind (Handle.ofint rp)) }]
           
           | `V (x, (_, Some _)) ->
               let rp = Vars.getid goal.g_env x |> Option.get in
@@ -3086,8 +3154,12 @@ end = struct
               let hg_fold = mk_ipath (Handle.toint hd)
                 ~ctxt:{ kind = `Var `Body; handle = rp } in
 
-              ["Unfold", [hg_unfold], `Click hg_unfold, (hd, `Unfold x);
-               "Fold", [hg_fold], `Click hg_fold, (hd, `Fold x)]
+              [{ description = "Unfold"; icon = None;
+                 highlights = [hg_unfold]; kind = `Click hg_unfold;
+                 action = (hd, `Unfold x) };
+               { description = "Fold"; icon = None;
+                 highlights = [hg_fold]; kind = `Click hg_fold;
+                 action = (hd, `Fold x) }]
           
           | _ ->
               []
@@ -3095,6 +3167,9 @@ end = struct
 
       | `DnD dnd ->
         dnd_actions (dnd, p.selection) proof
+      
+      | `Ctxt ->
+        ctxt_actions p.selection proof
 
 
   let apply (proof : Proof.proof) ((hd, a) : action) =
@@ -3121,7 +3196,7 @@ end = struct
     | `Forward (src, dst, p, s) ->
         forward (src, dst, p, s) targ
     | `Hyperlink (lnk, actions) ->
-        match lnk, actions with
+        begin match lnk, actions with
         | ([src], [dst]), [`Subform substs] ->
             dlink_tac (src, dst) substs targ
         | _, [`Instantiate (wit, tgt)] ->
@@ -3134,6 +3209,8 @@ end = struct
             unfold x tgts targ
         | _, _ :: _ :: _ -> failwith "Cannot handle multiple link actions yet"
         | _, _ -> raise TacticNotApplicable
+        end
+    | _ -> raise TacticNotApplicable
 
   module Translate = struct
     open Api

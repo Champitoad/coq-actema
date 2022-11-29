@@ -144,7 +144,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
    * properties:
    *
    *  - kind (string): the type of the source.
-   *    Can be "click" or "dnd".
+   *    Can be "click", "ctxt" or "dnd".
    *
    *  - path (string) [only for the kind "click"]
    *    ID of the "clicked" item
@@ -160,7 +160,8 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
    *
    * An output action is an object with the following properties:
    *
-   *  - description : the description of the action
+   *  - description : the textual description of the action
+   *  - icon        : optional id of a FontAwesome icon to be used in the description
    *  - ui          : the UI action
    *  - highlight   : a JS array of IDs to highlight
    *  - action      : the related action (see [apply])
@@ -177,6 +178,8 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
             | "click" ->
                 let path = Path.of_obj asource##.path in
                 [`Click path]
+            | "ctxt" ->
+                [`Ctxt]
             | "dnd" ->
                 let source = Path.of_obj asource##.source in
                 let destination = Path.of_opt asource##.destination in
@@ -198,7 +201,8 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
 
     Js.array (
       Array.of_list
-        (List.map (fun (p, ps, aui, a) -> 
+        (List.map (fun CoreLogic.{ description = p; icon = ic;
+                                   highlights = ps; kind = aui; action = a } -> 
            let ps = List.map CoreLogic.path_of_ipath ps in
            let ps = Js.array (Array.of_list (List.map Js.string ps)) in
 
@@ -216,10 +220,20 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
                  "source"     , Js.Unsafe.inject (Js.string (p2p src));
                  "destination", Js.Unsafe.inject (Js.string (p2p dst));
                |]
-           in               
+
+             | `Ctxt -> Js.Unsafe.obj [|
+                 "kind"       , Js.Unsafe.inject (Js.string "ctxt");
+               |]
+           in
+
+           let icon =
+             match ic with
+             | Some s -> Js.Unsafe.inject (Js.string s)
+             | None -> Js.Unsafe.inject Js.undefined in
 
            Js.Unsafe.obj [|
              "description", Js.Unsafe.inject (Js.string p) ;
+             "icon"       , icon                           ;
              "highlight"  , Js.Unsafe.inject ps            ;
              "ui"         , aui                            ;
              "action"     , Js.Unsafe.inject a             |]) actions))
