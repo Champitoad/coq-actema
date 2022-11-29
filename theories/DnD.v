@@ -1734,15 +1734,15 @@ Ltac beta_head t l :=
         rebuild constr:(cons (@existT Type (fun X => X) _ t) l)
     end.
 
-
 Ltac unfold_path_r p t :=
   match p with
   | nil =>
-      let l := list_args t in
+      (let r := eval red in t in  r)
+(*      let l := list_args t in
       match l with
       | cons ?f ?l' =>
           let r := constr:(
-                       fun x : unit =>
+                         fun x : unit =>
                          ltac:(
                          let g := extract f in
                          let g' := (eval unfold g in g) in
@@ -1757,7 +1757,7 @@ Ltac unfold_path_r p t :=
                                         let r := (  beta_head g' l') in exact r)
                          end))
                          in beta1 r tt
-       end
+       end *)
   | cons ?n ?p' =>
       match t with
       |  forall x: ?T, @?body' x => 
@@ -1801,10 +1801,13 @@ Ltac unfold_path_hyp h p :=
 Definition fn := fun x => x + 3.
 Goal (2+(2 + (fn 1))) = fn 4 ->  (2+(2 + (fn 1))) = fn 4.
   intro h.
-  unfold_path (cons 1 (cons 1 (cons 1 nil))).
   unfold_path ( (cons 2 ( nil))).
-  unfold_path (cons 1  (cons 1 (cons 1 nil))).
-unfold_path_hyp h (cons 1 (cons 1 (cons 1 nil))).
+  unfold_path (cons 1 (cons 1 (cons 1 nil))).
+
+  unfold_path (cons 1  nil).
+
+
+  unfold_path_hyp h (cons 1 (cons 1 (cons 1 nil))).
 Abort.
 
 (*
