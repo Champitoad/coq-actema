@@ -10,7 +10,8 @@ Require Import Lia.
 Parameters A : Prop.
 
 Lemma test_eq (n m : nat) : 2 + 4 = 6 -> (A -> A) /\ 5 + 4 * 5 = 25.
-  actema.
+  actema. actema "unfold".
+  unfold Nat.add.
   lia.
 Qed.
 

@@ -1058,36 +1058,28 @@ module Import = struct
         let prf = EConstr.mkVar id in
 
         Tactics.pose_proof name prf
-    | `ASimpl tgt ->
-        let tac, args =
+    | `ASimpl tgt | `ARed tgt ->
+        let tac_name =
+          begin match a with
+          |`ASimpl _ -> "simpl_path"
+          | `ARed _ -> "unfold_path"
+          | _ -> assert false
+          end in
+        let tac_name, args =
           begin match tgt.ctxt.kind with
           | `Hyp ->
               let hyp = Utils.get_hyp goal tgt.ctxt.handle in
               let p = tgt.sub |> fix_sub_eq (`F hyp.h_form) |> Trm.natlist in
               let id = UidMap.find tgt.ctxt.handle hm in
               let h = EConstr.mkVar id in
-              kname "simpl_path_hyp", [h; p]
+              tac_name ^ "_hyp", [h; p]
           | `Concl ->
               let p = tgt.sub |> fix_sub_eq (`F goal.g_concl) |> Trm.natlist in
-              kname "simpl_path", [p]
+              tac_name, [p]
           | _ ->
               raise (InvalidPath tgt)
           end in 
-        calltac tac args
-    | `ARed tgt ->
-        let p = bool_path tgt.sub in
-        let tac, args =
-          begin match tgt.ctxt.kind with
-          | `Hyp ->
-              let id = UidMap.find tgt.ctxt.handle hm in
-              let h = EConstr.mkVar id in
-              kname "unfold_path_hyp", [h; p]
-          | `Concl ->
-              kname "unfold_path", [p]
-          | _ ->
-              raise (InvalidPath tgt)
-          end in 
-        calltac tac args
+        calltac (kname tac_name) args
     | _ ->
         raise (UnsupportedAction a)
 
