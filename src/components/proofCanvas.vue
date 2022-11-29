@@ -6,6 +6,10 @@
     overflow: hidden;
 }
 
+#menuIcons {
+    display: none;
+}
+
 .selectable {
     /* border-color: rgba(255, 153, 51, 0.3);
     background-color: rgba(255, 153, 51, 0.3);
@@ -171,7 +175,8 @@
 </style>
 
 <template>
-    <div id="proof-canvas" class="container-fluid" @click="unhighlight">
+    <div id="proof-canvas" class="container-fluid" @click="unhighlight" @contextmenu="openActionsMenu">
+        <div id="menuIcons"></div>
         <div class="row" style="height: 100%;">
             <div class="col" style="padding: 0;" :key="renderIndex">
                 <template v-if="proofState">
@@ -199,6 +204,8 @@
                                     </div>
                                 </div>
                             </div>
+                            <RadialMenu ref="actionsMenu" :style="{ 'z-index': 10, top: actionsMenu.y + 'px', left: actionsMenu.x + 'px' }" @clicked="actionsMenuClicked" @closed="actionsMenuClosed"
+                                        :menu-items="actionsMenu.items" :size="actionsMenu.size" close-on-click></RadialMenu>
                         </div>
                     </template>
                 </template>
@@ -221,6 +228,7 @@ import ExpressionVue from "./expression.vue";
 import PredicateVue from "./predicate.vue";
 import GoalVue from "./goal.vue";
 import FireWorksVue from "./fireworks.vue";
+import RadialMenu from "./RadialMenu/RadialMenu.vue"
 
 export default {
     components: {
@@ -228,7 +236,8 @@ export default {
         predicate: PredicateVue,
         expression: ExpressionVue,
         goal: GoalVue,
-        fireworks: FireWorksVue
+        fireworks: FireWorksVue,
+        RadialMenu
     },
     data: function() {
         return {
@@ -245,7 +254,13 @@ export default {
             selectMode: false, // true if we are selecting a subpath, false otherwise
             displayMode: "html", // "html" or "mathml"
 
-            selection: {}
+            selection: {},
+
+            actionsMenu: {
+                size: 400, x: 0, y: 0,
+                items: []
+            },
+            menuIcons: []
         };
     },
     computed: {
@@ -869,6 +884,48 @@ export default {
 
         QED() {
             this.qed = true;
+        },
+
+        addMenuIcon(faId) {
+            if (!this.menuIcons.includes(faId)) {
+                let icon = document.createElement("i");
+                icon.id = faId;
+                icon.classList.add("fa-solid");
+                icon.classList.add("fa-" + faId);
+                icon.classList.add("menu-icon");
+                document.getElementById("menuIcons").appendChild(icon);
+                this.menuIcons.push(faId);
+            }
+        },
+
+        addActionItem(id, faId, title) {
+            let item = {
+                id: id,
+                icon: '#' + faId,
+                title: title
+            };
+            this.actionsMenu.items.push(item);
+            this.addMenuIcon(faId);
+        },
+
+        removeActionItem(id) {
+            this.actionsMenu.items = this.actionsMenu.items.filter(item => item.id != id);
+        },
+
+        openActionsMenu(e) {
+            this.addActionItem("wand", "wand-magic-sparkles", "Magic wand");
+            this.actionsMenu.x = e.clientX - (this.actionsMenu.size / 2);
+            this.actionsMenu.y = e.clientY - (this.actionsMenu.size / 2) - 135;
+            this.$refs.actionsMenu.open();
+            e.preventDefault();
+        },
+
+        actionsMenuClicked(item) {
+
+        },
+
+        actionsMenuClosed() {
+            this.removeActionItem("wand");
         }
     }
 };
