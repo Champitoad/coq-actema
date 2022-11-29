@@ -9,7 +9,7 @@ Require Import Lia.
 
 Parameters A : Prop.
 
-Lemma test_eq (n m : nat) : (A -> A) /\ 3 + 4 * 5 < 25.
+Lemma test_eq (n m : nat) : 2 + 4 = 6 -> (A -> A) /\ 5 + 4 * 5 = 25.
   actema.
   lia.
 Qed.

@@ -727,16 +727,30 @@ module Import = struct
     let open Tactypes in
     List.map (fun name -> CAst.make (IntroNaming (Namegen.IntroIdentifier name))) names
   
-  let path (sub : int list) : EConstr.t =
+  let bool_path (sub : int list) : EConstr.t =
     let boollist_of_intlist =
       Stdlib.List.map (fun n -> if n = 0 then false else true) in
     sub |> boollist_of_intlist |> Trm.boollist
+  
+  let fix_sub_eq (t : Logic_t.term) (sub : int list) : int list =
+    let rec aux acc t sub =
+      begin match sub with
+      | [] -> Stdlib.List.rev acc
+      | i :: sub ->
+          let j =
+            begin match t with
+            | `F `FPred ("_EQ", _) -> i + 1
+            | _ -> i
+            end in
+          aux (j :: acc) (Utils.direct_subterm t i) sub
+      end in
+    aux [] t sub
 
   exception UnsupportedAction of Logic_t.action
   exception UnexpectedIntroPattern of Logic_t.intro_pat
   exception UnexpectedIntroVariant of int
   exception UnexpectedDnD
-  exception InvalidInstantiatePath
+  exception InvalidPath of Logic_t.ipath
 
   let action (sign : FOSign.t) (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
              (a : Logic_t.action) : unit tactic =
@@ -941,8 +955,8 @@ module Import = struct
             | None ->
                 let t = Trm.boollist t in
 
-                let hp1 = path hyp1.sub in
-                let hp2 = path hyp2.sub in
+                let hp1 = bool_path hyp1.sub in
+                let hp2 = bool_path hyp2.sub in
                 
                 let log_trace () =
                   let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
@@ -996,8 +1010,8 @@ module Import = struct
             | None ->
                 let t = Trm.boollist t in
 
-                let hp = path hyp.sub in
-                let gp = path concl.sub in
+                let hp = bool_path hyp.sub in
+                let gp = bool_path concl.sub in
                 
                 let log_trace () =
                   let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
@@ -1015,7 +1029,7 @@ module Import = struct
         | _ -> raise UnexpectedDnD
         end
     | `AInstantiate (wit, tgt) ->
-        let l = path (tgt.sub @ [0]) in
+        let l = bool_path (tgt.sub @ [0]) in
         let s = infer_sort goal.g_env wit |> sort_index sign |> Trm.nat_of_int in
         let o = expr sign [] wit in
 
@@ -1032,7 +1046,7 @@ module Import = struct
           | `Concl ->
               kname "inst_goal", [l; s; o]
           | _ ->
-              raise InvalidInstantiatePath
+              raise (InvalidPath tgt)
           end in
 
           calltac tac args
@@ -1044,6 +1058,36 @@ module Import = struct
         let prf = EConstr.mkVar id in
 
         Tactics.pose_proof name prf
+    | `ASimpl tgt ->
+        let tac, args =
+          begin match tgt.ctxt.kind with
+          | `Hyp ->
+              let hyp = Utils.get_hyp goal tgt.ctxt.handle in
+              let p = tgt.sub |> fix_sub_eq (`F hyp.h_form) |> Trm.natlist in
+              let id = UidMap.find tgt.ctxt.handle hm in
+              let h = EConstr.mkVar id in
+              kname "simpl_path_hyp", [h; p]
+          | `Concl ->
+              let p = tgt.sub |> fix_sub_eq (`F goal.g_concl) |> Trm.natlist in
+              kname "simpl_path", [p]
+          | _ ->
+              raise (InvalidPath tgt)
+          end in 
+        calltac tac args
+    | `ARed tgt ->
+        let p = bool_path tgt.sub in
+        let tac, args =
+          begin match tgt.ctxt.kind with
+          | `Hyp ->
+              let id = UidMap.find tgt.ctxt.handle hm in
+              let h = EConstr.mkVar id in
+              kname "unfold_path_hyp", [h; p]
+          | `Concl ->
+              kname "unfold_path", [p]
+          | _ ->
+              raise (InvalidPath tgt)
+          end in 
+        calltac tac args
     | _ ->
         raise (UnsupportedAction a)
 
