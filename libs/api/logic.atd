@@ -71,6 +71,8 @@ type action = [
   | AExact of uid
   | AElim of uid
   | AInd of uid
+  | ASimpl of ipath
+  | ARed of ipath
   | ACut of (form * uid)
   | AAssume of (form * uid)
   | AGeneralize of uid

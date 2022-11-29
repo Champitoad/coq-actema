@@ -279,7 +279,7 @@ let biniou_unhash_dict = Bi_io.make_unhash [
   "Hyp"; "Concl"; "Var"; "Head"; "Body";
   "kind"; "pkind"; "handle";
   "root"; "uid"; "ctxt"; "sub";
-  "AId"; "ADef"; "AIntro"; "AElim"; "AExact"; "ACut"; "AAssume"; "AGeneralize"; "AMove"; "ADuplicate"; "ALink";
+  "AId"; "ADef"; "AIntro"; "AExact"; "AElim"; "AInd"; "ASimpl"; "ARed"; "ACut"; "AAssume"; "AGeneralize"; "AMove"; "ADuplicate"; "ALink"; "AInstantiate";
   "PNode";
 ]
 

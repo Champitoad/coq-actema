@@ -3272,6 +3272,10 @@ end = struct
       | `Ind subhd ->
           let uid = Handle.toint subhd in
           `AInd uid
+      | `Simpl tgt ->
+          `ASimpl (of_ipath tgt)
+      | `Red tgt ->
+          `ARed (of_ipath tgt)
       | `Hyperlink (lnk, actions) ->
           begin match lnk, actions with
           | ([src], [dst]), [`Subform substs] ->
