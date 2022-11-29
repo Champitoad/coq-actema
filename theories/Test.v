@@ -3,8 +3,6 @@ From Actema Require Import Loader.
 Lemma test A B : (A /\ B) -> A /\ B.
 Proof.
   intro H. actema.
-  actema "addexpr".
-  actema "addhyp"; actema.
 Qed.
 
 Require Import Lia.

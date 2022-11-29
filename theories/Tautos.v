@@ -329,5 +329,5 @@ case (h2 0) => [h3|h3].
 forward h1 h5 h6 (cons false (cons false(nil)))(@nil bool)(cons false (cons false (nil)))                      (cons (Some im0) nil).
 elim (h3 h6).  
 Restart.
-  actema.
+  (* Fail actema "bug_recheck_failure". *)
 Admitted.

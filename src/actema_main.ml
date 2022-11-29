@@ -157,7 +157,11 @@ let interactive_proof () : proof tactic =
       let cont =
         compile_action (idx, a) >>= fun _ ->
         aux () in
-      tclOR cont (fun _ -> aux ()) in
+      tclOR cont begin fun (exn, _) ->
+        match exn with
+        | ApplyUndo -> aux ()
+        | _ -> raise exn
+      end in
 
     export_goals () >>= fun goals ->
     begin match get_user_action goals with
