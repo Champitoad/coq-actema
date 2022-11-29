@@ -694,6 +694,11 @@ export default {
             return this.selection[subgoal.handle] || [];
         },
 
+        getActiveSelection() {
+            let subgoal = this.proofState.subgoals()[this.getActiveSubgoal()];
+            return this.getSelection(subgoal);
+        },
+
         addSelectedPath(handle, path) {
             if (!this.selection[handle])
                 this.selection[handle] = [];
@@ -898,34 +903,43 @@ export default {
             }
         },
 
-        addActionItem(id, faId, title) {
+        addActionItem(id, faId, title, action) {
             let item = {
                 id: id,
                 icon: '#' + faId,
-                title: title
+                title: title,
+                action: action
             };
             this.actionsMenu.items.push(item);
             this.addMenuIcon(faId);
         },
 
-        removeActionItem(id) {
-            this.actionsMenu.items = this.actionsMenu.items.filter(item => item.id != id);
+        populateActionsMenu() {
+            let query = { kind: "ctxt", selection: this.getActiveSelection() };
+            let actions = this.proofState.actions(query);
+
+            let $this = this;
+            actions.forEach((a, i) => {
+                if (a.ui.kind == 'ctxt') {
+                    console.log(a);
+                    $this.addActionItem(i+1, a.icon, a.description, a.action);
+                }
+            });
+        },
+
+        actionsMenuClicked(action) {
+            this.sendActionCode(action.action);
         },
 
         openActionsMenu(e) {
-            this.addActionItem("wand", "wand-magic-sparkles", "Magic wand");
+            this.populateActionsMenu();
             this.actionsMenu.x = e.clientX - (this.actionsMenu.size / 2);
             this.actionsMenu.y = e.clientY - (this.actionsMenu.size / 2) - 135;
             this.$refs.actionsMenu.open();
-            e.preventDefault();
-        },
-
-        actionsMenuClicked(item) {
-
         },
 
         actionsMenuClosed() {
-            this.removeActionItem("wand");
+            this.actionsMenu.items = [];
         }
     }
 };
