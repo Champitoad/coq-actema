@@ -859,7 +859,7 @@ module Import = struct
                   let pol = pol_of_ipath goal p in
                   begin match pol, t |> form_of_term with
                   | Neg, `FPred ("_EQ", [_; _]) ->
-                      let hp = rsub |> Stdlib.List.rev |> boollist_of_intlist in
+                      let hp = p.sub |> boollist_of_intlist in
                       let bside = match side with 0 -> false | _ -> true in
                       Some (hp, bside)
                   | _ ->

@@ -19,7 +19,6 @@ Proof.
   induction n; induction m; actema.
 Qed.
 
-
 (** * Kaustuv's challenge *)
 
 Context (A B C D E F G : Prop).
