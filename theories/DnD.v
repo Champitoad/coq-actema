@@ -1734,15 +1734,15 @@ Ltac beta_head t l :=
         rebuild constr:(cons (@existT Type (fun X => X) _ t) l)
     end.
 
-
 Ltac unfold_path_r p t :=
   match p with
   | nil =>
-      let l := list_args t in
+      (let r := eval red in t in  r)
+(*      let l := list_args t in
       match l with
       | cons ?f ?l' =>
           let r := constr:(
-                       fun x : unit =>
+                         fun x : unit =>
                          ltac:(
                          let g := extract f in
                          let g' := (eval unfold g in g) in
@@ -1757,7 +1757,7 @@ Ltac unfold_path_r p t :=
                                         let r := (  beta_head g' l') in exact r)
                          end))
                          in beta1 r tt
-       end
+       end *)
   | cons ?n ?p' =>
       match t with
       |  forall x: ?T, @?body' x => 
@@ -1796,18 +1796,16 @@ Ltac unfold_path_hyp h p :=
   let g' := unfold_path_r p g in
   change g' in h.
 
-
-
-Definition fn := fun x => x + 3.
-Goal (2+(2 + (fn 1))) = fn 4 ->  (2+(2 + (fn 1))) = fn 4.
-  intro h.
-  unfold_path (cons 1 (cons 1 (cons 1 nil))).
-  unfold_path ( (cons 2 ( nil))).
-  unfold_path (cons 1  (cons 1 (cons 1 nil))).
-unfold_path_hyp h (cons 1 (cons 1 (cons 1 nil))).
-Abort.
-
 (*
+
+Definition f x := x + 2.
+Definition g x := (f x) + 1.
+
+Goal forall x,  x + 3 = 3 + x.
+  intro x.
+  unfold_path (cons 2 nil).
+unfold_path (cons 1 nil).
+
 Ltac mkprop n env P p :=
   let t := find_pat P p in
   let T := type of t in
@@ -1886,6 +1884,19 @@ Ltac preify_rec p l n env t :=
      with
      | (fun _: _ => ?r) => constr:(fa n s r) 
      end 
+      | exists x: ?T, @?body' x =>
+          let s := tst T in
+          let y := fresh "y" in
+          lazymatch constr:(fun y: T => ltac:(
+           let body := beta1 body' y in
+           let r := preify_rec p l'
+                               (cons s n)
+                               (cons (@existT Type (fun x => x) T y) env)
+                               body in
+              exact r))
+     with
+     | (fun _: _ => ?r) => constr:(ex n s r) 
+     end 
       | ?a -> ?b =>
           match type of a with
           | Prop =>
@@ -1936,6 +1947,7 @@ Ltac reify_prop p l :=
       let gs := preify_rec p l (@nil nat)(@nil dyn) g in
       change (coerce (@nil nat) gs tt)
   end.
+
 
 Ltac reify_prop_hyp h h' p l :=
   let gs := preify_rec p l  (@nil nat)(@nil dyn) ltac:(type of h) in
@@ -2487,7 +2499,8 @@ Ltac simplify_goal :=
   apply simplc_corrg;
   rewrite /simplc /eB /eT /cs3.
 
-
+(* these two tactics currently only work
+   for the last hypothesis of the context *)
 Ltac sreify_hyp h :=
   match goal with
   | h : ?g |- _ =>
