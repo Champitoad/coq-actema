@@ -2,19 +2,13 @@ From Actema Require Import Loader.
 
 Goal forall n m,
 ( exists p, m=n+p ) ->
-( exists q, n+q = m).
+( exists p, n+p = m).
 
 intros n m [p H].
 
-rew_dnd
-  H
-  (@nil bool)
-  (1 :: nil)%list
-  (false :: nil)%list
-  (true :: true :: nil)%list
-  (Some (existT (fun s : nat => env -> env -> sort s) 0 (fun _ _ : env => p))
-  :: nil)%list.
-Admitted.
+actema.
+easy.
+Qed.
 
 Lemma test A B : (A /\ B) -> A /\ B.
 Proof.

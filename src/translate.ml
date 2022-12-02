@@ -510,7 +510,9 @@ end
 (** Importing Actema actions as Coq tactics *)
 
 module Import = struct
-  let kname = kername ["Actema"; "DnD"]
+  (* let kname = kername ["Actema"; "DnD"] *)
+  let kname = kername ["Actema"; "HOL"]
+  let ts = EConstr.mkConst (Names.Constant.make1 (kname "test"))
 
   let symbol (sy : symbol) : EConstr.t =
     match sy with
@@ -537,12 +539,12 @@ module Import = struct
   let sort_ty (s : EConstr.t) : EConstr.t =
     let name = Names.Constant.make1 (kname "sort") in
     let ty = EConstr.mkConst name in
-    EConstr.mkApp (ty, [| s |])
+    EConstr.mkApp (ty, [| ts; s |])
 
   let env_ty () : EConstr.t =
     let name = Names.Constant.make1 (kname "env") in
     let ty = EConstr.mkConst name in
-    ty
+    EConstr.mkApp (ty, [| ts |])
   
   let clos_ty () : EConstr.t =
     let open EConstr in
@@ -552,7 +554,7 @@ module Import = struct
   let inst1_ty () : EConstr.t =
     let name = Names.Constant.make1 (kname "inst1") in
     let ty = EConstr.mkConst name in
-    ty
+    EConstr.mkApp (ty, [| ts |])
   
   let rec type_ (sign : FOSign.t)
       (ty : Fo_t.type_) : EConstr.t =
@@ -951,7 +953,7 @@ module Import = struct
                 log_trace ();
 
                 let forw = kname "rew_dnd_hyp" in
-                calltac forw [h1; h2; h3; hp1; hp2; hp2'; t; i]
+                calltac forw [ts; h1; h2; h3; hp1; hp2; hp2'; t; i]
             | None ->
                 let t = Trm.boollist t in
 
@@ -970,7 +972,7 @@ module Import = struct
                 log_trace ();
 
                 let forw = kname "forward" in
-                calltac forw [h1; h2; h3; hp1; hp2; t; i]
+                calltac forw [ts; h1; h2; h3; hp1; hp2; t; i]
             end
 
         (* Backward DnD *)
@@ -1006,7 +1008,7 @@ module Import = struct
                 log_trace ();
 
                 let back = kname "rew_dnd" in
-                calltac back [h; hp; gp'; gp; t; i]
+                calltac back [ts; h; hp; gp'; gp; t; i]
             | None ->
                 let t = Trm.boollist t in
 
@@ -1023,7 +1025,7 @@ module Import = struct
                 log_trace ();
 
                 let back = kname "back" in
-                calltac back [h; hp; gp; t; i]
+                calltac back [ts; h; hp; gp; t; i]
             end
 
         | _ -> raise UnexpectedDnD
@@ -1041,10 +1043,10 @@ module Import = struct
             let h = EConstr.mkVar id in
             let id' = Goal.fresh_name ~basename:(Names.Id.to_string id) coq_goal () in
             let h' = EConstr.mkVar id' in
-            kname "inst_hyp", [l; h; h'; s; o]
+            kname "inst_hyp", [ts; l; h; h'; s; o]
           (* Backward instantiate *)
           | `Concl ->
-              kname "inst_goal", [l; s; o]
+              kname "inst_goal", [ts; l; s; o]
           | _ ->
               raise (InvalidPath tgt)
           end in

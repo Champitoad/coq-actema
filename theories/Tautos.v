@@ -1,7 +1,7 @@
 From Actema Require Import Loader.
 
 (** * Peano arithmetic *)
-Definition icl1 : nat -> (list (option inst1)).
+(* Definition icl1 : nat -> (list (option inst1)).
 intro n; apply cons; try apply nil.
 apply Some; exists 0.
 intros; exact n.
@@ -9,7 +9,7 @@ Defined.
 Definition ic : nat -> (option inst1).
 intro n; apply Some; exists 0.
 intros; exact n.
-Defined.
+Defined. *)
 
 Lemma add_comm :
   forall n m, n + m = m + n.
@@ -292,14 +292,14 @@ Parameter Rich : nat -> Prop.
 Parameter mother : nat -> nat.
 Parameter h : nat.
 
-Definition imm0 : inst1.
+(* Definition imm0 : inst1.
 exists 0.
 intros; exact (mother (mother 0)).
 Defined.
 Definition im0 : inst1.
 exists 0.
 intros; exact (mother 0).
-Defined.
+Defined. *)
 
 (* algebra *)
 Parameter f g : nat -> nat.
@@ -315,18 +315,7 @@ Lemma eduk1 :
 Proof.
  intros h1 h2.
 case (h2 0) => [h3|h3].
-        forward h1 h3 h4
-                (cons false (cons false nil))
-                      (@nil bool)
-                      (cons false (cons false nil))
-                      (cons (Some imm0) nil).
-                                                  forward h4 h2 h5
-                                                          (@nil bool)
-                                                          (cons false (cons false (cons false nil)))
-                                                          (cons true (cons true (cons true nil)))
-                      (cons (Some im0) nil).
-forward h1 h5 h6 (cons false (cons false(nil)))(@nil bool)(cons false (cons false (nil)))                      (cons (Some im0) nil).
-elim (h3 h6).  
 Restart.
-  (* Fail actema "bug_recheck_failure". *)
-Admitted.
+  intros.
+  actema. actema.
+Qed.

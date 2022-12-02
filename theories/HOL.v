@@ -3497,12 +3497,24 @@ Ltac reify_rec ts' l n env t :=
      | (fun _: (sort ts s) => ?r) => constr:(fa ts n s r) 
      end
 
-      | ?a -> ?b => 
+      | ?a -> ?b =>
+        match type of a with
+        | Prop => 
           let rb :=
             constr:(fun (z: ppp ts n) =>
               ltac:(let r := wrap env z b in exact r)) in
           let ra := reify_rec ts l' n  env a in
           constr:(impl _ n ra rb) 
+          | _ =>
+          let y := fresh "y" in
+          lazymatch constr:(fun y: a => ltac:(
+           let s := ltac:( tst ts a) in                                  
+              let r := reify_rec ts l' (cons s n) (cons (@existT Type (fun x => x) a y) env) b in
+              exact r))
+     with
+     | (fun _: a => ?r) => constr:(fa ts n ltac:(let s := tst ts a in exact s) r) 
+     end
+     end
       | forall x: ?T, @?body' x =>
           let y := fresh "y" in
           lazymatch constr:(fun y: T => ltac:(
@@ -3591,10 +3603,21 @@ Ltac reify_rec_at ts' l n env t :=
      end
         
       | ?a -> ?b => 
+      match type of a with
+      | Prop =>
           let rb := constr:(fun (z: ppp ts n) =>
                       ltac:(let r := wrap env z b in exact r)) in
           let ra := reify_rec_at ts l' n  env a in
           constr:(impl _ n ra rb) 
+       | _ => 
+       let y := fresh "y" in
+       lazymatch constr:(fun y: a => ltac:(
+        let s := ltac:(tst ts a) in                                  
+           let r := reify_rec_at ts l' (cons s n) (cons (@existT Type (fun x => x) a y) env) b in
+           exact r))
+  with
+  | (fun _: a => ?r) => constr:(fa ts n ltac:(let s := tst ts a in exact s) r) 
+  end end
       | forall x: ?T, @?body' x =>
           let y := fresh "y" in
           lazymatch constr:(fun y: T => ltac:(
@@ -3914,7 +3937,7 @@ Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
 
       
   
-Ltac forward ts  h1 h2 h3 hp1 hp2 t i :=
+Ltac forward ts h1 h2 h3 hp1 hp2 t i :=
   reify_hyp ts hp1 h1;
   reify_hyp ts hp2 h2;
   let o1 := type of h1 in
@@ -3933,7 +3956,7 @@ Ltac forward ts  h1 h2 h3 hp1 hp2 t i :=
   rewrite /coerce /= in h2;
   [ | simpl; try done; auto];
   rewrite /trl3 /f3 /o3_norm /= /cT /cB in h3;
-  rewrite /trs /sl /ts  ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym in h3;
+  rewrite /trs /sl /ts  ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym /trad1/trs/eq_rect_r/= in h3;
   simplify_hyp h3;
       match goal with
       | h3 : False |- _ => case h3
