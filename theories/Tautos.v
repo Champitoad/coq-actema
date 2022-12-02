@@ -19,6 +19,22 @@ Proof.
   induction n; induction m; actema.
 Qed.
 
+
+Fixpoint le (n:nat)(m:nat) :=
+  match n,m with
+  | 0,_ => True
+  | (S _) , 0  => False
+  | S n, S m => le n m
+  end.
+
+Require Import ssreflect.
+
+Lemma le_ex : forall n m, le n m  ->
+                 exists p, n+p = m.
+elim => [|n hn][|m]//=; actema.
+Qed.
+
+
 (** * Kaustuv's challenge *)
 
 Context (A B C D E F G : Prop).
@@ -319,3 +335,5 @@ Restart.
   intros.
   actema. actema.
 Qed.
+
+
