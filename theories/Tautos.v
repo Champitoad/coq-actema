@@ -35,6 +35,89 @@ elim => [|n hn][|m]//=; actema.
 Qed.
 
 
+
+Fixpoint even n := match n with
+                   | 0 => True
+                   | S n => ~(even n)
+                   end.
+
+Fixpoint eqb n m :=
+  match n, m with
+  | 0, 0 => True
+  | S n, S m => eqb n m
+  | _, _ => False
+  end.
+
+Lemma eqb_eq : forall n m,
+    eqb n m -> n = m.
+elim => [|n hn][|m]//=; actema.
+Qed.
+
+Lemma eqb_refl : forall n, eqb n n.
+elim => [//|n hn].
+actema.
+Qed.
+
+Lemma eq_eqb : forall n m, n=m -> eqb n m.
+  pose h2 := eqb_refl.
+actema.
+Qed.
+
+Lemma S_inj : forall n m, S n = S m -> n =m.
+  (* BW : je dois vérifier si/comment ça marche
+     pour des cstes (pose) à la place de have *)
+have h1 : ( forall n m : nat, eqb n m -> n = m)
+  by exact eqb_eq.
+have h2 :  ( forall n m : nat, n = m -> eqb n m)
+                        by exact eq_eqb.    
+actema.
+Qed.
+
+Lemma even_aux :
+  forall n, (even n) /\ (exists p, n = p + p)
+            \/(~even n) /\  (exists p, n = S(p + p)).
+have h : (forall n m : nat, n + S m = S (n + m)) by
+    exact  PeanoNat.Nat.add_succ_r.
+induction n; actema.
+Qed.
+
+
+Lemma even_ex : forall n,  even n ->
+                           (exists p, n = p + p).
+pose h := even_aux.
+actema.
+Qed.
+
+Lemma ex_pred : forall x p, S(S x) = p+p ->
+                            exists q, x = q + q.
+move => x [//=|p].
+have h : (forall n m : nat, n + S m = S (n + m)) by exact PeanoNat.Nat.add_succ_r.
+have s_i : (forall n m, S n = S m -> n =m) by exact S_inj.
+actema.
+(* ici on doit faire un change à cause du pb de id's *)
+change (forall x y, S x = S y -> x = y) in s_i.
+actema.  
+Qed.
+
+
+Lemma ex_aux :
+  forall n, ((exists p, n = p + p) ->  even n)
+/\ ((exists p, S n = p + p) ->  even (S n)).
+  induction n.
+actema.
+have h : (forall n m : nat, n + S m = S (n + m))
+    by exact PeanoNat.Nat.add_succ_r.
+move: H; case: p; first done.
+actema.
+(* manque bouton 'done' *)
+done.
+have h : (forall n m : nat, n + S m = S (n + m)) by exact PeanoNat.Nat.add_succ_r.
+have e_p : (forall x p, S(S x) = p+p ->
+                        exists q, x = q + q)
+  by exact ex_pred.
+actema.
+Qed.
+                                            
 (** * Kaustuv's challenge *)
 
 Context (A B C D E F G : Prop).
@@ -337,3 +420,21 @@ Restart.
 Qed.
 
 
+Fixpoint app l1 l2 :=
+  match l1 with
+  | niln => l2
+  | consn n l1 => consn n (app l1 l2)
+  end.
+
+Lemma app_nil : forall l, (app l niln) = l.
+pose app' := app.
+pose c := consn.
+pose nn := niln.
+rewrite -/nn -/c -/app'.
+  induction l.
+rewrite -/nn -/c -/app'.
+  actema.
+  Print test.
+
+
+  actema.
