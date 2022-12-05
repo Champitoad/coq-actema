@@ -1,15 +1,15 @@
 From Actema Require Import Loader.
 
 (** * Peano arithmetic *)
-(* Definition icl1 : nat -> (list (option inst1)).
+ Definition icl1 : nat -> (list (option (inst1 test))).
 intro n; apply cons; try apply nil.
 apply Some; exists 0.
 intros; exact n.
 Defined.
-Definition ic : nat -> (option inst1).
+Definition ic : nat -> (option (inst1 test)).
 intro n; apply Some; exists 0.
 intros; exact n.
-Defined. *)
+Defined. 
 
 Lemma add_comm :
   forall n m, n + m = m + n.
@@ -18,6 +18,114 @@ Proof.
   pose proof PeanoNat.Nat.add_succ_r.
   induction n; induction m; actema.
 Qed.
+
+
+Fixpoint le (n:nat)(m:nat) :=
+  match n,m with
+  | 0,_ => True
+  | (S _) , 0  => False
+  | S n, S m => le n m
+  end.
+
+Require Import ssreflect.
+
+Lemma le_ex : forall n m, le n m  ->
+                 exists p, n+p = m.
+elim => [|n hn][|m]//=; actema.
+Qed.
+
+Lemma le_refl : forall n, le n n.
+induction n; actema.
+Qed.
+
+Lemma le_0 : forall n, le 0 n.
+actema.
+Qed.
+  
+Lemma le_S : forall n m,
+    le n m -> le n (S m).
+elim => [| n hn][|m]; try done.
+actema.
+Qed.
+
+Fixpoint even n := match n with
+                   | 0 => True
+                   | S n => ~(even n)
+                   end.
+
+Fixpoint eqb n m :=
+  match n, m with
+  | 0, 0 => True
+  | S n, S m => eqb n m
+  | _, _ => False
+  end.
+
+Lemma eqb_eq : forall n m,
+    eqb n m -> n = m.
+elim => [|n hn][|m]//=; actema.
+Qed.
+
+Lemma eqb_refl : forall n, eqb n n.
+elim => [//|n hn].
+actema.
+Qed.
+
+Lemma eq_eqb : forall n m, n=m -> eqb n m.
+pose h2 := eqb_refl.
+actema.
+Qed.
+
+Lemma S_inj : forall n m, S n = S m -> n =m.
+pose h1 := eqb_eq.
+pose h2 := eq_eqb.    
+actema.
+Qed.
+
+
+Lemma even_aux :
+  forall n, (even n) /\ (exists p, n = p + p)
+            \/(~even n) /\  (exists p, n = S(p + p)).
+pose h := PeanoNat.Nat.add_succ_r.
+induction n; actema.
+Qed.
+
+
+Lemma even_ex : forall n,  even n ->
+                           (exists p, n = p + p).
+pose h := even_aux.
+actema.
+Qed.
+
+Lemma ex_pred : forall x p, S(S x) = p+p ->
+                            exists q, x = q + q.
+move => x [//=|p].
+pose h := PeanoNat.Nat.add_succ_r.
+pose s_i := S_inj.
+actema.
+Qed.
+
+
+Lemma ex_aux :
+  forall n, ((exists p, n = p + p) ->  even n)
+/\ ((exists p, S n = p + p) ->  even (S n)).
+pose h :=  PeanoNat.Nat.add_succ_r.
+induction n.
+actema.
+move: H; case: p; first done.
+actema.
+(* manque bouton 'done' *)
+done.
+pose e_p := ex_pred.
+actema.
+Qed.
+
+Lemma ex_even :
+  forall n, (exists p, n = p + p) -> even n.
+pose h := ex_aux.
+actema.
+Qed.
+
+
 
 (** * Kaustuv's challenge *)
 
@@ -317,5 +425,6 @@ Proof.
 case (h2 0) => [h3|h3].
 Restart.
   intros.
-  actema. actema.
+  actema. 
 Qed.
+
