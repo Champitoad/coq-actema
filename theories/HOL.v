@@ -2365,7 +2365,8 @@ Ltac rereify_hyp ts h :=
   end.
 *)
 
-Ltac back ts h0 hp gp t i :=
+Ltac back ts' h0 hp gp t i :=
+  let ts := eval hnf in ts' in
   let h := fresh "h" in
   move: (h0) => h;
   reify_goal ts gp;
@@ -2375,21 +2376,29 @@ Ltac back ts h0 hp gp t i :=
     | coerce _ (@nil nat) ?hc _ =>
         apply (b3_corr ts t i (@nil nat) tt (@nil nat) tt hc);
         [idtac|assumption];
-        rewrite /coerce /= in h;
         (apply trex_norm_apply; [simpl; try done; auto|
-          rewrite /b3 /o3_norm ;
+          rewrite /b3 /o3_norm /coerce ;
           try exact tt];
-          rewrite /= /trl3 /= /cT /cB /= /trad1 /nthc /list_rect /sort;
-         rewrite /trs /sl  ?eqnqtdec_refl /eq_rect_r
-                 /eq_rect /Logic.eq_sym;
+          rewrite  /trl3 /tr3 /convert /cT /cB /trad /trad1 /nthc /list_rect /sort;
+         rewrite /appist /trs /sl  ?eqnqtdec_refl /eq_rect_r
+                 /eq_rect /Logic.eq_sym /eq_sym /trad1;
           simplify_goal
         );
         try by apply I
   end;
-  rewrite /sort /trad1 /nth /nthc /list_rect /trs ;
+  rewrite /sort /trad1 /nth /nthc /list_rect /trs /eq_rect_r /eq_rect /eq_sym ;
   clear h. 
 
-
+(*
+Parameter A : Prop.
+Print test.
+Goal A -> forall x:nat,A/\A.
+  intro a.
+  back [:: existT IDT nat 0; existT IDT bool true; existT IDT Prop True;
+    existT IDT listn niln]
+       a (@nil bool)(cons false (cons false nil))(cons true (cons true nil))(@nil (option (inst1 test))).  
+rewrite /test. *)
+  
 (* rewrite with hypothesis h in goal 
  hp : list bool = path to the equality
  gp : list bool = path to the atomic proposition containing the term
@@ -2415,7 +2424,7 @@ Ltac rew_dnd ts' h hp gp gp' t i' :=
                  ec gc);
   [idtac| try assumption];
   (apply trex_norm_apply ; [try split; try reflexivity|idtac]);
-     rewrite  /b3 /trl3 /tr3 /o3_norm /convert /cT /cB  /appist /sort /trad1 /nth /nthc /list_rect /sort /sl;
+     rewrite  /coerce /b3 /trl3 /tr3 /o3_norm /convert /cT /cB  /appist /sort /trad1 /nth /nthc /list_rect /sort /sl;
   rewrite /trs ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym;
   clear h';
   simplify_goal;
@@ -2482,7 +2491,7 @@ Abort.
  hp2' : list nat = path to the term
  t : list bool = trace (with the last bool for choice l <-> r)
  i : instantiation *)
-Check trex_norm_fapply.
+
 Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
   let ts := eval compute in ts' in
   let i' := eval compute in i in
@@ -2504,7 +2513,7 @@ Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
   move:
     (f3_corr ts  t i' (@nil nat) hc1 tt
              (@nil nat) hc2 tt h1 h2) => h4;
-   clear h1' h2';
+  clear h1' h2';
   let oh4 :=
     match type of h4 with
     | (trl3 _ ?oh) => oh
@@ -2513,7 +2522,7 @@ Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
   move => h5;
   move: (trex_norm_fapply ts oh4 h5 h4) => h3;
   clear h5 h4;
-   rewrite /sort /trl3 /tr3 /f3 /o3_norm /cT /cB in h3;
+   rewrite /coerce /sort /trl3 /tr3 /f3 /o3_norm /cT /cB in h3;
    rewrite /convert /trs  ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym in h3;
     rewrite /appist /trs /eqnqtdec /eq_rect_r /eq_rect /nat_rec/nat_rect /protect_term /eq_sym /f_equal /sort /sl in h3;
   simplify_hyp h3. 
@@ -2543,7 +2552,7 @@ Ltac forward ts h1' h2' h3 hp1 hp2 t i :=
   rewrite /coerce /= in h2;
   [ | simpl; try done; auto];
   try clear h1 h2;
-  rewrite /trl3 /f3 /o3_norm /= /cT /cB in h3;
+  rewrite /coerce /trl3 /f3 /o3_norm /= /cT /cB in h3;
   rewrite /trs /sl /ts  ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym /trad1/trs/eq_rect_r/= in h3;
   simplify_hyp h3;
       match goal with

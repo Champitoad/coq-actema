@@ -18,7 +18,6 @@ Proof.
   pose proof PeanoNat.Nat.add_succ_r.
   induction n; induction m; actema.
 Qed.
-Print add_comm.
 
 Fixpoint le (n:nat)(m:nat) :=
   match n,m with
@@ -45,10 +44,11 @@ Qed.
   
 Lemma le_S : forall n m,
     le n m -> le n (S m).
-elim => [| n hn][|m]; try done.
+  elim => [| n hn][|m]; try done.
 actema.
 Qed.
 
+(* le back force un simpl sur le but *)
 
 Fixpoint even n := match n with
                    | 0 => True
@@ -429,9 +429,6 @@ Lemma eduk1 :
   (forall x : nat,  ~Rich(mother(mother(x))) \/ ~Rich(x))->
   False.
 Proof.
- intros h1 h2.
-case (h2 0) => [h3|h3].
-Restart.
   intros.
   actema. 
 Qed.
