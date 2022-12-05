@@ -7,7 +7,6 @@ Goal forall n m,
 intros n m [p H].
 
 actema.
-easy.
 Qed.
 
 Lemma test A B : (A /\ B) -> A /\ B.

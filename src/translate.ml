@@ -105,10 +105,10 @@ module Export = struct
 
   type sdest = destarg -> symbol
 
-  let sdest_compose (d1 : sdest) (d2 : sdest) : sdest =
-    fun et -> try d1 et with Constr.DestKO -> d2 et 
-  
-  let ( >>!!! ) = sdest_compose
+  let trydest f g =
+    fun x -> try f x with Constr.DestKO -> g x
+
+  let ( >>? ) = trydest
 
   let dest_sconst : sdest = fun ({ evd; _ }, t) ->
     Cst (EConstr.destConst evd t |> fst)
@@ -123,9 +123,9 @@ module Export = struct
     Var (EConstr.destVar evd t)
 
   let dest_symbol : sdest =
-    dest_sconst >>!!!
-    dest_sconstruct >>!!!
-    dest_sind >>!!!
+    dest_sconst >>?
+    dest_sconstruct >>?
+    dest_sind >>?
     dest_svar
 
   let find_sort ({ sign; _ }, _ as d : destarg) : string =
@@ -174,11 +174,6 @@ module Export = struct
   
   type edest = destarg -> Logic_t.expr
 
-  let comp_edest (d1 : edest) (d2 : edest) : edest = fun et ->
-    try d1 et with Constr.DestKO -> d2 et
-
-  let ( >>!! ) = comp_edest
-    
   let rec dest_econst : edest = fun (e, t) ->
     match find_func (e, t) with
     | name, ([], _) ->
@@ -208,21 +203,16 @@ module Export = struct
 
   and dest_expr : edest = fun et ->
     begin
-      dest_econst >>!!
-      dest_evar >>!!
-      dest_erel >>!!
-      dest_eapp >>!!
+      dest_econst >>?
+      dest_evar >>?
+      dest_erel >>?
+      dest_eapp >>?
       fun _ -> dummy_expr
     end et
 
 
   type fdest = destarg -> Logic_t.form
 
-  let comp_fdest (d1 : fdest) (d2 : fdest) : fdest = fun et ->
-    try d1 et with Constr.DestKO -> d2 et
-
-  let ( >>! ) = comp_fdest
-  
   let rec dest_pconst : fdest = fun ({ env; evd; _ }, t) ->
     if not (is_prop env evd t) then raise Constr.DestKO;
     let name = name_of_const evd t in
@@ -343,19 +333,19 @@ module Export = struct
   
   and dest_form : fdest = fun et ->
     begin
-      dest_eq >>!
-      dest_true >>!
-      dest_false >>!
-      dest_pconst >>!
-      dest_pvar >>!
-      dest_papp >>!
-      dest_imp >>!
-      dest_and >>!
-      dest_or >>!
-      dest_iff >>!
-      dest_not >>!
-      dest_forall >>!
-      dest_exists >>!
+      dest_eq >>?
+      dest_true >>?
+      dest_false >>?
+      dest_pconst >>?
+      dest_pvar >>?
+      dest_papp >>?
+      dest_imp >>?
+      dest_and >>?
+      dest_or >>?
+      dest_iff >>?
+      dest_not >>?
+      dest_forall >>?
+      dest_exists >>?
       fun _ -> dummy_form
     end et
 
@@ -379,72 +369,60 @@ module Export = struct
       end in
     { env_prp; env_fun; env_var = []; env_tvar; env_handles = [] }
 
-  let env ({ env = coq_env; evd; sign } as e : destenv) : Logic_t.env * FOSign.t = 
+  
+  type envsig = Logic_t.env * FOSign.t
+  
+  let env ({ env = coq_env; evd; sign } as e : destenv) : envsig = 
     let open FOSign in
 
     let add_sort name sy ty (env, sign) =
-      try
-        let sort = ty |> EConstr.destSort evd |> EConstr.ESorts.kind evd in
-        if sort = Sorts.set then begin
-          let env_tvar = (name, [None]) :: env.Fo_t.env_tvar in
-          let s_sorts = SymbolMap.add sy name sign.symbols.s_sorts in
-          let symbols = { sign.symbols with s_sorts } in
-          { env with env_tvar }, { sign with symbols }
-        end else
-          env, sign
-      with Constr.DestKO ->
+      let sort = ty |> EConstr.destSort evd |> EConstr.ESorts.kind evd in
+      if sort = Sorts.set then begin
+        let env_tvar = (name, [None]) :: env.Fo_t.env_tvar in
+        let s_sorts = SymbolMap.add sy name sign.symbols.s_sorts in
+        let symbols = { sign.symbols with s_sorts } in
+        { env with env_tvar }, { sign with symbols }
+      end else
         env, sign in
     
     let add_func name sy ty (env, sign) =
       let e = { e with sign } in
-      try
-        let sig_ = dest_functy (e, ty) in
-        let env_fun = (name, sig_) :: env.Fo_t.env_fun in
+      let sig_ = dest_functy (e, ty) in
+      let env_fun = (name, sig_) :: env.Fo_t.env_fun in
+      let s_funcs = SymbolMap.add sy name sign.symbols.s_funcs in
+      let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
+      let symbols = { sign.symbols with s_funcs } in
+      let typing = { sign.typing with t_funcs } in
+      { env with env_fun }, { symbols; typing } in
+
+    let add_strict_func name sy ty (env, sign) =
+      let e = { e with sign } in
+      let sig_ = dest_functy (e, ty) in
+      if List.length (fst sig_) = 0 then
+        raise Constr.DestKO
+      else 
+        let ar = (name, sig_) in
+        let env_fun = ar :: env.Fo_t.env_fun in
         let s_funcs = SymbolMap.add sy name sign.symbols.s_funcs in
         let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
         let symbols = { sign.symbols with s_funcs } in
         let typing = { sign.typing with t_funcs } in
-        { env with env_fun }, { symbols; typing }
-      with Constr.DestKO ->
-        env, sign in
-
-    let add_strict_func name sy ty (env, sign) =
-      let e = { e with sign } in
-      try
-        let sig_ = dest_functy (e, ty) in
-        if List.length (fst sig_) = 0 then
-          env, sign
-        else 
-          let ar = (name, sig_) in
-          let env_fun = ar :: env.Fo_t.env_fun in
-          let s_funcs = SymbolMap.add sy name sign.symbols.s_funcs in
-          let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
-          let symbols = { sign.symbols with s_funcs } in
-          let typing = { sign.typing with t_funcs } in
-          { env with env_fun }, { symbols; typing }
-      with Constr.DestKO ->
-        env, sign in
+        { env with env_fun }, { symbols; typing } in
 
     let add_pred name sy ty (env, sign) =
       let e = { e with sign } in
-      try
-        let arity = dest_predty (e, ty) in
-        let env_prp = (name, arity) :: env.Fo_t.env_prp in
-        let s_preds = SymbolMap.add sy name sign.symbols.s_preds in
-        let t_preds = NameMap.add name arity sign.typing.t_preds in
-        let symbols = { sign.symbols with s_preds } in
-        let typing = { sign.typing with t_preds } in
-        { env with env_prp }, { symbols; typing }
-      with Constr.DestKO ->
-        env, sign in
+      let arity = dest_predty (e, ty) in
+      let env_prp = (name, arity) :: env.Fo_t.env_prp in
+      let s_preds = SymbolMap.add sy name sign.symbols.s_preds in
+      let t_preds = NameMap.add name arity sign.typing.t_preds in
+      let symbols = { sign.symbols with s_preds } in
+      let typing = { sign.typing with t_preds } in
+      { env with env_prp }, { symbols; typing } in
 
     let add_var name ty (env, sign) =
       let e = { e with sign } in
-      try
-        let sort = find_sort (e, ty) in
-        Vars.push env (name, (`TVar (sort, 0), None)), sign
-      with Constr.DestKO ->
-        env, sign in
+      let sort = find_sort (e, ty) in
+      Vars.push env (name, (`TVar (sort, 0), None)), sign in
     
     let env = empty_env sign in
 
@@ -454,21 +432,25 @@ module Export = struct
         let ty =
           Environ.constant_type_in coq_env (Univ.in_punivs c) |>
           EConstr.of_constr in
-        es |>
-        (* add_sort (c |> Names.Constant.to_string) (Cst c) ty |> *)
-        add_func name (Cst c) ty |>
-        add_pred name (Cst c) ty
+        es |> begin
+          (* add_sort (c |> Names.Constant.to_string) (Cst c) ty >>? *)
+          add_func name (Cst c) ty >>?
+          add_pred name (Cst c) ty >>?
+          identity
+        end
       end coq_env (env, sign) in
 
     let env, sign = Environ.fold_named_context begin fun _ decl es ->
         let id = Context.Named.Declaration.get_id decl in
         let name = id |> Names.Id.to_string in
         let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
-        es |>
-        (* add_sort name (Var id) ty |> *)
-        add_strict_func name (Var id) ty |>
-        add_pred name (Var id) ty |>
-        add_var name ty
+        es |> begin
+          (* add_sort name (Var id) ty >>? *)
+          add_strict_func name (Var id) ty >>?
+          add_pred name (Var id) ty >>?
+          add_var name ty >>?
+          identity
+        end
       end coq_env ~init:(env, sign) in
 
     env, sign
@@ -496,7 +478,7 @@ module Export = struct
 
     let g_env, sign =
       env e in
-
+    
     let (g_hyps, hm) =
       hyps { e with sign } in
 
@@ -529,7 +511,7 @@ module Import = struct
     match einfer env e with
     | `TVar (name, _) -> name
     | _ -> failwith "Non-atomic sort type"
-
+    
   let sort (sign : FOSign.t) (n : int) : EConstr.t =
     let sorts = sign.symbols.s_sorts |> FOSign.SymbolMap.keys in
     match List.nth_opt sorts n with

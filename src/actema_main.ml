@@ -199,13 +199,16 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
   Goal.enter begin fun coq_goal ->
     let _, goal, _ = Export.goal sign coq_goal in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
+    let interactive () =
+      interactive_proof () >>= fun prf ->
+      save_proof id prf;
+      return () in
+    if force then interactive () else
     match load_proof id with
-    | Some prf when not force ->
+    | Some prf ->
         compile_proof prf
     | _ ->
-        interactive_proof () >>= fun prf ->
-        save_proof id prf;
-        return ()
+        interactive ()
   end
 
 let test_tac : unit tactic =
