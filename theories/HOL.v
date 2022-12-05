@@ -1627,7 +1627,7 @@ end.
   (cons n l)*(f a1 ... ak) -> (f a1 ... l*an ... ak)
   (cons 0 l)*(bind x . t) => bind x . (l * t)
  *)
-
+Check cons.
 Ltac simpl_path_r p t :=
   match p with
   | nil =>  eval simpl in t
@@ -1654,6 +1654,13 @@ Ltac simpl_path_r p t :=
           let l' := ttreplace constr:(@existT Type (fun X => X) _ u) (S n) l in
           let r := rebuild l'
           in r
+      | ?a -> ?b =>
+          match p with
+          | (cons 0 ?p'') =>
+              let a' := simpl_path_r p'' a in constr:(a' -> b)
+          | _ =>
+              let b' := simpl_path_r p' b in constr:(a -> b')
+          end
       end
   end.
 
@@ -3032,16 +3039,26 @@ Ltac find_pat t p :=
      x'
 end.
 
-Check ltac:(
-              let r :=
-                find_pat (2=33)(cons 2 nil)
-                         in exact r).
+Ltac buil_imp l :=
+  match l with
+    (cons ?a (cons ?b _)) =>
+      let a' := extract a in
+      let b' := extract b in
+      constr:(a' -> b')
+  end.
+
+Definition imp_fun A B := A -> B.
+
 
 Ltac simpl_path_r p t :=
   match p with
   | nil =>  eval simpl in t
   | cons ?n ?p' =>
       match t with
+      | ?a -> ?b =>
+          let c := constr:(imp_fun a b) in
+          let c' := simpl_path_r p c in
+          let r := eval red in c' in r
       |  forall x: ?T, @?body' x => 
           constr:(forall x : T,
                      ltac:(let body := beta1 body' x in
@@ -3173,12 +3190,13 @@ Ltac st_aux n l T :=
 Ltac tst ts T := (st_aux constr:(0) constr:(ts) T). 
 
 Definition IDT := fun X:Type => X.
+
+Inductive listn :=
+  niln | consn : nat -> listn -> listn.
 Definition test := (cons  (existT IDT nat 0)
                         (cons (existT IDT bool true)
-                               (cons (existT IDT Prop True) nil))).
-
-
-Check ltac:(let r := tst test Prop in exact r).
+                              (cons (existT IDT Prop True)
+                   (cons (existT IDT listn niln) nil)))).
 
 Ltac preify_rec ts p l n env t :=
   lazymatch constr:(l) with
@@ -3227,6 +3245,33 @@ Ltac preify_rec ts p l n env t :=
        end
   | cons false ?l' =>
       lazymatch t with
+      | ?a -> ?b =>
+          match type of a with
+          | Prop =>
+               let rb :=
+            constr:(fun (z: ppp ts n) =>
+                      ltac:(let r := wrap env z b in exact r)) in
+              let ra := preify_rec ts p l' n  env a in
+              constr:(impl _ n ra rb)
+          | _ => 
+              let y := fresh "y" in
+              let s := tst ts a in
+              let br :=
+                constr:(fun y: a =>
+                      ltac:(
+                              let s := ltac:(tst ts a) in
+                              let r := preify_rec ts p l'
+                                             (cons s n)
+                                             (cons (@existT Type (fun x => x) a y) env)
+                                             b in
+                         exact r))
+          in
+          match br with
+          | (fun _: a => ?r) => constr:(fa ts n
+                                           s
+                                           r) 
+          end
+          end
       | not ?a =>
           let ra := preify_rec ts p l' n  env a in
           constr:(cNot _ n ra)
@@ -3256,33 +3301,6 @@ Ltac preify_rec ts p l n env t :=
      with
      | (fun _: _ => ?r) => constr:(ex ts n s r) 
      end 
-      | ?a -> ?b =>
-          match type of a with
-          | Prop =>
-               let rb :=
-            constr:(fun (z: ppp ts n) =>
-                      ltac:(let r := wrap env z b in exact r)) in
-              let ra := preify_rec ts p l' n  env a in
-              constr:(impl _ n ra rb)
-          | _ => 
-              let y := fresh "y" in
-              let s := tst ts a in
-              let br :=
-                constr:(fun y: a =>
-                      ltac:(
-                              let s := ltac:(tst ts a) in
-                              let r := preify_rec ts p l'
-                                             (cons s n)
-                                             (cons (@existT Type (fun x => x) a y) env)
-                                             b in
-                         exact r))
-          in
-          match br with
-          | (fun _: a => ?r) => constr:(fa ts n
-                                           s
-                                           r) 
-          end
-          end
       | ?a /\ ?b => 
           let rb := constr:(fun (z: ppp ts n) =>
                       ltac:(let r := wrap env z b in exact r)) in
@@ -3937,7 +3955,11 @@ Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
 
       
   
-Ltac forward ts h1 h2 h3 hp1 hp2 t i :=
+Ltac forward ts h1' h2' h3 hp1 hp2 t i :=
+  let h1 := fresh "_fh1" in
+  let h2 := fresh "_fh2" in
+  move: (h1') => h1;
+  move: (h2') => h2;
   reify_hyp ts hp1 h1;
   reify_hyp ts hp2 h2;
   let o1 := type of h1 in
@@ -3955,6 +3977,7 @@ Ltac forward ts h1 h2 h3 hp1 hp2 t i :=
   rewrite /coerce  /= in h1;
   rewrite /coerce /= in h2;
   [ | simpl; try done; auto];
+  try clear h1 h2;
   rewrite /trl3 /f3 /o3_norm /= /cT /cB in h3;
   rewrite /trs /sl /ts  ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym /trad1/trs/eq_rect_r/= in h3;
   simplify_hyp h3;
