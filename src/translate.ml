@@ -34,17 +34,18 @@ end with type t = symbol = struct
 end
 
 module FOSign = struct
-  module SymbolMap = BiMap(Symbol)(String)
+  module SortSymbol = BiMap(Symbol)(String)
   module NameMap = Map.Make(String)
+  module SymbolMap = Map.Make(Symbol)
 
   type symbols =
-    { s_sorts : SymbolMap.t; s_funcs : SymbolMap.t; s_preds : SymbolMap.t }
+    { s_sorts : SortSymbol.t; s_funcs : SortSymbol.t; s_preds : SortSymbol.t }
   
   type typing =
     { t_funcs : Fo_t.sig_ NameMap.t; t_preds : Fo_t.arity NameMap.t }
   
   type t =
-    { symbols : symbols; typing : typing }
+    { symbols : symbols; typing : typing; defaults : EConstr.t SymbolMap.t }
 end
 
 let peano : FOSign.t =
@@ -52,7 +53,7 @@ let peano : FOSign.t =
   let open Trm in
   let nat : Fo_t.type_ = `TVar ("nat", 0) in
   let symbols =
-    let open SymbolMap in
+    let open SortSymbol in
     let s_sorts = empty |>
       add (Ind nat_name) "nat" in
     let s_funcs = empty |>
@@ -71,7 +72,11 @@ let peano : FOSign.t =
       add "mult" ([nat; nat], nat) in
     let t_preds = empty in
     { t_funcs; t_preds } in
-  { symbols; typing }
+  let defaults =
+    let open SymbolMap in
+    empty |>
+    add (Ind nat_name) zero in
+  { symbols; typing; defaults }
 
 (* -------------------------------------------------------------------- *)
 (** Exporting Coq goals to Actema *)
@@ -130,13 +135,13 @@ module Export = struct
 
   let find_sort ({ sign; _ }, _ as d : destarg) : string =
     try
-      FOSign.SymbolMap.find (dest_symbol d) sign.symbols.s_sorts
+      FOSign.SortSymbol.find (dest_symbol d) sign.symbols.s_sorts
     with Not_found ->
       raise Constr.DestKO
 
   let find_func ({ sign; _ }, _ as d : destarg) : Fo_t.name * Fo_t.sig_ =
     try
-      let name = FOSign.SymbolMap.find (dest_symbol d) sign.symbols.s_funcs in
+      let name = FOSign.SortSymbol.find (dest_symbol d) sign.symbols.s_funcs in
       let sig_ = FOSign.NameMap.find name sign.typing.t_funcs in
       name, sig_
     with Not_found ->
@@ -144,7 +149,7 @@ module Export = struct
 
   let find_pred ({ sign; _ }, _ as d : destarg) : Fo_t.name * Fo_t.arity =
     try
-      let name = FOSign.SymbolMap.find (dest_symbol d) sign.symbols.s_preds in
+      let name = FOSign.SortSymbol.find (dest_symbol d) sign.symbols.s_preds in
       let arity = FOSign.NameMap.find name sign.typing.t_preds in
       name, arity
     with Not_found ->
@@ -353,18 +358,18 @@ module Export = struct
   let empty_env (sign : FOSign.t) : Logic_t.env =
     let open FOSign in
     let env_tvar =
-      SymbolMap.values sign.symbols.s_sorts |>
+      SortSymbol.values sign.symbols.s_sorts |>
       List.map (fun name -> (name, [None])) in
     let env_fun =
       ("dummy", ([], `TVar ("unit", 0))) ::
       begin
-        SymbolMap.values sign.symbols.s_funcs |>
+        SortSymbol.values sign.symbols.s_funcs |>
         List.map (fun f -> f, NameMap.find f sign.typing.t_funcs)
       end in
     let env_prp =
       ("dummy", []) ::
       begin
-        SymbolMap.values sign.symbols.s_preds |>
+        SortSymbol.values sign.symbols.s_preds |>
         List.map (fun p -> p, NameMap.find p sign.typing.t_preds)
       end in
     { env_prp; env_fun; env_var = []; env_tvar; env_handles = [] }
@@ -379,21 +384,28 @@ module Export = struct
       let sort = ty |> EConstr.destSort evd |> EConstr.ESorts.kind evd in
       if sort = Sorts.set then begin
         let env_tvar = (name, [None]) :: env.Fo_t.env_tvar in
-        let s_sorts = SymbolMap.add sy name sign.symbols.s_sorts in
+        let s_sorts = SortSymbol.add sy name sign.symbols.s_sorts in
         let symbols = { sign.symbols with s_sorts } in
         { env with env_tvar }, { sign with symbols }
       end else
         env, sign in
     
+    let add_default t ty (env, sign) =
+      let sort_sy = dest_symbol ({ env = coq_env; evd; sign }, ty) in
+      if not (SymbolMap.mem sort_sy sign.defaults) then
+        (env, { sign with defaults = SymbolMap.add sort_sy t sign.defaults })
+      else
+        (env, sign) in
+    
     let add_func name sy ty (env, sign) =
       let e = { e with sign } in
       let sig_ = dest_functy (e, ty) in
       let env_fun = (name, sig_) :: env.Fo_t.env_fun in
-      let s_funcs = SymbolMap.add sy name sign.symbols.s_funcs in
+      let s_funcs = SortSymbol.add sy name sign.symbols.s_funcs in
       let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
       let symbols = { sign.symbols with s_funcs } in
       let typing = { sign.typing with t_funcs } in
-      { env with env_fun }, { symbols; typing } in
+      { env with env_fun }, { sign with symbols; typing } in
 
     let add_strict_func name sy ty (env, sign) =
       let e = { e with sign } in
@@ -403,21 +415,21 @@ module Export = struct
       else 
         let ar = (name, sig_) in
         let env_fun = ar :: env.Fo_t.env_fun in
-        let s_funcs = SymbolMap.add sy name sign.symbols.s_funcs in
+        let s_funcs = SortSymbol.add sy name sign.symbols.s_funcs in
         let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
         let symbols = { sign.symbols with s_funcs } in
         let typing = { sign.typing with t_funcs } in
-        { env with env_fun }, { symbols; typing } in
+        { env with env_fun }, { sign with symbols; typing } in
 
     let add_pred name sy ty (env, sign) =
       let e = { e with sign } in
       let arity = dest_predty (e, ty) in
       let env_prp = (name, arity) :: env.Fo_t.env_prp in
-      let s_preds = SymbolMap.add sy name sign.symbols.s_preds in
+      let s_preds = SortSymbol.add sy name sign.symbols.s_preds in
       let t_preds = NameMap.add name arity sign.typing.t_preds in
       let symbols = { sign.symbols with s_preds } in
       let typing = { sign.typing with t_preds } in
-      { env with env_prp }, { symbols; typing } in
+      { env with env_prp }, { sign with symbols; typing } in
 
     let add_var name ty value (env, sign) =
       let e = { e with sign } in
@@ -435,7 +447,8 @@ module Export = struct
           Environ.constant_type_in coq_env (Univ.in_punivs c) |>
           EConstr.of_constr in
         es |> begin
-          (* add_sort (c |> Names.Constant.to_string) (Cst c) ty >>? *)
+          add_sort (c |> Names.Constant.to_string) (Cst c) ty >>?
+          add_default t ty >>?
           add_func name (Cst c) ty >>?
           add_pred name (Cst c) ty >>?
           identity
@@ -448,7 +461,8 @@ module Export = struct
         let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
         let value = Context.Named.Declaration.get_value decl in
         es |> begin
-          (* add_sort name (Var id) ty >>? *)
+          add_sort name (Var id) ty >>?
+          add_default (EConstr.mkVar id) ty >>?
           add_strict_func name (Var id) ty >>?
           add_pred name (Var id) ty >>?
           add_var name ty value >>?
@@ -497,7 +511,6 @@ end
 module Import = struct
   (* let kname = kername ["Actema"; "DnD"] *)
   let kname = kername ["Actema"; "HOL"]
-  let ts = EConstr.mkConst (Names.Constant.make1 (kname "test"))
 
   let symbol (sy : symbol) : EConstr.t =
     match sy with
@@ -507,7 +520,7 @@ module Import = struct
     | Var x -> EConstr.mkVar x
   
   let sort_index (sign : FOSign.t) (s : string) : int =
-    let sorts = sign.symbols.s_sorts |> FOSign.SymbolMap.values in
+    let sorts = sign.symbols.s_sorts |> FOSign.SortSymbol.values in
     List.nth_index 0 s sorts
   
   let infer_sort (env : Logic_t.env) (e : Logic_t.expr) : string =
@@ -516,27 +529,44 @@ module Import = struct
     | _ -> failwith "Non-atomic sort type"
     
   let sort (sign : FOSign.t) (n : int) : EConstr.t =
-    let sorts = sign.symbols.s_sorts |> FOSign.SymbolMap.keys in
+    let sorts = sign.symbols.s_sorts |> FOSign.SortSymbol.keys in
     match List.nth_opt sorts n with
     | None -> Trm.unit
     | Some sy -> symbol sy
 
-  let sort_ty (s : EConstr.t) : EConstr.t =
+  
+  let ls_ty () : EConstr.t =
+    let name = Names.Constant.make1 (kname "ls") in
+    let ty = EConstr.mkConst name in
+    ty
+  
+  let inh_sort_ty () : EConstr.t =
+    Trm.(sigT "T" type_ (var "T"))
+  
+  let sorts (sign : FOSign.t) : EConstr.t =
+    FOSign.SymbolMap.bindings sign.defaults |>
+    List.map begin fun (sort_sy, wit) ->
+      let sort = symbol sort_sy in
+      Trm.(existT "T" type_ (var "T") sort wit)
+    end |>
+    Trm.of_list (inh_sort_ty ()) identity
+
+  let sort_ty ts (s : EConstr.t) : EConstr.t =
     let name = Names.Constant.make1 (kname "sort") in
     let ty = EConstr.mkConst name in
     EConstr.mkApp (ty, [| ts; s |])
 
-  let env_ty () : EConstr.t =
+  let env_ty ts () : EConstr.t =
     let name = Names.Constant.make1 (kname "env") in
     let ty = EConstr.mkConst name in
     EConstr.mkApp (ty, [| ts |])
   
-  let clos_ty () : EConstr.t =
+  let clos_ty ts () : EConstr.t =
     let open EConstr in
-    let sort_s = sort_ty (mkVar (Names.Id.of_string "s")) in
-    mkArrowR (env_ty ()) (mkArrowR (env_ty ()) sort_s)
+    let sort_s = sort_ty ts (Trm.var "s") in
+    mkArrowR (env_ty ts ()) (mkArrowR (env_ty ts ()) sort_s)
   
-  let inst1_ty () : EConstr.t =
+  let inst1_ty ts () : EConstr.t =
     let name = Names.Constant.make1 (kname "inst1") in
     let ty = EConstr.mkConst name in
     EConstr.mkApp (ty, [| ts |])
@@ -545,7 +575,7 @@ module Import = struct
       (ty : Fo_t.type_) : EConstr.t =
     match ty with
     | `TVar (x, _) ->
-        symbol (FOSign.SymbolMap.dnif x sign.symbols.s_sorts)
+        symbol (FOSign.SortSymbol.dnif x sign.symbols.s_sorts)
     | `TUnit ->
         Trm.unit
     | _ ->
@@ -560,9 +590,9 @@ module Import = struct
             List.(lenv |> split |> fst |> nth_index i x) in
           EConstr.mkRel (index + 1)
         end else
-          EConstr.mkVar (Names.Id.of_string x)
+          Trm.var x
     | `EFun (f, args) ->
-        let head = symbol (FOSign.SymbolMap.dnif f sign.symbols.s_funcs) in
+        let head = symbol (FOSign.SortSymbol.dnif f sign.symbols.s_funcs) in
         let args = List.map (expr sign lenv) args in
         EConstr.mkApp (head, Array.of_list args)
 
@@ -578,9 +608,9 @@ module Import = struct
           let env_index = if side = 0 then 2 else 1 in
           EConstr.(mkApp (mkRel env_index, Trm.[| nat_of_int s; nat_of_int index |]))
         end else
-          EConstr.mkVar (Names.Id.of_string x)
+          Trm.var x
     | `EFun (f, args) ->
-        let head = symbol (FOSign.SymbolMap.dnif f sign.symbols.s_funcs) in
+        let head = symbol (FOSign.SortSymbol.dnif f sign.symbols.s_funcs) in
         let args = List.map (expr_itrace sign env lenv side) args in
         EConstr.mkApp (head, Array.of_list args)
   
@@ -597,7 +627,7 @@ module Import = struct
         let t2 = expr sign lenv t2 in
         EConstr.mkApp (Trm.Logic.eq ty, [|t1; t2|])
     | `FPred (p, args) ->
-        let head = symbol (FOSign.SymbolMap.dnif p sign.symbols.s_preds) in
+        let head = symbol (FOSign.SortSymbol.dnif p sign.symbols.s_preds) in
         let args = List.map (expr sign lenv) args in
         EConstr.mkApp (head, Array.of_list args)
     | `FTrue ->
@@ -625,14 +655,10 @@ module Import = struct
     | _ ->
         failwith "Unsupported formula"
 
-  let sorts (sign : FOSign.t) : EConstr.t =
-    sign.symbols.s_sorts |> FOSign.SymbolMap.keys |>
-    Trm.of_list Trm.type_ symbol
-
   let boollist_of_intlist =
     Stdlib.List.map (fun n -> if n = 0 then false else true)
 
-  let itrace (sign : FOSign.t) (env : Fo_t.env)
+  let itrace ts (sign : FOSign.t) (env : Fo_t.env)
       (mode : [`Back | `Forw]) (lp : int list) (rp : int list)
       (lf : Logic_t.form) (rf : Logic_t.form)
       (itr : Logic_t.itrace) : bool list * EConstr.t =
@@ -684,21 +710,16 @@ module Import = struct
         List.map begin fun (side, w) ->
           Option.map begin fun (le1, le2, e) ->
             let lenv = if side = 0 then le2 else le1 in
-            Log.str (List.to_string (fun (x, _) -> x) le1);
-            Log.str (List.to_string (fun (x, _) -> x) le2);
             let ty = infer_sort (Utils.Vars.push_lenv env lenv) e in
             let s = nat_of_int (sort_index sign ty) in
             let e =
               let body = expr_itrace sign env lenv (1 - side) e in
-              Trm.(lambda "env1" (env_ty ()) (lambda "env2" (env_ty ()) body)) in
-            existT "s" nat (clos_ty ()) s e
+              lambda "env1" (env_ty ts ()) (lambda "env2" (env_ty ts ()) body) in
+            existT "s" nat (clos_ty ts ()) s e
           end w
         end in
-      of_list (option (inst1_ty ())) (of_option (inst1_ty ()) (fun x -> x)) i in
+      of_list (option (inst1_ty ts ())) (of_option (inst1_ty ts ()) identity) i in
     t, i
-
-  let fosign (sign : FOSign.t) : EConstr.t =
-    failwith "TODO"
 
   let mk_or_and_intro_pattern (pat : Names.variable list list) : Tactypes.or_and_intro_pattern =
     let open Tactypes in
@@ -734,8 +755,6 @@ module Import = struct
     aux [] t sub
 
   exception UnsupportedAction of Logic_t.action
-  exception UnexpectedIntroPattern of Logic_t.intro_pat
-  exception UnexpectedIntroVariant of int
   exception UnexpectedDnD
   exception InvalidPath of Logic_t.ipath
 
@@ -896,6 +915,8 @@ module Import = struct
               | _ -> None
               end
           end in
+
+        let ts = sorts sign in
         
         begin match (src, src.ctxt.kind), (dst, dst.ctxt.kind) with
 
@@ -915,7 +936,7 @@ module Import = struct
               let rp = hyp2.sub in
               let lf = (Utils.get_hyp goal hyp1.ctxt.handle).h_form in
               let rf = (Utils.get_hyp goal hyp2.ctxt.handle).h_form in
-              itrace sign goal.g_env `Forw lp rp lf rf itr in
+              itrace ts sign goal.g_env `Forw lp rp lf rf itr in
             
             begin match rewrite_data with
             | Some (hsub, side, fsub, esub) ->
@@ -972,7 +993,7 @@ module Import = struct
               let rp = concl.sub in
               let lf = (Utils.get_hyp goal hyp.ctxt.handle).h_form in
               let rf = goal.g_concl in
-              itrace sign goal.g_env `Back lp rp lf rf itr in
+              itrace ts sign goal.g_env `Back lp rp lf rf itr in
             
             begin match rewrite_data with
             | Some (hsub, side, fsub, esub) ->
@@ -1019,6 +1040,7 @@ module Import = struct
         let l = bool_path (tgt.sub @ [0]) in
         let s = infer_sort goal.g_env wit |> sort_index sign |> Trm.nat_of_int in
         let o = expr sign [] wit in
+        let ts = sorts sign in
 
         let tac, args =
           begin match tgt.ctxt.kind with
@@ -1048,9 +1070,9 @@ module Import = struct
     | `ASimpl tgt | `ARed tgt | `AIndt tgt ->
         let tac_name =
           begin match a with
-          |`ASimpl _ -> "simpl_path"
+          | `ASimpl _ -> "simpl_path"
           | `ARed _ -> "unfold_path"
-	  | `AIndt _ -> "myinduction"
+          | `AIndt _ -> "myinduction"
           | _ -> assert false
           end in
         let tac_name, args =

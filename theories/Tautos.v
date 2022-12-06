@@ -14,6 +14,7 @@ Defined.
 Lemma add_comm :
   forall n m, n + m = m + n.
 Proof.
+  actema.
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
   induction n; induction m; actema.
