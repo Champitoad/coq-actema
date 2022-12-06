@@ -19,7 +19,6 @@ Proof.
   induction n; induction m; actema.
 Qed.
 
-
 Fixpoint le (n:nat)(m:nat) :=
   match n,m with
   | 0,_ => True
@@ -31,7 +30,8 @@ Require Import ssreflect.
 
 Lemma le_ex : forall n m, le n m  ->
                  exists p, n+p = m.
-elim => [|n hn][|m]//=; actema.
+  elim => [|n hn][|m]//=;
+  actema.
 Qed.
 
 Lemma le_refl : forall n, le n n.
@@ -44,9 +44,11 @@ Qed.
   
 Lemma le_S : forall n m,
     le n m -> le n (S m).
-elim => [| n hn][|m]; try done.
+  elim => [| n hn][|m]; try done.
 actema.
 Qed.
+
+(* le back force un simpl sur le but *)
 
 Fixpoint even n := match n with
                    | 0 => True
@@ -80,7 +82,13 @@ pose h1 := eqb_eq.
 pose h2 := eq_eqb.
 Admitted.
 
+Lemma ex_le : forall n m, (exists p, n = m + p)-> (le  m n).
+pose S_i := S_inj.
+elim => [| n hn][|m]; actema.
+done.
+Qed.
 
+  
 Lemma even_aux :
   forall n, (even n) /\ (exists p, n = p + p)
             \/(~even n) /\  (exists p, n = S(p + p)).
@@ -108,13 +116,13 @@ Lemma ex_aux :
   forall n, ((exists p, n = p + p) ->  even n)
 /\ ((exists p, S n = p + p) ->  even (S n)).
 pose h :=  PeanoNat.Nat.add_succ_r.
+pose e_p := ex_pred.
 induction n.
 actema.
 move: H; case: p; first done.
 actema.
 (* manque bouton 'done' *)
 done.
-pose e_p := ex_pred.
 actema.
 Qed.
 
@@ -420,9 +428,6 @@ Lemma eduk1 :
   (forall x : nat,  ~Rich(mother(mother(x))) \/ ~Rich(x))->
   False.
 Proof.
- intros h1 h2.
-case (h2 0) => [h3|h3].
-Restart.
   intros.
   actema. 
 Qed.
