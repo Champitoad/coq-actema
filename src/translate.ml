@@ -419,10 +419,12 @@ module Export = struct
       let typing = { sign.typing with t_preds } in
       { env with env_prp }, { symbols; typing } in
 
-    let add_var name ty (env, sign) =
+    let add_var name ty value (env, sign) =
       let e = { e with sign } in
       let sort = find_sort (e, ty) in
-      Vars.push env (name, (`TVar (sort, 0), None)), sign in
+      let destenv = { env = coq_env; evd; sign } in
+      let body = Option.map (fun v -> dest_expr (destenv, EConstr.of_constr v)) value in
+      Vars.push env (name, (`TVar (sort, 0), body)), sign in
     
     let env = empty_env sign in
 
@@ -444,11 +446,12 @@ module Export = struct
         let id = Context.Named.Declaration.get_id decl in
         let name = id |> Names.Id.to_string in
         let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
+        let value = Context.Named.Declaration.get_value decl in
         es |> begin
           (* add_sort name (Var id) ty >>? *)
           add_strict_func name (Var id) ty >>?
           add_pred name (Var id) ty >>?
-          add_var name ty >>?
+          add_var name ty value >>?
           identity
         end
       end coq_env ~init:(env, sign) in
