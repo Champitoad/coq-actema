@@ -16,7 +16,7 @@ Lemma add_comm :
 Proof.
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
-  induction n; induction m; actema.
+actema.
 Qed.
 
 Fixpoint le (n:nat)(m:nat) :=
@@ -537,6 +537,11 @@ done.
 done.
 Qed.
 
+Lemma div :
+  forall n, exists p, (n = p+p \/ n = Datatypes.S(p+p)).
+pose h :=  PeanoNat.Nat.add_succ_r.
+actema.
+Qed.
 
 
 (*
