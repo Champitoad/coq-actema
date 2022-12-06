@@ -1045,11 +1045,12 @@ module Import = struct
         let prf = EConstr.mkVar id in
 
         Tactics.pose_proof name prf
-    | `ASimpl tgt | `ARed tgt ->
+    | `ASimpl tgt | `ARed tgt | `AIndt tgt ->
         let tac_name =
           begin match a with
           |`ASimpl _ -> "simpl_path"
           | `ARed _ -> "unfold_path"
+	  | `AIndt _ -> "myinduction"
           | _ -> assert false
           end in
         let tac_name, args =

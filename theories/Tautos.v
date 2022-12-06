@@ -26,6 +26,13 @@ Fixpoint le (n:nat)(m:nat) :=
   | S n, S m => le n m
   end.
 
+Fixpoint moins n m :=
+  match m,n with
+  | 0,_ => n
+  | S m, S n => moins n m
+  | S _, 0 => 0
+  end.
+
 Require Import ssreflect.
 
 Lemma le_ex : forall n m, le n m  ->
@@ -129,6 +136,16 @@ Qed.
 Lemma ex_even :
   forall n, (exists p, n = p + p) -> even n.
 pose h := ex_aux.
+actema.
+Qed.
+
+Lemma le_minus :
+  forall m n, le m n ->
+              (moins n m) + m = n.
+pose h :=  PeanoNat.Nat.add_succ_r.
+  pose proof PeanoNat.Nat.add_0_r.
+induction m; induction n; try done.
+simpl; intro hh.
 actema.
 Qed.
 
@@ -432,3 +449,149 @@ Proof.
   actema. 
 Qed.
 
+Lemma essai :forall x, x + 0 = x.
+  actema.
+Qed.
+
+Lemma essai1 : forall x y, x + y = y + x.
+  actema.
+Qed.
+
+
+Lemma le_ex' : forall n m, le n m  ->
+                 exists p, n+p = m.
+  actema.
+  done.
+Qed.
+
+Lemma le_refl' : forall n, le n n.
+ actema.
+Qed.
+
+Lemma le_0' : forall n, le 0 n.
+actema.
+Qed.
+  Print nat.
+Lemma le_S' : forall n m,
+    le n m -> le n (Datatypes.S m).
+actema.
+done.
+Qed.
+
+
+Lemma eqb_eq' : forall n m,
+    eqb n m -> n = m.
+ actema.
+Qed.
+
+Lemma eqb_refl' : forall n, eqb n n.
+actema.
+Qed.
+
+Lemma eq_eqb' : forall n m, n=m -> eqb n m.
+pose h2 := eqb_refl.
+actema.
+Qed.
+
+Lemma ex_le' : forall n m, (exists p, n = m + p)-> (le  m n).
+  pose S_i := S_inj.
+  actema.
+done.
+Qed.
+
+
+  
+Lemma even_aux' :
+  forall n, (even n) /\ (exists p, n = p + p)
+            \/(~even n) /\  (exists p, n = Datatypes.S(p + p)).
+pose h := PeanoNat.Nat.add_succ_r.
+ actema.
+Qed.
+
+
+Lemma even_ex' : forall n,  even n ->
+                           (exists p, n = p + p).
+pose h := even_aux.
+actema.
+Qed.
+
+
+Lemma ex_pred' : forall x p, Datatypes.S(Datatypes.S x) = p+p ->
+                            exists q, x = q + q.
+pose h := PeanoNat.Nat.add_succ_r.
+pose s_i := S_inj.
+actema.
+done.
+Qed.
+
+
+
+Lemma ex_aux' :
+  forall n, ((exists p, n = p + p) ->  even n)
+/\ ((exists p, Datatypes.S n = p + p) ->  even (Datatypes.S n)).
+pose h :=  PeanoNat.Nat.add_succ_r.
+pose e_p := ex_pred.
+actema.
+done.
+done.
+Qed.
+
+
+
+(*
+Definition lmoins := locked moins.
+
+Lemma debug: forall n m : nat,
+ ( forall n m : nat, n + S m = S (n + m)) ->
+                    moins n m + S m = S n.
+  intros.
+actema.
+rew_dnd test H 
+(cons false (cons false
+                  nil))
+ (cons 1 nil)(@nil bool)
+ (cons false (cons false (cons false nil)))
+  (cons (ic (lmoins n m))
+                       (cons (ic m) nil))
+.
+ 
+  reify_prop test (cons 1 nil)(@nil bool).
+
+  reify_eq_hyp test
+               H h
+               (cons false (cons false
+                                 nil)).
+
+  apply (b3_corr test
+                 (cons false (cons false (cons false nil)))
+                 (cons (ic (moins n m))
+                       (cons (ic m) nil))
+
+
+
+                   (@nil nat) tt (@nil nat) tt
+    (fa test nil 0
+           (fa test (0 :: nil) 0
+              (equality test (0 :: 0 :: nil) 0
+                 (fun z : ppp test (0 :: 0 :: nil) =>
+                  let (v0, rest0) := z in let (v1, _) := rest0 in v1 + S v0)
+                 (fun z : ppp test (0 :: 0 :: nil) =>
+                  let (v0, rest0) := z in let (v1, _) := rest0 in S (v1 + v0)))))
+
+     (property test nil 0
+       (fun z : ppp test (0 :: nil) => let (v0, _) := z in v0 = S n)
+       (fun _ : ppp test nil => moins n m + S m))).
+2 : assumption.  
+ clear h;  apply trex_norm_apply.
+split; reflexivity.
+
+ rewrite /test /ic /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert  /defs /appist ?trs_corr;
+     rewrite  /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert /cT /cB  /appist /sort /trad1 /nthc /list_rect /sort /sl;
+  rewrite ?trs_corr /trs ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym; 
+  simplify_goal;
+  rewrite  /sort /sl. 
+
+
+  rewrite /coerce /o3_norm /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert  /defs /appist ?trs_corr.
+simplify_goal.  actema.
+ *)
