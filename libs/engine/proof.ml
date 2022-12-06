@@ -551,6 +551,7 @@ module CoreLogic : sig
     | `Ind       of Handle.t
     | `Simpl     of ipath
     | `Red       of ipath
+    | `Indt      of ipath
     | `Fold      of vname
     | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
@@ -2354,6 +2355,7 @@ end = struct
     | `Ind       of Handle.t
     | `Simpl     of ipath
     | `Red       of ipath
+    | `Indt      of ipath
     | `Fold      of vname
     | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
@@ -3095,6 +3097,12 @@ end = struct
                highlights = sel;
                kind = `Ctxt;
                action = (gid_of_ipath proof tgt, `Red tgt) };
+
+            { description = "Induction";
+               icon = Some "magnifying-glass";
+               highlights = sel;
+               kind = `Ctxt;
+               action = (gid_of_ipath proof tgt, `Indt tgt) };
           ]
         end
     | _ -> []
@@ -3276,6 +3284,8 @@ end = struct
           `ASimpl (of_ipath tgt)
       | `Red tgt ->
           `ARed (of_ipath tgt)
+     | `Indt tgt ->
+          `AIndt (of_ipath tgt)
       | `Hyperlink (lnk, actions) ->
           begin match lnk, actions with
           | ([src], [dst]), [`Subform substs] ->
