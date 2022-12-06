@@ -2406,9 +2406,8 @@ rewrite /test. *)
  t : list bool = trace (with the last bool for choice l <-> r)
  i : instantiation *)
 
-Ltac rew_dnd ts' h hp gp gp' t i' :=
+Ltac rew_dnd ts' h hp gp gp' t i :=
   let ts := eval compute in ts' in
-  let i := eval compute in i' in
   reify_prop ts gp gp'; 
   let h' := fresh "h" in
   reify_eq_hyp ts h h' hp;
@@ -2424,37 +2423,13 @@ Ltac rew_dnd ts' h hp gp gp' t i' :=
                  ec gc);
   [idtac| try assumption];
   (apply trex_norm_apply ; [try split; try reflexivity|idtac]);
-     rewrite  /coerce /b3 /trl3 /tr3 /o3_norm /convert /cT /cB  /appist /sort /trad1 /nth /nthc /list_rect /sort /sl;
-  rewrite /trs ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym;
   clear h';
+ rewrite /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert  /defs /appist ?trs_corr;
+     rewrite  /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert /cT /cB  /appist /sort /trad1 /nthc /list_rect /sort /sl;
+  rewrite ?trs_corr /trs ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym; 
   simplify_goal;
-  rewrite  /sort /sl.
+  rewrite  /sort /sl. 
 
-(*
-Ltac rew_dnd h hp hp' gp t i' :=
-  let i := eval compute in i' in
-  reify_eq gp; 
-  let h' := fresh "h" in
-  reify_prop_hyp h h' hp' hp;
-  let ec :=
-    match type of h' with
-    | coerce _ ?e _ => e
-    end in 
- let gc :=
-    match goal with
-    | |- coerce _ ?g _  => g
-    end in 
-  apply (b3_corr t i  (@nil nat) tt (@nil nat) tt
-                 ec gc);
-  [idtac| try assumption];
-  (apply trex_norm_apply ; [try split; try reflexivity|idtac]);
-     rewrite  /b3 /trl3 /tr3 /o3_norm /convert /cT /cB  /appist /sort /trad1 /nth /nthc /list_rect /sort;
-  rewrite /trs /sl /ts  ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym;
-  clear h';
-  simplify_goal;
-  rewrite  /sort /sl /ts.
-
-*)
   
   
 (*
@@ -2494,7 +2469,6 @@ Abort.
 
 Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
   let ts := eval compute in ts' in
-  let i' := eval compute in i in
   let h1' := fresh "h1" in
   let h2' := fresh "h2" in
   let h4 := fresh "h4" in
@@ -2511,7 +2485,7 @@ Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
     | coerce _ (@nil nat) ?hc2 _  => hc2
     end in
   move:
-    (f3_corr ts  t i' (@nil nat) hc1 tt
+    (f3_corr ts  t i (@nil nat) hc1 tt
              (@nil nat) hc2 tt h1 h2) => h4;
   clear h1' h2';
   let oh4 :=
@@ -2783,4 +2757,65 @@ Lemma sf3_corr :
  by intros l ist h1 h2 *; apply (sf3_corr_l l ist 0 h1 I).
 Qed.
  *)
+ 
+  
+Ltac myinduction_r  p t :=
+  match p with
+  | nil =>   t
+  | cons ?n ?p' =>
+      match t with
+      | ?a -> ?b =>
+          let c := constr:(imp_fun a b) in
+          let c' := myinduction_r p c in
+          c'
+      |  forall x: ?T, @?body' x => 
+             let y := fresh "y" in
+             lazymatch
+               constr:(fun y : T =>
+                      ltac:(
+                              let body := beta1 body' y in
+                              let r := myinduction_r p' body in exact r))
+        with                    
+        | (fun _ : _ => ?r2) => r2
+             end
+      |  exists x: ?T, @?body' x => 
+             let y := fresh "y" in
+             lazymatch
+               constr:(fun y : T =>
+                      ltac:(
+                              let body := beta1 body' y in
+                              let r := myinduction_r p' body in exact r))
+        with                    
+        | (fun _ : _ => ?r2) => r2
+             end
+      | fun x : ?T => @?body' x => 
+             let y := fresh "y" in
+             lazymatch
+               constr:(fun y : T =>
+                      ltac:(
+                              let body := beta1 body' y in
+                              let r := myinduction_r p' body in exact r))
+        with                    
+        | (fun _ : _ => ?r2) => r2
+             end
+      | (?f0 _) =>
+          let l := list_args t in
+          let u := myinduction_r p' ltac:(extract ltac:(tnth l (S n))) in
+          u
+      end
+  end.
+
+
+Ltac myinduction p :=
+  match goal with
+  | |- ?g =>
+      let g' := myinduction_r p g in
+      induction g'
+  end.
+
+
+Ltac myinduction_hyp h p :=
+  let g := type of h in
+  let g' := myinduction_r p g in
+  induction g'.
  
