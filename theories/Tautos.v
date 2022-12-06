@@ -14,6 +14,7 @@ Defined.
 Lemma add_comm :
   forall n m, n + m = m + n.
 Proof.
+  actema.
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
 actema.
@@ -86,9 +87,8 @@ Qed.
 
 Lemma S_inj : forall n m, S n = S m -> n =m.
 pose h1 := eqb_eq.
-pose h2 := eq_eqb.    
-actema.
-Qed.
+pose h2 := eq_eqb.
+Admitted.
 
 Lemma ex_le : forall n m, (exists p, n = m + p)-> (le  m n).
 pose S_i := S_inj.
@@ -101,7 +101,7 @@ Lemma even_aux :
   forall n, (even n) /\ (exists p, n = p + p)
             \/(~even n) /\  (exists p, n = S(p + p)).
 pose h := PeanoNat.Nat.add_succ_r.
-induction n; actema.
+induction n; actema; actema; actema.
 Qed.
 
 
@@ -116,7 +116,7 @@ Lemma ex_pred : forall x p, S(S x) = p+p ->
 move => x [//=|p].
 pose h := PeanoNat.Nat.add_succ_r.
 pose s_i := S_inj.
-actema.
+actema. actema.
 Qed.
 
 

@@ -78,6 +78,9 @@ let calltac (tacname : Names.KerName.t) (args : EConstr.constr list) : unit tact
 
 module Trm = struct
   open EConstr
+
+  let var name =
+    EConstr.mkVar (Names.Id.of_string name)
   
   let lambda x ty body =
     let x = Context.annotR (Names.Id.of_string x) in
