@@ -214,7 +214,11 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
 let test_tac : unit tactic =
   let open EConstr in
   Goal.enter begin fun g ->
-    let env, sigma = Goal.(env g, sigma g) in
-    Log.econstr env sigma EConstr.(Trm.lambda "x" Trm.unit (mkRel 1));
+    let env, evd = Goal.(env g, sigma g) in
+    let univs : string list =
+      Evd.evar_universe_context evd |> UState.ugraph |>
+      UGraph.domain |> Univ.Level.Set.elements |>
+      List.map Univ.Level.to_string in
+    Log.str Extlib.(List.to_string identity univs);
     Proofview.Monad.return ()
   end

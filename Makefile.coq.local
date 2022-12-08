@@ -1,4 +1,4 @@
-CAMLFLAGS = -rectypes -w -26 -warn-error -A -thread
+CAMLFLAGS = -rectypes -w -26 -warn-error -A -thread -g
 CAMLPKGS = -package atdgen -package cohttp-lwt-unix -package sha
 
 cleanall::

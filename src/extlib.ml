@@ -42,6 +42,9 @@ module BiMap (S : Map.OrderedType) (T : Map.OrderedType) = struct
     SMap.remove k r, TMap.remove v l
 
   
+  let mem k (r, _) =
+    SMap.mem k r
+
   let find k (r, _) =
     SMap.find k r
 

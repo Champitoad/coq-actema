@@ -16,6 +16,7 @@ module BiMap (K : Map.OrderedType) (V : Map.OrderedType) : sig
   val replace : K.t -> V.t -> t -> t
   val remove : K.t -> t -> t
 
+  val mem : K.t -> t -> bool
   val find : K.t -> t -> V.t
   val find_opt : K.t -> t -> V.t option
   val dnif : V.t -> t -> K.t
