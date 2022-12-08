@@ -159,8 +159,14 @@ let interactive_proof () : proof tactic =
         aux () in
       tclOR cont begin fun (exn, _) ->
         match exn with
-        | ApplyUndo -> aux ()
-        | _ -> raise exn
+        | ApplyUndo ->
+            aux ()
+        | _ ->
+            let msg =
+              CErrors.print_no_report exn |>
+              Pp.string_of_ppcmds in
+            Lwt_main.run (Client.error msg);
+            aux ()
       end in
 
     export_goals () >>= fun goals ->

@@ -13,18 +13,6 @@ exception ActemaError of string
 exception UnsupportedRequestMethod of string
 exception UnsupportedHttpResponseCode of int
 
-let qed () : unit t =
-  let req = make_req "qed" "" in
-
-  req >>= fun (resp, _) ->
-
-  let code = resp |> Response.status |> Code.code_of_status in
-  match code with
-  | 200 ->
-      return ()
-  | _ ->
-      raise (UnsupportedHttpResponseCode code)
-
 type action =
 | Do of int * Logic_t.action
 | Done | Undo | Redo
@@ -66,5 +54,25 @@ let action (goals : Logic_t.goals) : action t =
       raise (UnsupportedRequestMethod body)
   | 550 ->
       raise (ActemaError body)
+  | _ ->
+      raise (UnsupportedHttpResponseCode code)
+
+let qed () : unit t =
+  let req = make_req "qed" "" in
+  req >>= fun (resp, _) ->
+  let code = resp |> Response.status |> Code.code_of_status in
+  match code with
+  | 200 ->
+      return ()
+  | _ ->
+      raise (UnsupportedHttpResponseCode code)
+
+let error (msg : string) : unit t =
+  let req = make_req "error" msg in
+  req >>= fun (resp, _) ->
+  let code = resp |> Response.status |> Code.code_of_status in
+  match code with
+  | 200 ->
+      return ()
   | _ ->
       raise (UnsupportedHttpResponseCode code)
