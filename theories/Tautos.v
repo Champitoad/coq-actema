@@ -14,10 +14,9 @@ Defined.
 Lemma add_comm :
   forall n m, n + m = m + n.
 Proof.
-  actema.
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
-  induction n; induction m; actema.
+actema.
 Qed.
 
 Fixpoint le (n:nat)(m:nat) :=
@@ -87,8 +86,9 @@ Qed.
 
 Lemma S_inj : forall n m, S n = S m -> n =m.
 pose h1 := eqb_eq.
-pose h2 := eq_eqb.
-Admitted.
+pose h2 := eq_eqb.    
+actema.
+Qed.
 
 Lemma ex_le : forall n m, (exists p, n = m + p)-> (le  m n).
 pose S_i := S_inj.
@@ -101,7 +101,7 @@ Lemma even_aux :
   forall n, (even n) /\ (exists p, n = p + p)
             \/(~even n) /\  (exists p, n = S(p + p)).
 pose h := PeanoNat.Nat.add_succ_r.
-induction n; actema; actema; actema.
+induction n; actema.
 Qed.
 
 
@@ -116,7 +116,7 @@ Lemma ex_pred : forall x p, S(S x) = p+p ->
 move => x [//=|p].
 pose h := PeanoNat.Nat.add_succ_r.
 pose s_i := S_inj.
-actema. actema.
+actema.
 Qed.
 
 
@@ -450,19 +450,15 @@ Proof.
   actema. 
 Qed.
 
-Lemma essai :forall x, x + 0 = x.
-  actema.
-Qed.
-
-Lemma essai1 : forall x y, x + y = y + x.
-  actema.
-Qed.
+Definition icv : nat -> (option (inst1 test)).
+intro n; apply Some; exists 0.
+intros e1 e2; apply e2; exact n.
+Defined.
 
 
 Lemma le_ex' : forall n m, le n m  ->
                  exists p, n+p = m.
   actema.
-  done.
 Qed.
 
 Lemma le_refl' : forall n, le n n.
@@ -476,7 +472,6 @@ Qed.
 Lemma le_S' : forall n m,
     le n m -> le n (Datatypes.S m).
 actema.
-done.
 Qed.
 
 
@@ -498,6 +493,7 @@ Lemma ex_le' : forall n m, (exists p, n = m + p)-> (le  m n).
   pose S_i := S_inj.
   actema.
 done.
+  actema.
 Qed.
 
 
@@ -534,7 +530,15 @@ pose h :=  PeanoNat.Nat.add_succ_r.
 pose e_p := ex_pred.
 actema.
 done.
+actema.
 done.
+actema.
+Qed.
+
+Lemma div :
+  forall n, exists p, (n = p+p \/ n = Datatypes.S(p+p)).
+pose h :=  PeanoNat.Nat.add_succ_r.
+actema.
 Qed.
 
 

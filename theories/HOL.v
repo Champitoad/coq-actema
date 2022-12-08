@@ -2386,7 +2386,7 @@ Ltac back ts' h0 hp gp t i :=
         );
         try by apply I
   end;
-  rewrite /sort /trad1 /nth /nthc /list_rect /trs /eq_rect_r /eq_rect /eq_sym ;
+   rewrite /sort /trad1 /seq.nth /nthc /list_rect /trs /eqnqtdec /nat_rec /nat_rect /eq_rect_r /eq_rect /eq_sym ;
   clear h. 
 
 (*
@@ -2469,6 +2469,7 @@ Abort.
 
 Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
   let ts := eval compute in ts' in
+  let i' := eval compute in i in
   let h1' := fresh "h1" in
   let h2' := fresh "h2" in
   let h4 := fresh "h4" in
@@ -2485,7 +2486,7 @@ Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
     | coerce _ (@nil nat) ?hc2 _  => hc2
     end in
   move:
-    (f3_corr ts  t i (@nil nat) hc1 tt
+    (f3_corr ts  t i' (@nil nat) hc1 tt
              (@nil nat) hc2 tt h1 h2) => h4;
   clear h1' h2';
   let oh4 :=
