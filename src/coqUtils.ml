@@ -17,6 +17,13 @@ module Log = struct
   let econstr_debug evd t =
     t |> EConstr.to_constr evd |> Constr.debug_print |>
     Feedback.msg_notice
+
+  let univ_levels evd =
+    let univs : string list =
+      Evd.evar_universe_context evd |> UState.ugraph |>
+      UGraph.domain |> Univ.Level.Set.elements |>
+      List.map Univ.Level.to_string in
+    str Extlib.(List.to_string identity univs)
 end
 
 let name_of_const evd t =
