@@ -1524,21 +1524,21 @@ end = struct
   type choice = (int * (LEnv.lenv * LEnv.lenv * expr) option)
   type itrace = choice list
 
-  let print_choice ((side, witness) : choice) : string =
+  let print_choice env ((side, witness) : choice) : string =
     let side = if side = 0 then "←" else "→" in
     let witness =
       witness |> Option.map_default
         (fun (le1, le2, e) ->
           let print (x, ty) =
-            Printf.sprintf "%s : %s" x (Notation.t_tostring ty) in
+            Printf.sprintf "%s : %s" x (Notation.t_tostring env ty) in
           let le1 = List.to_string print (LEnv.bindings le1) in
           let le2 = List.to_string print (LEnv.bindings le2) in
-          let e = Fo.Notation.e_tostring e in
+          let e = Fo.Notation.e_tostring env e in
           Printf.sprintf "%s%s{%s}" le1 le2 e) "" in
     Printf.sprintf "%s%s" side witness
 
-  let print_itrace : itrace -> string =
-    Utils.List.to_string print_choice ~left:"" ~right:"" ~sep:" "
+  let print_itrace env : itrace -> string =
+    Utils.List.to_string (print_choice env) ~left:"" ~right:"" ~sep:" "
 
   type pnode += TLink of (ipath * ipath * itrace)
 
@@ -1872,10 +1872,10 @@ end = struct
         if f1 = f1' then f else elim_units (FBind (b, x, ty, f1'))
   
 
-  let print_linkage (mode : [`Backward | `Forward]) ((l, _), (r, _)) =
+  let print_linkage env (mode : [`Backward | `Forward]) ((l, _), (r, _)) =
     let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
     Printf.sprintf "%s %s %s"
-      (Notation.f_tostring l) op (Notation.f_tostring r) 
+      (Notation.f_tostring env l) op (Notation.f_tostring env r) 
   
   (** [dlink] stands for _d_eep linking, and implements the deep interaction phase
       à la Chaudhuri for intuitionistic logic. *)
@@ -1955,7 +1955,7 @@ end = struct
       (((l, lsub as h), (r, rsub as c)) as linkage : (form * int list) * (form * int list)) : form * itrace =
       
       (* js_log (Subst.to_string s1 ^ " ⊢ " ^ Subst.to_string s2); *)
-      js_log (print_linkage `Backward linkage);
+      js_log (print_linkage goal.g_env `Backward linkage);
       
       match linkage with
 
@@ -2137,7 +2137,7 @@ end = struct
       ((env1, _) as es1, (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       (((l, lsub as h), (r, rsub)) as linkage : (form * int list) * (form * int list)) : form * itrace =
 
-      js_log (print_linkage `Forward linkage);
+      js_log (print_linkage goal.g_env `Forward linkage);
       
       match linkage with
 
@@ -2289,10 +2289,11 @@ end = struct
   
   let dlink_tac (src, dst : link) (s_src, s_dst : Form.Subst.subst * Form.Subst.subst) : tactic =
     fun (proof, g_id) ->
+    let goal = Proof.byid proof g_id in
 
     let subgoal, itrace = dlink (src, dst) (s_src, s_dst) proof in
 
-    js_log (Printf.sprintf "itrace: %s" (print_itrace itrace));
+    js_log (Printf.sprintf "itrace: %s" (print_itrace goal.g_env itrace));
 
     let open Proof in
     let tac =
@@ -2344,7 +2345,9 @@ end = struct
       | `Rewrite (red, res, tgts) ->
           Printf.sprintf "%s[%s ~> %s]"
             (List.to_string ~sep:", " ~left:"{" ~right:"}"
-              (fun p -> let _, _, (_, t) = of_ipath proof p in Notation.tostring t)
+              (fun p ->
+                 let Proof.{ g_pregoal; _ }, _, (_, t) = of_ipath proof p in
+                 Notation.tostring g_pregoal.g_env t)
              tgts)
             red res
     in doit
@@ -3087,36 +3090,33 @@ end = struct
         | `Var `Head -> []
         | _ -> [
             { description = "Simplify";
-               icon = Some "wand-magic-sparkles";
-               highlights = sel;
-               kind = `Ctxt;
-               action = (gid_of_ipath proof tgt, `Simpl tgt) };
+              icon = Some "wand-magic-sparkles";
+              highlights = sel;
+              kind = `Ctxt;
+              action = (gid_of_ipath proof tgt, `Simpl tgt) };
 
             { description = "Unfold";
-               icon = Some "magnifying-glass";
-               highlights = sel;
-               kind = `Ctxt;
-               action = (gid_of_ipath proof tgt, `Red tgt) };
+              icon = Some "magnifying-glass";
+              highlights = sel;
+              kind = `Ctxt;
+              action = (gid_of_ipath proof tgt, `Red tgt) };
 
             { description = "Induction";
-               icon = Some "magnifying-glass";
-               highlights = sel;
-               kind = `Ctxt;
-               action = (gid_of_ipath proof tgt, `Indt tgt) };
+              icon = Some "oven";
+              highlights = sel;
+              kind = `Ctxt;
+              action = (gid_of_ipath proof tgt, `Indt tgt) };
           ]
         end
     | _ -> []
 
   let ctxt_actions (sel : selection) (proof : Proof.proof) : aoutput list =
-
     let selpred = selpred_add [
-      single_subterm_sel
-    ] in
-
+        single_subterm_sel
+      ] in
     selpred proof sel
 
-  let actions (proof : Proof.proof) (p : asource) : aoutput list
-  =
+  let actions (proof : Proof.proof) (p : asource) : aoutput list =
     match p.kind with
       | `Click path -> begin
           let Proof.{ g_id = hd; g_pregoal = goal}, item, (_, _) =

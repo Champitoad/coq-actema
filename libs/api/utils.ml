@@ -273,7 +273,7 @@ let biniou_unhash_dict = Bi_io.make_unhash [
   "Forall"; "Exist";
   "FTrue"; "FFalse"; "FPred"; "FConn"; "FBind";
   "F"; "E";
-  "env_prp"; "env_fun"; "env_var"; "env_tvar"; "env_handles";
+  "env_sort"; "env_prp"; "env_fun"; "env_sort_name"; "env_prp_name"; "env_fun_name"; "env_var"; "env_handles";
   "h_id"; "h_form";
   "g_env"; "g_hyps"; "g_concl";
   "Hyp"; "Concl"; "Var"; "Head"; "Body";
@@ -284,7 +284,9 @@ let biniou_unhash_dict = Bi_io.make_unhash [
 ]
 
 let empty_env =
-  Fo_t.{ env_prp = []; env_fun = []; env_var = []; env_tvar = []; env_handles = [] }
+  Fo_t.{ env_sort = []; env_prp = []; env_fun = [];
+         env_sort_name = []; env_prp_name = []; env_fun_name = [];
+         env_var = []; env_handles = [] }
 
 let string_of_expr e =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_expr e)

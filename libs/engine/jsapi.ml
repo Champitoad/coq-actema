@@ -269,7 +269,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
     _self##.proof |> CoreLogic.lemmas ?selection |>
     List.map begin fun (name, form) ->
       let stmt =
-        Fo.Notation.f_tostring form |>
+        Fo.Notation.f_tostring (LemmaDB.env (Proof.db _self##.proof)) form |>
         Js.string |>
         Js.Unsafe.inject
       in name, stmt
@@ -287,27 +287,31 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
   (* the handle (UID) of the subgoal *)
   val handle = handle
 
+  (* the OCaml subgoal *)
+  method goal =
+    Proof.byid parent##.proof _self##.handle
+
   (* Return all the functional variables as a [string array] *)
   method fvars =
-    let goal = Proof.byid parent##.proof _self##.handle in
+    let goal = _self##goal in
     let fvars : string list =
       Fo.Funs.all goal.g_env |>
       Map.bindings |>
       List.map (fun (f, (ar, res)) ->
-        let ar = List.to_string ~sep:" & " ~left:"" ~right:"" Fo.Notation.t_tostring ar in
-        let res = Fo.Notation.t_tostring res in
+        let ar = List.to_string ~sep:" & " ~left:"" ~right:"" (Fo.Notation.t_tostring goal.Proof.g_env) ar in
+        let res = Fo.Notation.t_tostring goal.g_env res in
         Printf.sprintf "%s : %s -> %s" f ar res) in
     Js.array (Array.of_list (List.map Js.string fvars))
 
   (* Return all the propositional variables as a [string array] *)
   method pvars =
-    let goal = Proof.byid parent##.proof _self##.handle in
+    let goal = _self##goal in
     let pvars = List.fst (Map.bindings (Fo.Prps.all goal.g_env)) in
     Js.array (Array.of_list (List.map Js.string pvars))
 
   (* Return all the local variables as a [js_tvar array] *)
   method tvars =
-    let goal  = Proof.byid parent##.proof _self##.handle in
+    let goal  = _self##goal in
     let tvars = Fo.Vars.to_list goal.g_env in
     let aout  = List.mapi (fun i (id, x, b) ->
       js_tvar _self (i, (Handle.ofint id, x, b))) tvars in
@@ -315,7 +319,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
 
   (* Return all the local hypotheses (context) as a [js_hyps array] *)
   method context =
-    let goal = Proof.byid parent##.proof _self##.handle in
+    let goal = _self##goal in
     let hyps = List.rev (Proof.Hyps.to_list goal.g_hyps) in
 
     Js.array (Array.of_list (List.mapi (fun i x -> js_hyps _self (i, x)) hyps))
@@ -323,7 +327,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
   (* Return the subgoal conclusion as a [js_form] *)
   method conclusion =
     let goal  = Proof.byid parent##.proof _self##.handle in
-    js_form (_self##.handle, `C) goal.g_goal
+    js_form _self (_self##.handle, `C) goal.g_goal
 
   (* [this#intro [variant : int]] applies the relevant introduction
    * rule to the conclusion of the subgoal [this]. The parameter
@@ -356,7 +360,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
    * cut it. *)
   method cut form =
     let doit () =
-      let goal = Proof.byid parent##.proof _self##.handle in
+      let goal = _self##goal in
       let form = String.trim (Js.to_string form) in
       let form = Io.parse_form (Io.from_string form) in
       let form = Fo.Form.check goal.g_env form in
@@ -366,7 +370,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
   (* [this#getcutb (form : string)] parses [form] in the current goal, and
    * returns the base64-encoded string of the corresponding ACut action. *)
   method getcutb form =
-      let goal = Proof.byid parent##.proof _self##.handle in
+      let goal = _self##goal in
       let form = form |>
         Js.to_string |> String.trim |>
         Io.from_string |> Io.parse_form |>
@@ -392,7 +396,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
    * [context] and adds it to the local [context] under the name [name]. *)
   method addlocal name expr =
     let doit () =
-      let goal = Proof.byid parent##.proof _self##.handle in
+      let goal = _self##goal in
       let expr = String.trim (Js.to_string expr) in
       let expr = Io.parse_expr (Io.from_string expr) in
       let expr, ty = Fo.Form.echeck goal.g_env expr in
@@ -404,7 +408,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
    * in the goal [context] and add it to the local [context]. *)
   method addalias expr =
     let doit () =
-      let goal = Proof.byid parent##.proof _self##.handle in
+      let goal = _self##goal in
       let expr = String.trim (Js.to_string expr) in
       let name, expr = Io.parse_nexpr (Io.from_string expr) in
       let expr, ty = Fo.Form.echeck goal.g_env expr in
@@ -416,7 +420,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
    * in the current goal, and returns the base64-encoded string of the
    * corresponding ADef action. *)
   method getaliasb expr =
-    let goal = Proof.byid parent##.proof _self##.handle in
+    let goal = _self##goal in
     let expr = String.trim (Js.to_string expr) in
     let name, expr = Io.parse_nexpr (Io.from_string expr) in
     let expr, ty = Fo.Form.echeck goal.g_env expr in
@@ -509,7 +513,7 @@ object%js (_self)
   val fresh = Js.bool (hyp.h_gen <= 1)
 
   (* the hypothesis as a [js_form] *)
-  val form = js_form (parent##.handle, `H handle) hyp.h_form
+  val form = js_form parent (parent##.handle, `H handle) hyp.h_form
 
   (* The enclosing proof engine *)
   val proof = parent##.parent
@@ -550,15 +554,18 @@ object%js (_self)
   (* the handle position in its context *)
   val position = i
 
+  (* the local variable name, as an OCaml string *)
+  val oname = Fo.Notation.e_tostring (parent##goal).g_env (EVar x)
+
   (* the local variable name *)
-  val name = Js.string (Fo.Notation.e_tostring (EVar x))
+  method name = Js.string _self##.oname
 
   (* the local variable type as a [js_type] *)
-  val type_ = js_type ty
+  val type_ = js_type parent ty
 
   (* the local definition - return an optional expression *)
   val body =
-    Js.Opt.option (Option.map js_expr b)
+    Js.Opt.option (Option.map (js_expr parent) b)
 
   (* the enclosing proof engine *)
   val proof = parent##.parent
@@ -586,15 +593,15 @@ object%js (_self)
         span begin
           [span ~a:[Xml.string_attrib "id" _self##idhead] begin
             [span
-              [Xml.pcdata (UTF8.of_latin1 (Fo.Notation.e_tostring (EVar x)))]] @
+              [Xml.pcdata (UTF8.of_latin1 _self##.oname)]] @
               spaced [span [Xml.pcdata ":"]] @
-              [Fo.Notation.t_tohtml ty]
+              [Fo.Notation.t_tohtml (parent##goal).g_env ty]
           end]
           @
           match b with
           | Some b ->
               spaced [span [Xml.pcdata ":="]] @
-              [Fo.Notation.e_tohtml ~id:(Some _self##idbody) b]
+              [Fo.Notation.e_tohtml ~id:(Some _self##idbody) (parent##goal).g_env b]
           | None -> []
         end]
     in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
@@ -608,15 +615,15 @@ object%js (_self)
       math [
         row begin
           [row ~a:[Xml.string_attrib "id" _self##idhead] begin
-            [mi (UTF8.of_latin1 (Fo.Notation.e_tostring (EVar x)))] @
+            [mi (UTF8.of_latin1 (Fo.Notation.e_tostring (parent##goal).g_env (EVar x)))] @
             [mo ":"] @
-            [Fo.Notation.t_tomathml ty]
+            [Fo.Notation.t_tomathml (parent##goal).g_env ty]
           end]
           @
           match b with
           | Some b ->
               [mo ":="] @
-              [Fo.Notation.e_tomathml ~id:(Some _self##idbody) b]
+              [Fo.Notation.e_tomathml ~id:(Some _self##idbody) (parent##goal).g_env b]
           | None -> []
         end]
     in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
@@ -626,20 +633,25 @@ object%js (_self)
     match b with
     | Some b ->
         Js.string (Format.sprintf "%s : %s := %s"
-          (Fo.Notation.e_tostring (EVar x)) (Fo.Notation.t_tostring ty) (Fo.Notation.e_tostring b))
+          (Fo.Notation.e_tostring (parent##goal).g_env (EVar x))
+          (Fo.Notation.t_tostring (parent##goal).g_env ty)
+          (Fo.Notation.e_tostring (parent##goal).g_env b))
     | None ->
         Js.string (Format.sprintf "%s : %s"
-          (Fo.Notation.e_tostring (EVar x)) (Fo.Notation.t_tostring ty))
+          (Fo.Notation.e_tostring (parent##goal).g_env (EVar x))
+          (Fo.Notation.t_tostring (parent##goal).g_env ty))
 
   (* Return an ASCII string representation of the enclosed local variable *)
   method toascii =
     match b with
     | Some b ->
         Js.string (Format.sprintf "%s := %s"
-          (Fo.Notation.e_tostring (EVar x)) (Fo.Notation.e_toascii b))
+          (Fo.Notation.e_tostring (parent##goal).g_env (EVar x))
+          (Fo.Notation.e_toascii (parent##goal).g_env b))
     | None ->
         Js.string (Format.sprintf "%s : %s"
-          (Fo.Notation.e_tostring (EVar x)) (Fo.Notation.t_toascii ty))
+          (Fo.Notation.e_tostring (parent##goal).g_env (EVar x))
+          (Fo.Notation.t_toascii (parent##goal).g_env ty))
 
   method getmeta =
     Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
@@ -650,7 +662,7 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
-and js_form (source : source) (form : Fo.form) = object%js (_self)
+and js_form parent (source : source) (form : Fo.form) = object%js (_self)
   (* The prefix for all subpaths of the formula *)
   val prefix =
     match source with
@@ -671,7 +683,7 @@ and js_form (source : source) (form : Fo.form) = object%js (_self)
       if not id then None else Some _self##.prefix in
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Utils.Mathml.math [Fo.Notation.f_tomathml ~id:prefix form]))
+      (Utils.Mathml.math [Fo.Notation.f_tomathml (parent##goal).g_env ~id:prefix form]))
 
   (* Return the [html] of the formula *)  
   method htmltag (id : bool) =
@@ -679,20 +691,20 @@ and js_form (source : source) (form : Fo.form) = object%js (_self)
       if not id then None else Some _self##.prefix in
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Fo.Notation.f_tohtml ~id:prefix form))
+      (Fo.Notation.f_tohtml (parent##goal).g_env ~id:prefix form))
 
   (* Return an UTF8 string representation of the formula *)
   method tostring =
-    Js.string (Fo.Notation.f_tostring form)
+    Js.string (Fo.Notation.f_tostring (parent##goal).g_env form)
 
   (* Return an ASCII string representation of the formula *)
   method toascii =
-    Js.string (Fo.Notation.f_toascii form)
+    Js.string (Fo.Notation.f_toascii (parent##goal).g_env form)
 end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for expressions                                           *)
-and js_expr (expr : Fo.expr) = object%js (_self)
+and js_expr parent (expr : Fo.expr) = object%js (_self)
   (* Return the [mathml] of the formula *)  
   method mathml =
     _self##mathmltag
@@ -705,33 +717,33 @@ and js_expr (expr : Fo.expr) = object%js (_self)
   method mathmltag =
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Utils.Mathml.math [Fo.Notation.e_tomathml expr]))
+      (Utils.Mathml.math [Fo.Notation.e_tomathml (parent##goal).g_env expr]))
 
   (* Return the [html] of the formula *)  
   method htmltag =
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Fo.Notation.e_tohtml expr))
+      (Fo.Notation.e_tohtml (parent##goal).g_env expr))
 
   (* Return an UTF8 string representation of the expression *)
   method tostring =
-    Js.string (Fo.Notation.e_tostring expr)
+    Js.string (Fo.Notation.e_tostring (parent##goal).g_env expr)
 end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for types                                                 *)
-and js_type (ty : Fo.type_) = object%js (_self)
+and js_type parent (ty : Fo.type_) = object%js (_self)
   (* Return the raw [mathml] of the type *)
   method rawmathml =
-    Utils.Mathml.math [Fo.Notation.t_tomathml ty]
+    Utils.Mathml.math [Fo.Notation.t_tomathml (parent##goal).g_env ty]
 
   (* Return the raw [html] of the type *)
   method rawhtml =
-    Fo.Notation.t_tohtml ty
+    Fo.Notation.t_tohtml (parent##goal).g_env ty
 
   (* Return the raw string representation of the type *)
   method rawstring =
-    Fo.Notation.t_tostring ty
+    Fo.Notation.t_tostring (parent##goal).g_env ty
 
   (* Return the [mathml] of the type *)  
   method mathml =
@@ -765,7 +777,7 @@ let export (name : string) : unit =
      *
      * Raise an exception if [input] is invalid *)
     method parseToUnicode x =
-      let _, hyps, goal = !!(fun () ->
+      let env, hyps, goal = !!(fun () ->
           let goal = String.trim (Js.to_string x##.input) in
           let goal = Io.parse_goal (Io.from_string goal) in
           Fo.Goal.check goal
@@ -777,7 +789,7 @@ let export (name : string) : unit =
           (fun b -> if not (Js.to_bool b) then ""
                     else List.to_string
                            ~sep:", " ~left:"" ~right:" "
-                           Fo.Notation.f_tostring hyps))
-        (Fo.Notation.f_tostring goal))
+                           (Fo.Notation.f_tostring env) hyps))
+        (Fo.Notation.f_tostring env goal))
 
   end)

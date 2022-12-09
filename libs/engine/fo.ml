@@ -124,12 +124,15 @@ type 'a eqns = ('a * 'a) list
 (** Environments *)
 
 type env = {
-  env_prp     : (name, arity            ) Map.t;
-  env_fun     : (name, sig_             ) Map.t;
-  env_var     : (name, bvar  list       ) Map.t;
-  env_tvar    : (name, type_ option list) Map.t;
-  env_evar    : (name, type_ list       ) Map.t;
-  env_handles : (vname, uid             ) BiMap.t;
+  env_prp       : (name, arity            ) Map.t;
+  env_fun       : (name, sig_             ) Map.t;
+  env_prp_name  : (name, name             ) Map.t;
+  env_fun_name  : (name, name             ) Map.t;
+  env_sort_name : (name, name             ) Map.t;
+  env_tvar      : (name, type_ option list) Map.t;
+  env_var       : (name, bvar  list       ) Map.t;
+  env_evar      : (name, type_ list       ) Map.t;
+  env_handles   : (vname, uid             ) BiMap.t;
 }
 
 and bvar = type_ * expr option
@@ -151,17 +154,20 @@ end = struct
   let mult n m = EFun ("mult", [n; m])
     
   let empty : env = Map.{
-    env_prp     = empty;
-    env_fun     = empty |>
-                  add "Z" ([], nat) |>
-                  add "S" ([nat], nat) |>
-                  add "add" ([nat; nat], nat) |>
-                  add "mult" ([nat; nat], nat);
-    env_var     = empty;
-    env_tvar    = empty |>
-                  add "nat" [None];
-    env_evar    = empty;
-    env_handles = BiMap.empty;
+    env_prp       = empty;
+    env_fun       = empty |>
+                    add "Z" ([], nat) |>
+                    add "S" ([nat], nat) |>
+                    add "add" ([nat; nat], nat) |>
+                    add "mult" ([nat; nat], nat);
+    env_prp_name  = empty;
+    env_fun_name  = empty;
+    env_sort_name = empty;
+    env_var       = empty;
+    env_tvar      = empty |>
+                    add "nat" [None];
+    env_evar      = empty;
+    env_handles   = BiMap.empty;
   }
 end
 
@@ -299,25 +305,25 @@ end
 module Notation : sig
   open Tyxml
   
-  val t_toascii  : type_ -> string
-  val t_tostring : type_ -> string
-  val t_tohtml   : type_ -> Xml.elt
-  val t_tomathml : type_ -> Xml.elt
+  val t_toascii  : env -> type_ -> string
+  val t_tostring : env -> type_ -> string
+  val t_tohtml   : env -> type_ -> Xml.elt
+  val t_tomathml : env -> type_ -> Xml.elt
 
-  val e_toascii  : expr -> string
-  val e_tostring : expr -> string
-  val e_tohtml   : ?id:string option -> expr -> Xml.elt
-  val e_tomathml : ?id:string option -> expr -> Xml.elt
+  val e_toascii  : env -> expr -> string
+  val e_tostring : env -> expr -> string
+  val e_tohtml   : ?id:string option -> env -> expr -> Xml.elt
+  val e_tomathml : ?id:string option -> env -> expr -> Xml.elt
 
-  val f_toascii  : form -> string
-  val f_tostring : form -> string
-  val f_tohtml   : ?id:string option -> form -> Xml.elt
-  val f_tomathml : ?id:string option -> form -> Xml.elt
+  val f_toascii  : env -> form -> string
+  val f_tostring : env -> form -> string
+  val f_tohtml   : ?id:string option -> env -> form -> Xml.elt
+  val f_tomathml : ?id:string option -> env -> form -> Xml.elt
   
-  val toascii  : term -> string
-  val tostring : term -> string
-  val tohtml   : ?id:string option -> term -> Xml.elt
-  val tomathml : ?id:string option -> term -> Xml.elt
+  val toascii  : env -> term -> string
+  val tostring : env -> term -> string
+  val tohtml   : ?id:string option -> env -> term -> Xml.elt
+  val tomathml : ?id:string option -> env -> term -> Xml.elt
 end = struct
   open Tyxml
   
@@ -394,21 +400,21 @@ end = struct
   let f_toascii, e_toascii, t_toascii =
     let open Text in
 
-    let rec for_type ?(is_pr = false) =
+    let rec for_type ?(is_pr = false) env =
       pr ~doit:is_pr <<| function
       | TUnit ->
           "()"
 
       | TVar (x, 0) ->
-          UTF8.of_latin1 x
+          UTF8.of_latin1 (Map.find x env.env_sort_name)
 
       | TVar (x, i) ->
           Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i
 
       | TProd (t1, t2)
       | TOr (t1, t2) as ty ->
-          let t1 = for_type ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
-          let t2 = for_type ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
+          let t1 = for_type env ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
+          let t2 = for_type env ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
           let tycon = begin match ty with
             | TProd _ -> '*'
             | TOr _   -> '+'
@@ -416,9 +422,9 @@ end = struct
           end in t1 ^ (spaced (UTF8.of_char (UChar.of_char tycon))) ^ t2
 
       | TRec (x, t) ->
-          Format.sprintf "rec %s . %s" (UTF8.of_latin1 x) (for_type t)
+          Format.sprintf "rec %s . %s" (UTF8.of_latin1 x) (for_type env t)
 
-    and for_expr = function
+    and for_expr env = function
       | EVar (x, 0) ->
           UTF8.of_latin1 x
 
@@ -426,10 +432,10 @@ end = struct
           Format.sprintf "%s{%d}" (UTF8.of_latin1 x) i
 
       | EFun (f, args) ->
-          let args = String.concat ", " (List.map for_expr args) in
-          (UTF8.of_latin1 f) ^ (pr args)
+          let args = String.concat ", " (List.map (for_expr env) args) in
+          (UTF8.of_latin1 (Map.find f env.env_fun_name)) ^ (pr args)
 
-    and for_form ?(is_pr = false) =
+    and for_form ?(is_pr = false) env =
       pr ~doit:is_pr <<| function
       | FTrue ->
           "true"
@@ -442,7 +448,7 @@ end = struct
           let text_fs =
             List.combine fs (assoc_of_op lg) |>
             List.map (fun (f, cmp) ->
-              for_form ~is_pr:(cmp (prio_of_form f) (prio_of_op lg)) f) in
+              for_form env ~is_pr:(cmp (prio_of_form f) (prio_of_op lg)) f) in
 
           match lg, text_fs with
           | (`And | `Or | `Imp | `Equiv), [f1; f2] ->
@@ -455,14 +461,14 @@ end = struct
       
       | FPred ("_EQ", [e1; e2]) ->
           Format.sprintf "%s = %s"
-            (for_expr e1)
-            (for_expr e2)
+            (for_expr env e1)
+            (for_expr env e2)
 
       | FPred (name, []) ->
-          UTF8.of_latin1 name
+          UTF8.of_latin1 (Map.find name env.env_prp_name)
 
       | FPred (name, args) ->
-          let args = List.map for_expr args in
+          let args = List.map (for_expr env) args in
           let args = String.join ", " args in
           UTF8.of_latin1 name ^ (pr args)
 
@@ -471,20 +477,20 @@ end = struct
             | `Forall -> "forall"
             | `Exist -> "exists" in
           Format.sprintf "%s %s : %s . %s"
-            (bd) (UTF8.of_latin1 x) (for_type ty) (for_form f)
+            (bd) (UTF8.of_latin1 x) (for_type env ty) (for_form env f)
 
     in (fun f -> for_form f),
        (fun e -> for_expr e),
        (fun t -> for_type t)
 
-  let toascii = function
-    | `E e -> e_toascii e
-    | `F f -> f_toascii f
+  let toascii env = function
+    | `E e -> e_toascii env e
+    | `F f -> f_toascii env f
 
   let f_tostring, e_tostring, t_tostring =
     let open Text in
 
-    let rec for_type ?(is_pr = false) =
+    let rec for_type ?(is_pr = false) env =
       pr ~doit:is_pr <<| function
       | TUnit ->
           "()"
@@ -493,15 +499,15 @@ end = struct
           "ℕ"
 
       | TVar (x, 0) ->
-          UTF8.of_latin1 x
+          UTF8.of_latin1 (Map.find x env.env_sort_name)
 
       | TVar (x, i) ->
           Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i
 
       | TProd (t1, t2)
       | TOr (t1, t2) as ty ->
-          let t1 = for_type ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
-          let t2 = for_type ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
+          let t1 = for_type env ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
+          let t2 = for_type env ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
           let tycon = begin match ty with
             | TProd _ -> '*'
             | TOr _   -> '+'
@@ -509,9 +515,9 @@ end = struct
           end in t1 ^ (spaced (UTF8.of_char (UChar.of_char tycon))) ^ t2
 
       | TRec (x, t) ->
-          Format.sprintf "rec %s . %s" (UTF8.of_latin1 x) (for_type t)
+          Format.sprintf "rec %s . %s" (UTF8.of_latin1 x) (for_type env t)
 
-    and for_expr ?(is_pr = false) expr =
+    and for_expr ?(is_pr = false) env expr =
       match expr with
       | EVar (x, 0) ->
           UTF8.of_latin1 x
@@ -525,8 +531,8 @@ end = struct
       | EFun ("mult" as f, es) ->
           let str es =
             List.combine es (assoc_of_fun f) |>
-            List.mapi (fun i (e, cmp) ->
-              for_expr ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) e) in
+            List.mapi (fun _ (e, cmp) ->
+              for_expr env ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) e) in
 
           begin match f, str es with
           | "Z", [] ->
@@ -552,10 +558,10 @@ end = struct
           end
 
       | EFun (f, args) ->
-          let args = String.concat ", " (List.map for_expr args) in
-          (UTF8.of_latin1 f) ^ (pr args)
+          let args = String.concat ", " (List.map (for_expr env) args) in
+          (UTF8.of_latin1 (Map.find f env.env_fun_name)) ^ (pr args)
 
-    and for_form ?(is_pr = false) =
+    and for_form ?(is_pr = false) env =
       pr ~doit:is_pr <<| function
       | FTrue ->
           UTF8.of_char (UChar.chr 0x22A4)
@@ -564,16 +570,16 @@ end = struct
           UTF8.of_char (UChar.chr 0x22A5)
 
       | FConn (`Not, [FPred ("_EQ", [e1; e2])]) ->
-          for_expr e1 ^
+          for_expr env e1 ^
           spaced (UTF8.of_char (UChar.chr 0x2260)) ^
-          for_expr e2
+          for_expr env e2
 
       | FConn (lg, fs) -> begin
           let text_lg = lg |> unicode_of_op |> UChar.chr |> UTF8.of_char in
           let text_fs =
             List.combine fs (assoc_of_op lg) |>
             List.map (fun (f, cmp) ->
-              for_form ~is_pr:(cmp (prio_of_form f) (prio_of_op lg)) f) in
+              for_form env ~is_pr:(cmp (prio_of_form f) (prio_of_op lg)) f) in
 
           match lg, text_fs with
           | (`And | `Or | `Imp | `Equiv), [f1; f2] ->
@@ -586,14 +592,14 @@ end = struct
       
       | FPred ("_EQ", [e1; e2]) ->
           Format.sprintf "%s = %s"
-            (for_expr e1)
-            (for_expr e2)
+            (for_expr env e1)
+            (for_expr env e2)
 
       | FPred (name, []) ->
           UTF8.of_latin1 name
 
       | FPred (name, args) ->
-          let args = List.map for_expr args in
+          let args = List.map (for_expr env) args in
           let args = String.join ", " args in
           UTF8.of_latin1 name ^ (pr args)
 
@@ -602,20 +608,20 @@ end = struct
             | `Forall -> UTF8.of_char (UChar.chr 0x2200)
             | `Exist -> UTF8.of_char (UChar.chr 0x2203) in
           Format.sprintf "%s%s : %s . %s"
-            (bd) (UTF8.of_latin1 x) (for_type ty) (for_form f)
+            (bd) (UTF8.of_latin1 x) (for_type env ty) (for_form env f)
 
     in (fun f -> for_form f),
        (fun e -> for_expr e),
        (fun t -> for_type t)
 
-  let tostring = function
-    | `E e -> e_tostring e
-    | `F f -> f_tostring f
+  let tostring env = function
+    | `E e -> e_tostring env e
+    | `F f -> f_tostring env f
 
   let f_tohtml, e_tohtml, t_tohtml =
     let open Utils.Html in
 
-    let rec for_type ?(is_pr = false) (ty : type_) =
+    let rec for_type ?(is_pr = false) env (ty : type_) =
       let data = match ty with
         | TUnit ->
             [span [Xml.pcdata "()"]]
@@ -624,15 +630,15 @@ end = struct
             [span [Xml.pcdata "ℕ"]]
 
         | TVar (x, 0) ->
-            [span [Xml.pcdata (UTF8.of_latin1 x)]]
+            [span [Xml.pcdata (UTF8.of_latin1 (Map.find x env.env_sort_name))]]
 
         | TVar (x, i) ->
             [span [Xml.pcdata (Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i)]]
 
         | TProd (t1, t2)
         | TOr   (t1, t2) ->
-            let t1 = for_type ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
-            let t2 = for_type ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
+            let t1 = for_type env ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
+            let t2 = for_type env ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
             let tycon = match ty with
               | TProd _ -> '*'
               | TOr _   -> '+'
@@ -644,13 +650,13 @@ end = struct
                 [[span [Xml.pcdata "rec"]]]
               @ [[span [Xml.pcdata (UTF8.of_latin1 x)]]]
               @ [[span [Xml.pcdata "."]]]
-              @ [[span (for_type t)]]
+              @ [[span (for_type env t)]]
             in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
       in
 
       [span (pr ~doit:is_pr data)]
 
-    and for_expr ?(id : string option option) ?(is_pr = false) (p : int list) (expr : expr) : Xml.elt list =
+    and for_expr ?(id : string option option) ?(is_pr = false) env (p : int list) (expr : expr) : Xml.elt list =
       let for_expr = for_expr ?id in
 
       let thisid p =
@@ -680,7 +686,7 @@ end = struct
             let xml es p =
               List.combine es (assoc_of_fun f) |>
               List.mapi (fun i (e, cmp) ->
-                for_expr ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) (i :: p) e) in
+                for_expr env ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) (i :: p) e) in
 
             begin match f, xml es p with
             | "Z", [] ->
@@ -709,9 +715,9 @@ end = struct
             end
 
         | EFun (name, args) ->
-            let args = List.mapi (fun i e -> for_expr (i :: p) e) args in
+            let args = List.mapi (fun i e -> for_expr env (i :: p) e) args in
             let aout =
-                [[span [Xml.pcdata (UTF8.of_latin1 name)]]]
+                [[span [Xml.pcdata (UTF8.of_latin1 (Map.find name env.env_fun_name))]]]
               @ [pr (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
 
             in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
@@ -719,7 +725,7 @@ end = struct
 
       [span ~a:(if !id then thisid p else []) (pr ~doit:is_pr data)]
 
-    and for_form ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
+    and for_form ?(id : string option option) ?(is_pr = false) env (p : int list) (form : form) =
       let for_form = for_form ?id in
 
       let thisid p =
@@ -742,9 +748,9 @@ end = struct
 
         | FConn (`Not, [FPred ("_EQ", [e1; e2])]) ->
             [span ~a:(thisid (0 :: p)) (
-              [span (for_expr ?id (0 :: 0 :: p) e1);
+              [span (for_expr ?id env (0 :: 0 :: p) e1);
                span [Xml.entity "nbsp"; Xml.entity "#x2260"; Xml.entity "nbsp"];
-               span (for_expr ?id (1 :: 0 :: p) e2)])]
+               span (for_expr ?id env (1 :: 0 :: p) e2)])]
 
         | FConn (lg, fs) -> begin
             let xml_lg =
@@ -754,7 +760,7 @@ end = struct
             let xml_fs =
               List.combine fs (assoc_of_op lg) |>
               List.mapi (fun i (f, cmp) ->
-                for_form ~is_pr:(cmp (prio_of_form f) (prio_of_op lg)) (i :: p) f) in
+                for_form env ~is_pr:(cmp (prio_of_form f) (prio_of_op lg)) (i :: p) f) in
 
             match lg, xml_fs with
             | (`And | `Or | `Imp | `Equiv), [f1; f2] ->
@@ -766,15 +772,15 @@ end = struct
           end
 
         | FPred ("_EQ", [e1; e2]) ->
-            [span (for_expr ?id (0 :: p) e1);
+            [span (for_expr ?id env (0 :: p) e1);
              span [Xml.entity "nbsp"; Xml.pcdata "="; Xml.entity "nbsp"];
-             span (for_expr ?id (1 :: p) e2)]
+             span (for_expr ?id env (1 :: p) e2)]
 
         | FPred (name, []) ->
-            [span [Xml.pcdata (UTF8.of_latin1 name)]]
+            [span [Xml.pcdata (UTF8.of_latin1 (Map.find name env.env_prp_name))]]
 
         | FPred (name, args) ->
-            let args = List.mapi (fun i e -> for_expr ?id (i :: p) e) args in
+            let args = List.mapi (fun i e -> for_expr ?id env (i :: p) e) args in
             let aout =
                 [[span [Xml.pcdata (UTF8.of_latin1 name)]]]
               @ [pr (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
@@ -790,9 +796,9 @@ end = struct
                 [[span [Xml.pcdata (bd)]]]
               @ [[span [Xml.pcdata (UTF8.of_latin1 x)]]]
               @ [[span [Xml.pcdata ":"]]]
-              @ [[span (for_type ty)]]
+              @ [[span (for_type env ty)]]
               @ [[span [Xml.pcdata "."]]]
-              @ [for_form (0 :: p) f]
+              @ [for_form env (0 :: p) f]
 
             in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
 
@@ -800,19 +806,19 @@ end = struct
 
       [span ~a:(thisid p) (pr ~doit:is_pr data)] in
 
-    ((fun ?id (form : form ) -> span (for_form ?id [] form)),
-     (fun ?id (expr : expr ) -> span (for_expr ?id [] expr)),
-     (fun (ty : type_) -> span (for_type ty)))
+    ((fun ?id env (form : form ) -> span (for_form ?id env [] form)),
+     (fun ?id env (expr : expr ) -> span (for_expr ?id env [] expr)),
+     (fun env (ty : type_) -> span (for_type env ty)))
 
-  let tohtml ?id = function
-    | `E e -> e_tohtml ?id e
-    | `F f -> f_tohtml ?id f
+  let tohtml ?id env = function
+    | `E e -> e_tohtml ?id env e
+    | `F f -> f_tohtml ?id env f
 
   let f_tomathml, e_tomathml, t_tomathml =
     let open Tyxml in
     let open Utils.Mathml in
 
-    let rec for_type ?(is_pr = false) (ty : type_) =
+    let rec for_type ?(is_pr = false) env (ty : type_) =
       let data = match ty with
         | TUnit ->
             [mo (UTF8.of_char (UChar.of_int 0x2022))]
@@ -821,7 +827,7 @@ end = struct
             [mo "ℕ"]
 
         | TVar (x, 0) ->
-            [mi (UTF8.of_latin1 x)]
+            [mi (UTF8.of_latin1 (Map.find x env.env_sort_name))]
 
         | TVar (x, i) ->
             let x = Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i in
@@ -829,8 +835,8 @@ end = struct
 
         | TProd (t1, t2)
         | TOr   (t1, t2) ->
-            let t1 = for_type ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
-            let t2 = for_type ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
+            let t1 = for_type env ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
+            let t2 = for_type env ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
             let tycon = match ty with
               | TProd _ -> UChar.of_int 0x00D7
               | TOr _   -> UChar.of_int 0x002B
@@ -840,12 +846,12 @@ end = struct
         | TRec (x, t) ->
             [mo (UTF8.of_char (UChar.of_int 0x03BC));
              mi (UTF8.of_latin1 x);
-             mo (UTF8.of_latin1 ".")] @ for_type t
+             mo (UTF8.of_latin1 ".")] @ for_type env t
       in
 
       [pr ~doit:is_pr (row data)]
 
-    and for_expr ?(id : string option option) ?(is_pr = false) (p : int list) (expr : expr) =
+    and for_expr ?(id : string option option) ?(is_pr = false) env (p : int list) (expr : expr) =
       let for_expr = for_expr ?id in
 
       let data =
@@ -864,7 +870,7 @@ end = struct
             let xml es p =
               List.combine es (assoc_of_fun f) |>
               List.mapi (fun i (e, cmp) ->
-                for_expr ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) (i :: p) e) in
+                for_expr ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) env (i :: p) e) in
 
             begin match f, xml es p with
             | "Z", [] ->
@@ -894,8 +900,8 @@ end = struct
             end
 
         | EFun (name, args) ->
-            let args = List.mapi (fun i e -> for_expr (i :: p) e) args in
-                [mi (UTF8.of_latin1 name)]
+            let args = List.mapi (fun i e -> for_expr env (i :: p) e) args in
+                [mi (UTF8.of_latin1 (Map.find name env.env_fun_name))]
               @ [pr (row (List.flatten (List.join [mo ","] args)))]
       in
 
@@ -909,7 +915,7 @@ end = struct
 
       [pr ~doit:is_pr (row ~a:(List.of_option thisid) data)]
 
-    and for_form ?(id : string option option) ?(is_pr = false) (p : int list) (form : form) =
+    and for_form ?(id : string option option) ?(is_pr = false) env (p : int list) (form : form) =
       let for_form = for_form ?id in
 
       let thisid p =
@@ -932,9 +938,9 @@ end = struct
 
         | FConn (`Not, [FPred ("_EQ", [e1; e2])]) ->
             [row ~a:(thisid (0 :: p)) (
-              (for_expr ?id (0 :: 0 :: p) e1) @
+              (for_expr ?id env (0 :: 0 :: p) e1) @
               [mo (UTF8.of_char (UChar.of_int 0x2260))] @
-              (for_expr ?id (1 :: 0 :: p) e2))]
+              (for_expr ?id env (1 :: 0 :: p) e2))]
 
         | FConn (lg, fs) -> begin
             let xml_lg =
@@ -943,7 +949,7 @@ end = struct
             let xml_fs =
               List.combine fs (assoc_of_op lg) |>
               List.mapi (fun i (f, cmp) ->
-                for_form ~is_pr:(cmp (prio_of_form f) (prio_of_op lg)) (i :: p) f) in
+                for_form ~is_pr:(cmp (prio_of_form f) (prio_of_op lg)) env (i :: p) f) in
 
             match lg, xml_fs with
             | (`And | `Or | `Imp | `Equiv), [f1; f2] ->
@@ -955,15 +961,15 @@ end = struct
           end
 
         | FPred ("_EQ", [e1; e2]) ->
-              (for_expr ?id (0 :: p) e1)
+              (for_expr ?id env (0 :: p) e1)
             @ [mo (UTF8.of_latin1 "=")]
-            @ (for_expr ?id (1 :: p) e2)
+            @ (for_expr ?id env (1 :: p) e2)
 
         | FPred (name, []) ->
-            [mi (UTF8.of_latin1 name)]
+            [mi (UTF8.of_latin1 (Map.find name env.env_prp_name))]
 
         | FPred (name, args) ->
-            let args = List.mapi (fun i e -> for_expr ?id (i :: p) e) args in
+            let args = List.mapi (fun i e -> for_expr ?id env (i :: p) e) args in
                [mi (UTF8.of_latin1 name)]
              @ [pr (row (List.flatten (List.join [mo ","] args)))]
 
@@ -973,21 +979,21 @@ end = struct
               | `Exist  -> UTF8.of_char (UChar.chr 0x2203) in
 
             [mo bd; mi (UTF8.of_latin1 x); mo ":"]
-          @ (for_type ty)
+          @ (for_type env ty)
           @ [mo (UTF8.of_latin1 ".")]
-          @ (for_form (0 :: p) f)
+          @ (for_form env (0 :: p) f)
 
       in
 
       [pr ~doit:is_pr (row ~a:(thisid p) data)] in
 
-    ((fun ?id (form : form ) -> row (for_form ?id [] form)),
-     (fun ?id (expr : expr ) -> row (for_expr ?id [] expr)),
-     (fun (ty : type_) -> row (for_type ty)))
+    ((fun ?id env (form : form ) -> row (for_form ?id env [] form)),
+     (fun ?id env (expr : expr ) -> row (for_expr ?id env [] expr)),
+     (fun env (ty : type_) -> row (for_type env ty)))
 
-  let tomathml ?id = function
-    | `E e -> e_tomathml ?id e
-    | `F f -> f_tomathml ?id f
+  let tomathml ?id env = function
+    | `E e -> e_tomathml ?id env e
+    | `F f -> f_tomathml ?id env f
 end
 
 (* -------------------------------------------------------------------- *)
@@ -1087,8 +1093,8 @@ end = struct
     Printf.sprintf "%s : %s" x
       (List.to_string (fun (ty, body) ->
         match body with
-        | Some b -> Printf.sprintf "%s := %s" (Notation.t_tostring ty) (Notation.e_tostring b)
-        | None -> Printf.sprintf "%s" (Notation.t_tostring ty)) bs)
+        | Some b -> Printf.sprintf "%s := %s" (Notation.t_tostring env ty) (Notation.e_tostring env b)
+        | None -> Printf.sprintf "%s" (Notation.t_tostring env ty)) bs)
 
   let to_list env =
     let open Monad.List in
@@ -1308,7 +1314,7 @@ module Form : sig
 
     val close       : subst -> subst
     
-    val to_string   : subst -> string
+    val to_string   : env -> subst -> string
   end
 
   val e_unify : env -> LEnv.lenv -> Subst.subst -> expr eqns -> Subst.subst option
@@ -1716,6 +1722,8 @@ end = struct
               raise TypingError;
             let args = List.map (einfer env) args in
             if not (List.for_all2 (t_equal env) fargs args) then
+              (* (js_log "ddjkdsjf";
+              raise TypingError); *)
               raise TypingError;
             fres
       end
@@ -1739,7 +1747,13 @@ end = struct
     | FTrue | FFalse -> ()
     
     | FPred (name, [e1; e2]) when name = "_EQ" ->
-        let t1, t2 = pair_map (einfer env) (e1, e2) in
+        let t1, t2 =
+          begin try
+            pair_map (einfer env) (e1, e2)
+          with TypingError ->
+            raise TypingError
+          end
+        in
         if not (t_equal env t1 t2) then raise RecheckFailure
 
     | FPred (name, args) -> begin
@@ -1941,12 +1955,12 @@ end = struct
       end
       
 
-    let to_string =
+    let to_string env =
       List.to_string ~sep:", " ~left:"{" ~right:"}"
         (fun (x, tag) ->
           match tag with
           | Sflex -> "?" ^ x
-          | Sbound e -> x ^ " := " ^ (Notation.e_tostring e))
+          | Sbound e -> x ^ " := " ^ (Notation.e_tostring env e))
   end
 
 
@@ -2160,22 +2174,33 @@ module Translate = struct
     let bimap_to_assoc m f =
       BiMap.bindings m |> List.map f in
 
+    let env_sort = map_to_assoc env.env_tvar
+      (fun (x, _) -> x) in
+      
     let env_prp = map_to_assoc env.env_prp
-      (fun (p, ar) -> p, of_arity ar) in
+    (fun (p, ar) -> p, of_arity ar) in
     
     let env_fun = map_to_assoc env.env_fun
-      (fun (f, sig_) -> f, of_sig_ sig_) in
+    (fun (f, sig_) -> f, of_sig_ sig_) in
+    
+    let env_sort_name = map_to_assoc env.env_sort_name
+      identity in
+    
+    let env_prp_name = map_to_assoc env.env_prp_name
+      identity in
+
+    let env_fun_name = map_to_assoc env.env_prp_name
+      identity in
 
     let env_var = map_to_assoc env.env_var
       (fun (x, bodies) -> x, List.map of_bvar bodies) in
-
-    let env_tvar = map_to_assoc env.env_tvar
-      (fun (x, aliases) -> x, List.map (Option.map of_type_) aliases) in
-
+    
     let env_handles = bimap_to_assoc env.env_handles
       identity in
     
-    { env_prp; env_fun; env_var; env_tvar; env_handles }
+    { env_sort; env_prp; env_fun;
+      env_sort_name; env_prp_name; env_fun_name;
+      env_var; env_handles }
 
 (* -------------------------------------------------------------------- *)
   (** From API to engine *)
@@ -2223,14 +2248,25 @@ module Translate = struct
     let env_fun = assoc_to_map env.env_fun
       (fun (f, sig_) -> f, to_sig_ sig_) in
 
-    let env_var = assoc_to_map env.env_var
-      (fun (x, bodies) -> x, List.map to_bvar bodies) in
-
-    let env_tvar = assoc_to_map env.env_tvar
-      (fun (x, aliases) -> x, List.map (Option.map to_type_) aliases) in
-
-    let env_handles = assoc_to_bimap env.env_handles
+    let env_sort_name = assoc_to_map env.env_sort_name
       identity in
     
-    { env_prp; env_fun; env_var; env_tvar; env_evar = Map.empty; env_handles }
+    let env_prp_name = assoc_to_map env.env_prp_name
+      identity in
+
+    let env_fun_name = assoc_to_map env.env_fun_name
+      identity in
+
+    let env_tvar = assoc_to_map env.env_sort
+      (fun x -> x, [None]) in
+
+    let env_var = assoc_to_map env.env_var
+      (fun (x, bodies) -> x, List.map to_bvar bodies) in
+    
+    let env_handles = assoc_to_bimap env.env_handles
+      identity in
+
+    { env_prp; env_fun;
+      env_sort_name; env_prp_name; env_fun_name;
+      env_tvar; env_var; env_evar = Map.empty; env_handles }
 end

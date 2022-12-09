@@ -53,11 +53,14 @@ type term = [F of form | E of expr]
 type bvar = (type_ * expr option)
 
 type env = {
-  env_prp     : (name * arity            ) list;
-  env_fun     : (name * sig_             ) list;
-  env_var     : (name * bvar  list       ) list;
-  env_tvar    : (name * type_ option list) list;
-  env_handles : (vname * uid             ) list;
+  env_sort      : name                       list;
+  env_prp       : (name * arity            ) list;
+  env_fun       : (name * sig_             ) list;
+  env_sort_name : (name * name             ) list;
+  env_prp_name  : (name * name             ) list;
+  env_fun_name  : (name * name             ) list;
+  env_var       : (name * bvar  list       ) list;
+  env_handles   : (vname * uid             ) list;
 }
 
 type lenv = (name * type_) list

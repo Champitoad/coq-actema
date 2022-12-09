@@ -4,6 +4,8 @@ exception LemmaNotFound of string
 
 val empty : Fo.env -> t
 
+val env : t -> Fo.env
+
 val find : t -> string -> Fo.form
 
 val add : t -> name:string -> form:string -> t

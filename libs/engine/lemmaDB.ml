@@ -8,6 +8,9 @@ type t = {
 let empty env =
   { db_env = env; db_map = Map.empty }
 
+let env db =
+  db.db_env
+
 exception LemmaNotFound of string
 
 let find db name =
