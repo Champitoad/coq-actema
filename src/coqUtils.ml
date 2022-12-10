@@ -165,11 +165,16 @@ module Trm = struct
   let succ_kname =
     kername ["Coq"; "Init"; "Datatypes"] "S"
   
-  let add_kname =
-    kername ["Coq"; "Init"; "Nat"] "add"
+  let add_modpaths = [
+    ["Coq"; "Init"; "Nat"];
+    ["Coq"; "Arith"; "PeanoNat"; "Nat"];
+  ]
+  let add_knames =
+    List.map (fun mp -> kername mp "add") add_modpaths
   
-  let mul_kname =
-    kername ["Coq"; "Init"; "Nat"] "mul"
+  let mul_modpaths = add_modpaths
+  let mul_knames =
+    List.map (fun mp -> kername mp "mul") mul_modpaths
   
   let app_kname =
     kername ["Coq"; "Init"; "Datatypes"] "app"
@@ -255,11 +260,11 @@ module Trm = struct
     let succ = mkConstruct succ_name in
     mkApp (succ, [|n|])
   
-  let add_name : Names.Constant.t =
-    Names.Constant.make1 add_kname
+  let add_names : Names.Constant.t list =
+    List.map Names.Constant.make1 add_knames
 
-  let mul_name : Names.Constant.t =
-    Names.Constant.make1 mul_kname
+  let mul_names : Names.Constant.t list =
+    List.map Names.Constant.make1 mul_knames
 
   let app_name : Names.Constant.t =
     Names.Constant.make1 app_kname

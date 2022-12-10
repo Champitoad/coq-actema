@@ -59,9 +59,9 @@ let peano : FOSign.t =
       add (Ind nat_name) "nat" in
     let s_funcs = empty |>
       add (Ctr zero_name) "Z" |>
-      add (Ctr succ_name) "S" |>
-      add (Cst add_name) "add" |>
-      add (Cst mul_name) "mult" in
+      add (Ctr succ_name) "S" |> fun m ->
+      List.fold_left (fun m name -> add (Cst name) "add" m) m Trm.add_names |> fun m ->
+      List.fold_left (fun m name -> add (Cst name) "mult" m) m Trm.mul_names in
     let s_preds = empty in
     { s_sorts; s_funcs; s_preds } in
   let typing =
@@ -359,25 +359,37 @@ module Export = struct
   type varenv = Logic_t.bvar list NameMap.t
   type varsign = varenv * FOSign.t
 
+  let shortname (fullname : string) : string =
+    fullname |> String.split_on_char '.' |> List.rev |> List.hd
+
   let env_of_varsign ((venv, sign) : varsign) : Logic_t.env =
     let open FOSign in
-    let env_tvar =
-      SortSymbol.values sign.symbols.s_sorts |>
-      List.map (fun name -> (name, [None])) in
+
+    let env_sort =
+      SortSymbol.values sign.symbols.s_sorts in
+    let env_sort_name =
+      List.(combine env_sort (map shortname env_sort)) in
+
+    let func_names = SortSymbol.values sign.symbols.s_funcs in
     let env_fun =
       ("dummy", ([], `TVar ("unit", 0))) ::
-      begin
-        SortSymbol.values sign.symbols.s_funcs |>
-        List.map (fun f -> f, NameMap.find f sign.typing.t_funcs)
-      end in
+      List.map (fun f -> f, NameMap.find f sign.typing.t_funcs) func_names in
+    let env_fun_name =
+      List.(combine func_names (map shortname func_names)) in
+
+    let pred_names = SortSymbol.values sign.symbols.s_preds in
     let env_prp =
       ("dummy", []) ::
-      begin
-        SortSymbol.values sign.symbols.s_preds |>
-        List.map (fun p -> p, NameMap.find p sign.typing.t_preds)
-      end in
+      List.map (fun p -> p, NameMap.find p sign.typing.t_preds) pred_names in
+    let env_prp_name =
+      List.(combine pred_names (map shortname pred_names)) in
+
     let env_var = NameMap.bindings venv in
-    { env_tvar; env_fun; env_prp; env_var; env_handles = [] }
+
+    let env_handles = [] in
+
+    { env_sort; env_sort_name; env_fun; env_fun_name; env_prp; env_prp_name;
+      env_var; env_handles }
   
   let env ({ env = coq_env; evd; sign } as e : destenv) : Fo_t.env * FOSign.t = 
     let open FOSign in
@@ -436,7 +448,10 @@ module Export = struct
     let venv, sign = Environ.fold_inductives begin fun mi bodies vsign ->
         let _, vsign = Array.fold_left begin fun (i, vsign) body ->
             let id = mi, i in
-            let name = Names.Id.to_string body.Declarations.mind_typename in
+            let modpath = Names.(Ind.modpath id |> ModPath.to_string) in
+            let name =
+              let name = Names.Id.to_string body.Declarations.mind_typename in
+              Printf.sprintf "%s.%s" modpath name in
             let ty =
               match body.Declarations.mind_arity with
               | RegularArity ar -> EConstr.of_constr ar.mind_user_arity
@@ -453,12 +468,13 @@ module Export = struct
        constants *)
     let venv, sign = Environ.fold_constants begin fun c _ vsign ->
         let t = EConstr.mkConst c in
-        let name = name_of_const evd t in
+        (* let name = name_of_const evd t in *)
+        let name = c |> Names.Constant.to_string in
         let ty =
           Environ.constant_type_in coq_env (Univ.in_punivs c) |>
           EConstr.of_constr in
         vsign |> begin
-          add_sort (c |> Names.Constant.to_string) (Cst c) ty >>?
+          add_sort name (Cst c) ty >>?
           add_default t ty >>?
           add_func name (Cst c) ty >>?
           add_pred name (Cst c) ty >>?
@@ -485,14 +501,14 @@ module Export = struct
 
     env_of_varsign (venv, sign), sign
 
-  let hyps ({ env = coq_env; evd; sign } : destenv) : Logic_t.hyp list * hidmap =
+  let hyps ({ env = coq_env; evd; _} as destenv : destenv) : Logic_t.hyp list * hidmap =
     let fresh = Uid.fresh () in
     Environ.fold_named_context begin fun _ decl (hyps, hm) ->
       let name = Context.Named.Declaration.get_id decl in
       let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
       if is_prop coq_env evd ty then
         let h_id = fresh () in
-        let h_form = dest_form ({ env = coq_env; evd; sign }, ty) in
+        let h_form = dest_form (destenv, ty) in
         let hyp = Logic_t.{ h_id; h_form } in
         (hyp :: hyps, UidMap.add h_id name hm)
       else
@@ -536,7 +552,10 @@ module Import = struct
     | Var x -> EConstr.mkVar x
   
   let sort_index (sign : FOSign.t) (s : string) : int =
-    let sorts = sign.symbols.s_sorts |> FOSign.SortSymbol.values in
+    let sorts =
+      sign.defaults |> FOSign.SymbolMap.bindings |>
+      List.split |> fst |>
+      List.map (fun sy -> FOSign.SortSymbol.find sy sign.symbols.s_sorts) in
     List.nth_index 0 s sorts
   
   let infer_sort (env : Logic_t.env) (e : Logic_t.expr) : string =
@@ -617,7 +636,7 @@ module Import = struct
     match e with
     | `EVar (x, i) ->
         if LEnv.exists lenv (x, i) then begin
-          let s = sort_index sign (infer_sort (Vars.push_lenv env lenv) e) in
+          let s = sort_index sign (infer_sort (Utils.Vars.push_lenv env lenv) e) in
           let index : int =
             List.(lenv |> split |> fst |> nth_index i x) in
           let env_index = if side = 0 then 2 else 1 in

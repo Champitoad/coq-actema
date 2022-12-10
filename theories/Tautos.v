@@ -16,7 +16,7 @@ Lemma add_comm :
 Proof.
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
-actema.
+actema_force.
 Qed.
 
 Fixpoint le (n:nat)(m:nat) :=

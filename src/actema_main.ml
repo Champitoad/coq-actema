@@ -131,6 +131,7 @@ let export_goals () : Logic_t.goals tactic =
   Stdlib.List.fold_right begin fun coq_goal_tac acc ->
       coq_goal_tac >>= fun coq_goal ->
       let _, goal, _ = Export.goal sign coq_goal in
+      Log.str (Utils.string_of_goal goal);
       acc >>= fun goals ->
       return (goal :: goals)
   end coq_goals_tacs (return [])

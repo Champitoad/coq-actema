@@ -1,13 +1,20 @@
 From Actema Require Import Loader.
 
-Goal forall n m,
-( exists p, m=n+p ) ->
-( exists p, n+p = m).
-
-intros n m [p H].
-
+Parameter f : nat -> nat -> nat.
+Lemma test : (forall x y, f x y = 0) ->
+forall x y, 99 = f x y -> True.
+intros h1 x y h2.
 actema.
-Qed.
+Abort.
+
+Locate mul.
+
+Goal forall n m,
+(exists p, m = n+p) ->
+(exists p, n+p = m).
+intros n m [p H].
+actema.
+Abort.
 
 Lemma test A B : (A /\ B) -> A /\ B.
 Proof.
