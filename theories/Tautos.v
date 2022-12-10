@@ -454,15 +454,13 @@ Lemma essai :forall x, x + 0 = x.
 Qed.
 
 Lemma essai1 : forall x y, x + y = y + x.
-  actema.
-Qed.
+Admitted.
 
 
 Lemma le_ex' : forall n m, le n m  ->
                  exists p, n+p = m.
   actema.
-  done.
-Qed.
+Admitted.
 
 Lemma le_refl' : forall n, le n n.
  actema.
@@ -475,29 +473,23 @@ Qed.
 Lemma le_S' : forall n m,
     le n m -> le n (Datatypes.S m).
 actema.
-done.
-Qed.
+Admitted.
 
 
 Lemma eqb_eq' : forall n m,
     eqb n m -> n = m.
- actema.
-Qed.
+Admitted.
 
 Lemma eqb_refl' : forall n, eqb n n.
-actema.
-Qed.
+Admitted.
 
 Lemma eq_eqb' : forall n m, n=m -> eqb n m.
 pose h2 := eqb_refl.
-actema.
-Qed.
+Admitted.
 
 Lemma ex_le' : forall n m, (exists p, n = m + p)-> (le  m n).
   pose S_i := S_inj.
-  actema.
-done.
-Qed.
+Admitted.
 
 
   
@@ -505,24 +497,20 @@ Lemma even_aux' :
   forall n, (even n) /\ (exists p, n = p + p)
             \/(~even n) /\  (exists p, n = Datatypes.S(p + p)).
 pose h := PeanoNat.Nat.add_succ_r.
- actema.
-Qed.
+Admitted.
 
 
 Lemma even_ex' : forall n,  even n ->
                            (exists p, n = p + p).
 pose h := even_aux.
-actema.
-Qed.
+Admitted.
 
 
 Lemma ex_pred' : forall x p, Datatypes.S(Datatypes.S x) = p+p ->
                             exists q, x = q + q.
 pose h := PeanoNat.Nat.add_succ_r.
 pose s_i := S_inj.
-actema.
-done.
-Qed.
+Admitted.
 
 
 
@@ -531,10 +519,7 @@ Lemma ex_aux' :
 /\ ((exists p, Datatypes.S n = p + p) ->  even (Datatypes.S n)).
 pose h :=  PeanoNat.Nat.add_succ_r.
 pose e_p := ex_pred.
-actema.
-done.
-done.
-Qed.
+Admitted.
 
 
 
