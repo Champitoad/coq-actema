@@ -53,6 +53,10 @@ export default {
             this.$refs.proofCanvas.QED();
             this.setProofMode("draft");
         });
+        window.ipcRenderer.on("error", (_, msg) => {
+            console.log(msg);
+            this.$refs.proofCanvas.showErrorMessage(msg);
+        });
     },
     updated() {
     },

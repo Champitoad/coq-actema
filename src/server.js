@@ -60,6 +60,10 @@ export default {
             res.writeHead(rcode, { 'Content-Type': 'text/plain' });
             res.end('');
             break;
+          case "/error":
+            win.webContents.send('error', data);
+            res.end('');
+            break;
           default:
             rcode = 501;
             body = req.url;
