@@ -2262,9 +2262,13 @@ module Translate = struct
 
     let env_var = assoc_to_map env.env_var
       (fun (x, bodies) -> x, List.map to_bvar bodies) in
-    
-    let env_handles = assoc_to_bimap env.env_handles
-      identity in
+
+    let env_handles =
+      Map.foldi begin fun x bodies env_handles ->
+        let pushx env body = Vars.push env (x, body) in
+        let empty = { Env.empty with env_handles } in
+        (List.fold_left pushx empty bodies).env_handles
+      end env_var BiMap.empty in
 
     { env_prp; env_fun;
       env_sort_name; env_prp_name; env_fun_name;
