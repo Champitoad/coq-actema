@@ -470,7 +470,7 @@ end = struct
       | FPred (name, args) ->
           let args = List.map (for_expr env) args in
           let args = String.join ", " args in
-          UTF8.of_latin1 name ^ (pr args)
+          UTF8.of_latin1 (Map.find name env.env_prp_name) ^ (pr args)
 
       | FBind (bd, x, ty, f) ->
           let bd = match bd with
@@ -596,12 +596,12 @@ end = struct
             (for_expr env e2)
 
       | FPred (name, []) ->
-          UTF8.of_latin1 name
+          UTF8.of_latin1 (Map.find name env.env_prp_name)
 
       | FPred (name, args) ->
           let args = List.map (for_expr env) args in
           let args = String.join ", " args in
-          UTF8.of_latin1 name ^ (pr args)
+          UTF8.of_latin1 (Map.find name env.env_prp_name) ^ (pr args)
 
       | FBind (bd, x, ty, f) ->
           let bd = match bd with
@@ -782,7 +782,7 @@ end = struct
         | FPred (name, args) ->
             let args = List.mapi (fun i e -> for_expr ?id env (i :: p) e) args in
             let aout =
-                [[span [Xml.pcdata (UTF8.of_latin1 name)]]]
+                [[span [Xml.pcdata (UTF8.of_latin1 (Map.find name env.env_prp_name))]]]
               @ [pr (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
 
             in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
@@ -970,7 +970,7 @@ end = struct
 
         | FPred (name, args) ->
             let args = List.mapi (fun i e -> for_expr ?id env (i :: p) e) args in
-               [mi (UTF8.of_latin1 name)]
+               [mi (UTF8.of_latin1 (Map.find name env.env_prp_name))]
              @ [pr (row (List.flatten (List.join [mo ","] args)))]
 
         | FBind (bd, x, ty, f) ->
