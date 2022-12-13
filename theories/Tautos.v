@@ -39,7 +39,9 @@ Lemma le_ex : forall n m, le n m  ->
   elim => [|n hn][|m]//=.
   actema. actema.
   (* @cons not unfoldable when DnD on [le n m]?? *)
+  Set Ltac Profiling.
   actema.
+  Show Ltac Profile.
 Qed.
 
 Lemma le_refl : forall n, le n n.
