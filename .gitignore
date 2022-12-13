@@ -54,3 +54,5 @@ src/fo_b.ml*
 src/logic_t.ml*
 src/logic_b.ml*
 src/utils.ml*
+
+actema.proofs
