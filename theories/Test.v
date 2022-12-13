@@ -7,8 +7,6 @@ intros h1 x y h2.
 actema.
 Abort.
 
-Locate mul.
-
 Goal forall n m,
 (exists p, m = n+p) ->
 (exists p, n+p = m).

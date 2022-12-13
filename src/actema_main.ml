@@ -26,6 +26,14 @@ type aident = Logic_t.aident
 
 type proof = (int * Logic_t.action) list
 
+let string_of_aident (name, (hyps, concl) : aident) : string =
+  let hyps = hyps |>
+    Extlib.List.to_string begin fun Logic_t.{ h_form; _ } ->
+      Utils.string_of_form h_form
+    end in
+  let concl = concl |> Utils.string_of_form in
+  Printf.sprintf "#%s%s%s" name hyps concl
+
 let string_of_proof (prf : proof) : string =
   Extlib.List.to_string ~sep:"\n" ~left:"PROOF\n" ~right:"\nQED"
   begin fun (idx, action) ->
@@ -99,6 +107,8 @@ let load_proof (id : aident) : proof option =
       close_in ic
     end;
     let prf = List.rev !prf in
+    Log.str (string_of_aident id);
+    Log.str (string_of_proof prf);
     Some prf
   end
 
@@ -131,7 +141,7 @@ let export_goals () : Logic_t.goals tactic =
   Stdlib.List.fold_right begin fun coq_goal_tac acc ->
       coq_goal_tac >>= fun coq_goal ->
       let _, goal, _ = Export.goal sign coq_goal in
-      Log.str (Utils.string_of_goal goal);
+      (* Log.str (Utils.string_of_goal goal); *)
       acc >>= fun goals ->
       return (goal :: goals)
   end coq_goals_tacs (return [])
@@ -167,6 +177,7 @@ let interactive_proof () : proof tactic =
               CErrors.print_no_report exn |>
               Pp.string_of_ppcmds in
             Lwt_main.run (Client.error msg);
+            !hist.before <- Stdlib.List.tl !hist.before;
             aux ()
       end in
 

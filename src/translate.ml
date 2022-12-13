@@ -924,11 +924,11 @@ module Import = struct
                     | `F _ ->
                         fsub @ [i], esub
                     | `E _ ->
-                        let i =
+                        (* let i =
                           begin match t with
                           | `F (`FPred ("_EQ", _)) -> i + 1
                           | _ -> i
-                          end in
+                          end in *)
                         fsub, esub @ [i]
                     end in
                   aux fsub esub subt sub
@@ -1113,12 +1113,14 @@ module Import = struct
           begin match tgt.ctxt.kind with
           | `Hyp ->
               let hyp = Utils.get_hyp goal tgt.ctxt.handle in
-              let p = tgt.sub |> fix_sub_eq (`F hyp.h_form) |> Trm.natlist in
+              (* let p = tgt.sub |> fix_sub_eq (`F hyp.h_form) |> Trm.natlist in *)
+              let p = tgt.sub |> Trm.natlist in
               let id = UidMap.find tgt.ctxt.handle hm in
               let h = EConstr.mkVar id in
               tac_name ^ "_hyp", [h; p]
           | `Concl ->
-              let p = tgt.sub |> fix_sub_eq (`F goal.g_concl) |> Trm.natlist in
+              (* let p = tgt.sub |> fix_sub_eq (`F goal.g_concl) |> Trm.natlist in *)
+              let p = tgt.sub |> Trm.natlist in
               tac_name, [p]
           | _ ->
               raise (InvalidPath tgt)

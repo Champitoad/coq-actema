@@ -16,8 +16,7 @@ Lemma add_comm :
 Proof.
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
-actema_force.
-Qed.
+Admitted.
 
 Fixpoint le (n:nat)(m:nat) :=
   match n,m with
@@ -37,7 +36,9 @@ Require Import ssreflect.
 
 Lemma le_ex : forall n m, le n m  ->
                  exists p, n+p = m.
-  elim => [|n hn][|m]//=;
+  elim => [|n hn][|m]//=.
+  actema. actema.
+  (* @cons not unfoldable when DnD on [le n m]?? *)
   actema.
 Qed.
 
