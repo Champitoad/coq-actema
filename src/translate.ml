@@ -684,8 +684,6 @@ module Import = struct
         List.map begin fun (side, w) ->
           Option.map begin fun (le1, le2, e) ->
             let lenv = if side = 0 then le2 else le1 in
-            Log.str (List.to_string (fun (x, _) -> x) le1);
-            Log.str (List.to_string (fun (x, _) -> x) le2);
             let ty = infer_sort (Utils.Vars.push_lenv env lenv) e in
             let s = nat_of_int (sort_index sign ty) in
             let e =
@@ -935,7 +933,7 @@ module Import = struct
                   log hp2';
                   log t;
                   log i in
-                log_trace ();
+                (* log_trace (); *)
 
                 let forw = kname "rew_dnd_hyp" in
                 calltac forw [ts; h1; h2; h3; hp1; hp2; hp2'; t; i]
@@ -954,7 +952,7 @@ module Import = struct
                   log hp2;
                   log t;
                   log i in
-                log_trace ();
+                (* log_trace (); *)
 
                 let forw = kname "forward" in
                 calltac forw [ts; h1; h2; h3; hp1; hp2; t; i]
@@ -990,7 +988,7 @@ module Import = struct
                   log gp;
                   log t;
                   log i; in
-                log_trace ();
+                (* log_trace (); *)
 
                 let back = kname "rew_dnd" in
                 calltac back [ts; h; hp; gp'; gp; t; i]
@@ -1007,7 +1005,7 @@ module Import = struct
                   log gp;
                   log t;
                   log i; in
-                log_trace ();
+                (* log_trace (); *)
 
                 let back = kname "back" in
                 calltac back [ts; h; hp; gp; t; i]
