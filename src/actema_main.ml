@@ -168,13 +168,13 @@ let interactive_proof () : proof tactic =
       let cont =
         compile_action (idx, a) >>= fun _ ->
         aux () in
-      tclOR cont begin fun (exn, _) ->
+      tclOR cont begin fun (exn, _ as iexn) ->
         match exn with
         | ApplyUndo ->
             aux ()
         | _ ->
             let msg =
-              CErrors.print_no_report exn |>
+              CErrors.iprint_no_report iexn |>
               Pp.string_of_ppcmds in
             Lwt_main.run (Client.error msg);
             !hist.before <- Stdlib.List.tl !hist.before;

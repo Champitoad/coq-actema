@@ -985,9 +985,9 @@ module Import = struct
                   log h1;
                   log h2;
                   log h3;
-                  log hp1;
+                  (* log hp1;
                   log hp2;
-                  log hp2';
+                  log hp2'; *)
                   log t;
                   log i in
                 log_trace ();

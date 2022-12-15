@@ -74,6 +74,8 @@ Fixpoint eqb n m :=
 
 Lemma eqb_eq : forall n m,
     eqb n m -> n = m.
+Set Debug "backtrace".
+Set Ltac Backtrace.
 elim => [|n hn][|m]//=; actema.
 Qed.
 
