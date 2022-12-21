@@ -16,7 +16,7 @@ Lemma add_comm :
 Proof.
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
-  induction n; induction m; actema.
+  actema.
 Qed.
 
 Fixpoint le (n:nat)(m:nat) :=
@@ -43,6 +43,7 @@ Qed.
 
 Lemma le_refl : forall n, le n n.
 induction n; actema.
+
 Qed.
 
 Lemma le_0 : forall n, le 0 n.

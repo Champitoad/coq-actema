@@ -23,3 +23,29 @@ Lemma dnd1 :
 Proof.
   actema.
 Abort.
+
+Lemma curry_dnd :
+  ((A /\ B) -> C) -> (A -> B -> C) -> A -> B -> C \/ D.
+Proof.
+  intros.
+  actema.
+  actema.
+Restart.
+actema.
+Qed.
+
+Print curry_dnd.
+
+Lemma inst_ex (x : nat) :
+  P x -> ∃ y, P y.
+Proof.
+  intros.
+  actema.
+Qed.
+
+Lemma apply_ex :
+  (∀ x, P x -> Q x) -> ∃ y, Q y.
+Proof.
+  actema.
+Qed.
+
