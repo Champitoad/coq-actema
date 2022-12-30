@@ -16,7 +16,12 @@ Lemma add_comm :
 Proof.
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
-Admitted.
+  actema.
+Qed.
+
+Inductive ile (n:nat) : nat -> Prop :=
+  | ilr :  ile n n
+  | ils : forall m, ile n m -> ile n (S m).
 
 Fixpoint le (n:nat)(m:nat) :=
   match n,m with
@@ -24,6 +29,7 @@ Fixpoint le (n:nat)(m:nat) :=
   | (S _) , 0  => False
   | S n, S m => le n m
   end.
+
 
 Fixpoint moins n m :=
   match m,n with
@@ -35,30 +41,24 @@ Fixpoint moins n m :=
 Require Import ssreflect.
 
 Lemma le_ex : forall n m, le n m  ->
-                 exists p, n+p = m.
-  elim => [|n hn][|m]//=.
-  actema. actema.
-  (* @cons not unfoldable when DnD on [le n m]?? *)
-  Set Ltac Profiling.
-  actema.
-  Show Ltac Profile.
-Qed.
+                          exists p, n+p = m.
+actema.
+Qed.  
 
 Lemma le_refl : forall n, le n n.
-induction n; actema.
+ actema.
 Qed.
 
 Lemma le_0 : forall n, le 0 n.
 actema.
 Qed.
-  
+
 Lemma le_S : forall n m,
-    le n m -> le n (S m).
-  elim => [| n hn][|m]; try done.
+       le n m -> le n (S m).
 actema.
 Qed.
 
-(* le back force un simpl sur le but *)
+
 
 Fixpoint even n := match n with
                    | 0 => True
@@ -74,13 +74,11 @@ Fixpoint eqb n m :=
 
 Lemma eqb_eq : forall n m,
     eqb n m -> n = m.
-Set Debug "backtrace".
-Set Ltac Backtrace.
-elim => [|n hn][|m]//=; actema.
+actema.
 Qed.
 
+
 Lemma eqb_refl : forall n, eqb n n.
-elim => [//|n hn].
 actema.
 Qed.
 
@@ -95,18 +93,61 @@ pose h2 := eq_eqb.
 actema.
 Qed.
 
-Lemma ex_le : forall n m, (exists p, n = m + p)-> (le  m n).
-pose S_i := S_inj.
-elim => [| n hn][|m]; actema.
+
+Definition lee n m := ile n m.
+
+Lemma ile_r : forall n m,  lee n m -> le n m.
+  pose h1 := le_refl.
+  pose h2 := le_S.
+  actema.
+Qed.
+Search lee.
+
+Lemma lee0 : forall n, lee 0 n.
+have h1 : (forall n : nat, lee n n) by constructor.
+have h2 : (forall n m, lee n m -> lee n (S m))
+  by constructor.
+actema.
+Qed.
+
+Lemma leeSS : forall n m, lee n m -> lee (S n)(S m).
+have h1 : (forall n : nat, lee n n) by constructor.
+have h2 : (forall n m, lee n m -> lee n (S m))
+  by constructor.
+actema.
+Qed.
+
+Lemma rle_i : forall n m, le n m -> lee  n m.
+have h1 : (forall n : nat, lee n n) by constructor.
+have h2 : (forall n m, lee n m -> lee n (S m))
+  by constructor.
+pose h3 := lee0.
+pose h4 := leeSS.
+
+actema.
+Qed.
+
+Definition pl n m := n + m.
+
+Lemma plS x y : pl (S x) y = S (pl x y).
 done.
 Qed.
+
+Lemma ex_le : forall n m, (exists p, n = pl m p)-> (le  m n).
+pose S_i := S_inj.
+pose pls' := plS.
+induction n; induction m; simpl; try done.
+ by case.
+actema.
+Qed.
+(* ca ne marche pas avec rew_dnd_hyp *)
 
   
 Lemma even_aux :
   forall n, (even n) /\ (exists p, n = p + p)
             \/(~even n) /\  (exists p, n = S(p + p)).
 pose h := PeanoNat.Nat.add_succ_r.
-induction n; actema.
+ actema.
 Qed.
 
 
@@ -116,12 +157,42 @@ pose h := even_aux.
 actema.
 Qed.
 
+
 Lemma ex_pred : forall x p, S(S x) = p+p ->
                             exists q, x = q + q.
 move => x [//=|p].
 pose h := PeanoNat.Nat.add_succ_r.
 pose s_i := S_inj.
 actema.
+(* A la place de divers "not found" *)
+rew_dnd_hyp test h H hh
+            (cons false (cons false ( nil)))
+            (@nil bool)(cons 1 (cons 0 nil))
+             (cons false (cons false (cons true nil)))
+             (cons (ic p)(cons (ic p) nil)).
+back test s_i
+     (cons false (cons false (cons true nil)))
+     (@nil bool)
+     (cons false (cons false (cons false nil)))
+     (cons (ic ( x)) (cons (ic ( (p+p))) nil)).
+back test s_i
+     (cons false (cons false (cons true nil)))
+     (@nil bool)
+     (cons false (cons false (cons false nil)))
+     (cons (ic (S x)) (cons (ic (S (p+p))) nil)).
+
+forward test s_i hh hhh
+        (cons false (cons false (cons false nil)))
+        (@nil bool)
+        (cons false (cons false (cons false nil)))
+        (cons (ic (S x)) (cons (ic (S (p+p))) nil)).
+forward test s_i hhh hhhh
+        (cons false (cons false (cons false nil)))
+        (@nil bool)
+        (cons false (cons false (cons false nil)))
+        (cons (ic ( x)) (cons (ic ( (p+p))) nil)).
+
+done.
 Qed.
 
 
@@ -130,13 +201,13 @@ Lemma ex_aux :
 /\ ((exists p, S n = p + p) ->  even (S n)).
 pose h :=  PeanoNat.Nat.add_succ_r.
 pose e_p := ex_pred.
-induction n.
 actema.
-move: H; case: p; first done.
+induction p.
+done.
+by rewrite h in H.
+
 actema.
 (* manque bouton 'done' *)
-done.
-actema.
 Qed.
 
 Lemma ex_even :
@@ -150,11 +221,8 @@ Lemma le_minus :
               (moins n m) + m = n.
 pose h :=  PeanoNat.Nat.add_succ_r.
   pose proof PeanoNat.Nat.add_0_r.
-induction m; induction n; try done.
-simpl; intro hh.
 actema.
 Qed.
-
 
 
 (** * Kaustuv's challenge *)
@@ -180,12 +248,14 @@ Proof.
   actema.
 Qed.
 
+
+(* bug export 
 Lemma ex_elim :
   (exists x, P x) -> (forall y, P y -> C) -> C.
 Proof.
   intros.
-  actema.
-Qed.
+  actema_force.
+Qed. *)
 
 (** * Forall *)
 
@@ -221,13 +291,14 @@ Proof.
   actema.
 Qed.
 
+(* re-bug 
 Lemma bw :
   A -> (~ exists n : nat, A) -> False.
 Proof.
   intros.
   actema.
   by exists 0.
-Qed.
+Qed. 
 
 (** * Implication *)
 
@@ -424,6 +495,14 @@ Qed.
 Lemma efq : False -> A.
 Proof.
   actema.
+Qed. *)
+
+
+(* algebra *)
+Parameter f g : nat -> nat.
+Lemma inv_d : (forall y, f (g y) = y) -> (forall x, exists y,  x = g y) ->
+              forall x,  g (f x) = x.
+actema.
 Qed.
 
 Parameter Rich : nat -> Prop.
@@ -439,13 +518,6 @@ exists 0.
 intros; exact (mother 0).
 Defined. *)
 
-(* algebra *)
-Parameter f g : nat -> nat.
-Lemma inv_d : (forall y, f (g y) = y) -> (forall x, exists y,  x = g y) ->
-              forall x,  g (f x) = x.
-actema.
-Qed.
-  
 Lemma eduk1 :
   (forall x : nat, ~Rich(x) -> Rich(mother(x))) ->
   (forall x : nat,  ~Rich(mother(mother(x))) \/ ~Rich(x))->
@@ -461,84 +533,6 @@ intros e1 e2; apply e2; exact n.
 Defined.
 
 
-Lemma le_ex' : forall n m, le n m  ->
-                 exists p, n+p = m.
-  actema.
-Qed.
-
-Lemma le_refl' : forall n, le n n.
- actema.
-Qed.
-
-Lemma le_0' : forall n, le 0 n.
-actema.
-Qed.
-  Print nat.
-Lemma le_S' : forall n m,
-    le n m -> le n (Datatypes.S m).
-actema.
-Qed.
-
-
-Lemma eqb_eq' : forall n m,
-    eqb n m -> n = m.
- actema.
-Qed.
-
-Lemma eqb_refl' : forall n, eqb n n.
-actema.
-Qed.
-
-Lemma eq_eqb' : forall n m, n=m -> eqb n m.
-pose h2 := eqb_refl.
-actema.
-Qed.
-
-Lemma ex_le' : forall n m, (exists p, n = m + p)-> (le  m n).
-  pose S_i := S_inj.
-  actema.
-done.
-  actema.
-Qed.
-
-
-  
-Lemma even_aux' :
-  forall n, (even n) /\ (exists p, n = p + p)
-            \/(~even n) /\  (exists p, n = Datatypes.S(p + p)).
-pose h := PeanoNat.Nat.add_succ_r.
- actema.
-Qed.
-
-
-Lemma even_ex' : forall n,  even n ->
-                           (exists p, n = p + p).
-pose h := even_aux.
-actema.
-Qed.
-
-
-Lemma ex_pred' : forall x p, Datatypes.S(Datatypes.S x) = p+p ->
-                            exists q, x = q + q.
-pose h := PeanoNat.Nat.add_succ_r.
-pose s_i := S_inj.
-actema.
-done.
-Qed.
-
-
-
-Lemma ex_aux' :
-  forall n, ((exists p, n = p + p) ->  even n)
-/\ ((exists p, Datatypes.S n = p + p) ->  even (Datatypes.S n)).
-pose h :=  PeanoNat.Nat.add_succ_r.
-pose e_p := ex_pred.
-actema.
-done.
-actema.
-done.
-actema.
-Qed.
 
 Lemma div :
   forall n, exists p, (n = p+p \/ n = Datatypes.S(p+p)).

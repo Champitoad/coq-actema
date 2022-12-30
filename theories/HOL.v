@@ -2437,14 +2437,14 @@ Ltac rew_dnd ts' h hp gp gp' t i :=
     end in 
   apply (b3_corr ts t i  (@nil nat) tt (@nil nat) tt
                  ec gc);
-  [idtac| try assumption];
-  (apply trex_norm_apply ; [try split; try reflexivity|idtac]);
+  [idtac| assumption];
+  (apply trex_norm_apply ; [split; try reflexivity|idtac]);
   clear h';
  rewrite ?/ts /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert  /defs /appist ?trs_corr;
      rewrite  /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert /cT /cB  /appist /sort /trad1 /nthc /list_rect /sort /sl;
   rewrite ?trs_corr /trs ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym; 
-  simplify_goal; clear ts;
-  rewrite  /sort /sl. 
+  simplify_goal; 
+  rewrite  /sort /sl; clear ts.
 
   
   
@@ -2828,16 +2828,57 @@ Ltac myinduction_r  p t :=
   end.
 
 
+Ltac definduction :=
+   match goal with
+   | |- forall x : _, _ =>
+       let nx := fresh x in
+       intro nx; induction nx
+   | _ => 
+       let arg := fresh "arg" in
+       intro arg; induction arg
+   end.
+
+
+Ltac ninduction n :=
+  match constr:(n) with
+  | 0 => definduction
+  | S ?m => intro; ninduction m
+  end.
+
+Ltac pinduction p :=
+  match p with
+  | nil => definduction
+  | cons _ ?p' => intro; pinduction p'
+  end.
+
+Ltac cdr l :=
+  match l with
+  | cons 0 ?l' => l'
+  end.
+
 Ltac myinduction p :=
   match goal with
   | |- ?g =>
       let g' := myinduction_r p g in
       induction g'
+  | _ => pinduction p
+  | _ => pinduction ltac:(cdr p)
   end.
-
 
 Ltac myinduction_hyp h p :=
   let g := type of h in
   let g' := myinduction_r p g in
   induction g'.
- 
+
+(*
+      let g' := myinduction_r p g in
+      match g' with
+      | forall n : _, _ => pinduction p
+      | _ -> _ => pinduction p
+      | _ => induction g'
+      end
+  end.
+*)
+
+
+
