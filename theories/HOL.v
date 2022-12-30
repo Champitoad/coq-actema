@@ -2395,14 +2395,15 @@ Ltac back ts' h0 hp gp t i :=
           rewrite ?/ts /trad /trad1 /b3 /o3_norm /coerce ;
           try exact tt];
           rewrite  ?/ts /trad /trad1 /appist /trl3 /tr3 /convert /cT /cB /trad /trad1 /nthc /list_rect /sort;
-         rewrite  /trs /sl  ?eqnqtdec_refl /eq_rect_r
+         rewrite  /trs /sl  /eqnqtdec /protect_term /nat_rec /nat_rect /seq.nth /nthc /list_rect /eq_sym
+                  ?eqnqtdec_refl /eq_rect_r
                  /eq_rect /Logic.eq_sym /eq_sym /trad1 /=;
           simplify_goal
         );
         try by apply I
   end;
    rewrite /sort /trad1 /seq.nth /nthc /list_rect /trs /eqnqtdec /nat_rec /nat_rect /eq_rect_r /eq_rect /eq_sym ;
-  clear h; clear ts.
+  try clear h; try clear ts.
 (*
 Parameter A : Prop.
 Print test.
@@ -2439,12 +2440,12 @@ Ltac rew_dnd ts' h hp gp gp' t i :=
                  ec gc);
   [idtac| assumption];
   (apply trex_norm_apply ; [split; try reflexivity|idtac]);
-  clear h';
+  try clear h';
  rewrite ?/ts /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert  /defs /appist ?trs_corr;
      rewrite  /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert /cT /cB  /appist /sort /trad1 /nthc /list_rect /sort /sl;
   rewrite ?trs_corr /trs ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym; 
   simplify_goal; 
-  rewrite  /sort /sl; clear ts.
+  rewrite  /sort /sl; try clear ts.
 
   
   
@@ -2485,7 +2486,7 @@ Abort.
 
 Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
   let tsc := eval compute in ts' in
-  let ts := fresh"t" in 
+  let ts := fresh "t" in 
   let i' := eval compute in i in
   let h1' := fresh "h1" in
   let h2' := fresh "h2" in
@@ -2503,10 +2504,10 @@ Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
     match type of h2' with
     | coerce _ (@nil nat) ?hc2 _  => hc2
     end in
+  clear h1' h2';
   move:
     (f3_corr ts  t i' (@nil nat) hc1 tt
              (@nil nat) hc2 tt h1 h2) => h4;
-  clear h1' h2';
   let oh4 :=
     match type of h4 with
     | (trl3 _ ?oh) => oh
@@ -2514,10 +2515,11 @@ Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
   cut (trex ts oh4); [idtac| by split];
   move => h5;
   move: (trex_norm_fapply ts oh4 h5 h4) => h3;
-  clear h5 h4;
+  try clear h5; try clear h4;
    rewrite ?/ts /coerce /sort /trl3 /tr3 /f3 /o3_norm /cT /cB in h3;
-   rewrite /convert /trs  ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym in h3;
-    rewrite /appist /trs /eqnqtdec /eq_rect_r /eq_rect /nat_rec/nat_rect /protect_term /eq_sym /f_equal /sort /sl in h3; clear ts;
+   rewrite /convert /trs ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym in h3;
+   rewrite /appist /trs /eqnqtdec /eq_rect_r /eq_rect /nat_rec /nat_rect /protect_term  /eq_ind_r /eq_ind /eq_sym /f_equal /sort /sl in h3;
+   try clear ts;
   simplify_hyp h3. 
 
       
@@ -2547,15 +2549,20 @@ Ltac forward ts' h1' h2' h3 hp1 hp2 t i :=
   rewrite /coerce  /= in h1;
   rewrite /coerce /= in h2;
   [ | simpl; try done; auto];
-  try clear h1 h2;
-  rewrite ?/ts /coerce /trl3 /f3 /o3_norm /= /cT /cB in h3;
-  rewrite /trs /sl /ts  ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym /trad1/trs/eq_rect_r in h3;
+  try clear h1; try clear h2;
+  rewrite ?/ts /coerce /trl3 /f3 /o3_norm  /trad /trad1 /appist /trl3 /tr3 /convert /cT /cB /trad /trad1 /seq.nth /nthc /list_rect /sort
+          /cT /cB in h3;
+  rewrite /trs /sl /ts  /trs /sl  /eqnqtdec /protect_term /nat_rec /nat_rect /seq.nth /nthc /list_rect /eq_sym
+                  ?eqnqtdec_refl /eq_rect_r
+                  /eq_rect /eq_ind_r /eq_ind /Logic.eq_sym /eq_sym /trad1
+                  ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym /trad1/trs/eq_rect_r in h3;
   simplify_hyp h3;
-  clear ts;
+  try clear ts;
   match goal with
       | h3 : False |- _ => case h3
       | _ => idtac
       end.
+
 
 Goal 2=3 -> 3=4.
   intro h.
