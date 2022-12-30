@@ -166,8 +166,8 @@ module Trm = struct
     kername ["Coq"; "Init"; "Datatypes"] "S"
   
   let add_modpaths = [
-    ["Coq"; "Init"; "Nat"];
     ["Coq"; "Arith"; "PeanoNat"; "Nat"];
+    ["Coq"; "Init"; "Nat"];
   ]
   let add_knames =
     List.map (fun mp -> kername mp "add") add_modpaths
