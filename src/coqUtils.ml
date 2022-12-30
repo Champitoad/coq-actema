@@ -269,6 +269,20 @@ module Trm = struct
   let app_name : Names.Constant.t =
     Names.Constant.make1 app_kname
   
+  module Cst = struct
+    let nat =
+      Constr.mkInd nat_name
+    let zero =
+      Constr.mkConstruct zero_name
+    let succ =
+      Constr.mkConstruct succ_name
+    let add =
+      add_knames |>
+      List.map (fun name -> Constr.mkConst (Names.Constant.make1 name))
+    let mul =
+      mul_knames |>
+      List.map (fun name -> Constr.mkConst (Names.Constant.make1 name))
+  end
   
   let tt =
     mkConstruct ((Names.MutInd.make1 unit_kname, 0), 1)

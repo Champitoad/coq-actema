@@ -36,8 +36,8 @@ end
 module NameMap = Map.Make(String)
 
 module FOSign = struct
-  module SortSymbol = BiMap(Symbol)(String)
-  module SymbolMap = Map.Make(Symbol)
+  module SortSymbol = BiMap(Constr)(String)
+  module SymbolMap = Map.Make(Constr)
 
   type symbols =
     { s_sorts : SortSymbol.t; s_funcs : SortSymbol.t; s_preds : SortSymbol.t }
@@ -56,12 +56,13 @@ let peano : FOSign.t =
   let symbols =
     let open SortSymbol in
     let s_sorts = empty |>
-      add (Ind nat_name) "nat" in
+      add Trm.Cst.nat "nat" in
     let s_funcs = empty |>
-      add (Ctr zero_name) "Z" |>
-      add (Ctr succ_name) "S" |> fun m ->
-      List.fold_left (fun m name -> add (Cst name) "add" m) m Trm.add_names |> fun m ->
-      List.fold_left (fun m name -> add (Cst name) "mult" m) m Trm.mul_names in
+      add Trm.Cst.zero "Z" |>
+      add Trm.Cst.succ "S" |>
+      add Trm.Cst.succ "S" |> fun m ->
+      List.fold_left (fun m cst -> add cst "add" m) m Trm.Cst.add |> fun m ->
+      List.fold_left (fun m cst -> add cst "mult" m) m Trm.Cst.mul in
     let s_preds = empty in
     { s_sorts; s_funcs; s_preds } in
   let typing =
@@ -76,7 +77,7 @@ let peano : FOSign.t =
   let defaults =
     let open SymbolMap in
     empty |>
-    add (Ind nat_name) zero in
+    add Trm.Cst.nat zero in
   { symbols; typing; defaults }
 
 (* -------------------------------------------------------------------- *)
@@ -134,23 +135,23 @@ module Export = struct
     dest_sind >>?
     dest_svar
 
-  let find_sort ({ sign; _ }, _ as d : destarg) : string =
+  let find_sort ({ sign; evd; _ }, t : destarg) : string =
     try
-      FOSign.SortSymbol.find (dest_symbol d) sign.symbols.s_sorts
+      FOSign.SortSymbol.find (EConstr.to_constr evd t) sign.symbols.s_sorts
     with Not_found ->
       raise Constr.DestKO
 
-  let find_func ({ sign; _ }, _ as d : destarg) : Fo_t.name * Fo_t.sig_ =
+  let find_func ({ sign; evd; _ }, t : destarg) : Fo_t.name * Fo_t.sig_ =
     try
-      let name = FOSign.SortSymbol.find (dest_symbol d) sign.symbols.s_funcs in
+      let name = FOSign.SortSymbol.find (EConstr.to_constr evd t) sign.symbols.s_funcs in
       let sig_ = NameMap.find name sign.typing.t_funcs in
       name, sig_
     with Not_found ->
       raise Constr.DestKO
 
-  let find_pred ({ sign; _ }, _ as d : destarg) : Fo_t.name * Fo_t.arity =
+  let find_pred ({ sign; evd; _ }, t : destarg) : Fo_t.name * Fo_t.arity =
     try
-      let name = FOSign.SortSymbol.find (dest_symbol d) sign.symbols.s_preds in
+      let name = FOSign.SortSymbol.find (EConstr.to_constr evd t) sign.symbols.s_preds in
       let arity = NameMap.find name sign.typing.t_preds in
       name, arity
     with Not_found ->
@@ -403,11 +404,10 @@ module Export = struct
       env, { sign with symbols } in
     
     let add_default t ty (env, sign) =
-      let sort_sy = dest_symbol ({ env = coq_env; evd; sign }, ty) in
-      if not (SortSymbol.mem sort_sy sign.symbols.s_sorts)
-           || SymbolMap.mem sort_sy sign.defaults then
+      if not (SortSymbol.mem ty sign.symbols.s_sorts)
+           || SymbolMap.mem ty sign.defaults then
         raise Constr.DestKO;
-      (env, { sign with defaults = SymbolMap.add sort_sy t sign.defaults }) in
+      (env, { sign with defaults = SymbolMap.add ty t sign.defaults }) in
     
     let add_func name sy ty (env, sign) =
       let e = { e with sign } in
@@ -457,7 +457,7 @@ module Export = struct
               | RegularArity ar -> EConstr.of_constr ar.mind_user_arity
               | TemplateArity ar -> EConstr.mkType ar.template_level in
             i+1, vsign |> begin
-              add_sort name (Ind id) ty >>?
+              add_sort name (Constr.mkInd id) ty >>?
               identity
             end
           end (0, vsign) bodies.mind_packets in
@@ -467,17 +467,17 @@ module Export = struct
     (* Add sorts, default elements, functions and predicates defined as global
        constants *)
     let venv, sign = Environ.fold_constants begin fun c _ vsign ->
-        let t = EConstr.mkConst c in
+        let t = Constr.mkConst c in
         (* let name = name_of_const evd t in *)
         let name = c |> Names.Constant.to_string in
         let ty =
           Environ.constant_type_in coq_env (Univ.in_punivs c) |>
           EConstr.of_constr in
         vsign |> begin
-          add_sort name (Cst c) ty >>?
-          add_default t ty >>?
-          add_func name (Cst c) ty >>?
-          add_pred name (Cst c) ty >>?
+          add_sort name t ty >>?
+          add_default (EConstr.mkConst c) (EConstr.to_constr evd ty) >>?
+          add_func name t ty >>?
+          add_pred name t ty >>?
           identity
         end
       end coq_env (venv, sign) in
@@ -489,11 +489,12 @@ module Export = struct
         let name = id |> Names.Id.to_string in
         let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
         let value = Context.Named.Declaration.get_value decl in
+        let t = Constr.mkVar id in
         vsign |> begin
-          add_sort name (Var id) ty >>?
-          add_default (EConstr.mkVar id) ty >>?
-          add_strict_func name (Var id) ty >>?
-          add_pred name (Var id) ty >>?
+          add_sort name t ty >>?
+          add_default (EConstr.mkVar id) (EConstr.to_constr evd ty) >>?
+          add_strict_func name t ty >>?
+          add_pred name t ty >>?
           add_var name ty value >>?
           identity
         end
@@ -544,12 +545,8 @@ module Import = struct
   (* let kname = kername ["Actema"; "DnD"] *)
   let kname = kername ["Actema"; "HOL"]
 
-  let symbol (sy : symbol) : EConstr.t =
-    match sy with
-    | Cst c -> EConstr.mkConst c
-    | Ctr c -> EConstr.mkConstruct c
-    | Ind i -> EConstr.mkInd i
-    | Var x -> EConstr.mkVar x
+  let symbol (sy : Constr.t) : EConstr.t =
+    EConstr.of_constr sy
   
   let sort_index (sign : FOSign.t) (s : string) : int =
     let sorts =
@@ -990,7 +987,7 @@ module Import = struct
                   log hp2'; *)
                   log t;
                   log i in
-                log_trace ();
+                (* log_trace (); *)
 
                 let forw = kname "rew_dnd_hyp" in
                 calltac forw [ts; h1; h2; h3; hp1; hp2; hp2'; t; i]
@@ -1009,7 +1006,7 @@ module Import = struct
                   log hp2;
                   log t;
                   log i in
-                log_trace ();
+                (* log_trace (); *)
 
                 let forw = kname "forward" in
                 calltac forw [ts; h1; h2; h3; hp1; hp2; t; i]
@@ -1045,7 +1042,7 @@ module Import = struct
                   log gp;
                   log t;
                   log i; in
-                log_trace ();
+                (* log_trace (); *)
 
                 let back = kname "rew_dnd" in
                 calltac back [ts; h; hp; gp'; gp; t; i]
@@ -1062,7 +1059,7 @@ module Import = struct
                   log gp;
                   log t;
                   log i; in
-                log_trace ();
+                (* log_trace (); *)
 
                 let back = kname "back" in
                 calltac back [ts; h; hp; gp; t; i]

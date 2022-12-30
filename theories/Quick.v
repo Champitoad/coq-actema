@@ -4,6 +4,58 @@ Require Import ssreflect.
 Lemma S_inj : forall n m, S n = S m -> n = m.
 Admitted.
 
+Lemma addS : forall n m, n + (S m) = S (n + m).
+move => n.
+induction n; simpl; trivial.
+intros m; rewrite IHn; trivial.
+Qed.
+
+Definition icl1 : nat -> (list (option (inst1 test))).
+intro n; apply cons; try apply nil.
+apply Some; exists 0.
+intros; exact n.
+Defined.
+Definition ic : nat -> (option (inst1 test)).
+intro n; apply Some; exists 0.
+intros; exact n.
+Defined. 
+
+Lemma ex_pred : forall x p, S(S x) = Nat.add p p ->
+                            exists q, x = Nat.add q  q.
+move => x [//=|p].
+pose h := addS.
+pose s_i := S_inj.
+simpl.
+intros.
+(* A la place de divers "not found" *)
+rew_dnd_hyp test h H hh
+            (cons false (cons false ( nil)))
+            (@nil bool)(cons 1 (cons 0 nil))
+             (cons false (cons false (cons true nil)))
+             (cons (ic p)(cons (ic p) nil)).
+back test s_i
+     (cons false (cons false (cons true nil)))
+     (@nil bool)
+     (cons false (cons false (cons false nil)))
+     (cons (ic ( x)) (cons (ic ( (p+p))) nil)).
+back test s_i
+     (cons false (cons false (cons true nil)))
+     (@nil bool)
+     (cons false (cons false (cons false nil)))
+     (cons (ic (S x)) (cons (ic (S (p+p))) nil)).
+
+forward test s_i hh hhh
+        (cons false (cons false (cons false nil)))
+        (@nil bool)
+        (cons false (cons false (cons false nil)))
+        (cons (ic (S x)) (cons (ic (S (p+p))) nil)).
+forward test s_i hhh hhhh
+        (cons false (cons false (cons false nil)))
+        (@nil bool)
+        (cons false (cons false (cons false nil)))
+        (cons (ic ( x)) (cons (ic ( (p+p))) nil)).
+Abort.
+
 Fixpoint le (n:nat)(m:nat) :=
   match n,m with
   | 0,_ => True
@@ -14,5 +66,4 @@ Fixpoint le (n:nat)(m:nat) :=
 Lemma ex_le : forall n m, (exists p, n = m + p)-> (le m n).
 pose S_i := S_inj.
 elim => [| n hn][|m]; actema_force.
-done.
-Qed.
+Abort.
