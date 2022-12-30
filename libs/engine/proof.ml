@@ -3084,10 +3084,19 @@ end = struct
       List.concat
 
   let single_subterm_sel : selpred = fun proof sel ->
+    let induction tgt =
+      { description = "Induction";
+        icon = Some "pickaxe";
+        highlights = sel;
+        kind = `Ctxt;
+        action = (gid_of_ipath proof tgt, `Indt tgt) } in
+      
     match sel with
     | [tgt] ->
         begin match tgt.ctxt.kind with 
-        | `Var `Head -> []
+        | `Var `Head -> [
+              induction tgt
+            ]
         | _ -> [
             { description = "Simplify";
               icon = Some "wand-magic-sparkles";
@@ -3101,11 +3110,7 @@ end = struct
               kind = `Ctxt;
               action = (gid_of_ipath proof tgt, `Red tgt) };
 
-            { description = "Induction";
-              icon = Some "oven";
-              highlights = sel;
-              kind = `Ctxt;
-              action = (gid_of_ipath proof tgt, `Indt tgt) };
+            induction tgt
           ]
         end
     | _ -> []
