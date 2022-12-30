@@ -219,9 +219,9 @@ module Export = struct
 
   type fdest = destarg -> Logic_t.form
 
-  let rec dest_pconst : fdest = fun ({ env; evd; _ }, t) ->
+  let rec dest_pconst : fdest = fun ({ env; evd; _ } as e, t) ->
     if not (is_prop env evd t) then raise Constr.DestKO;
-    let name = name_of_const evd t in
+    let name, _ = find_pred (e, t) in
     `FPred (name, [])
 
   and dest_pvar : fdest = fun ({ env; evd; _ }, t) ->

@@ -7,6 +7,11 @@ intros h1 x y h2.
 actema.
 Abort.
 
+Lemma tetest  (n:nat)(e:n+n=n+n) : exists p, n+n = p.
+  Set Debug "backtrace".
+  actema.
+Abort.
+
 Goal forall n m,
 (exists p, m = n+p) ->
 (exists p, n+p = m).

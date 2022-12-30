@@ -107,8 +107,8 @@ let load_proof (id : aident) : proof option =
       close_in ic
     end;
     let prf = List.rev !prf in
-    Log.str (string_of_aident id);
-    Log.str (string_of_proof prf);
+    (* Log.str (string_of_aident id);
+    Log.str (string_of_proof prf); *)
     Some prf
   end
 
