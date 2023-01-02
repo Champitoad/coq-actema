@@ -118,16 +118,6 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
     Api.Logic_b.string_of_action |>
     Base64.encode_string |>
     Js.string
-  
-  (* Return a new proof engine whose goals are the base64, binary decoding of [goalsb]  *)
-  method setgoalsb goalsb =
-    let goals =
-      goalsb |>
-      Js.to_string |>
-      Base64.decode_exn |>
-      Api.Logic_b.goals_of_string in
-    let gls = List.map Proof.Translate.import_goal goals in
-    js_proof_engine (Proof.ginit gls)
 
   (* Get the meta-data attached to this proof engine *)
   method getmeta =
@@ -434,12 +424,12 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
   (* [this#move_hyp (from : handle<js_hyp>) (before : handle<js_hyp> option)] move
    * hypothesis [from] before hypothesis [before]. Both hypothesis
    * must be part of this sub-goal. *)
-  method move_hyp from before =
+  method movehyp from before =
     let doit () =
       CoreLogic.move
         from (Js.Opt.to_option before)
         (parent##.proof, _self##.handle)
-    in !!doit ()
+    in js_proof_engine (!!doit ())
 
   (* [this#generalize (h : handle<js_hyps>) generalizes the hypothesis [h] *)
   method generalize hid =
@@ -792,4 +782,13 @@ let export (name : string) : unit =
                            (Fo.Notation.f_tostring env) hyps))
         (Fo.Notation.f_tostring env goal))
 
+    (* Return a new proof engine whose goals are the base64, binary decoding of [goalsb]  *)
+    method setgoalsb goalsb =
+      let goals =
+        goalsb |>
+        Js.to_string |>
+        Base64.decode_exn |>
+        Api.Logic_b.goals_of_string in
+      let gls = List.map Proof.Translate.import_goal goals in
+      js_proof_engine (Proof.ginit gls)
   end)
