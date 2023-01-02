@@ -2,18 +2,12 @@
     <div>
         <div class="container-fluid">
             <div class="row" style="padding-top: 20px; padding-bottom: 20px; background-color: #eee;">
-                <button id="done" class="btn btn-info ml-2" @click="done" title="Done" :disabled="doneDisabled">Done</button>
-                <form class="form-inline mx-auto" action="javascript:false">
-                    <div class="form-group">
-                        <label for="formula-input">Prove: </label>
-                        <input type="text" class="form-control ml-2" id="formula-input" size="40" value="Socrates:(), Human::(), Mortal::(); Human(Socrates), forall x:(). Human(x) -> Mortal(x) |- Mortal(Socrates)" />
-                    </div>
-                    <button type="submit" class="btn btn-outline-secondary" id="parse" @click="parseGoal" :disabled="parseDisabled">Start</button>
-                </form>
+                <button id="done" class="btn btn-info ml-2" @click="done" title="Done" :disabled="!connected">Done</button>
+                <div class="mx-auto"></div>
                 <div class="buttons text-right mr-2">
-                    <button class="btn btn-outline-secondary btn-select" @click="toggleSelectionMode" title="Undo (ctrl+z)"><i class="fas fa-mouse-pointer fa-sm"></i></button>
-                    <button class="btn btn-outline-secondary btn-undo" @click="undo" title="Undo (ctrl+z)"><i class="fas fa-undo"></i></button>
-                    <button class="btn btn-outline-secondary btn-redo" @click="redo" title="Undo (ctrl+y)"><i class="fas fa-redo"></i></button>
+                    <button class="btn btn-outline-secondary btn-select" @click="toggleSelectionMode" :disabled="!connected" title="Undo (ctrl+z)"><i class="fas fa-mouse-pointer fa-sm"></i></button>
+                    <button class="btn btn-outline-secondary btn-undo" @click="undo" :disabled="!connected" title="Undo (ctrl+z)"><i class="fas fa-undo"></i></button>
+                    <button class="btn btn-outline-secondary btn-redo" @click="redo" :disabled="!connected" title="Undo (ctrl+y)"><i class="fas fa-redo"></i></button>
                 </div>
             </div>
             <div class="row" style="height: calc(100vh - 78px)">
@@ -40,9 +34,9 @@ export default {
         // update proof canvas with new goal when action request is received
         window.ipcRenderer.on("action", (_, goalsb) => {
             try {
-                var proofState = window.goal.setgoalsb(goalsb);
+                this.connected = true;
+                var proofState = engine.setgoalsb(goalsb);
                 this.$refs.proofCanvas.setProofState(proofState);
-                this.setProofMode("server");
             } catch (e) {
                 this.$refs.proofCanvas.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
@@ -51,7 +45,7 @@ export default {
         // trigger fireworks when qed request is received
         window.ipcRenderer.on("qed", _ => {
             this.$refs.proofCanvas.QED();
-            this.setProofMode("draft");
+            this.connected = false;
         });
         window.ipcRenderer.on("error", (_, msg) => {
             console.log(msg);
@@ -62,19 +56,6 @@ export default {
     },
     mounted() {
         window.vue = this; // for debug purposes
-
-        // load lemma db
-        this.loadLemmaDB();
-
-        // when prover is ready, enable parse button
-        this.parseDisabled = false;
-
-        // manage the url parameter goal if there is one
-        var goal = this.loadGoal();
-        if (goal) {
-            $("#formula-input").val(goal);
-        }
-        this.parseGoal();
 
         // also capture ctrl+z and ctrl+y and M for MathML
         var self = this;
@@ -107,53 +88,11 @@ export default {
     },
     data() {
         return {
-            goal: null,
-            parseDisabled: true,
-            doneDisabled: true,
+            connected: false,
         };
     },
 
     methods: {
-        loadLemmaDB() {
-            let $this = this;
-            $.getJSON("lemmas.json", function(lemmas) {
-                var goal = window.goal.loaddb(lemmas);
-                $this.$refs.proofCanvas.setGoal(goal);
-            });
-        },
-
-        loadGoal() {
-            var result = null,
-                tmp = [];
-            var items = window.location.search.substr(1).split("&");
-            for (var index = 0; index < items.length; index++) {
-                tmp = items[index].split("=");
-                if (tmp[0] === "goal") result = decodeURIComponent(tmp[1]);
-            }
-            return result ? atob(result) : null;
-        },
-
-        saveGoal(goal) {
-            var proofString = window.goal.subgoals()[0].conclusion().tostring();
-            document.title = "Prove: " + proofString;
-        },
-
-        parseGoal(e) {
-            if (e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-            this.setDisplayMode("html");
-            var input = $("#formula-input").val().trim();
-            try {
-                let goal = (window.goal = engine.parse(input)); // window.goal for debug
-                this.$refs.proofCanvas.setGoal(goal);
-                this.saveGoal(input);
-            } catch (e) {
-                this.$refs.proofCanvas.showErrorMessage(e);
-            }
-        },
-
         toggleSelectionMode() {
             if (this.$refs.proofCanvas.selectMode) {
                 this.exitSelectionMode();
@@ -190,21 +129,6 @@ export default {
             this.$refs.proofCanvas.sendRedo();
         },
 
-        setProofMode(mode) {
-            switch (mode) {
-                case "server":
-                    this.parseDisabled = true;
-                    this.doneDisabled = false;
-                    break;
-                case "draft":
-                    this.parseDisabled = false;
-                    this.doneDisabled = true;
-                    break;
-                default:
-                    break;
-            }
-        },
-
         sendProof() {
             try {
                 let proofb = window.goal.getproofb();
@@ -218,14 +142,13 @@ export default {
         done() {
             try {
                 window.ipcRenderer.send('done');
+                this.connected = false;
+                this.$refs.proofCanvas.setProofState(null);
             } catch (e) {
                 this.$refs.proofCanvas.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
             }
-            this.setProofMode("draft");
         },
-
-        toggleMenu() {},
     },
 };
 </script>

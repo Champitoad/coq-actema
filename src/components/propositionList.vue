@@ -115,7 +115,7 @@ li.archived .pi-predicate, li.archived .pi-expression {
                 <i class="fas fa-plus"></i> hyp
             </button>
         </li>
-        <li class="list-group-item">
+        <!-- <li class="list-group-item">
             <vue-simple-suggest
                 class="search-lemma-bar"
                 placeholder="Search lemma..."
@@ -125,12 +125,11 @@ li.archived .pi-predicate, li.archived .pi-expression {
                 @select="addLemma"
                 :list="lemmasList"
                 :filter-by-query="true">
-            <!-- Filter by input text to only show the matching results -->
                 <div slot="suggestion-item" slot-scope="{ suggestion }">
                     <div>{{ suggestion.name }} : {{ suggestion.stmt }}</div>
                 </div>
             </vue-simple-suggest>
-        </li>
+        </li> -->
         <template v-for="expression in getSortedExpressions(false)">
             <div class="predicate-dropspace" :key="'dropspace-' + expression.handle" :data-handle="expression.handle"></div>
             <li class="list-group-item text-success" :class="{ archived: isArchived(expression) }" :key="'li-' + expression.handle">

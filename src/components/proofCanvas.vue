@@ -368,17 +368,11 @@ export default {
             });
         },
 
-        setGoal(proof) {
-            this.qed = false;
-            this.$set(this, "proofState", proof);
-            this.addToHistory(proof);
-        },
-
         getGoalKey(index) {
             return "proof-" + this.proofState.handle + "-goal-" + "-" + index;
         },
 
-        getPredicateKey(sg, p, i, j) {
+        getPredicateKey(i, j) {
             return this.getGoalKey(i) + "-predicate-" + j;
         },
 
@@ -581,21 +575,25 @@ export default {
         },
 
         moveHyp(subgoal, fromHandle, toHandle) {
-            var proof = subgoal.move(fromHandle, toHandle);
+            var proof = subgoal.movehyp(fromHandle, toHandle);
             this.setProofState(proof);
         },
 
         setProofState(proofState) {
-            try {
-                // set the current active tab since the prover doesn't transmit root metadata on apply()
-                proofState.setmeta({ activeSubgoal: this.getActiveSubgoal() });
-                window.goal = this.proofState = proofState;
-                this.addToHistory(this.proofState);
-                this.resetSelection();
-                this.$forceUpdate();
-                this.qed = false;
-            } catch (e) {
-                this.showErrorMessage("Failed to apply new proof state");
+            if (!proofState) {
+                this.proofState = null;
+            } else {
+                try {
+                    // set the current active tab since the prover doesn't transmit root metadata on apply()
+                    proofState.setmeta({ activeSubgoal: this.getActiveSubgoal() });
+                    window.goal = this.proofState = proofState;
+                    this.addToHistory(this.proofState);
+                    this.resetSelection();
+                    this.$forceUpdate();
+                    this.qed = false;
+                } catch (e) {
+                    this.showErrorMessage("Failed to apply new proof state");
+                }
             }
         },
 
@@ -661,6 +659,8 @@ export default {
         },
 
         getActiveSubgoal() {
+            if (!this.proofState) return 0;
+
             var metadata = this.proofState.getmeta();
             var activeSubgoal = metadata && metadata.activeSubgoal;
             // check if the active subgoal is still valid (after ctrl-z/ctrl-y for instance)
