@@ -977,7 +977,7 @@ module Import = struct
                   let id = Goal.fresh_name ~basename:(Names.Id.to_string id2) coq_goal () in
                   EConstr.mkVar id in
 
-                let t = Trm.boollist (t @ [not side]) in
+                let t = Trm.boollist (t @ [side]) in
                 
                 let hp1 = Trm.boollist hsub in
                 let hp2 = Trm.boollist fsub in
