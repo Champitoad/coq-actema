@@ -1,6 +1,32 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
+Context (A B C D E F G : Prop).
+Context (P Q : nat -> Prop) (R S : nat -> nat -> Prop) (t : nat).
+
+Context (a b : nat).
+
+Goal (B -> a = b) -> P b -> C.
+intros h p.
+rew_dnd_hyp test
+true
+
+h
+
+p
+
+p0
+
+(true :: nil)%list
+
+(@nil bool)
+
+(0 :: nil)%list
+
+(true :: false :: nil)%list
+
+(@nil (option (inst1 test))).
+
 Lemma S_inj : forall n m, S n = S m -> n = m.
 Admitted.
 

@@ -942,10 +942,10 @@ module Import = struct
         let rewrite_data =
           begin match get_eq src, get_term dst with
           | Some (hsub, side), Some (fsub, esub) ->
-              Some (hsub, side, fsub, esub)
+              Some (false, hsub, side, fsub, esub)
           | _ ->
               begin match get_eq dst, get_term src with
-              | Some (hsub, side), Some (fsub, esub) -> Some (hsub, side, fsub, esub)
+              | Some (hsub, side), Some (fsub, esub) -> Some (true, hsub, side, fsub, esub)
               | _ -> None
               end
           end in
@@ -955,25 +955,28 @@ module Import = struct
         begin match (src, src.ctxt.kind), (dst, dst.ctxt.kind) with
 
         (* Forward DnD *)
-        | (hyp1, `Hyp), (hyp2, `Hyp) ->
-            let h1 =
-              let id = UidMap.find hyp1.ctxt.handle hm in
-              EConstr.mkVar id in
-            let id2 = UidMap.find hyp2.ctxt.handle hm in
-            let h2 = EConstr.mkVar id2 in
-            let h3 =
-              let id = Goal.fresh_name ~basename:(Names.Id.to_string id2) coq_goal () in
-              EConstr.mkVar id in
-
+        | (src, `Hyp), (dst, `Hyp) ->
             let t, i =
-              let lp = hyp1.sub in
-              let rp = hyp2.sub in
-              let lf = (Utils.get_hyp goal hyp1.ctxt.handle).h_form in
-              let rf = (Utils.get_hyp goal hyp2.ctxt.handle).h_form in
+              let lp = src.sub in
+              let rp = dst.sub in
+              let lf = (Utils.get_hyp goal src.ctxt.handle).h_form in
+              let rf = (Utils.get_hyp goal dst.ctxt.handle).h_form in
               itrace ts sign goal.g_env `Forw lp rp lf rf itr in
             
             begin match rewrite_data with
-            | Some (hsub, side, fsub, esub) ->
+            (* Rewrite *)
+            | Some (eqside, hsub, side, fsub, esub) ->
+                let eq_hyp, dst_hyp = if eqside then dst, src else src, dst in
+                let fl = Trm.bool_of_bool eqside in
+                let h1 =
+                  let id = UidMap.find eq_hyp.ctxt.handle hm in
+                  EConstr.mkVar id in
+                let id2 = UidMap.find dst_hyp.ctxt.handle hm in
+                let h2 = EConstr.mkVar id2 in
+                let h3 =
+                  let id = Goal.fresh_name ~basename:(Names.Id.to_string id2) coq_goal () in
+                  EConstr.mkVar id in
+
                 let t = Trm.boollist (t @ [not side]) in
                 
                 let hp1 = Trm.boollist hsub in
@@ -993,12 +996,22 @@ module Import = struct
                 log_trace ();
 
                 let forw = kname "rew_dnd_hyp" in
-                calltac forw [ts; h1; h2; h3; hp1; hp2; hp2'; t; i]
+                calltac forw [ts; fl; h1; h2; h3; hp1; hp2; hp2'; t; i]
+            (* Non-rewrite *)
             | None ->
+                let h1 =
+                  let id = UidMap.find src.ctxt.handle hm in
+                  EConstr.mkVar id in
+                let id2 = UidMap.find dst.ctxt.handle hm in
+                let h2 = EConstr.mkVar id2 in
+                let h3 =
+                  let id = Goal.fresh_name ~basename:(Names.Id.to_string id2) coq_goal () in
+                  EConstr.mkVar id in
+
                 let t = Trm.boollist t in
 
-                let hp1 = bool_path hyp1.sub in
-                let hp2 = bool_path hyp2.sub in
+                let hp1 = bool_path src.sub in
+                let hp2 = bool_path dst.sub in
                 
                 let log_trace () =
                   let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
@@ -1030,7 +1043,7 @@ module Import = struct
               itrace ts sign goal.g_env `Back lp rp lf rf itr in
             
             begin match rewrite_data with
-            | Some (hsub, side, fsub, esub) ->
+            | Some (_, hsub, side, fsub, esub) ->
                 let t = Trm.boollist (t @ [side]) in
                 
                 let hp = Trm.boollist hsub in
