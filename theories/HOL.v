@@ -2545,8 +2545,8 @@ rewrite /test. *)
 
 Ltac rew_dnd ts' h hp gp gp' t i :=
   let tsc := eval compute in ts' in
-    let ts := fresh "ts" in
-    pose ts := tsc;
+  let ts := fresh "ts" in
+  pose ts := tsc;
   reify_prop ts gp gp'; 
   let h' := fresh "h" in
   reify_eq_hyp ts h h' hp;
@@ -2606,7 +2606,7 @@ Abort.
  t : list bool = trace (with the last bool for choice l <-> r)
  i : instantiation *)
 
-Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
+Ltac rew_dnd_hyp ts' fl  h1 h2 h3 hp1 hp2 hp2' t i :=
   let tsc := eval compute in ts' in
   let ts := fresh "t" in 
   let i' := eval compute in i in
@@ -2627,9 +2627,16 @@ Ltac rew_dnd_hyp ts'  h1 h2 h3 hp1 hp2 hp2' t i :=
     | coerce _ (@nil nat) ?hc2 _  => hc2
     end in
   clear h1' h2';
-  move:
-    (f3_corr ts  t i' (@nil nat) hc1 tt
-             (@nil nat) hc2 tt h1 h2) => h4;
+  match fl with
+  | false =>
+      move:
+      (f3_corr ts  t i' (@nil nat) hc1 tt
+               (@nil nat) hc2 tt h1 h2) => h4
+  | true =>
+      move:
+      (f3_corr ts  t i' (@nil nat) hc2 tt
+               (@nil nat) hc1 tt h2 h1) => h4
+  end;
   let oh4 :=
     match type of h4 with
     | (trl3 _ ?oh) => oh
