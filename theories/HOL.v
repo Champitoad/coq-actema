@@ -670,9 +670,9 @@ with f3 (l:trace)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
               impl3
                 (Hol3 (s1=s2 /\
                      ((v (convert n2 n2' i2)=
-                         (trs ts s1 s2 (t (convert n1 n1' i1)))))))
+                         (trs ts s1 s2 (u (convert n1 n1' i1)))))))
                (P (convert (cons s2 n2)(cons s2 n2')
-                            ((trs ts s1 s2 (u (convert n1 n1' i1))),
+                            ((trs ts s1 s2 (t (convert n1 n1' i1))),
                               i2)))
           | _ => top3
           end
@@ -683,9 +683,9 @@ with f3 (l:trace)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
               impl3
                 (Hol3 (s1=s2 /\
                      ((v (convert n1 n1' i1)=
-                         (trs ts s2 s1 (t (convert n2 n2' i2)))))))
+                         (trs ts s2 s1 (u (convert n2 n2' i2)))))))
                (P (convert (cons s1 n1)(cons s1 n1')
-                            ((trs ts s2 s1 (u (convert n2 n2' i2))),
+                            ((trs ts s2 s1 (t (convert n2 n2' i2))),
                               i1)))
 
            |_ => top3
@@ -799,7 +799,7 @@ move => h1 h2 s1 s2.
 rewrite !trs_corr convert_corr s1.
 simpl. by move <-.
   by rewrite /= convert_corr; move => [e1  [e3 e2]];
-      rewrite trs_corr -e1 -e2.
+      rewrite trs_corr e1 -e2.
 
 - move => ist nh
           [nh'|nh'|nh' P|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
