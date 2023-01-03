@@ -24,13 +24,30 @@ Inductive ile (n:nat) : nat -> Prop :=
   | ilr :  ile n n
   | ils : forall m, ile n m -> ile n (S m).
 
+Fixpoint leb (n:nat)(m:nat) :=
+  match n,m with
+  | 0,_ => true
+  | (S _) , 0  => false
+  | S n, S m => leb n m
+  end.
+ 
 Fixpoint le (n:nat)(m:nat) :=
   match n,m with
   | 0,_ => True
   | (S _) , 0  => False
   | S n, S m => le n m
   end.
+  
+Fixpoint gtb  (n:nat)(m:nat) :=
+  match n,m with
+  | 0,_ => false
+  | (S _) , 0  => true
+  | S n, S m => gtb n m
+  end.
 
+Lemma leb_gtb : forall n m, leb n m = negb (gtb n m).
+actema.
+Qed.
 
 Fixpoint moins n m :=
   match m,n with
@@ -350,9 +367,6 @@ Lemma app_ass : forall l m n,
   done.
   actema. *)
 
-Parameter P : nat -> Prop.
-Parameter B C : Prop.
-
 Lemma ex_aux :
   forall n, ((exists p, n = p + p) ->  even n)
 /\ ((exists p, S n = p + p) ->  even (S n)).
@@ -648,7 +662,7 @@ Qed.
 
 (* algebra *)
 Parameter f g : nat -> nat.
-Lemma inv_d : (forall y, f (g y) = y) -> (forall x, exists y,  x = g y) ->
+Lemma inv_d : (forall y, f (g y) = y) -> (forall x, exists y,  g y = x) ->
               forall x,  g (f x) = x.
 actema.
 Qed.
