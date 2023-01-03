@@ -9,7 +9,7 @@ Defined.
 Definition ic : nat -> (option (inst1 test)).
 intro n; apply Some; exists 0.
 intros; exact n.
-Defined. 
+Defined.
 
 Lemma add_comm :
   forall n m, n + m = m + n.
@@ -18,6 +18,7 @@ Proof.
   pose proof PeanoNat.Nat.add_succ_r.
   actema.
 Qed.
+
 
 Inductive ile (n:nat) : nat -> Prop :=
   | ilr :  ile n n
@@ -53,6 +54,9 @@ Lemma le_0 : forall n, le 0 n.
 actema.
 Qed.
 
+
+(* bug: simplify peut toujours fabriquer des termes
+ avec des match / fix *)
 Lemma le_S : forall n m,
        le n m -> le n (S m).
 actema.
@@ -93,6 +97,7 @@ pose h2 := eq_eqb.
 actema.
 Qed.
 
+Print ile.
 
 Definition lee n m := ile n m.
 
@@ -101,7 +106,6 @@ Lemma ile_r : forall n m,  lee n m -> le n m.
   pose h2 := le_S.
   actema.
 Qed.
-Search lee.
 
 Lemma lee0 : forall n, lee 0 n.
 have h1 : (forall n : nat, lee n n) by constructor.
@@ -123,26 +127,28 @@ have h2 : (forall n m, lee n m -> lee n (S m))
   by constructor.
 pose h3 := lee0.
 pose h4 := leeSS.
-
 actema.
 Qed.
 
-Definition pl n m := n + m.
+Definition  add n m := n + m.
 
-Lemma plS x y : pl (S x) y = S (pl x y).
+Lemma plS x y : add (S x) y = S (add x y).
 done.
 Qed.
 
-Lemma ex_le : forall n m, (exists p, n = pl m p)-> (le  m n).
-pose S_i := S_inj.
-pose pls' := plS.
-induction n; induction m; simpl; try done.
- by case.
-actema.
-Qed.
-(* ca ne marche pas avec rew_dnd_hyp *)
+Definition ief : nat -> nat -> (option (inst1 test)).
+intros n1 n2; apply Some; exists 0.
+intros e1 e2.
+exact (n1 + (e1 0 n2)).
+Defined.
 
-  
+Lemma ex_le : forall n m, (exists p, n =  m + p)-> (le  m n).
+pose S_i := S_inj.
+pose h := PeanoNat.Nat.add_succ_r.
+actema.
+done.
+Qed.
+
 Lemma even_aux :
   forall n, (even n) /\ (exists p, n = p + p)
             \/(~even n) /\  (exists p, n = S(p + p)).
@@ -157,14 +163,111 @@ pose h := even_aux.
 actema.
 Qed.
 
+Definition icp (e : list DYN) : (sort e 1) -> (option (inst1 e)).
+intros n; apply Some; exists 1.
+intros; exact n.
+Defined.
 
 Lemma ex_pred : forall x p, S(S x) = p+p ->
                             exists q, x = q + q.
-move => x [//=|p].
 pose h := PeanoNat.Nat.add_succ_r.
 pose s_i := S_inj.
 actema.
+actema.
+Qed.
+
+(*
+
+Definition ee := (mDYN bool InitialRing.NotConstant
+                    :: mDYN nat 0
+                       :: mDYN unit abstract_key
+                          :: mDYN BinNums.N BinNat.N.one
+                             :: mDYN BinNums.Z BinIntDef.Z.one
+                                :: mDYN Ascii.ascii Ascii.one
+                                   :: mDYN String.string String.HelloWorld
+                                      :: mDYN InitialRing.Nword InitialRing.NwI
+                                      :: nil)%list.
+simpl.
+
+
+let h' := fresh "h" in
+reify_eq_hyp
+  ee
+  h h'
+    (cons false (cons false nil)).
+reify_prop ee   (cons 1 nil)(cons false nil)
+ .
+
+ apply (b3_corr ee
+         (cons false (cons false (cons true (cons true nil))))
+                  (cons (icp ee ( p))(cons (icp ee p) nil))
+     (@nil nat) tt (@nil nat) tt
+ (fa ee nil 1
+            (fa ee (1 :: nil) 1
+               (equality ee (1 :: 1 :: nil) 1
+                  (fun z : ppp ee (1 :: 1 :: nil) =>
+                   let (v0, rest0) := z in let (v1, _) := rest0 in v1 + S v0)
+                  (fun z : ppp ee (1 :: 1 :: nil) =>
+                   let (v0, rest0) := z in let (v1, _) := rest0 in S (v1 + v0)))))
+(impl ee nil
+       (property ee nil 1 (fun z : ppp ee (1 :: nil) => let (v0, _) := z in S (S x) = v0)
+          (fun _ : ppp ee nil => S (p + S p)))
+       (fun _ : ppp ee nil => exists q : nat, x = q + q))).
+2 : assumption.
+apply trex_norm_apply ; [split; try reflexivity|idtac].           
+rewrite /= !trs_corr.
+Check trs_corr.
+
+
+rewrite ?/ts /icp /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert  /defs /appist ?trs_corr;
+     rewrite  /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert /cT /cB  /appist /sort /trad1 /nthc /list_rect /sort /sl;
+   rewrite ?trs_corr /trs ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym.
+simplify_goal.
+
+auto.
+simpl in h'.
+
+2 : simpl.
+2 : rewrite /trl3 /= trs_corr.
+2 : simpl.
+
+rew_dnd
+  ee
+  h
+  (cons false (cons false nil))
+  (cons false nil)
+  (cons 1 nil)
+  (cons false (cons false (cons true (cons false nil))))
+             (cons (icp ee p)(cons (icp ee p) nil)).
+
+Qed. *)
+(* encore un pb en backward ! *)
+
+(*
 (* A la place de divers "not found" *)
+intro H.
+simpl in H.
+actema.
+Definition ee := (mDYN bool InitialRing.NotConstant
+                    :: mDYN nat 0
+                       :: mDYN unit abstract_key
+                          :: mDYN BinNums.N BinNat.N.one
+                             :: mDYN BinNums.Z BinIntDef.Z.one
+                                :: mDYN Ascii.ascii Ascii.one
+                                   :: mDYN String.string String.HelloWorld
+                                      :: mDYN InitialRing.Nword InitialRing.NwI
+                                      :: nil)%list.
+Eval compute in (sort ee 1).
+                   
+rew_dnd_hyp ee h
+ H hh
+            (cons false (cons false ( nil)))
+            (@nil bool)(cons 1 (cons 0 nil))
+             (cons false (cons false (cons true nil)))
+             (cons (icp ee p)(cons (icp ee p) nil)).
+
+rewrite /eq_ind_r /eq_ind /eq_sym in hh.
+
 rew_dnd_hyp test h H hh
             (cons false (cons false ( nil)))
             (@nil bool)(cons 1 (cons 0 nil))
@@ -194,7 +297,61 @@ forward test s_i hhh hhhh
 
 done.
 Qed.
+ 
 
+  
+Inductive ln :=
+  lnil
+| lc : nat -> ln -> ln.
+
+Fixpoint la l1 l2 :=
+  match l1 with
+  | lc x l => lc x (la l l2)
+  | _ => l2
+  end.
+
+Goal forall l1 l2 l3,  (la l1 (la l2 l3)) = lnil.
+actema.
+
+Parameter f : nat -> nat -> nat.
+Lemma test :(forall x:nat, forall y:nat, y=x).
+intro y.
+  actema.
+  -> (forall x y, f x y = 0) -> forall x' y', 9 = f x' y' -> True.
+
+
+  intros hf h1 x' y' h2.
+ .actema.
+Goal   forall x, x = lnil1.
+actema_force.
+
+
+Definition lel n l :=
+  match l with
+  | lnil => True
+  | cons m _ => le n m
+  end.
+
+Fixpoint sorted l :=
+  match l with
+  | lnil => True
+  | cons n l => (lel n l) /\ (sorted l)
+  end.
+
+Fixpoint napp l m :=
+  match l with
+  | lnil => m
+  | cons x l => cons x (napp l m)
+  end.
+
+Lemma app_ass : forall l m n,
+    napp (napp l m) n = napp l (napp m n).
+  induction l.
+  done.
+  actema. *)
+
+Parameter P : nat -> Prop.
+Parameter B C : Prop.
 
 Lemma ex_aux :
   forall n, ((exists p, n = p + p) ->  even n)
@@ -202,12 +359,6 @@ Lemma ex_aux :
 pose h :=  PeanoNat.Nat.add_succ_r.
 pose e_p := ex_pred.
 actema.
-induction p.
-done.
-by rewrite h in H.
-
-actema.
-(* manque bouton 'done' *)
 Qed.
 
 Lemma ex_even :
@@ -229,7 +380,7 @@ Qed.
 
 Context (A B C D E F G : Prop).
 Context (P Q : nat -> Prop) (R S : nat -> nat -> Prop) (t : nat).
-
+                                                          
 Lemma kchal :
   (forall x y, R x y \/ R y x) ->
   (forall x y, S x y -> S y x -> x = y) ->
@@ -238,6 +389,7 @@ Lemma kchal :
 Proof.
   actema.
 Qed.
+
 
 Require Import ssreflect.
 
@@ -249,13 +401,12 @@ Proof.
 Qed.
 
 
-(* bug export 
 Lemma ex_elim :
   (exists x, P x) -> (forall y, P y -> C) -> C.
 Proof.
   intros.
-  actema_force.
-Qed. *)
+  actema.
+Qed. 
 
 (** * Forall *)
 
@@ -291,14 +442,12 @@ Proof.
   actema.
 Qed.
 
-(* re-bug 
 Lemma bw :
   A -> (~ exists n : nat, A) -> False.
 Proof.
   intros.
   actema.
-  by exists 0.
-Qed. 
+  Qed. 
 
 (** * Implication *)
 
@@ -375,14 +524,12 @@ Proof.
   actema.
 Qed.
 
-Print jn_switch.
 
 Lemma jn_switch_clicks : (A /\ (B /\ (C /\ D -> E) -> F) -> G) -> A /\ D /\ (B /\ (C -> E) -> F) -> G.
 Proof.
   actema "clicks".
 Qed.
 
-Print jn_switch_clicks.
 
 (** * Disjunction *)
 
@@ -430,6 +577,7 @@ Lemma or_and_distr : A \/ B /\ C <-> (A \/ B) /\ (A \/ C).
 Proof.
   actema.
 Qed.
+
 
 (** * Negation *)
 
@@ -495,7 +643,7 @@ Qed.
 Lemma efq : False -> A.
 Proof.
   actema.
-Qed. *)
+Qed.
 
 
 (* algebra *)
