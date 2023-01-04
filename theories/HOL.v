@@ -116,8 +116,13 @@ elim: c => [| t c rc] [|n].
 - move => [_ x]; exact (rc n x).
 Defined.
 
-
-
+Definition nths s (c:seq nat)(p : ppp ts c)(n:nat): (sort ts s).
+move: c p n.  elim => [| s1 n hn].
+ move => *; apply def.
+move => [x p][|i].
+ exact (trs ts s1 s x).
+exact (hn p i).
+Defined.
 
 (* focused propositions with n free variables *)
 Inductive cx : (seq nat)  -> Type :=
@@ -402,9 +407,9 @@ Definition inst1 := {s : nat & env -> env -> sort ts s}.
 
 
 Definition trad1 : forall n, pp n -> env :=
-  fun n p s i =>
-    trs ts (nth 0 n i) s
-        (nthc n p i).
+  fun n p s i =>  nths s n p i.
+(*    trs ts (nth 0 n i) s
+        (nthc n p i). *)
 
 
 Definition trad :
@@ -417,7 +422,6 @@ exact (f (trad1 n1 p1)(trad1 n2 p2)).
 Defined.
 
 Definition inst' := list (option inst1).
-
 
 
 Definition appist1 sr
@@ -435,7 +439,7 @@ Definition appist sr (g: inst1) n1 c1 n2 c2 :=
     existT s f => trs ts  s sr (f (trad1 n1 c1)(trad1 n2 c2))
   end.
 
-
+  
 (* the main functions as described in our CPP 2022 article *)
 (* "side conditions" are generated (which are actually in the center
    and not on the side : 
@@ -2500,6 +2504,93 @@ Ltac rereify_hyp ts h :=
   end.
 *)
 
+
+      
+Ltac myhnf t :=
+  match t with
+  | tr3 _ _ =>
+  let t0 := eval hnf in t in
+    match t0 with
+    | ?A \/ ?B =>
+        let rA := myhnf A in
+        let rB := myhnf B in
+        constr:(rA \/ rB)
+    | ?A /\ ?B =>
+        let rA := myhnf A in
+        let rB := myhnf B in
+        constr:(rA /\ rB)
+    | ?A -> ?B =>
+        let rA := myhnf A in
+        let rB := myhnf B in
+        constr:(rA -> rB)
+    | forall x : ?T, ?B =>
+        let y := fresh x in
+        let T' := eval simpl in T in
+          constr:(forall y : T',
+                     let B' := (subst! y for x in B) in
+             ltac:(let r := myhnf B' in exact r))
+    | exists x : ?T, ?B =>
+        let y := fresh x in
+        let T' := eval simpl in T in
+          constr:(exists y : T',
+                     let B' := (subst! y for x in B) in
+                     ltac:(let r := myhnf B in exact r))
+    | ~ ?A => let rA := myhnf A in
+              constr:(~ rA)
+    | ?X => constr:(X)
+    end
+  | _ => t
+  end.
+
+(*
+                constr:(orr3 h r)
+    | orl3  ?u ?h =>
+        let r := myhnf u in
+        constr:(orl3 r h)
+    | andr3 ?h ?u =>
+        let r := myhnf u in
+        constr:(andr3 h r)
+    | andl3 ?u ?h =>
+        let r := myhnf u in
+        constr:(andl3 r h)
+    | impr3 ?h ?u =>
+        let r := myhnf u in
+        constr:(impr3 h r)
+    | impl3 ?u ?h =>
+        let r := myhnf u in
+        constr:(impl3 r h)
+    | fa3 ?s ?f =>
+        constr:(fa3 s (fun x =>
+                 ltac:(let body := beta1 f x in
+                       let r := myhnf body in
+                       exact r)))
+    | ex3 ?s ?f =>
+        constr:(ex3 s (fun x =>
+                 ltac:(let body := beta1 f x in
+                       let r := myhnf body in
+                       exact r)))
+    | not3 ?u =>
+        let r := myhnf u in
+       constr:(not3 r)
+    | ?X => X
+    end. *)
+
+Ltac myhnf_goal :=
+  rewrite /o3_norm;
+  match goal with
+  | |- trl3 ?m ?o =>
+      let r := myhnf (tr3 m o) in
+      change r
+  end.
+
+Ltac myhnf_hyp h :=
+  rewrite /o3_norm in h;
+  match type of h with
+  | trl3 ?m ?o =>
+      let r := myhnf (tr3 m o) in
+      change r in h
+  end.
+
 Ltac back ts' h0 hp gp t i :=
   let ts1 := eval hnf in ts' in
     let ts := fresh "ts" in
@@ -2514,17 +2605,19 @@ Ltac back ts' h0 hp gp t i :=
         apply (b3_corr ts t i (@nil nat) tt (@nil nat) tt hc);
         [idtac|assumption];
         (apply trex_norm_apply; [simpl; try done; auto|
-          rewrite ?/ts /trad /trad1 /b3 /o3_norm /coerce ;
+                                  (*  rewrite ?/ts /trad /trad1 /b3 /o3_norm /coerce ; *)
           try exact tt];
-          rewrite  ?/ts /trad /trad1 /appist /trl3 /tr3 /convert /cT /cB /trad /trad1 /nthc /list_rect /sort;
+  rewrite   /b3 /o3_norm /trl3 /convert  /appist /trad1 /nths   /trs /tr3 /eqnqtdec /nat_rec /nat_rect /eq_rect_r /eq_rect  /eq_ind_r /eq_ind  /eq_sym /list_rect /ts  /sort /sl;
+    simplify_goal
+
+         (* rewrite  ?/ts /trad /trad1 /appist /trl3 /tr3 /convert /cT /cB /trad /trad1 /nthc /list_rect /sort;
          rewrite  /trs /sl  /eqnqtdec /protect_term /nat_rec /nat_rect /seq.nth /nthc /list_rect /eq_sym
                   ?eqnqtdec_refl /eq_rect_r
-                 /eq_rect /Logic.eq_sym /eq_sym /trad1 /=;
-          simplify_goal
+                 /eq_rect /Logic.eq_sym /eq_sym /trad1 /=; *)
         );
         try by apply I
   end;
-   rewrite /sort /trad1 /seq.nth /nthc /list_rect /trs /eqnqtdec /nat_rec /nat_rect /eq_rect_r /eq_rect /eq_sym ;
+  (* rewrite /sort /trad1 /seq.nth /nthc /list_rect /trs /eqnqtdec /nat_rec /nat_rect /eq_rect_r /eq_rect /eq_sym ; *)
   try clear h; try clear ts.
 (*
 Parameter A : Prop.
@@ -2563,10 +2656,15 @@ Ltac rew_dnd ts' h hp gp gp' t i :=
   [idtac| assumption];
   (apply trex_norm_apply ; [split; try reflexivity|idtac]);
   try clear h';
- rewrite ?/ts /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert  /defs /appist ?trs_corr;
+  rewrite   /b3 /trl3 /o3_norm /convert  /appist /trad1 /nths   /trs /tr3 /eqnqtdec /nat_rec /nat_rect /eq_rect_r /eq_rect  /eq_ind_r /eq_ind  /eq_sym /list_rect /ts; 
+    simplify_goal;
+
+
+  (*
+rewrite ?/ts /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert  /defs /appist ?trs_corr;
      rewrite  /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert /cT /cB  /appist /sort /trad1 /nthc /list_rect /sort /sl;
   rewrite ?trs_corr /trs ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym; 
-  simplify_goal; 
+  simplify_goal; *)
   rewrite  /sort /sl; try clear ts.
 
   
@@ -2627,7 +2725,7 @@ Ltac rew_dnd_hyp ts' fl  h1 h2 h3 hp1 hp2 hp2' t i :=
     | coerce _ (@nil nat) ?hc2 _  => hc2
     end in
   clear h1' h2';
-  match fl with
+  match (fl) with
   | false =>
       move:
       (f3_corr ts  t i' (@nil nat) hc1 tt
@@ -2645,14 +2743,32 @@ Ltac rew_dnd_hyp ts' fl  h1 h2 h3 hp1 hp2 hp2' t i :=
   move => h5;
   move: (trex_norm_fapply ts oh4 h5 h4) => h3;
   try clear h5; try clear h4;
-   rewrite ?/ts /coerce /sort /trl3 /tr3 /f3 /o3_norm /cT /cB in h3;
+  rewrite /f3 /trl3 /o3_norm /convert  /appist /trad1 /nths   /trs /tr3 /eqnqtdec /nat_rec /nat_rect /eq_rect_r /eq_rect  /eq_ind_r /eq_ind  /eq_sym /list_rect /ts  /sort /sl in h3;
+
+ (*    rewrite ?/ts /coerce /sort /trl3 /tr3 /f3 /o3_norm /cT /cB in h3;
    rewrite /convert /trs ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym in h3;
-   rewrite /appist /trs /eqnqtdec /eq_rect_r /eq_rect /nat_rec /nat_rect /protect_term  /eq_ind_r /eq_ind /eq_sym /f_equal /sort /sl in h3;
+   rewrite /appist /trs /eqnqtdec /eq_rect_r /eq_rect /nat_rec /nat_rect /protect_term  /eq_ind_r /eq_ind /eq_sym /f_equal /sort /sl in h3; *)
    try clear ts;
    simplify_hyp h3.
+(*
+Parameter P : nat -> Prop.
+Parameter B C : Prop.
 
-      
-  
+Goal (B -> 3=4) -> P 3 -> C.
+intros h p.      
+
+rew_dnd_hyp
+  test
+  true
+  h
+  p
+  p'
+  (cons true nil)
+  (@nil bool)
+  (cons 0 nil)
+  (cons true ( (cons false nil)))
+  (@nil (option (inst1 test))).
+*)
 Ltac forward ts' h1' h2' h3 hp1 hp2 t i :=
   let ts1 := eval compute in ts' in
   let ts := fresh "ts" in
@@ -2679,20 +2795,19 @@ Ltac forward ts' h1' h2' h3 hp1 hp2 t i :=
   rewrite /coerce /= in h2;
   [ | simpl; try done; auto];
   try clear h1; try clear h2;
-  rewrite ?/ts /coerce /trl3 /f3 /o3_norm  /trad /trad1 /appist /trl3 /tr3 /convert /cT /cB /trad /trad1 /seq.nth /nthc /list_rect /sort
-          /cT /cB in h3;
-  rewrite /trs /sl /ts  /trs /sl  /eqnqtdec /protect_term /nat_rec /nat_rect /seq.nth /nthc /list_rect /eq_sym
+    rewrite /f3 /trl3 /o3_norm /convert /appist /trad1 /nths /trs /tr3 /eqnqtdec /nat_rec /nat_rect /eq_rect_r /eq_rect  /eq_ind_r /eq_ind  /eq_sym /list_rect /ts /sort /sl in h3;
+  simplify_hyp h3;
+  try clear ts; try done.
+
+
+
+      (* /trl3 /f3 /o3_norm  /trad /trad1 /appist /trl3 /tr3 /convert /cT /cB /trad /trad1 /seq.nth /nthc /list_rect  /sort
+   rewrite /trs /sl /ts  /trs /sl  /eqnqtdec /protect_term /nat_rec /nat_rect /seq.nth /nthc /list_rect /eq_sym
                   ?eqnqtdec_refl /eq_rect_r
                   /eq_rect /eq_ind_r /eq_ind /Logic.eq_sym /eq_sym /trad1 /coerce
-                  ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym /trad1 /trs /eq_rect_r in h3;
-  simplify_hyp h3;
-  try clear ts;
-  match goal with
-      | h3 : False |- _ => case h3
-      | _ => idtac
-      end.
+                  ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym /trad1 /trs /eq_rect_r in h3; *)
 
-
+(*
 Goal 2=3 -> 3=4.
   intro h.
   Check b3_corr.
@@ -2915,7 +3030,7 @@ Lemma sf3_corr :
  by intros l ist h1 h2 *; apply (sf3_corr_l l ist 0 h1 I).
 Qed.
  *)
- 
+ *)
   
 Ltac myinduction_r  p t :=
   match p with
@@ -3034,6 +3149,5 @@ Ltac myinduction_hyp_nosimpl h p :=
       end
   end.
 *)
-
 
 
