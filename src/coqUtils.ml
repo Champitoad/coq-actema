@@ -1,5 +1,10 @@
 open Proofview
 
+module PVMonad = struct
+  include Proofview.Monad
+  let (let*) = (>>=)
+end
+
 module Log = struct
   let str str =
     Feedback.msg_notice (Pp.str str)
@@ -24,6 +29,14 @@ module Log = struct
       UGraph.domain |> Univ.Level.Set.elements |>
       List.map Univ.Level.to_string in
     str Extlib.(List.to_string identity univs)
+
+  let profile (name : string) (chunk : unit -> 'a) : 'a =
+    let start = Sys.time () in
+    let result = chunk () in
+    let end_ = Sys.time () in
+    let duration = end_ -. start in
+    str (Printf.sprintf "%s took %f seconds" name duration);
+    result
 end
 
 let name_of_const evd t =
@@ -81,7 +94,7 @@ let calltac (tacname : Names.KerName.t) (args : EConstr.constr list) : unit tact
   with Not_found ->
     let name = Names.KerName.to_string tacname in
     let _ = Log.error (Printf.sprintf "Could not find tactic \"%s\"" name) in
-    Proofview.Monad.return ()
+    PVMonad.return ()
 
 module Trm = struct
   open EConstr

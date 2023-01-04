@@ -47,6 +47,27 @@ module FOSign = struct
   
   type t =
     { symbols : symbols; typing : typing; defaults : EConstr.t SymbolMap.t }
+  
+  let empty : t =
+    { symbols = {
+        s_sorts = SortSymbol.empty;
+        s_funcs = SortSymbol.empty;
+        s_preds = SortSymbol.empty; };
+      typing = {
+        t_funcs = NameMap.empty;
+        t_preds = NameMap.empty; };
+      defaults = SymbolMap.empty; }
+  
+  let union (s1 : t) (s2 : t) : t =
+    let f _ x _ = Some x in
+    { symbols = {
+        s_sorts = SortSymbol.union s1.symbols.s_sorts s2.symbols.s_sorts;
+        s_funcs = SortSymbol.union s1.symbols.s_funcs s2.symbols.s_funcs;
+        s_preds = SortSymbol.union s1.symbols.s_preds s2.symbols.s_preds; };
+      typing = {
+        t_funcs = NameMap.union f s1.typing.t_funcs s2.typing.t_funcs;
+        t_preds = NameMap.union f s1.typing.t_preds s2.typing.t_preds; };
+      defaults = SymbolMap.union f s1.defaults s2.defaults; }
 end
 
 let peano : FOSign.t =
@@ -80,11 +101,10 @@ let peano : FOSign.t =
   { symbols; typing; defaults }
 
 (* -------------------------------------------------------------------- *)
-(** Exporting Coq goals to Actema *)
+(** * Exporting Coq goals to Actema *)
 
 module Export = struct
-  let fosign (sign : EConstr.t) : FOSign.t =
-    failwith "TODO"
+  (** ** Translating Coq terms to Actema expressions and formulas *)
 
   let dummy_expr : Logic_t.expr =
     `EFun ("dummy", [])
@@ -355,14 +375,17 @@ module Export = struct
       fun _ -> dummy_form
     end et
 
+  (** ** Translating Coq's global and local environments to an Actema environment *)
 
+  open FOSign
+
+  (* Local environment of Actema definitions *)
   type varenv = Logic_t.bvar list NameMap.t
-  type varsign = varenv * FOSign.t
 
   let shortname (fullname : string) : string =
     fullname |> String.split_on_char '.' |> List.rev |> List.hd
 
-  let env_of_varsign ((venv, sign) : varsign) : Logic_t.env =
+  let env_of_varsign (venv : varenv) (sign : FOSign.t) : Logic_t.env =
     let open FOSign in
 
     let env_sort =
@@ -390,60 +413,58 @@ module Export = struct
 
     { env_sort; env_sort_name; env_fun; env_fun_name; env_prp; env_prp_name;
       env_var; env_handles }
+
+  let add_sort ({ evd; _ } : destenv) name sy ty (env, sign) =
+    let sort = ty |> EConstr.destSort evd |> EConstr.ESorts.kind evd in
+    if sort <> Sorts.set && sort <> Sorts.type1 then
+      raise Constr.DestKO;
+    let s_sorts = SortSymbol.add sy name sign.symbols.s_sorts in
+    let symbols = { sign.symbols with s_sorts } in
+    env, { sign with symbols }
   
-  let env ({ env = coq_env; evd; sign } as e : destenv) : Fo_t.env * FOSign.t = 
-    let open FOSign in
+  let add_default (e : destenv) t ty (env, sign) =
+    let sort_sy = dest_symbol (e, ty) in
+    if not (SortSymbol.mem sort_sy sign.symbols.s_sorts)
+          || SymbolMap.mem sort_sy sign.defaults then
+      raise Constr.DestKO;
+    (env, { sign with defaults = SymbolMap.add sort_sy t sign.defaults })
+  
+  let add_func (e : destenv) name sy ty (env, sign) =
+    let e = { e with sign } in
+    let sig_ = dest_functy (e, ty) in
+    let s_funcs = SortSymbol.add sy name sign.symbols.s_funcs in
+    let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
+    let symbols = { sign.symbols with s_funcs } in
+    let typing = { sign.typing with t_funcs } in
+    env, { sign with symbols; typing }
 
-    let add_sort name sy ty (env, sign) =
-      let sort = ty |> EConstr.destSort evd |> EConstr.ESorts.kind evd in
-      if sort <> Sorts.set && sort <> Sorts.type1 then
-        raise Constr.DestKO;
-      let s_sorts = SortSymbol.add sy name sign.symbols.s_sorts in
-      let symbols = { sign.symbols with s_sorts } in
-      env, { sign with symbols } in
-    
-    let add_default t ty (env, sign) =
-      let sort_sy = dest_symbol ({ env = coq_env; evd; sign }, ty) in
-      if not (SortSymbol.mem sort_sy sign.symbols.s_sorts)
-           || SymbolMap.mem sort_sy sign.defaults then
-        raise Constr.DestKO;
-      (env, { sign with defaults = SymbolMap.add sort_sy t sign.defaults }) in
-    
-    let add_func name sy ty (env, sign) =
-      let e = { e with sign } in
-      let sig_ = dest_functy (e, ty) in
-      let s_funcs = SortSymbol.add sy name sign.symbols.s_funcs in
-      let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
-      let symbols = { sign.symbols with s_funcs } in
-      let typing = { sign.typing with t_funcs } in
-      env, { sign with symbols; typing } in
+  let add_strict_func (e : destenv) name sy ty (env, sign) =
+    let e = { e with sign } in
+    let sig_ = dest_functy (e, ty) in
+    if List.length (fst sig_) = 0 then raise Constr.DestKO;
+    let s_funcs = SortSymbol.add sy name sign.symbols.s_funcs in
+    let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
+    let symbols = { sign.symbols with s_funcs } in
+    let typing = { sign.typing with t_funcs } in
+    env, { sign with symbols; typing }
 
-    let add_strict_func name sy ty (env, sign) =
-      let e = { e with sign } in
-      let sig_ = dest_functy (e, ty) in
-      if List.length (fst sig_) = 0 then raise Constr.DestKO;
-      let s_funcs = SortSymbol.add sy name sign.symbols.s_funcs in
-      let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
-      let symbols = { sign.symbols with s_funcs } in
-      let typing = { sign.typing with t_funcs } in
-      env, { sign with symbols; typing } in
+  let add_pred (e : destenv) name sy ty (env, sign) =
+    let e = { e with sign } in
+    let arity = dest_predty (e, ty) in
+    let s_preds = SortSymbol.add sy name sign.symbols.s_preds in
+    let t_preds = NameMap.add name arity sign.typing.t_preds in
+    let symbols = { sign.symbols with s_preds } in
+    let typing = { sign.typing with t_preds } in
+    env, { sign with symbols; typing }
 
-    let add_pred name sy ty (env, sign) =
-      let e = { e with sign } in
-      let arity = dest_predty (e, ty) in
-      let s_preds = SortSymbol.add sy name sign.symbols.s_preds in
-      let t_preds = NameMap.add name arity sign.typing.t_preds in
-      let symbols = { sign.symbols with s_preds } in
-      let typing = { sign.typing with t_preds } in
-      env, { sign with symbols; typing } in
-
-    let add_var name ty value (env, sign) =
-      let e = { e with sign } in
-      let sort = find_sort (e, ty) in
-      let destenv = { env = coq_env; evd; sign } in
-      let body = Option.map (fun v -> dest_expr (destenv, EConstr.of_constr v)) value in
-      NameMap.add name [`TVar (sort, 0), body] env, sign in
-
+  let add_var (e : destenv) name ty value (env, sign) =
+    let e = { e with sign } in
+    let sort = find_sort (e, ty) in
+    let destenv = { e with sign } in
+    let body = Option.map (fun v -> dest_expr (destenv, EConstr.of_constr v)) value in
+    NameMap.add name [`TVar (sort, 0), body] env, sign
+  
+  let global_env ({ env = coq_env; sign; _ } as e : destenv) : Fo_t.env * FOSign.t = 
     (* Add sorts defined as inductive types *)
     let venv, sign = Environ.fold_inductives begin fun mi bodies vsign ->
         let _, vsign = Array.fold_left begin fun (i, vsign) body ->
@@ -457,7 +478,7 @@ module Export = struct
               | RegularArity ar -> EConstr.of_constr ar.mind_user_arity
               | TemplateArity ar -> EConstr.mkType ar.template_level in
             i+1, vsign |> begin
-              add_sort name (Ind id) ty >>?
+              add_sort e name (Ind id) ty >>?
               identity
             end
           end (0, vsign) bodies.mind_packets in
@@ -474,14 +495,17 @@ module Export = struct
           Environ.constant_type_in coq_env (Univ.in_punivs c) |>
           EConstr.of_constr in
         vsign |> begin
-          add_sort name (Cst c) ty >>?
-          add_default t ty >>?
-          add_func name (Cst c) ty >>?
-          add_pred name (Cst c) ty >>?
+          add_sort e name (Cst c) ty >>?
+          add_default e t ty >>?
+          add_func e name (Cst c) ty >>?
+          add_pred e name (Cst c) ty >>?
           identity
         end
       end coq_env (venv, sign) in
 
+    env_of_varsign venv sign, sign
+
+  let local_env ({ env = coq_env; sign; _ } as e : destenv) : Fo_t.env * FOSign.t = 
     (* Add sorts, default elements, functions, predicates and variables defined
        as local variables *)
     let venv, sign = Environ.fold_named_context begin fun _ decl vsign ->
@@ -490,55 +514,56 @@ module Export = struct
         let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
         let value = Context.Named.Declaration.get_value decl in
         vsign |> begin
-          add_sort name (Var id) ty >>?
-          add_default (EConstr.mkVar id) ty >>?
-          add_strict_func name (Var id) ty >>?
-          add_pred name (Var id) ty >>?
-          add_var name ty value >>?
+          add_sort e name (Var id) ty >>?
+          add_default e (EConstr.mkVar id) ty >>?
+          add_strict_func e name (Var id) ty >>?
+          add_pred e name (Var id) ty >>?
+          add_var e name ty value >>?
           identity
         end
-      end coq_env ~init:(venv, sign) in
+      end coq_env ~init:(NameMap.empty, sign) in
 
-    env_of_varsign (venv, sign), sign
+    env_of_varsign venv sign, sign
+  
+  let env (e : destenv) : Fo_t.env * FOSign.t =
+    let genv, gsign = global_env e in
+    let lenv, lsign = local_env e in
+    Utils.Env.concat genv lenv, FOSign.union gsign lsign
 
-  let hyps ({ env = coq_env; evd; _} as destenv : destenv) : Logic_t.hyp list * hidmap =
+  let hyps ({ env = coq_env; evd; _ } as e : destenv) : Logic_t.hyp list * hidmap =
     let fresh = Uid.fresh () in
     Environ.fold_named_context begin fun _ decl (hyps, hm) ->
       let name = Context.Named.Declaration.get_id decl in
       let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
       if is_prop coq_env evd ty then
         let h_id = fresh () in
-        let h_form = dest_form (destenv, ty) in
+        let h_form = dest_form (e, ty) in
         let hyp = Logic_t.{ h_id; h_form } in
         (hyp :: hyps, UidMap.add h_id name hm)
       else
         (hyps, hm)
     end coq_env ~init:([], UidMap.empty)
 
-  let goal (sign : FOSign.t) (goal : Goal.t) : FOSign.t * Logic_t.goal * hidmap =
+  (* [goal env sign gl] exports the Coq goal [gl] into an Actema goal and a
+     mapping from Actema uids to Coq identifiers *)
+  let goal (env : Logic_t.env) (sign : FOSign.t) (goal : Goal.t) : Logic_t.goal * hidmap =
     let coq_env = Goal.env goal in
     let evd = Goal.sigma goal in
     let concl = Goal.concl goal in
     
-    let destenv = { env = coq_env; evd; sign } in
+    let e = { env = coq_env; evd; sign } in
 
-    let g_env, sign =
-      env destenv in
-    (* Second pass to get all constants with previously unknown sorts *)
-    let g_env, sign =
-      env { destenv with sign } in
+    let g_env =
+      let lenv, _ = local_env e in
+      Utils.Env.concat env lenv in
+    let g_hyps, hm = hyps e in
+    let g_concl = dest_form (e, concl) in
     
-    let (g_hyps, hm) =
-      hyps { destenv with sign } in
-
-    let g_concl : Logic_t.form =
-      dest_form ({ destenv with sign }, concl) in
-    
-    sign, Logic_t.{ g_env; g_hyps; g_concl }, hm
+    Logic_t.{ g_env; g_hyps; g_concl }, hm
 end
 
 (* -------------------------------------------------------------------- *)
-(** Importing Actema actions as Coq tactics *)
+(** * Importing Actema actions as Coq tactics *)
 
 module Import = struct
   (* let kname = kername ["Actema"; "DnD"] *)
@@ -794,7 +819,7 @@ module Import = struct
 
   let action (sign : FOSign.t) (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
              (a : Logic_t.action) : unit tactic =
-    let open Proofview.Monad in
+    let open PVMonad in
     match a with
     | `AId ->
         Tacticals.tclIDTAC
@@ -833,7 +858,8 @@ module Import = struct
               | 1 when zero -> Tactics.left Tactypes.NoBindings
               | 0 -> Tactics.right Tactypes.NoBindings
               | n ->
-                  Tactics.left Tactypes.NoBindings >>= fun _ -> aux zero (n-1)
+                  let* _ = Tactics.left Tactypes.NoBindings in
+                  aux zero (n-1)
             in
             aux (iv = 0) (arity 0 f - iv - 1)
         | `FBind (`Forall, x, _, _) ->
@@ -1141,17 +1167,4 @@ module Import = struct
         calltac (kname tac_name) args
     | _ ->
         raise (UnsupportedAction a)
-
-  (* let rec proof (sign : FOSign.t) (hm : hidmap) (t : Logic_t.proof) : unit tactic =
-    let open Proofview.Monad in
-    match t with
-    | `PNode (a, goal, ipat, subs) ->
-        Goal.enter begin fun coq_goal ->
-          action sign hm goal coq_goal ipat a >>= fun hm ->
-          if subs = [] then 
-            Tacticals.tclIDTAC
-          else
-            let subs_tacs = Stdlib.List.map (proof sign hm) subs in
-            Proofview.tclDISPATCH subs_tacs
-        end *)
 end

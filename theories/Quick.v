@@ -7,7 +7,7 @@ Context (P Q : nat -> Prop) (R S : nat -> nat -> Prop) (t : nat).
 Context (a b : nat).
 
 Goal (B -> a = b) -> P b -> C.
-intros h p.
+intros h p. actema_force.
 rew_dnd_hyp test
 true
 

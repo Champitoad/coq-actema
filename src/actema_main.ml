@@ -114,40 +114,50 @@ let load_proof (id : aident) : proof option =
 
 let sign = Translate.peano
 
-let compile_action ((idx, a) : int * Logic_t.action) : unit tactic =
-  let open Proofview.Monad in
+let compile_action env sign ((idx, a) : int * Logic_t.action) : unit tactic =
+  let open PVMonad in
   Goal.enter begin fun coq_goal ->
-    let sign, goal, hm = Export.goal sign coq_goal in
+    let goal, hm = Export.goal env sign coq_goal in
     Import.action sign hm goal coq_goal a
   end |>
   let idx = idx + 1 in
   tclFOCUS idx idx
 
-let compile_proof (prf : proof) : unit tactic =
+let compile_proof env sign (prf : proof) : unit tactic =
   let rec aux prf =
-    let open Proofview.Monad in
+    let open PVMonad in
     begin match prf with
     | action :: prf ->
-        compile_action action >>= fun _ ->
+        let* _ = compile_action env sign action in
         aux prf
     | [] ->
         return ()
     end in
   aux prf
 
-let export_goals () : Logic_t.goals tactic =
-  let open Proofview.Monad in
-  Goal.goals >>= fun coq_goals_tacs ->
+let export_env () : (Logic_t.env * FOSign.t) tactic =
+  let result = ref (Utils.Env.empty, sign) in
+  let open PVMonad in
+  let* _ = Goal.enter begin fun goal ->
+    let coq_env, evd = Goal.env goal, Goal.sigma goal in
+    result := Export.env { env = coq_env; evd; sign };
+    return ()
+  end in
+  return !result
+
+let export_goals env sign : Logic_t.goals tactic =
+  let open PVMonad in
+  let* coq_goals_tacs = Goal.goals in
   Stdlib.List.fold_right begin fun coq_goal_tac acc ->
-      coq_goal_tac >>= fun coq_goal ->
-      let _, goal, _ = Export.goal sign coq_goal in
+      let* coq_goal = coq_goal_tac in
+      let goal, _ = Export.goal env sign coq_goal in
       (* Log.str (Utils.string_of_goal goal); *)
-      acc >>= fun goals ->
+      let* goals = acc in
       return (goal :: goals)
   end coq_goals_tacs (return [])
 
 let get_user_action (goals : Logic_t.goals) : Client.action =
-  let open Proofview.Monad in
+  let open PVMonad in
   if goals = [] then begin
     Lwt_main.run (Client.qed ());
     Client.Done
@@ -157,16 +167,16 @@ let get_user_action (goals : Logic_t.goals) : Client.action =
 type history = { mutable before : proof; mutable after : proof }
 exception ApplyUndo
 
-let interactive_proof () : proof tactic =
+let interactive_proof env sign : proof tactic =
   let hist = ref { before = []; after = [] } in
 
   let rec aux () =
-    let open Proofview.Monad in
+    let open PVMonad in
     let open Client in
 
     let continue idx a =
       let cont =
-        compile_action (idx, a) >>= fun _ ->
+        let* _ = compile_action env sign (idx, a) in
         aux () in
       tclOR cont begin fun (exn, _ as iexn) ->
         match exn with
@@ -181,7 +191,7 @@ let interactive_proof () : proof tactic =
             aux ()
       end in
 
-    export_goals () >>= fun goals ->
+    let* goals = export_goals env sign in
     begin match get_user_action goals with
 
     | Do (idx, a) ->
@@ -213,18 +223,19 @@ let interactive_proof () : proof tactic =
   aux ()
 
 let actema_tac ?(force = false) (action_name : string) : unit tactic =
-  let open Proofview.Monad in
+  let open PVMonad in
   Goal.enter begin fun coq_goal ->
-    let _, goal, _ = Export.goal sign coq_goal in
+    let* env, sign = export_env () in
+    let goal, _ = Export.goal env sign coq_goal in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
     let interactive () =
-      interactive_proof () >>= fun prf ->
+      let* prf = interactive_proof env sign in
       save_proof id prf;
       return () in
     if force then interactive () else
     match load_proof id with
     | Some prf ->
-        compile_proof prf
+        compile_proof env sign prf
     | _ ->
         interactive ()
   end
@@ -238,5 +249,5 @@ let test_tac : unit tactic =
       UGraph.domain |> Univ.Level.Set.elements |>
       List.map Univ.Level.to_string in
     Log.str Extlib.(List.to_string identity univs);
-    Proofview.Monad.return ()
+    PVMonad.return ()
   end

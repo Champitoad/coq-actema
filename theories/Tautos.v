@@ -17,6 +17,9 @@ Proof.
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
   actema.
+  Set Ltac Profiling.
+  actema.
+  Show Ltac Profile CutOff 1.
 Qed.
 
 Inductive ile (n:nat) : nat -> Prop :=

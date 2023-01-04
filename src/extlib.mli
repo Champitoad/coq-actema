@@ -12,6 +12,7 @@ module BiMap (K : Map.OrderedType) (V : Map.OrderedType) : sig
   val size : t -> int
 
   val empty : t
+  val union : t -> t -> t
   val add : K.t -> V.t -> t -> t
   val replace : K.t -> V.t -> t -> t
   val remove : K.t -> t -> t
@@ -32,3 +33,5 @@ module List : sig
     ?sep : string -> ?left : string -> ?right : string ->
     ('a -> string) -> 'a t -> string 
 end
+
+val ssystime : unit -> string
