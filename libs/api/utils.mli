@@ -2,12 +2,15 @@ open Logic_t
 
 val biniou_unhash_dict : int -> string option
 
-val empty_env : env
-
 module Uid : sig
   include Map.OrderedType
   val fresh : unit -> unit -> t
 end with type t = uid
+
+module Env : sig
+  val empty : env
+  val concat : env -> env -> env
+end
 
 module LEnv : sig
   val exists : lenv -> vname -> bool

@@ -15,6 +15,24 @@ end with type t = Logic_t.uid = struct
     fun () -> incr count; !count
 end
 
+module Env = struct
+  let empty =
+    Fo_t.{ env_sort = []; env_prp = []; env_fun = [];
+           env_sort_name = []; env_prp_name = []; env_fun_name = [];
+           env_var = []; env_handles = [] }
+  
+  let concat e1 e2 =
+    Fo_t.{
+      env_sort = e1.env_sort @ e2.env_sort;
+      env_prp = e1.env_prp @ e2.env_prp;
+      env_fun = e1.env_fun @ e2.env_fun;
+      env_sort_name = e1.env_sort_name @ e2.env_sort_name;
+      env_prp_name = e1.env_prp_name @ e2.env_prp_name;
+      env_fun_name = e1.env_fun_name @ e2.env_fun_name;
+      env_var = e1.env_var @ e2.env_var;
+      env_handles = e1.env_handles @ e2.env_handles; }
+end
+
 module LEnv = struct
   let exists lenv (x, i) =
     (lenv |>
@@ -282,11 +300,6 @@ let biniou_unhash_dict = Bi_io.make_unhash [
   "AId"; "ADef"; "AIntro"; "AExact"; "AElim"; "AInd"; "ASimpl"; "ARed"; "ACut"; "AAssume"; "AGeneralize"; "AMove"; "ADuplicate"; "ALink"; "AInstantiate";
   "PNode";
 ]
-
-let empty_env =
-  Fo_t.{ env_sort = []; env_prp = []; env_fun = [];
-         env_sort_name = []; env_prp_name = []; env_fun_name = [];
-         env_var = []; env_handles = [] }
 
 let string_of_expr e =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_expr e)
