@@ -3289,7 +3289,7 @@ end = struct
           `ASimpl (of_ipath tgt)
       | `Red tgt ->
           `ARed (of_ipath tgt)
-     | `Indt tgt ->
+      | `Indt tgt ->
           `AIndt (of_ipath tgt)
       | `Hyperlink (lnk, actions) ->
           begin match lnk, actions with
