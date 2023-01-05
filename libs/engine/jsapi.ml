@@ -53,7 +53,7 @@ end
 let () = Exn.register (fun exn ->
     match exn with
     | Syntax.ParseError _ ->
-        Some "invalid goal (parse error)"
+        Some "invalid input (parse error)"
     | DuplicatedEntry (_, name) ->
         Some ("duplicated entry \"" ^ name ^ "\" in goal")
     | TypingError
@@ -352,16 +352,18 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
   (* [this#getcutb (form : string)] parses [form] in the current goal, and
    * returns the base64-encoded string of the corresponding ACut action. *)
   method getcutb form =
+    !! begin fun () ->
       let goal = _self##goal in
       let form = form |>
         Js.to_string |> String.trim |>
         Io.from_string |> Io.parse_form |>
         Form.check goal.g_env |>
         Translate.of_form in
-    `ACut form |>
-    Api.Logic_b.string_of_action |>
-    Base64.encode_string |>
-    Js.string
+      `ACut form |>
+      Api.Logic_b.string_of_action |>
+      Base64.encode_string |>
+      Js.string
+    end ()
     
   
   (* [this#addlemma (name : string)] retrieves the lemma [name] in the database,
@@ -402,16 +404,18 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
    * in the current goal, and returns the base64-encoded string of the
    * corresponding ADef action. *)
   method getaliasb expr =
-    let goal = _self##goal in
-    let expr = String.trim (Js.to_string expr) in
-    let name, expr = Io.parse_nexpr (Io.from_string expr) in
-    let expr, ty = Form.echeck goal.g_env expr in
-    let name = Location.unloc name in
-    let expr, ty = Translate.(of_expr expr, of_type_ ty) in
-    `ADef (name, ty, expr) |>
-    Api.Logic_b.string_of_action |>
-    Base64.encode_string |>
-    Js.string
+    !! begin fun () ->
+      let goal = _self##goal in
+      let expr = String.trim (Js.to_string expr) in
+      let name, expr = Io.parse_nexpr (Io.from_string expr) in
+      let expr, ty = Form.echeck goal.g_env expr in
+      let name = Location.unloc name in
+      let expr, ty = Translate.(of_expr expr, of_type_ ty) in
+      `ADef (name, ty, expr) |>
+      Api.Logic_b.string_of_action |>
+      Base64.encode_string |>
+      Js.string
+    end ()
 
   (* [this#move_hyp (from : handle<js_hyp>) (before : handle<js_hyp> option)] move
    * hypothesis [from] before hypothesis [before]. Both hypothesis
@@ -781,7 +785,7 @@ let export (name : string) : unit =
         Js.to_string |>
         Base64.decode_exn |>
         Api.Logic_b.goals_of_string in
-      let gls, hms = goals |> List.map Proof.Translate.import_goal |> List.split in
+      let gls, hms = goals |> !!(List.map Proof.Translate.import_goal) |> List.split in
       let hm = List.fold_left Hidmap.union Hidmap.empty hms in
-      js_proof_engine (Proof.ginit hm gls)
+      js_proof_engine (!!(Proof.ginit hm) gls)
   end)

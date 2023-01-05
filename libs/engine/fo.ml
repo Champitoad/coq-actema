@@ -743,6 +743,9 @@ end = struct
 
         | EVar (x, i) ->
             [span [Xml.pcdata (Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i)]]
+        
+        | EFun ("_dummy", _) ->
+            [span [Xml.pcdata "😬"]]
             
         | EFun ("Z"    as f, es)
         | EFun ("S"    as f, es)
@@ -835,6 +838,9 @@ end = struct
             | (`And | `Or | `Imp | `Not | `Equiv), _ ->
                 assert false
           end
+
+        | FPred ("_dummy", _) ->
+            [span [Xml.pcdata "🫠"]]
 
         | FPred ("_EQ", [e1; e2]) ->
             [span (for_expr ?id env (0 :: p) e1);
@@ -1449,6 +1455,7 @@ end = struct
     and eq bds env ty1 ty2 =
       match ty1, ty2 with
       | TVar a, ty | ty, TVar a ->
+          a = ("_dummy", 0) ||
           eq_alias bds env a ty
 
       | TUnit, TUnit ->
@@ -1787,8 +1794,6 @@ end = struct
               raise TypingError;
             let args = List.map (einfer env) args in
             if not (List.for_all2 (t_equal env) fargs args) then
-              (* (js_log "ddjkdsjf";
-              raise TypingError); *)
               raise TypingError;
             fres
       end
