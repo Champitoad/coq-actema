@@ -2,8 +2,6 @@
 (** Identifiers *)
 
 type name <ocaml from="Fo"> = abstract
-type vname <ocaml from="Fo"> = abstract
-type uid <ocaml from="Fo"> = abstract
 
 (* -------------------------------------------------------------------- *)
 (** Types *)
@@ -39,6 +37,8 @@ type lenv <ocaml from="Fo"> = abstract
 (* -------------------------------------------------------------------- *)
 (** Goals *)
 
+type uid = string
+
 type hyp = {
   h_id : uid;
   h_form : form;
@@ -59,7 +59,7 @@ type lgoal = (hyp list * form)
 
 type pkind = [Hyp | Concl | Var of [Head | Body]]
 type ctxt = { kind : pkind; handle : uid }
-type ipath = { root : uid; ctxt : ctxt; sub : int list }
+type ipath = { ctxt : ctxt; sub : int list }
 
 type choice = (int * (lenv * lenv * expr) option)
 type itrace = choice list
@@ -74,8 +74,7 @@ type action = [
   | ASimpl of ipath
   | ARed of ipath
   | AIndt of ipath
-  | ACut of (form * uid)
-  | AAssume of (form * uid)
+  | ACut of form
   | AGeneralize of uid
   | AMove of (uid * uid option)
   | ADuplicate of uid
@@ -84,11 +83,3 @@ type action = [
 ]
 
 type aident = (string * lgoal)
-
-(** Proofs *)
-
-type intro_pat = uid list list
-
-type proof = [
-  | PNode of (action * goal * intro_pat * proof list)
-]

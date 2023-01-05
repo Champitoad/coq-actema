@@ -4,7 +4,7 @@ open Fo
 
 (* ------------------------------------------------------------------- *)
 module Handle : sig
-  type t = private int
+  include Map.OrderedType
 
   val ofint : int -> t
   val fresh : unit -> t
@@ -12,6 +12,8 @@ module Handle : sig
   val toint : t -> int
 end = struct
   type t = int
+
+  let compare = Utils.Uid.compare
 
   let fresh () : t =
     Utils.Uid.fresh ()
@@ -23,6 +25,36 @@ end = struct
     t
 
   let eq = ((=) : t -> t -> bool)
+end
+
+module Hidmap = struct
+  open Api
+
+  module HandleMap = Map.Make(Handle)
+
+  type hidmap = Logic_t.uid HandleMap.t
+
+  module Env = struct type t = hidmap end
+  module State = Monad.State(Env)
+
+  open State
+
+  let empty =
+    HandleMap.empty
+
+  let find (hd : Handle.t) : Logic_t.uid State.t =
+    let* hm = get in
+    return (HandleMap.find hd hm)
+  
+  let push (id : Logic_t.uid) : Handle.t State.t =
+    let hd = Handle.fresh () in
+    let* hm = get in
+    let* _ = put (HandleMap.add hd id hm) in
+    return hd
+  
+  let union (m1 : hidmap) (m2 : hidmap) : hidmap =
+    let f _ x _ = Some x in
+    HandleMap.union f m1 m2
 end
 
 (* -------------------------------------------------------------------- *)
@@ -43,6 +75,8 @@ module Proof : sig
   }
 
   val mk_hyp : ?src:Handle.t -> ?gen:int -> form -> hyp
+
+  val hidmap : proof -> Hidmap.hidmap
 
   type hyps
 
@@ -70,7 +104,7 @@ module Proof : sig
   and goal = { g_id: Handle.t; g_pregoal: pregoal; }
 
   val init      : env -> form list -> form -> proof
-  val ginit     : pregoal list -> proof
+  val ginit     : Hidmap.hidmap -> pregoal list -> proof
   val closed    : proof -> bool
   val opened    : proof -> Handle.t list
   val after     : proof -> Handle.t -> Handle.t list option
@@ -79,12 +113,6 @@ module Proof : sig
 
   val db      : proof -> LemmaDB.t
   val loaddb  : proof -> (string * string) list -> proof
-
-  type intro_pat = Handle.t list list
-  type ptree =
-    | PNode of (pnode * pregoal * intro_pat * ptree list)
-
-  val get_ptree : proof -> ptree
 
   type meta = < > Js_of_ocaml.Js.t
 
@@ -108,8 +136,9 @@ module Proof : sig
     proof -> Handle.t -> pnode -> pregoals -> proof
   
   module Translate : sig
-    val export_goal : pregoal -> Api.Logic_t.goal
-    val import_goal : Api.Logic_t.goal -> pregoal
+    open Hidmap
+    val import_goal : Api.Logic_t.goal -> pregoal * hidmap
+    val export_goal : pregoal * hidmap -> Api.Logic_t.goal
   end
 end = struct
   module Js = Js_of_ocaml.Js
@@ -207,11 +236,10 @@ end = struct
 
   type goal = { g_id: Handle.t; g_pregoal: pregoal; }
 
-  type intro_pat = Handle.t list list
   type gdep = {
     d_src : Handle.t;
     d_dst : Handle.t list;
-    d_ndn : pnode * intro_pat;
+    d_ndn : pnode;
   }
 
   type proof = {
@@ -222,18 +250,22 @@ end = struct
     p_bkwd : (Handle.t, gdep) Map.t;
     p_meta : (Handle.t, < > Js.t) Map.t ref;
     p_db   : LemmaDB.t;
+    p_hm   : Hidmap.hidmap;
   }
 
   let mk_hyp ?(src : Handle.t option) ?(gen : int = 0) form =
     { h_src = src; h_gen = gen; h_form = form; }
+  
+  let hidmap proof =
+    proof.p_hm
 
   let init (env : env) (hyps : form list) (goal : form) =
     Form.recheck env goal;
     List.iter (Form.recheck env) hyps;
 
-    let uid  = Handle.fresh () in
+    let uid = Handle.fresh () in
     let g_hyps = List.fold_left
-      (fun hs f ->  Hyps.add hs (Handle.fresh ()) (mk_hyp f))
+      (fun hs f -> Hyps.add hs (Handle.fresh ()) (mk_hyp f))
       Hyps.empty hyps in
     let root = { g_id = uid; g_pregoal = {
         g_env  = env;
@@ -248,9 +280,10 @@ end = struct
       p_frwd = Map.empty;
       p_bkwd = Map.empty;
       p_meta = ref Map.empty;
-      p_db   = LemmaDB.empty env; }
+      p_db   = LemmaDB.empty env;
+      p_hm   = Hidmap.empty }
 
-  let ginit (pregoals : pregoal list) : proof =
+  let ginit (hm : Hidmap.hidmap) (pregoals : pregoal list) : proof =
     let check { g_env; g_hyps; g_goal } =
       Form.recheck g_env g_goal;
       Hyps.iter (fun hyp -> Form.recheck g_env hyp.h_form) g_hyps; in
@@ -277,7 +310,8 @@ end = struct
       p_frwd = Map.empty;
       p_bkwd = Map.empty;
       p_meta = ref Map.empty;
-      p_db   = LemmaDB.empty Env.empty; }
+      p_db   = LemmaDB.empty Env.empty;
+      p_hm   = hm }
   
   let db (proof : proof) =
     proof.p_db
@@ -320,19 +354,6 @@ end = struct
         (InvalidGoalId id)
     in goal.g_pregoal
 
-  type ptree =
-    | PNode of (pnode * pregoal * intro_pat * ptree list)
-
-  let get_ptree (proof : proof) : ptree =
-    let rec aux (id : Handle.t) : ptree =
-      let goal = byid proof id in
-      try
-        let { d_dst; d_ndn = pn, ipat; _ } = Map.find id proof.p_frwd in
-        PNode (pn, goal, ipat, List.map aux d_dst)
-      with Not_found ->
-        PNode (TId, goal, [], [])
-    in aux proof.p_root
-  
   type subgoal = (Handle.t option * form list) list * form
 
   let hprogress (pr : proof) (id : Handle.t) (pn : pnode) (sub : pregoal) =
@@ -348,10 +369,7 @@ end = struct
       try  List.pivot (Handle.eq id) pr.p_crts
       with Invalid_argument _ -> raise (SubgoalNotOpened id) in
 
-    let new_hyps = Hyps.diff sub.g_pregoal.g_hyps _goal.g_hyps in
-    let new_defs = Vars.diff sub.g_pregoal.g_env _goal.g_env in
-    let d_ndn = pn, [Hyps.ids new_hyps @ List.map Handle.ofint new_defs] in
-    let dep = { d_src = id; d_dst = [g_id]; d_ndn; } in
+    let dep = { d_src = id; d_dst = [g_id]; d_ndn = pn; } in
 
     let meta =
       match Map.Exceptionless.find id !(pr.p_meta) with
@@ -388,13 +406,7 @@ end = struct
       try  List.pivot (Handle.eq id) pr.p_crts
       with Invalid_argument _ -> raise (SubgoalNotOpened id) in
 
-    let ipat =
-      subs |> List.map (fun sub ->
-        let new_hyps = Hyps.diff sub.g_pregoal.g_hyps _goal.g_hyps in
-        let new_defs = Vars.diff sub.g_pregoal.g_env _goal.g_env in
-        Hyps.ids new_hyps @ List.map Handle.ofint new_defs) in
-    let d_ndn = pn, ipat in
-    let dep = { d_src = id; d_dst = sids; d_ndn; } in
+    let dep = { d_src = id; d_dst = sids; d_ndn = pn; } in
 
     let meta =
       match Map.Exceptionless.find id !(pr.p_meta) with
@@ -453,27 +465,45 @@ end = struct
     open Api
     open Fo.Translate
 
-    let of_hyp (id, { h_form; _ } : Handle.t * hyp) : Logic_t.hyp =
-      Logic_t.{ h_id = Handle.toint id; h_form = of_form h_form }
+    open Hidmap
+    open State
 
-    let of_hyps (hyps : hyps) : Logic_t.hyp list =
-      hyps |> Hyps.to_list |> List.map of_hyp
+    let of_hyp (hd, { h_form; _ } : Handle.t * hyp) : Logic_t.hyp State.t =
+      let* h_id = find hd in
+      return Logic_t.{ h_id; h_form = of_form h_form }
+
+    let of_hyps (hyps : hyps) : Logic_t.hyp list State.t =
+      hyps |> Hyps.to_list |> fold begin fun hyps hyp ->
+        let* h = of_hyp hyp in
+        return (hyps @ [h])
+      end []
     
-    let to_hyp (Logic_t.{ h_id; h_form } : Logic_t.hyp) : Handle.t * hyp =
-      Handle.ofint h_id, mk_hyp (to_form h_form)
+    let to_hyp (Logic_t.{ h_id; h_form } : Logic_t.hyp) : (Handle.t * hyp) State.t =
+      let* hd = push h_id in
+      return (hd, mk_hyp (to_form h_form))
 
-    let to_hyps (hyps : Logic_t.hyp list) : hyps =
-      hyps |> List.map to_hyp |> Hyps.of_list
+    let to_hyps (hyps : Logic_t.hyp list) : hyps State.t =
+      let* hyps = fold begin fun hyps hyp ->
+          let* h = to_hyp hyp in
+          return (hyps @ [h])
+        end [] hyps in
+      hyps |> Hyps.of_list |> return
 
-    let export_goal ({ g_env; g_hyps; g_goal } : pregoal) : Logic_t.goal =
+    let export_goal ({ g_env; g_hyps; g_goal }, hm : pregoal * hidmap) : Logic_t.goal =
       Logic_t.{ g_env = of_env g_env;
-                g_hyps = of_hyps g_hyps;
+                g_hyps = run (of_hyps g_hyps) hm;
                 g_concl = of_form g_goal }
 
-    let import_goal (Logic_t.{ g_env; g_hyps; g_concl } : Logic_t.goal) : pregoal =
+    let import_goal (Logic_t.{ g_env; g_hyps; g_concl } : Logic_t.goal) : pregoal * hidmap =
+      let g_hyps, hm =
+        HandleMap.empty |> run begin
+          let* hyps = to_hyps g_hyps in
+          let* hm = get in
+          return (hyps, hm)
+        end in
       { g_env = to_env g_env;
-        g_hyps = to_hyps g_hyps;
-        g_goal = to_form g_concl }
+        g_hyps;
+        g_goal = to_form g_concl }, hm
   end
 end
 
@@ -584,9 +614,9 @@ module CoreLogic : sig
   val apply   : Proof.proof -> action -> Proof.proof
 
   module Translate : sig
+    open Hidmap
     exception UnsupportedAction of action_type
-    val export_action : Proof.proof -> action -> Api.Logic_t.action
-    val export_proof : Proof.proof -> Api.Logic_t.proof
+    val export_action : hidmap -> Proof.proof -> action -> Api.Logic_t.action
   end
 end = struct
   type targ   = Proof.proof * Handle.t
@@ -3229,15 +3259,19 @@ end = struct
     open Api
     open Fo.Translate
     open Proof
+    open Hidmap
+    open State
 
     exception UnsupportedPNode of pnode
     exception UnsupportedAction of action_type
 
-    let of_ctxt (ctxt : ctxt) : Logic_t.ctxt =
-      Logic_t.{ kind = ctxt.kind; handle = ctxt.handle }
+    let of_ctxt (ctxt : ctxt) : Logic_t.ctxt State.t =
+      let* handle = find (Handle.ofint ctxt.handle) in
+      return Logic_t.{ kind = ctxt.kind; handle }
 
-    let of_ipath (p : ipath) : Logic_t.ipath =
-      Logic_t.{ root = p.root; ctxt = of_ctxt (p.ctxt); sub = p.sub }
+    let of_ipath (p : ipath) : Logic_t.ipath State.t =
+      let* ctxt = of_ctxt p.ctxt in
+      return Logic_t.{ ctxt; sub = p.sub }
     
     let of_lenv (lenv : LEnv.lenv) : Fo_t.lenv =
       LEnv.bindings lenv |>
@@ -3248,74 +3282,75 @@ end = struct
         i, Option.map (fun (le1, le2, e) -> of_lenv le1, of_lenv le2, of_expr e) w
       end itrace
 
-    let action_of_pnode (p : pnode) : Logic_t.action =
-      match p with
+    let action_of_pnode (p : pnode) : Logic_t.action State.t =
+      begin match p with
       | TId ->
-          `AId
+          return `AId
       | TExact hd ->
-          `AExact (Handle.toint hd)
+          let* id = find hd in
+          return (`AExact id)
       | TDef ((name, ty, body), _) ->
-          `ADef (name, of_type_ ty, of_expr body)
+          return (`ADef (name, of_type_ ty, of_expr body))
       | TIntro (i, wit) ->
           let wit' = wit |>
             Option.map begin fun (e, t) ->
               of_expr e, of_type_ t
             end in
-          `AIntro (i, wit')
+          return (`AIntro (i, wit'))
       | TElim hd ->
-          `AElim (Handle.toint hd)
+          let* id = find hd in
+          return (`AElim id)
       | TLink (src, dst, itrace) ->
-          `ALink (of_ipath src, of_ipath dst, of_itrace itrace)
+          let* src = of_ipath src in
+          let* dst = of_ipath dst in
+          return (`ALink (src, dst, of_itrace itrace))
       | TInstantiate (wit, tgt) ->
-          `AInstantiate (of_expr wit, of_ipath tgt)
-      | TDuplicate uid ->
-          `ADuplicate (Handle.toint uid)
+          let* tgt = of_ipath tgt in
+          return (`AInstantiate (of_expr wit, tgt))
+      | TDuplicate hd ->
+          let* id = find hd in
+          return (`ADuplicate id)
       | _ -> raise (UnsupportedPNode p)
+      end
 
-    let export_action (proof : Proof.proof) (hd, a : action) : Logic_t.action =
+    let of_action (proof : Proof.proof) (hd, a : action) : Logic_t.action State.t =
       match a with
       | `Intro variant ->
-          `AIntro (variant, None)
+          return (`AIntro (variant, None))
       | `Elim subhd ->
           let goal = Proof.byid proof hd in
           let hyp = (Proof.Hyps.byid goal.g_hyps subhd).h_form in 
           let exact = Form.f_equal goal.g_env hyp goal.g_goal in
-          let uid = Handle.toint subhd in
-          if exact then `AExact uid else `AElim uid
+          let* uid = find subhd in
+          return (if exact then `AExact uid else `AElim uid)
       | `Ind subhd ->
-          let uid = Handle.toint subhd in
-          `AInd uid
+          let* uid = find subhd in
+          return (`AInd uid)
       | `Simpl tgt ->
-          `ASimpl (of_ipath tgt)
+          let* tgt = of_ipath tgt in
+          return (`ASimpl tgt)
       | `Red tgt ->
-          `ARed (of_ipath tgt)
+          let* tgt = of_ipath tgt in
+          return (`ARed tgt)
       | `Indt tgt ->
-          `AIndt (of_ipath tgt)
+          let* tgt = of_ipath tgt in
+          return (`AIndt tgt)
       | `Hyperlink (lnk, actions) ->
           begin match lnk, actions with
           | ([src], [dst]), [`Subform substs] ->
               let _, itrace = dlink (src, dst) substs proof in
-              `ALink (of_ipath src, of_ipath dst, of_itrace itrace)
+              let* src = of_ipath src in
+              let* dst = of_ipath dst in
+              return (`ALink (src, dst, of_itrace itrace))
           | _, [`Instantiate (wit, tgt)] ->
-              `AInstantiate (of_expr wit, of_ipath tgt)
+              let* tgt = of_ipath tgt in
+              return (`AInstantiate (of_expr wit, tgt))
           | _, _ :: _ :: _ -> failwith "Cannot handle multiple link actions yet"
           | _, _ -> raise (UnsupportedAction a)
           end
       | _ -> raise (UnsupportedAction a)
-
-    (* let export_action (prf : Proof.proof) (action : action) : Api.Logic_t.action =
-      match Proof.get_ptree (apply prf action) with
-      | PNode (pn, _, _, []) -> action_of_pnode pn
-      | _ -> failwith "Proof tree must contain exactly one node" *)
-
-    let export_proof (proof : Proof.proof) : Logic_t.proof =
-      let rec aux (p : Proof.ptree) : Logic_t.proof =
-        match p with
-        | PNode (pn, gl, ipat, subs) ->
-            `PNode (action_of_pnode pn,
-                    Proof.Translate.export_goal gl,
-                    List.map (List.map Handle.toint) ipat,
-                    List.map aux subs)
-      in aux (Proof.get_ptree proof)
-    end
+    
+    let export_action hm proof a =
+      run (of_action proof a) hm
+  end
 end

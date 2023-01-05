@@ -269,8 +269,13 @@ end
 type uid = int
 
 module Uid : sig
+  include Map.OrderedType
   val fresh : unit -> uid
-end = struct
+end with type t = int = struct
+  type t = int
+
+  let compare = Int.compare
+
   let fresh : unit -> uid =     (* not mt-safe *)
     let count = ref (-1) in
     fun () -> incr count; !count

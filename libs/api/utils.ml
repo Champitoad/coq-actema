@@ -5,8 +5,8 @@ module Uid : sig
   include Map.OrderedType
 
   val fresh : unit -> unit -> t
-end with type t = Logic_t.uid = struct
-  type t = Logic_t.uid
+end with type t = int = struct
+  type t = int
   
   let compare = Int.compare
 
@@ -19,7 +19,7 @@ module Env = struct
   let empty =
     Fo_t.{ env_sort = []; env_prp = []; env_fun = [];
            env_sort_name = []; env_prp_name = []; env_fun_name = [];
-           env_var = []; env_handles = [] }
+           env_var = [] }
   
   let concat e1 e2 =
     Fo_t.{
@@ -29,15 +29,12 @@ module Env = struct
       env_sort_name = e1.env_sort_name @ e2.env_sort_name;
       env_prp_name = e1.env_prp_name @ e2.env_prp_name;
       env_fun_name = e1.env_fun_name @ e2.env_fun_name;
-      env_var = e1.env_var @ e2.env_var;
-      env_handles = e1.env_handles @ e2.env_handles; }
+      env_var = e1.env_var @ e2.env_var; }
 end
 
 module LEnv = struct
-  let exists lenv (x, i) =
-    (lenv |>
-     List.filter (fun (y, _) -> x = y) |>
-     List.length) > i
+  let exists lenv x =
+    List.exists (fun (y, _) -> x = y) lenv
     
   let enter lenv x ty =
     (x, ty) :: lenv
@@ -46,22 +43,12 @@ end
 module Vars = struct
   let fresh = Uid.fresh ()
 
-  let get (env : env) ((name, idx) : vname) =
-    let bds = List.assoc_opt name env.env_var in
-    Stdlib.Option.fold ~none:None ~some:(fun bds -> List.nth_opt bds idx) bds
+  let get (env : env) name =
+    List.assoc_opt name env.env_var
 
   let push (env : env) ((name, bvar) : name * bvar) =
-    let bds =
-      match List.assoc_opt name env.env_var with
-      | None -> []
-      | Some bds -> bds in
-
-    let env_var = (name, bvar :: bds) :: env.env_var in
-
-    let env_handles = 
-      ((name, List.length bds), fresh ()) :: env.env_handles in
-
-    { env with env_var; env_handles }
+    let env_var = (name, bvar) :: env.env_var in
+    { env with env_var }
   
   let push_lenv (env : env) (lenv : lenv) : env =
     List.fold_left begin fun env (x, ty) ->
@@ -70,9 +57,8 @@ module Vars = struct
 
   let byid env id =
     let open Monads.Option in
-    (env.env_handles |> List.map (fun (x, y) -> y, x) |> List.assoc_opt id) >>= fun x ->
-    get env x >>= fun body ->
-    return (x, body)
+    let* body = List.assoc_opt id env.env_var in
+    return body
 end
 
 module Funs = struct
@@ -82,24 +68,10 @@ end
 
 exception TypingError
 
-let rec t_equal env ty1 ty2 =
+let t_equal (ty1 : type_) (ty2 : type_) =
   match ty1, ty2 with
   | `TVar a, `TVar b ->
       a = b
-
-  | `TUnit, `TUnit ->
-      true
-    
-  | `TProd (tya1, tyb1), `TProd (tya2, tyb2)
-  | `TOr   (tya1, tyb1), `TOr   (tya2, tyb2) ->
-         t_equal env tya1 tya2
-      && t_equal env tyb1 tyb2
-
-  | `TRec _, `TRec _ ->
-      failwith "Unsupported type"
-
-  | _, _ ->
-      false
 
 let rec einfer (env : env) (e : expr) : type_ =
   match e with
@@ -116,7 +88,7 @@ let rec einfer (env : env) (e : expr) : type_ =
           if List.length fargs <> List.length args then
             raise TypingError;
           let args = List.map (einfer env) args in
-          if not (List.for_all2 (t_equal env) fargs args) then
+          if not (List.for_all2 t_equal fargs args) then
             raise TypingError;
           fres
     end
@@ -187,7 +159,7 @@ let subexpr (e : expr) (p : int list) =
 type item = [
   | `C of form
   | `H of uid * hyp
-  | `V of vname * bvar
+  | `V of name * bvar
 ]
 
 exception InvalidHypId of uid
@@ -198,7 +170,7 @@ let byid (hyps : hyp list) (id : uid) =
     raise (InvalidHypId id)
 
 let of_ipath (goal : goal) (p : ipath)
-  : goal * item * (uid list * term)
+  : goal * item * (int list * term)
 =
   let exn = InvalidPath p in
 
@@ -206,7 +178,7 @@ let of_ipath (goal : goal) (p : ipath)
 
   let item, t_item =
     match ctxt.kind, ctxt.handle with
-    | `Concl, 0 ->
+    | `Concl, _ ->
         let f = goal.g_concl in
         (`C f, `F f)
 
@@ -216,17 +188,15 @@ let of_ipath (goal : goal) (p : ipath)
         (`H (hd, hyd), `F hf)
 
     | `Var part, hd ->
-        let (x, (_, body)) as def =
+        let (_, body) as def =
           match Vars.byid goal.g_env hd with
           | Some v -> v | None -> raise exn in
-        let expr = match part with
-          | `Head -> `EVar x
+        let expr : Fo_t.expr = match part with
+          | `Head -> `EVar hd
           | `Body ->
-          match body with
-          | Some b -> b | None -> raise exn in
-        `V def, `E expr
-    
-    | _ -> raise exn
+              match body with
+              | Some b -> b | None -> raise exn in
+        `V (hd, def), `E expr
   in
   let target = subterm t_item sub in
 
@@ -285,20 +255,19 @@ let pol_of_ipath (goal : goal) (p : ipath) : pol =
 
 
 let biniou_unhash_dict = Bi_io.make_unhash [
-  "TVar"; "TUnit"; "TProd"; "TOr"; "TRec";
+  "TVar";
   "EVar"; "EFun";
   "And"; "Or"; "Imp"; "Equiv"; "Not";
   "Forall"; "Exist";
   "FTrue"; "FFalse"; "FPred"; "FConn"; "FBind";
   "F"; "E";
-  "env_sort"; "env_prp"; "env_fun"; "env_sort_name"; "env_prp_name"; "env_fun_name"; "env_var"; "env_handles";
+  "env_sort"; "env_prp"; "env_fun"; "env_sort_name"; "env_prp_name"; "env_fun_name"; "env_var";
   "h_id"; "h_form";
   "g_env"; "g_hyps"; "g_concl";
   "Hyp"; "Concl"; "Var"; "Head"; "Body";
   "kind"; "pkind"; "handle";
-  "root"; "uid"; "ctxt"; "sub";
-  "AId"; "ADef"; "AIntro"; "AExact"; "AElim"; "AInd"; "ASimpl"; "ARed"; "ACut"; "AAssume"; "AGeneralize"; "AMove"; "ADuplicate"; "ALink"; "AInstantiate";
-  "PNode";
+  "uid"; "ctxt"; "sub";
+  "AId"; "ADef"; "AIntro"; "AExact"; "AElim"; "AInd"; "ASimpl"; "ARed"; "ACut"; "AGeneralize"; "AMove"; "ADuplicate"; "ALink"; "AInstantiate";
 ]
 
 let string_of_expr e =
@@ -321,9 +290,6 @@ let string_of_itrace itr =
 
 let string_of_action a =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_action a)
-
-let string_of_proof prf =
-  Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_proof prf)
 
 let get_hyp ({ g_hyps; _ } : goal) (id : uid) : hyp =
   List.find (fun { h_id; _ } -> h_id = id) g_hyps

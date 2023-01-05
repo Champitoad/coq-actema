@@ -100,20 +100,11 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   (* Return true when there are no opened subgoals left *)
   method closed =
     Js.bool (Proof.closed proof)
-  
-  (* Return the current action tree as a binary, base64-encoded string *)
-  method getproofb =
-    _self##.proof |>
-    CoreLogic.Translate.export_proof |>
-    fun pr -> js_log (pr |> Api.Utils.string_of_proof); pr |>
-    Api.Logic_b.string_of_proof |>
-    Base64.encode_string |>
-    Js.string
 
   (* Return the given action as a binary, base64-encoded string *)
   method getactionb action =
     action |>
-    CoreLogic.Translate.export_action _self##.proof |>
+    CoreLogic.Translate.export_action (Proof.hidmap _self##.proof) _self##.proof |>
     fun pr -> js_log (pr |> Api.Utils.string_of_action); pr |>
     Api.Logic_b.string_of_action |>
     Base64.encode_string |>
@@ -366,7 +357,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
         Io.from_string |> Io.parse_form |>
         Fo.Form.check goal.g_env |>
         Fo.Translate.of_form in
-    `ACut (form, Uid.fresh ()) |>
+    `ACut form |>
     Api.Logic_b.string_of_action |>
     Base64.encode_string |>
     Js.string
@@ -789,6 +780,7 @@ let export (name : string) : unit =
         Js.to_string |>
         Base64.decode_exn |>
         Api.Logic_b.goals_of_string in
-      let gls = List.map Proof.Translate.import_goal goals in
-      js_proof_engine (Proof.ginit gls)
+      let gls, hms = goals |> List.map Proof.Translate.import_goal |> List.split in
+      let hm = List.fold_left Hidmap.union Hidmap.empty hms in
+      js_proof_engine (Proof.ginit hm gls)
   end)
