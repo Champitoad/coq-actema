@@ -21,35 +21,18 @@ Lemma eduk1 :
 Proof.
   intros.
   Set Ltac Profiling.
-  actema_force.
+  actema.
   Show Ltac Profile CutOff 1.
-Qed.
+Admitted.
 
 Context (A B C D E F G : Prop).
-Context (P Q : nat -> Prop) (R S : nat -> nat -> Prop) (t : nat).
+Context (P Q : nat -> Prop) (R : nat -> nat -> Prop) (t : nat).
 
 Context (a b : nat).
 
 Goal (B -> a = b) -> P b -> C.
-intros h p. actema_force.
-rew_dnd_hyp test
-true
-
-h
-
-p
-
-p0
-
-(true :: nil)%list
-
-(@nil bool)
-
-(0 :: nil)%list
-
-(true :: false :: nil)%list
-
-(@nil (option (inst1 test))).
+intros h p. actema.
+Abort.
 
 Lemma S_inj : forall n m, S n = S m -> n = m.
 Admitted.
@@ -78,6 +61,7 @@ pose s_i := S_inj.
 simpl.
 intros.
 actema.
+actema_force.
 (* A la place de divers "not found" *)
 rew_dnd_hyp test h H hh
             (cons false (cons false ( nil)))

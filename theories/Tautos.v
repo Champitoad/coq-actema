@@ -16,12 +16,8 @@ Lemma add_comm :
 Proof.
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
-  actema_force.
-  Set Ltac Profiling.
   actema.
-  Show Ltac Profile CutOff 1.
 Qed.
-
 
 Inductive ile (n:nat) : nat -> Prop :=
   | ilr :  ile n n
@@ -49,7 +45,7 @@ Fixpoint gtb  (n:nat)(m:nat) :=
   end.
 
 Lemma leb_gtb : forall n m, leb n m = negb (gtb n m).
-actema.
+actema. actema_force.
 Qed.
 
 Fixpoint moins n m :=

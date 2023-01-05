@@ -3,6 +3,18 @@ open CoqUtils
 open Utils
 open Extlib
 
+(* -------------------------------------------------------------------- *)
+(** * Debugging log flags *)
+
+(** Set to true to log the arguments given to the DnD tactics, false otherwise *)
+let log_dnd_trace = false
+
+(** Set to true to print the atdgen-formatted goals exported to Actema *)
+let log_goals = false
+
+(* -------------------------------------------------------------------- *)
+(** * First-order signatures *)
+
 type symbol =
 | Cst of Names.Constant.t
 | Ctr of Names.constructor
@@ -103,10 +115,10 @@ module Export = struct
   (** ** Translating Coq terms to Actema expressions and formulas *)
 
   let dummy_expr : Logic_t.expr =
-    `EFun ("dummy", [])
+    `EFun ("_dummy", [])
 
   let dummy_form : Logic_t.form =
-    `FPred ("dummy", [])
+    `FPred ("_dummy", [])
 
   let is_prop env evd term =
     let sort = Retyping.get_sort_of env evd term in
@@ -386,20 +398,21 @@ module Export = struct
     let open FOSign in
 
     let env_sort =
+      "_dummy" ::
       SortSymbol.values sign.symbols.s_sorts in
     let env_sort_name =
       List.(combine env_sort (map shortname env_sort)) in
 
     let func_names = SortSymbol.values sign.symbols.s_funcs in
     let env_fun =
-      ("dummy", ([], `TVar "unit")) ::
+      ("_dummy", ([], `TVar "_dummy")) ::
       List.map (fun f -> f, NameMap.find f sign.typing.t_funcs) func_names in
     let env_fun_name =
       List.(combine func_names (map shortname func_names)) in
 
     let pred_names = SortSymbol.values sign.symbols.s_preds in
     let env_prp =
-      ("dummy", []) ::
+      ("_dummy", []) ::
       List.map (fun p -> p, NameMap.find p sign.typing.t_preds) pred_names in
     let env_prp_name =
       List.(combine pred_names (map shortname pred_names)) in
@@ -474,10 +487,21 @@ module Export = struct
               match body.Declarations.mind_arity with
               | RegularArity ar -> EConstr.of_constr ar.mind_user_arity
               | TemplateArity ar -> EConstr.mkType ar.template_level in
-            i+1, vsign |> begin
-              add_sort e name (Ind id) ty >>?
-              identity
-            end
+            let vsign = vsign |> begin
+                add_sort e name (Ind id) ty >>?
+                identity
+              end in
+            let _, vsign = Array.fold_left begin fun (i, vsign) (cname, cty) ->
+                let name = Names.Id.to_string cname in
+                let cid = id, i in
+                let ty = EConstr.of_constr cty in
+                let vsign = vsign |> begin
+                    add_func e name (Ctr cid) ty >>?
+                    identity
+                  end in
+                i+1, vsign
+              end (0, vsign) (Array.combine body.mind_consnames body.mind_user_lc) in
+            i+1, vsign
           end (0, vsign) bodies.mind_packets in
         vsign
       end coq_env (NameMap.empty, sign) in
@@ -555,7 +579,9 @@ module Export = struct
     let g_hyps = hyps e in
     let g_concl = dest_form (e, concl) in
     
-    Logic_t.{ g_env; g_hyps; g_concl }
+    let goal = Logic_t.{ g_env; g_hyps; g_concl } in
+    if log_goals then Log.str (Utils.string_of_goal goal);
+    goal
 end
 
 (* -------------------------------------------------------------------- *)
@@ -1000,8 +1026,8 @@ module Import = struct
                 let hp2 = Trm.boollist fsub in
                 let hp2' = Trm.natlist esub in
 
-                let log_trace () =
-                  let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                if log_dnd_trace then begin
                   log h1;
                   log h2;
                   log h3;
@@ -1009,8 +1035,8 @@ module Import = struct
                   log hp2;
                   log hp2';
                   log t;
-                  log i in
-                log_trace ();
+                  log i;
+                end;
 
                 let forw = kname "rew_dnd_hyp" in
                 calltac forw [ts; fl; h1; h2; h3; hp1; hp2; hp2'; t; i]
@@ -1030,16 +1056,16 @@ module Import = struct
                 let hp1 = bool_path src.sub in
                 let hp2 = bool_path dst.sub in
                 
-                let log_trace () =
-                  let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                if log_dnd_trace then begin
                   log h1;
                   log h2;
                   log h3;
                   log hp1;
                   log hp2;
                   log t;
-                  log i in
-                log_trace ();
+                  log i;
+                end;
 
                 let forw = kname "forward" in
                 calltac forw [ts; h1; h2; h3; hp1; hp2; t; i]
@@ -1067,15 +1093,15 @@ module Import = struct
                 let gp = Trm.boollist fsub in
                 let gp' = Trm.natlist esub in
 
-                let log_trace () =
-                  let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                if log_dnd_trace then begin
                   log h;
                   log hp;
                   log gp';
                   log gp;
                   log t;
-                  log i; in
-                log_trace ();
+                  log i;
+                end;
 
                 let back = kname "rew_dnd" in
                 calltac back [ts; h; hp; gp'; gp; t; i]
@@ -1085,14 +1111,14 @@ module Import = struct
                 let hp = bool_path hyp.sub in
                 let gp = bool_path concl.sub in
                 
-                let log_trace () =
-                  let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                if log_dnd_trace then begin
                   log h;
                   log hp;
                   log gp;
                   log t;
-                  log i; in
-                log_trace ();
+                  log i;
+                end;
 
                 let back = kname "back" in
                 calltac back [ts; h; hp; gp; t; i]

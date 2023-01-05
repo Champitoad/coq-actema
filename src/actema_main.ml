@@ -151,7 +151,6 @@ let export_goals env sign : Logic_t.goals tactic =
   Stdlib.List.fold_right begin fun coq_goal_tac acc ->
       let* coq_goal = coq_goal_tac in
       let goal = Export.goal env sign coq_goal in
-      (* Log.str (Utils.string_of_goal goal); *)
       let* goals = acc in
       return (goal :: goals)
   end coq_goals_tacs (return [])
