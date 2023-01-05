@@ -2143,16 +2143,13 @@ module Translate = struct
 
   let rec of_expr (e : expr) : Logic_t.expr =
     match e with
-    | EVar x -> `EVar x
+    | EVar (x, _) -> `EVar x
     | EFun (f, es) -> `EFun (f, List.map of_expr es)
 
-  let rec of_type_ (t : type_) : Logic_t.type_ =
+  let of_type_ (t : type_) : Logic_t.type_ =
     match t with
-    | TVar x -> `TVar x
-    | TUnit -> `TUnit
-    | TProd (t1, t2) -> `TProd (of_type_ t1, of_type_ t2)
-    | TOr (t1, t2) -> `TOr (of_type_ t1, of_type_ t2)
-    | TRec (x, ty) -> `TRec (x, of_type_ ty)
+    | TVar (x, _) -> `TVar x
+    | _ -> failwith "Unsupported type"
   
   let of_arity (ar : arity) : Logic_t.arity =
     List.map of_type_ ar
@@ -2175,9 +2172,6 @@ module Translate = struct
     let map_to_assoc m f =
       Map.bindings m |> List.map f in
 
-    let bimap_to_assoc m f =
-      BiMap.bindings m |> List.map f in
-
     let env_sort = map_to_assoc env.env_tvar
       (fun (x, _) -> x) in
       
@@ -2197,30 +2191,23 @@ module Translate = struct
       identity in
 
     let env_var = map_to_assoc env.env_var
-      (fun (x, bodies) -> x, List.map of_bvar bodies) in
-    
-    let env_handles = bimap_to_assoc env.env_handles
-      identity in
+      (fun (x, bodies) -> x, bodies |> List.hd |> of_bvar) in
     
     { env_sort; env_prp; env_fun;
       env_sort_name; env_prp_name; env_fun_name;
-      env_var; env_handles }
+      env_var; }
 
 (* -------------------------------------------------------------------- *)
   (** From API to engine *)
 
   let rec to_expr (e : Logic_t.expr) : expr =
     match e with
-    | `EVar x -> EVar x
+    | `EVar x -> EVar (x, 0)
     | `EFun (f, es) -> EFun (f, List.map to_expr es)
 
-  let rec to_type_ (t : Logic_t.type_) : type_ =
+  let to_type_ (t : Logic_t.type_) : type_ =
     match t with
-    | `TVar x -> TVar x
-    | `TUnit -> TUnit
-    | `TProd (t1, t2) -> TProd (to_type_ t1, to_type_ t2)
-    | `TOr (t1, t2) -> TOr (to_type_ t1, to_type_ t2)
-    | `TRec (x, ty) -> TRec (x, to_type_ ty)
+    | `TVar x -> TVar (x, 0)
 
   let to_arity (ar : Logic_t.arity) : arity =
     List.map to_type_ ar
@@ -2243,9 +2230,6 @@ module Translate = struct
     let assoc_to_map l f =
       l |> List.map f |> List.enum |> Map.of_enum in
 
-    let assoc_to_bimap l f =
-      l |> List.map f |> List.to_seq |> BiMap.of_seq in
-
     let env_prp = assoc_to_map env.env_prp
       (fun (p, ar) -> p, to_arity ar) in
     
@@ -2265,7 +2249,7 @@ module Translate = struct
       (fun x -> x, [None]) in
 
     let env_var = assoc_to_map env.env_var
-      (fun (x, bodies) -> x, List.map to_bvar bodies) in
+      (fun (x, body) -> x, [to_bvar body]) in
 
     let env_handles =
       Map.foldi begin fun x bodies env_handles ->

@@ -2,19 +2,12 @@
 (** Identifiers *)
 
 type name = string
-type vname = (name * int)
-
-type uid = int
 
 (* -------------------------------------------------------------------- *)
 (** Types *)
 
 type type_ = [
-  | TVar of vname
-  | TUnit
-  | TProd of (type_ * type_)
-  | TOr of (type_ * type_)
-  | TRec of (name * type_)
+  | TVar of name
 ]
 
 type arity = type_ list
@@ -24,7 +17,7 @@ type sig_  = (arity * type_)
 (** Expressions *)
 
 type expr = [
-  | EVar of vname
+  | EVar of name
   | EFun of (name * expr list)
 ]
 
@@ -59,8 +52,7 @@ type env = {
   env_sort_name : (name * name             ) list;
   env_prp_name  : (name * name             ) list;
   env_fun_name  : (name * name             ) list;
-  env_var       : (name * bvar  list       ) list;
-  env_handles   : (vname * uid             ) list;
+  env_var       : (name * bvar             ) list;
 }
 
 type lenv = (name * type_) list
