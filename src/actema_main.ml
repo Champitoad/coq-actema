@@ -117,8 +117,8 @@ let sign = Translate.peano
 let compile_action env sign ((idx, a) : int * Logic_t.action) : unit tactic =
   let open PVMonad in
   Goal.enter begin fun coq_goal ->
-    let goal, hm = Export.goal env sign coq_goal in
-    Import.action sign hm goal coq_goal a
+    let goal = Export.goal env sign coq_goal in
+    Import.action sign goal coq_goal a
   end |>
   let idx = idx + 1 in
   tclFOCUS idx idx
@@ -150,7 +150,7 @@ let export_goals env sign : Logic_t.goals tactic =
   let* coq_goals_tacs = Goal.goals in
   Stdlib.List.fold_right begin fun coq_goal_tac acc ->
       let* coq_goal = coq_goal_tac in
-      let goal, _ = Export.goal env sign coq_goal in
+      let goal = Export.goal env sign coq_goal in
       (* Log.str (Utils.string_of_goal goal); *)
       let* goals = acc in
       return (goal :: goals)
@@ -226,7 +226,7 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
   let open PVMonad in
   Goal.enter begin fun coq_goal ->
     let* env, sign = export_env () in
-    let goal, _ = Export.goal env sign coq_goal in
+    let goal = Export.goal env sign coq_goal in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
     let interactive () =
       let* prf = interactive_proof env sign in

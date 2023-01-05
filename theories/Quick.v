@@ -1,6 +1,30 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
+Parameter Rich : nat -> Prop.
+Parameter mother : nat -> nat.
+Parameter h : nat.
+
+(* Definition imm0 : inst1.
+exists 0.
+intros; exact (mother (mother 0)).
+Defined.
+Definition im0 : inst1.
+exists 0.
+intros; exact (mother 0).
+Defined. *)
+
+Lemma eduk1 :
+  (forall x : nat, ~Rich(x) -> Rich(mother(x))) ->
+  (forall x : nat,  ~Rich(mother(mother(x))) \/ ~Rich(x))->
+  False.
+Proof.
+  intros.
+  Set Ltac Profiling.
+  actema_force.
+  Show Ltac Profile CutOff 1.
+Qed.
+
 Context (A B C D E F G : Prop).
 Context (P Q : nat -> Prop) (R S : nat -> nat -> Prop) (t : nat).
 
