@@ -17,5 +17,5 @@
   (target jsprover.js)
   (deps (file jsprover.js.bc))
   (action (run %{bin:js_of_ocaml}
-     --disable genprim --pretty
+     --disable genprim --pretty --debug-info
      --source-map --source-map-inline --no-inline -o %{target} %{deps})))

@@ -2,61 +2,6 @@ open Utils
 (* -------------------------------------------------------------------- *)
 open Fo
 
-(* ------------------------------------------------------------------- *)
-module Handle : sig
-  include Map.OrderedType
-
-  val ofint : int -> t
-  val fresh : unit -> t
-  val eq    : t -> t -> bool
-  val toint : t -> int
-end = struct
-  type t = int
-
-  let compare = Utils.Uid.compare
-
-  let fresh () : t =
-    Utils.Uid.fresh ()
-
-  let ofint (i : int) : t =
-    i
-
-  let toint (t : t) : int =
-    t
-
-  let eq = ((=) : t -> t -> bool)
-end
-
-module Hidmap = struct
-  open Api
-
-  module HandleMap = Map.Make(Handle)
-
-  type hidmap = Logic_t.uid HandleMap.t
-
-  module Env = struct type t = hidmap end
-  module State = Monad.State(Env)
-
-  open State
-
-  let empty =
-    HandleMap.empty
-
-  let find (hd : Handle.t) : Logic_t.uid State.t =
-    let* hm = get in
-    return (HandleMap.find hd hm)
-  
-  let push (id : Logic_t.uid) : Handle.t State.t =
-    let hd = Handle.fresh () in
-    let* hm = get in
-    let* _ = put (HandleMap.add hd id hm) in
-    return hd
-  
-  let union (m1 : hidmap) (m2 : hidmap) : hidmap =
-    let f _ x _ = Some x in
-    HandleMap.union f m1 m2
-end
-
 (* -------------------------------------------------------------------- *)
 type pnode = ..
 type pnode += TId
@@ -495,14 +440,14 @@ end = struct
                 g_concl = of_form g_goal }
 
     let import_goal (Logic_t.{ g_env; g_hyps; g_concl } : Logic_t.goal) : pregoal * hidmap =
-      let g_hyps, hm =
+      let g_env, g_hyps, hm =
         HandleMap.empty |> run begin
+          let* env = to_env g_env in
           let* hyps = to_hyps g_hyps in
           let* hm = get in
-          return (hyps, hm)
+          return (env, hyps, hm)
         end in
-      { g_env = to_env g_env;
-        g_hyps;
+      { g_env; g_hyps;
         g_goal = to_form g_concl }, hm
   end
 end
@@ -850,7 +795,7 @@ end = struct
     let goal = Proof.byid pr id in
     let env = goal.g_env in
     
-    let ((n, _) as x, (_, _)) = Vars.byid env (Handle.toint h) |> Option.get in
+    let ((n, _) as x, (_, _)) = Vars.byid env h |> Option.get in
     
     let base_case = { goal with g_env =
       Vars.modify env (x, Env.(nat, Some Env.zero))} in
@@ -1146,13 +1091,13 @@ end = struct
     List.concat_map begin fun hd ->
       (if heads then
         [mk_ipath (Handle.toint g_id)
-          ~ctxt:{ kind = `Var `Head; handle = hd }]
+          ~ctxt:{ kind = `Var `Head; handle = Handle.toint hd }]
       else [])
       @
       match Vars.byid env hd with
       | Some (_, (_, Some _)) ->
           [mk_ipath (Handle.toint g_id)
-            ~ctxt:{ kind = `Var `Body; handle = hd }]
+            ~ctxt:{ kind = `Var `Body; handle = Handle.toint hd }]
       | _ -> []
     end
 
@@ -1246,7 +1191,7 @@ end = struct
 
       | `Var part, hd ->
           let (x, (_, body)) as def = Option.get_exn
-            (Vars.byid goal.g_env hd) exn in
+            (Vars.byid goal.g_env (Handle.ofint hd)) exn in
           let expr = match part with
             | `Head -> EVar x
             | `Body -> Option.get_exn body exn in
@@ -1408,7 +1353,7 @@ end = struct
         let id = Vars.getid goal.g_pregoal.g_env x |> Option.get in
         all_items_ipaths ~heads:false goal |>
         List.remove_if
-          (fun p -> p.ctxt.handle = id) in
+          (fun p -> p.ctxt.handle = Handle.toint id) in
 
       unfold ?fold x tgts targ
 
@@ -3184,18 +3129,18 @@ end = struct
           | `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
               let rp = Vars.getid goal.g_env x |> Option.get in
               let hg = mk_ipath (Handle.toint hd)
-                ~ctxt:{ kind = `Var `Head; handle = rp } in
+                ~ctxt:{ kind = `Var `Head; handle = Handle.toint rp } in
               [{ description = "Induction"; icon = None;
                  highlights = [hg]; kind = `Click hg;
-                 action = (hd, `Ind (Handle.ofint rp)) }]
+                 action = (hd, `Ind hd) }]
           
           | `V (x, (_, Some _)) ->
               let rp = Vars.getid goal.g_env x |> Option.get in
 
               let hg_unfold = mk_ipath (Handle.toint hd)
-                ~ctxt:{ kind = `Var `Head; handle = rp } in
+                ~ctxt:{ kind = `Var `Head; handle = Handle.toint rp } in
               let hg_fold = mk_ipath (Handle.toint hd)
-                ~ctxt:{ kind = `Var `Body; handle = rp } in
+                ~ctxt:{ kind = `Var `Body; handle = Handle.toint rp } in
 
               [{ description = "Unfold"; icon = None;
                  highlights = [hg_unfold]; kind = `Click hg_unfold;
@@ -3266,8 +3211,11 @@ end = struct
     exception UnsupportedAction of action_type
 
     let of_ctxt (ctxt : ctxt) : Logic_t.ctxt State.t =
-      let* handle = find (Handle.ofint ctxt.handle) in
-      return Logic_t.{ kind = ctxt.kind; handle }
+      let* uid =
+        match ctxt.kind with
+        | `Concl -> return "concl"
+        | `Hyp | `Var _ -> find (Handle.ofint ctxt.handle) in
+      return Logic_t.{ kind = ctxt.kind; handle = uid }
 
     let of_ipath (p : ipath) : Logic_t.ipath State.t =
       let* ctxt = of_ctxt p.ctxt in

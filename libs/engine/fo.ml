@@ -19,6 +19,67 @@ module Name = struct
   let hash    = Hashtbl.hash
 end
 
+(* ------------------------------------------------------------------- *)
+(** Handles *)
+
+module Handle : sig
+  include Map.OrderedType
+
+  val ofint : int -> t
+  val fresh : unit -> t
+  val eq    : t -> t -> bool
+  val toint : t -> int
+end = struct
+  type t = int
+
+  let compare = Utils.Uid.compare
+
+  let fresh () : t =
+    Utils.Uid.fresh ()
+
+  let ofint (i : int) : t =
+    i
+
+  let toint (t : t) : int =
+    t
+
+  let eq = ((=) : t -> t -> bool)
+end
+
+module Hidmap = struct
+  open Api
+
+  module HandleMap = Map.Make(Handle)
+
+  type hidmap = Logic_t.uid HandleMap.t
+
+  module Env = struct type t = hidmap end
+  module State = Monad.State(Env)
+
+  open State
+
+  let empty =
+    HandleMap.empty
+
+  let find (hd : Handle.t) : Logic_t.uid State.t =
+    let* hm = get in
+    return (HandleMap.find hd hm)
+  
+  let push (id : Logic_t.uid) : Handle.t State.t =
+    let hd = Handle.fresh () in
+    let* hm = get in
+    let* _ = put (HandleMap.add hd id hm) in
+    return hd
+  
+  let union (m1 : hidmap) (m2 : hidmap) : hidmap =
+    let f _ x _ = Some x in
+    HandleMap.union f m1 m2
+  
+  let to_string m =
+    m |> HandleMap.bindings |>
+    List.to_string (fun (hd, id) -> Printf.sprintf "%d -> %s" (Handle.toint hd) id)
+end
+
 (* -------------------------------------------------------------------- *)
 (** Types *)
 
@@ -132,7 +193,7 @@ type env = {
   env_tvar      : (name, type_ option list) Map.t;
   env_var       : (name, bvar  list       ) Map.t;
   env_evar      : (name, type_ list       ) Map.t;
-  env_handles   : (vname, uid             ) BiMap.t;
+  env_handles   : (vname, Handle.t        ) BiMap.t;
 }
 
 and bvar = type_ * expr option
@@ -1009,13 +1070,13 @@ module Vars : sig
   val modify    : env -> vname * bvar -> env
   val remove    : env -> vname -> env
   val exists    : env -> vname -> bool
-  val byid      : env -> uid -> (vname * bvar) option
-  val getid     : env -> vname -> uid option
-  val diff      : env -> env -> uid list
+  val byid      : env -> Handle.t -> (vname * bvar) option
+  val getid     : env -> vname -> Handle.t option
+  val diff      : env -> env -> Handle.t list
   val map       : env -> (expr option -> expr option) -> env
   val all       : env -> (name, bvar list) Map.t
   val to_string : env -> name -> string
-  val to_list   : env -> (uid * vname * bvar) list
+  val to_list   : env -> (Handle.t * vname * bvar) list
 end = struct
   let name_counters : (env, int ref) Map.t ref =
     ref Map.empty
@@ -1050,7 +1111,7 @@ end = struct
       i := List.length v - 1; Some v) env.env_var in
 
     let env_handles = 
-      BiMap.add (name, !i) (Uid.fresh ()) env.env_handles in
+      BiMap.add (name, !i) (Handle.fresh ()) env.env_handles in
 
     { env with env_var; env_handles }
 
@@ -2226,7 +2287,7 @@ module Translate = struct
     | `FConn (c, fs) -> FConn (c, List.map to_form fs)
     | `FBind (b, x, ty, f) -> FBind (b, x, to_type_ ty, to_form f)
 
-  let to_env (env : Logic_t.env) : env =
+  let to_env (env : Logic_t.env) : env Hidmap.State.t =
     let assoc_to_map l f =
       l |> List.map f |> List.enum |> Map.of_enum in
 
@@ -2250,15 +2311,23 @@ module Translate = struct
 
     let env_var = assoc_to_map env.env_var
       (fun (x, body) -> x, [to_bvar body]) in
-
+    
+    let open Hidmap.State in
+    
+    let* hm = get in
     let env_handles =
-      Map.foldi begin fun x bodies env_handles ->
-        let pushx env body = Vars.push env (x, body) in
-        let empty = { Env.empty with env_handles } in
-        (List.fold_left pushx empty bodies).env_handles
-      end env_var BiMap.empty in
-
-    { env_prp; env_fun;
+      run begin
+        env_var |> Map.bindings |>
+        fold begin fun env_handles (x, bodies) ->
+          let pushx env body = Vars.push env (x, body) in
+          let empty = { Env.empty with env_handles } in
+          let* _ = Hidmap.push x in
+          return (List.fold_left pushx empty bodies).env_handles
+        end BiMap.empty
+      end hm in
+    
+    return {
+      env_prp; env_fun;
       env_sort_name; env_prp_name; env_fun_name;
       env_tvar; env_var; env_evar = Map.empty; env_handles }
 end

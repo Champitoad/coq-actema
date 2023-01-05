@@ -1,5 +1,6 @@
 (* -------------------------------------------------------------------- *)
 open Utils
+open Fo
 open Proof
 
 (* -------------------------------------------------------------------- *)
@@ -53,10 +54,10 @@ let () = Exn.register (fun exn ->
     match exn with
     | Syntax.ParseError _ ->
         Some "invalid goal (parse error)"
-    | Fo.DuplicatedEntry (_, name) ->
+    | DuplicatedEntry (_, name) ->
         Some ("duplicated entry \"" ^ name ^ "\" in goal")
-    | Fo.TypingError
-    | Fo.RecheckFailure ->
+    | TypingError
+    | RecheckFailure ->
         Some "invalid goal (type error)"
     | TacticNotApplicable ->
         Some "tactic not applicable"
@@ -74,7 +75,7 @@ let (!!) f = fun x ->
         (fun () ->
           Format.sprintf "internal error: %s" (Printexc.to_string e))
         (Exn.translate e)
-    in Js.raise_js_error (new%js Js.error_constr (Js.string msg))
+    in Js.Js_error.(raise_ (of_error (new%js Js.error_constr (Js.string msg))))
 
 module Path : sig
   val of_obj : 'a Js.t -> CoreLogic.ipath
@@ -104,7 +105,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   (* Return the given action as a binary, base64-encoded string *)
   method getactionb action =
     action |>
-    CoreLogic.Translate.export_action (Proof.hidmap _self##.proof) _self##.proof |>
+    !!(CoreLogic.Translate.export_action (Proof.hidmap _self##.proof) _self##.proof) |>
     fun pr -> js_log (pr |> Api.Utils.string_of_action); pr |>
     Api.Logic_b.string_of_action |>
     Base64.encode_string |>
@@ -250,7 +251,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
     _self##.proof |> CoreLogic.lemmas ?selection |>
     List.map begin fun (name, form) ->
       let stmt =
-        Fo.Notation.f_tostring (LemmaDB.env (Proof.db _self##.proof)) form |>
+        Notation.f_tostring (LemmaDB.env (Proof.db _self##.proof)) form |>
         Js.string |>
         Js.Unsafe.inject
       in name, stmt
@@ -276,26 +277,26 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
   method fvars =
     let goal = _self##goal in
     let fvars : string list =
-      Fo.Funs.all goal.g_env |>
+      Funs.all goal.g_env |>
       Map.bindings |>
       List.map (fun (f, (ar, res)) ->
-        let ar = List.to_string ~sep:" & " ~left:"" ~right:"" (Fo.Notation.t_tostring goal.Proof.g_env) ar in
-        let res = Fo.Notation.t_tostring goal.g_env res in
+        let ar = List.to_string ~sep:" & " ~left:"" ~right:"" (Notation.t_tostring goal.Proof.g_env) ar in
+        let res = Notation.t_tostring goal.g_env res in
         Printf.sprintf "%s : %s -> %s" f ar res) in
     Js.array (Array.of_list (List.map Js.string fvars))
 
   (* Return all the propositional variables as a [string array] *)
   method pvars =
     let goal = _self##goal in
-    let pvars = List.fst (Map.bindings (Fo.Prps.all goal.g_env)) in
+    let pvars = List.fst (Map.bindings (Prps.all goal.g_env)) in
     Js.array (Array.of_list (List.map Js.string pvars))
 
   (* Return all the local variables as a [js_tvar array] *)
   method tvars =
     let goal  = _self##goal in
-    let tvars = Fo.Vars.to_list goal.g_env in
+    let tvars = Vars.to_list goal.g_env in
     let aout  = List.mapi (fun i (id, x, b) ->
-      js_tvar _self (i, (Handle.ofint id, x, b))) tvars in
+      js_tvar _self (i, (id, x, b))) tvars in
     Js.array (Array.of_list aout)
 
   (* Return all the local hypotheses (context) as a [js_hyps array] *)
@@ -344,7 +345,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       let goal = _self##goal in
       let form = String.trim (Js.to_string form) in
       let form = Io.parse_form (Io.from_string form) in
-      let form = Fo.Form.check goal.g_env form in
+      let form = Form.check goal.g_env form in
       CoreLogic.cut form (parent##.proof, _self##.handle)
     in js_proof_engine (!!doit ())
   
@@ -355,8 +356,8 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       let form = form |>
         Js.to_string |> String.trim |>
         Io.from_string |> Io.parse_form |>
-        Fo.Form.check goal.g_env |>
-        Fo.Translate.of_form in
+        Form.check goal.g_env |>
+        Translate.of_form in
     `ACut form |>
     Api.Logic_b.string_of_action |>
     Base64.encode_string |>
@@ -380,7 +381,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       let goal = _self##goal in
       let expr = String.trim (Js.to_string expr) in
       let expr = Io.parse_expr (Io.from_string expr) in
-      let expr, ty = Fo.Form.echeck goal.g_env expr in
+      let expr, ty = Form.echeck goal.g_env expr in
       CoreLogic.add_local_def (Js.to_string name, ty, expr) (parent##.proof, _self##.handle)
 
     in js_proof_engine (!!doit ())
@@ -392,7 +393,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       let goal = _self##goal in
       let expr = String.trim (Js.to_string expr) in
       let name, expr = Io.parse_nexpr (Io.from_string expr) in
-      let expr, ty = Fo.Form.echeck goal.g_env expr in
+      let expr, ty = Form.echeck goal.g_env expr in
       CoreLogic.add_local_def (Location.unloc name, ty, expr) (parent##.proof, _self##.handle)
 
     in js_proof_engine (!!doit ())
@@ -404,9 +405,9 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
     let goal = _self##goal in
     let expr = String.trim (Js.to_string expr) in
     let name, expr = Io.parse_nexpr (Io.from_string expr) in
-    let expr, ty = Fo.Form.echeck goal.g_env expr in
+    let expr, ty = Form.echeck goal.g_env expr in
     let name = Location.unloc name in
-    let expr, ty = Fo.Translate.(of_expr expr, of_type_ ty) in
+    let expr, ty = Translate.(of_expr expr, of_type_ ty) in
     `ADef (name, ty, expr) |>
     Api.Logic_b.string_of_action |>
     Base64.encode_string |>
@@ -524,7 +525,7 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for a local variable                                      *)
-and js_tvar parent ((i, (handle, x, (ty, b))) : int * (Handle.t * Fo.vname * Fo.bvar)) =
+and js_tvar parent ((i, (handle, x, (ty, b))) : int * (Handle.t * vname * bvar)) =
 object%js (_self)
   (* back-link to the [js_subgoal] this local variable belongs to *)
   val parent = parent
@@ -536,7 +537,7 @@ object%js (_self)
   val position = i
 
   (* the local variable name, as an OCaml string *)
-  val oname = Fo.Notation.e_tostring (parent##goal).g_env (EVar x)
+  val oname = Notation.e_tostring (parent##goal).g_env (EVar x)
 
   (* the local variable name *)
   method name = Js.string _self##.oname
@@ -576,13 +577,13 @@ object%js (_self)
             [span
               [Xml.pcdata (UTF8.of_latin1 _self##.oname)]] @
               spaced [span [Xml.pcdata ":"]] @
-              [Fo.Notation.t_tohtml (parent##goal).g_env ty]
+              [Notation.t_tohtml (parent##goal).g_env ty]
           end]
           @
           match b with
           | Some b ->
               spaced [span [Xml.pcdata ":="]] @
-              [Fo.Notation.e_tohtml ~id:(Some _self##idbody) (parent##goal).g_env b]
+              [Notation.e_tohtml ~id:(Some _self##idbody) (parent##goal).g_env b]
           | None -> []
         end]
     in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
@@ -596,15 +597,15 @@ object%js (_self)
       math [
         row begin
           [row ~a:[Xml.string_attrib "id" _self##idhead] begin
-            [mi (UTF8.of_latin1 (Fo.Notation.e_tostring (parent##goal).g_env (EVar x)))] @
+            [mi (UTF8.of_latin1 (Notation.e_tostring (parent##goal).g_env (EVar x)))] @
             [mo ":"] @
-            [Fo.Notation.t_tomathml (parent##goal).g_env ty]
+            [Notation.t_tomathml (parent##goal).g_env ty]
           end]
           @
           match b with
           | Some b ->
               [mo ":="] @
-              [Fo.Notation.e_tomathml ~id:(Some _self##idbody) (parent##goal).g_env b]
+              [Notation.e_tomathml ~id:(Some _self##idbody) (parent##goal).g_env b]
           | None -> []
         end]
     in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
@@ -614,25 +615,25 @@ object%js (_self)
     match b with
     | Some b ->
         Js.string (Format.sprintf "%s : %s := %s"
-          (Fo.Notation.e_tostring (parent##goal).g_env (EVar x))
-          (Fo.Notation.t_tostring (parent##goal).g_env ty)
-          (Fo.Notation.e_tostring (parent##goal).g_env b))
+          (Notation.e_tostring (parent##goal).g_env (EVar x))
+          (Notation.t_tostring (parent##goal).g_env ty)
+          (Notation.e_tostring (parent##goal).g_env b))
     | None ->
         Js.string (Format.sprintf "%s : %s"
-          (Fo.Notation.e_tostring (parent##goal).g_env (EVar x))
-          (Fo.Notation.t_tostring (parent##goal).g_env ty))
+          (Notation.e_tostring (parent##goal).g_env (EVar x))
+          (Notation.t_tostring (parent##goal).g_env ty))
 
   (* Return an ASCII string representation of the enclosed local variable *)
   method toascii =
     match b with
     | Some b ->
         Js.string (Format.sprintf "%s := %s"
-          (Fo.Notation.e_tostring (parent##goal).g_env (EVar x))
-          (Fo.Notation.e_toascii (parent##goal).g_env b))
+          (Notation.e_tostring (parent##goal).g_env (EVar x))
+          (Notation.e_toascii (parent##goal).g_env b))
     | None ->
         Js.string (Format.sprintf "%s : %s"
-          (Fo.Notation.e_tostring (parent##goal).g_env (EVar x))
-          (Fo.Notation.t_toascii (parent##goal).g_env ty))
+          (Notation.e_tostring (parent##goal).g_env (EVar x))
+          (Notation.t_toascii (parent##goal).g_env ty))
 
   method getmeta =
     Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
@@ -643,7 +644,7 @@ end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
-and js_form parent (source : source) (form : Fo.form) = object%js (_self)
+and js_form parent (source : source) (form : form) = object%js (_self)
   (* The prefix for all subpaths of the formula *)
   val prefix =
     match source with
@@ -664,7 +665,7 @@ and js_form parent (source : source) (form : Fo.form) = object%js (_self)
       if not id then None else Some _self##.prefix in
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Utils.Mathml.math [Fo.Notation.f_tomathml (parent##goal).g_env ~id:prefix form]))
+      (Utils.Mathml.math [Notation.f_tomathml (parent##goal).g_env ~id:prefix form]))
 
   (* Return the [html] of the formula *)  
   method htmltag (id : bool) =
@@ -672,20 +673,20 @@ and js_form parent (source : source) (form : Fo.form) = object%js (_self)
       if not id then None else Some _self##.prefix in
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Fo.Notation.f_tohtml (parent##goal).g_env ~id:prefix form))
+      (Notation.f_tohtml (parent##goal).g_env ~id:prefix form))
 
   (* Return an UTF8 string representation of the formula *)
   method tostring =
-    Js.string (Fo.Notation.f_tostring (parent##goal).g_env form)
+    Js.string (Notation.f_tostring (parent##goal).g_env form)
 
   (* Return an ASCII string representation of the formula *)
   method toascii =
-    Js.string (Fo.Notation.f_toascii (parent##goal).g_env form)
+    Js.string (Notation.f_toascii (parent##goal).g_env form)
 end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for expressions                                           *)
-and js_expr parent (expr : Fo.expr) = object%js (_self)
+and js_expr parent (expr : expr) = object%js (_self)
   (* Return the [mathml] of the formula *)  
   method mathml =
     _self##mathmltag
@@ -698,33 +699,33 @@ and js_expr parent (expr : Fo.expr) = object%js (_self)
   method mathmltag =
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Utils.Mathml.math [Fo.Notation.e_tomathml (parent##goal).g_env expr]))
+      (Utils.Mathml.math [Notation.e_tomathml (parent##goal).g_env expr]))
 
   (* Return the [html] of the formula *)  
   method htmltag =
     Js.string
       (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Fo.Notation.e_tohtml (parent##goal).g_env expr))
+      (Notation.e_tohtml (parent##goal).g_env expr))
 
   (* Return an UTF8 string representation of the expression *)
   method tostring =
-    Js.string (Fo.Notation.e_tostring (parent##goal).g_env expr)
+    Js.string (Notation.e_tostring (parent##goal).g_env expr)
 end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for types                                                 *)
-and js_type parent (ty : Fo.type_) = object%js (_self)
+and js_type parent (ty : type_) = object%js (_self)
   (* Return the raw [mathml] of the type *)
   method rawmathml =
-    Utils.Mathml.math [Fo.Notation.t_tomathml (parent##goal).g_env ty]
+    Utils.Mathml.math [Notation.t_tomathml (parent##goal).g_env ty]
 
   (* Return the raw [html] of the type *)
   method rawhtml =
-    Fo.Notation.t_tohtml (parent##goal).g_env ty
+    Notation.t_tohtml (parent##goal).g_env ty
 
   (* Return the raw string representation of the type *)
   method rawstring =
-    Fo.Notation.t_tostring (parent##goal).g_env ty
+    Notation.t_tostring (parent##goal).g_env ty
 
   (* Return the [mathml] of the type *)  
   method mathml =
@@ -750,7 +751,7 @@ let export (name : string) : unit =
       let env, hyps, goal = !!(fun () ->
         let goal = String.trim (Js.to_string x) in
         let goal = Io.parse_goal (Io.from_string goal) in
-        Fo.Goal.check goal
+        Goal.check goal
       ) () in js_proof_engine (Proof.init env hyps goal)
 
     (* [this#parseToUnicode input] parses the goal [input] and returns
@@ -761,7 +762,7 @@ let export (name : string) : unit =
       let env, hyps, goal = !!(fun () ->
           let goal = String.trim (Js.to_string x##.input) in
           let goal = Io.parse_goal (Io.from_string goal) in
-          Fo.Goal.check goal
+          Goal.check goal
         ) () in
 
       Js.string (Printf.sprintf "%s⊢ %s"
@@ -770,8 +771,8 @@ let export (name : string) : unit =
           (fun b -> if not (Js.to_bool b) then ""
                     else List.to_string
                            ~sep:", " ~left:"" ~right:" "
-                           (Fo.Notation.f_tostring env) hyps))
-        (Fo.Notation.f_tostring env goal))
+                           (Notation.f_tostring env) hyps))
+        (Notation.f_tostring env goal))
 
     (* Return a new proof engine whose goals are the base64, binary decoding of [goalsb]  *)
     method setgoalsb goalsb =
