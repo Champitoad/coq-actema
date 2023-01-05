@@ -10,6 +10,7 @@ Definition ic : nat -> (option (inst1 test)).
 intro n; apply Some; exists 0.
 intros; exact n.
 Defined.
+Require Import ssreflect.
 
 Lemma add_comm :
   forall n m, n + m = m + n.
@@ -17,11 +18,7 @@ Proof.
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
   actema.
-  Set Ltac Profiling.
-  actema.
-  Show Ltac Profile CutOff 1.
 Qed.
-
 
 Inductive ile (n:nat) : nat -> Prop :=
   | ilr :  ile n n
@@ -82,8 +79,6 @@ Lemma le_S : forall n m,
 actema.
 Qed.
 
-
-
 Fixpoint even n := match n with
                    | 0 => True
                    | S n => ~(even n)
@@ -117,7 +112,6 @@ pose h2 := eq_eqb.
 actema.
 Qed.
 
-Print ile.
 
 Definition lee n m := ile n m.
 
@@ -166,7 +160,6 @@ Lemma ex_le : forall n m, (exists p, n =  m + p)-> (le  m n).
 pose S_i := S_inj.
 pose h := PeanoNat.Nat.add_succ_r.
 actema.
-done.
 Qed.
 
 Lemma even_aux :
@@ -192,7 +185,6 @@ Lemma ex_pred : forall x p, S(S x) = p+p ->
                             exists q, x = q + q.
 pose h := PeanoNat.Nat.add_succ_r.
 pose s_i := S_inj.
-actema.
 actema.
 Qed.
 
@@ -388,7 +380,7 @@ Lemma le_minus :
   forall m n, le m n ->
               (moins n m) + m = n.
 pose h :=  PeanoNat.Nat.add_succ_r.
-  pose proof PeanoNat.Nat.add_0_r.
+pose proof PeanoNat.Nat.add_0_r.
 actema.
 Qed.
 
@@ -404,6 +396,7 @@ Lemma kchal :
   (forall x y, R x y -> S x y) ->
   forall x y, S x y -> R x y.
 Proof.
+  intros.
   actema.
 Qed.
 
@@ -617,6 +610,7 @@ Lemma not_not : A -> ~~A.
 Proof.
   actema.
 Qed.
+     
 
 Lemma not_not_tnd : ~~(A \/ ~A).
 Proof.
@@ -764,3 +758,13 @@ split; reflexivity.
   rewrite /coerce /o3_norm /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert  /defs /appist ?trs_corr.
 simplify_goal.  actema.
  *)
+
+Context (Socrates : nat).
+Context (Mortal Human : nat -> Prop).
+        
+Lemma Aristoteles (hm : forall x, Human x -> Mortal x)
+      (hh : Human Socrates) :
+  Mortal Socrates.
+  actema.
+Qed.
+
