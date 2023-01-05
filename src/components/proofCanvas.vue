@@ -545,8 +545,12 @@ export default {
         },
 
         sendCutHypothesis(subgoal, text) {
-            let action = subgoal.getcutb(text);
-            this.sendAction(action);
+            try {
+                let action = subgoal.getcutb(text);
+                this.sendAction(action);
+            } catch (e) {
+                this.showErrorMessage(e);
+            }
         },
 
         applyAddLemma(subgoal, name) {
@@ -570,8 +574,12 @@ export default {
         },
 
         sendNewExpression(subgoal, text) {
-            let action = subgoal.getaliasb(text);
-            this.sendAction(action);
+            try {
+                let action = subgoal.getaliasb(text);
+                this.sendAction(action);
+            } catch (e) {
+                this.showErrorMessage(e);
+            }
         },
 
         moveHyp(subgoal, fromHandle, toHandle) {
