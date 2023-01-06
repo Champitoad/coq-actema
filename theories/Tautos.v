@@ -45,7 +45,7 @@ Fixpoint gtb  (n:nat)(m:nat) :=
   end.
 
 Lemma leb_gtb : forall n m, leb n m = negb (gtb n m).
-actema. actema_force.
+actema. actema.
 Qed.
 
 Fixpoint moins n m :=
@@ -59,17 +59,16 @@ Require Import ssreflect.
 
 Lemma le_ex : forall n m, le n m  ->
                           exists p, n+p = m.
-actema.
-Qed.  
+actema. actema.
+Qed.
 
 Lemma le_refl : forall n, le n n.
- actema.
+actema.
 Qed.
 
 Lemma le_0 : forall n, le 0 n.
 actema.
 Qed.
-
 
 (* bug: simplify peut toujours fabriquer des termes
  avec des match / fix *)
@@ -77,8 +76,6 @@ Lemma le_S : forall n m,
        le n m -> le n (S m).
 actema.
 Qed.
-
-
 
 Fixpoint even n := match n with
                    | 0 => True
@@ -107,9 +104,9 @@ pose h2 := eqb_refl.
 actema.
 Qed.
 
-Lemma S_inj : forall n m, S n = S m -> n =m.
+Lemma S_inj : forall n m, S n = S m -> n = m.
 pose h1 := eqb_eq.
-pose h2 := eq_eqb.    
+pose h2 := eq_eqb.
 actema.
 Qed.
 
@@ -146,7 +143,7 @@ pose h4 := leeSS.
 actema.
 Qed.
 
-Definition  add n m := n + m.
+Definition add n m := n + m.
 
 Lemma plS x y : add (S x) y = S (add x y).
 done.
@@ -162,7 +159,6 @@ Lemma ex_le : forall n m, (exists p, n =  m + p)-> (le  m n).
 pose S_i := S_inj.
 pose h := PeanoNat.Nat.add_succ_r.
 actema.
-done.
 Qed.
 
 Lemma even_aux :
@@ -188,8 +184,8 @@ Lemma ex_pred : forall x p, S(S x) = p+p ->
                             exists q, x = q + q.
 pose h := PeanoNat.Nat.add_succ_r.
 pose s_i := S_inj.
-actema.
-actema.
+(* actema "perf1". *)
+actema; actema.
 Qed.
 
 (*

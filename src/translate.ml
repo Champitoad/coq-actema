@@ -4,13 +4,23 @@ open Utils
 open Extlib
 
 (* -------------------------------------------------------------------- *)
-(** * Debugging log flags *)
+(** * Configuration flags *)
 
-(** Set to true to log the arguments given to the DnD tactics, false otherwise *)
+(** ** Debug logging *)
+
+(** Set to true to log the arguments given to the DnD tactics *)
 let log_dnd_trace = false
 
 (** Set to true to print the atdgen-formatted goals exported to Actema *)
 let log_goals = false
+
+(** ** Export *)
+
+(** Set to true to export constructors of inductive types *)
+let export_ctr_type = false
+
+(** Set to true to export constructors of inductive predicates *)
+let export_ctr_prop = false
 
 (* -------------------------------------------------------------------- *)
 (** * First-order signatures *)
@@ -234,6 +244,11 @@ module Export = struct
     | name, _ ->
         let targs = Array.map (fun u -> dest_expr (e, u)) args in
         `EFun (name, Array.to_list targs)
+  
+  and dest_edummy : edest = fun ({ env; evd; _ }, t) ->
+    Log.str (Printf.sprintf "Failed to translate expression:\n%s"
+              (Log.string_of_econstr env evd t));
+    dummy_expr
 
   and dest_expr : edest = fun et ->
     begin
@@ -241,7 +256,7 @@ module Export = struct
       dest_evar >>?
       dest_erel >>?
       dest_eapp >>?
-      fun _ -> dummy_expr
+      dest_edummy
     end et
 
 
@@ -364,6 +379,12 @@ module Export = struct
         | _ -> raise Constr.DestKO
         end
     | _ -> raise Constr.DestKO
+
+  
+  and dest_dummy : fdest = fun ({ env; evd; _ }, t) ->
+    Log.str (Printf.sprintf "Failed to translate formula:\n%s"
+              (Log.string_of_econstr env evd t));
+    dummy_form
   
   and dest_form : fdest = fun et ->
     begin
@@ -380,7 +401,7 @@ module Export = struct
       dest_not >>?
       dest_forall >>?
       dest_exists >>?
-      fun _ -> dummy_form
+      dest_dummy
     end et
 
   (** ** Translating Coq's global and local environments to an Actema environment *)
@@ -475,7 +496,8 @@ module Export = struct
     NameMap.add name (`TVar sort, body) env, sign
   
   let global_env ({ env = coq_env; sign; _ } as e : destenv) : Fo_t.env * FOSign.t = 
-    (* Add sorts defined as inductive types *)
+    (* Add sorts defined as inductive types, and default elements,
+       functions and predicates defined as their constructors *)
     let venv, sign = Environ.fold_inductives begin fun mi bodies vsign ->
         let _, vsign = Array.fold_left begin fun (i, vsign) body ->
             let id = mi, i in
@@ -491,15 +513,18 @@ module Export = struct
                 add_sort e name (Ind id) ty >>?
                 identity
               end in
-            let _, vsign = Array.fold_left begin fun (i, vsign) (cname, cty) ->
-                let name = Names.Id.to_string cname in
-                let cid = id, i in
+            let _, vsign = Array.fold_left begin fun (j, vsign) (cname, cty) ->
+                let name =
+                  let name = Names.Id.to_string cname in
+                  Printf.sprintf "%s.%s" modpath name in
+                let cid = id, j+1 in
                 let ty = EConstr.of_constr cty in
                 let vsign = vsign |> begin
-                    add_func e name (Ctr cid) ty >>?
+                    if export_ctr_type then add_func e name (Ctr cid) ty else identity >>?
+                    if export_ctr_prop then add_pred e name (Ctr cid) ty else identity >>?
                     identity
                   end in
-                i+1, vsign
+                j+1, vsign
               end (0, vsign) (Array.combine body.mind_consnames body.mind_user_lc) in
             i+1, vsign
           end (0, vsign) bodies.mind_packets in
@@ -580,7 +605,11 @@ module Export = struct
     let g_concl = dest_form (e, concl) in
     
     let goal = Logic_t.{ g_env; g_hyps; g_concl } in
-    if log_goals then Log.str (Utils.string_of_goal goal);
+    if log_goals then begin
+      Log.str (List.to_string (fun (f, _) -> f) g_env.env_fun);
+      Log.str (Utils.string_of_form g_concl);
+      (* Log.str (Utils.string_of_goal goal); *)
+    end;
     goal
 end
 
@@ -840,18 +869,22 @@ module Import = struct
     match a with
     | `AId ->
         Tacticals.tclIDTAC
+
     | `AExact id ->
         let name = Names.Id.of_string id in
         Tactics.exact_check (EConstr.mkVar name)
+
     | `ADef (x, _, e) ->
         let id = Names.Id.of_string x in
         let name = Names.Name.Name id in
         let body = expr sign [] e in
         Tactics.pose_tac name body
+
     | `ACut f ->
         let id = Goal.fresh_name coq_goal () |> Names.Name.mk_name in
         let form = form sign goal.g_env [] f in
         Tactics.assert_before id form
+
     | `AIntro (iv, wit) ->
         begin match goal.g_concl with
         | `FTrue ->
@@ -888,6 +921,7 @@ module Import = struct
         | _ ->
             raise (UnsupportedAction a)
         end
+
     | `AElim uid ->
         let id = Names.Id.of_string uid in
         let hyp = Utils.get_hyp goal uid in
@@ -931,6 +965,7 @@ module Import = struct
         | _ ->
             raise (UnsupportedAction a)
         end
+
     | `ALink (src, dst, itr) ->
         let get_eq (p : Logic_t.ipath) : (bool list * bool) option =
           match Stdlib.List.rev p.sub with
@@ -1126,6 +1161,7 @@ module Import = struct
 
         | _ -> raise UnexpectedDnD
         end
+
     | `AInstantiate (wit, tgt) ->
         let l = bool_path (tgt.sub @ [0]) in
         let s = infer_sort goal.g_env wit |> sort_index sign |> Trm.nat_of_int in
@@ -1148,7 +1184,8 @@ module Import = struct
               raise (InvalidPath tgt)
           end in
 
-          calltac tac args
+        calltac tac args
+
     | `ADuplicate uid ->
         let id = Names.Id.of_string uid in
         let name =
@@ -1157,6 +1194,7 @@ module Import = struct
         let prf = EConstr.mkVar id in
 
         Tactics.pose_proof name prf
+
     | `ASimpl tgt | `ARed tgt | `AIndt tgt ->
         let tac_name =
           begin match a with
@@ -1165,6 +1203,7 @@ module Import = struct
           | `AIndt _ -> "myinduction"
           | _ -> assert false
           end in
+
         let tac_name, args =
           begin match tgt.ctxt.kind with
           | `Hyp ->
@@ -1180,7 +1219,9 @@ module Import = struct
           | _ ->
               raise (InvalidPath tgt)
           end in 
+
         calltac (kname tac_name) args
+        
     | _ ->
         raise (UnsupportedAction a)
 end
