@@ -3,9 +3,27 @@ open CoqUtils
 open Utils
 open Extlib
 
-module UidMap = Map.Make(Uid)
+(* -------------------------------------------------------------------- *)
+(** * Configuration flags *)
 
-type hidmap = Names.Id.t UidMap.t
+(** ** Debug logging *)
+
+(** Set to true to log the arguments given to the DnD tactics *)
+let log_dnd_trace = false
+
+(** Set to true to print the atdgen-formatted goals exported to Actema *)
+let log_goals = false
+
+(** ** Export *)
+
+(** Set to true to export constructors of inductive types *)
+let export_ctr_type = false
+
+(** Set to true to export constructors of inductive predicates *)
+let export_ctr_prop = false
+
+(* -------------------------------------------------------------------- *)
+(** * First-order signatures *)
 
 type symbol =
 | Cst of Names.Constant.t
@@ -73,7 +91,7 @@ end
 let peano : FOSign.t =
   let open FOSign in
   let open Trm in
-  let nat : Fo_t.type_ = `TVar ("nat", 0) in
+  let nat : Fo_t.type_ = `TVar "nat" in
   let symbols =
     let open SortSymbol in
     let s_sorts = empty |>
@@ -107,10 +125,10 @@ module Export = struct
   (** ** Translating Coq terms to Actema expressions and formulas *)
 
   let dummy_expr : Logic_t.expr =
-    `EFun ("dummy", [])
+    `EFun ("_dummy", [])
 
   let dummy_form : Logic_t.form =
-    `FPred ("dummy", [])
+    `FPred ("_dummy", [])
 
   let is_prop env evd term =
     let sort = Retyping.get_sort_of env evd term in
@@ -180,16 +198,16 @@ module Export = struct
     let rec aux arity t =
       if EConstr.isProd evd t then
         let _, t1, t2 = EConstr.destProd evd t in
-        aux (`TVar (find_sort (e, t1), 0) :: arity) t2
+        aux (`TVar (find_sort (e, t1)) :: arity) t2
       else
-        arity, `TVar (find_sort (e, t), 0) in
+        arity, `TVar (find_sort (e, t)) in
     aux [] t
 
   let dest_predty ({ evd; _ } as e, t : destarg) : Fo_t.arity =
     let rec aux arity t =
       if EConstr.isProd evd t then
         let _, t1, t2 = EConstr.destProd evd t in
-        aux (`TVar (find_sort (e, t1), 0) :: arity) t2
+        aux (`TVar (find_sort (e, t1)) :: arity) t2
       else
         if t |> EConstr.to_constr evd |> Constr.destSort |> Sorts.is_prop then
           arity
@@ -208,7 +226,7 @@ module Export = struct
   
   and dest_evar : edest = fun ({ env; evd; _ }, t) ->
     let id = EConstr.destVar evd t |> Names.Id.to_string in
-    `EVar (id, 0)
+    `EVar id
 
   and dest_erel : edest = fun ({ env; evd; _ }, t) ->
     let n = EConstr.destRel evd t in
@@ -217,7 +235,7 @@ module Export = struct
       EConstr.to_rel_decl evd |>
       Context.Rel.Declaration.get_name in
     match name with
-    | Name id -> `EVar (Names.Id.to_string id, 0)
+    | Name id -> `EVar (Names.Id.to_string id)
     | _ -> raise Constr.DestKO
 
   and dest_eapp : edest = fun ({ evd; _ } as e, t) ->
@@ -226,6 +244,11 @@ module Export = struct
     | name, _ ->
         let targs = Array.map (fun u -> dest_expr (e, u)) args in
         `EFun (name, Array.to_list targs)
+  
+  and dest_edummy : edest = fun ({ env; evd; _ }, t) ->
+    Log.str (Printf.sprintf "Failed to translate expression:\n%s"
+              (Log.string_of_econstr env evd t));
+    dummy_expr
 
   and dest_expr : edest = fun et ->
     begin
@@ -233,7 +256,7 @@ module Export = struct
       dest_evar >>?
       dest_erel >>?
       dest_eapp >>?
-      fun _ -> dummy_expr
+      dest_edummy
     end et
 
 
@@ -329,7 +352,7 @@ module Export = struct
     match Context.binder_name x with
     | Name id ->
         let name = Names.Id.to_string id in 
-        let ty = `TVar (sort, 0) in
+        let ty = `TVar sort in
         let env =
           (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env) in
         let body = dest_form ({ e with env }, t2) in
@@ -348,7 +371,7 @@ module Export = struct
         begin match Context.binder_name x with
         | Name id ->
             let name = Names.Id.to_string id in
-            let ty = `TVar (sort, 0) in
+            let ty = `TVar sort in
             let env =
               (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env) in
             let body = dest_form ({ e with env }, t2) in
@@ -356,6 +379,12 @@ module Export = struct
         | _ -> raise Constr.DestKO
         end
     | _ -> raise Constr.DestKO
+
+  
+  and dest_dummy : fdest = fun ({ env; evd; _ }, t) ->
+    Log.str (Printf.sprintf "Failed to translate formula:\n%s"
+              (Log.string_of_econstr env evd t));
+    dummy_form
   
   and dest_form : fdest = fun et ->
     begin
@@ -372,7 +401,7 @@ module Export = struct
       dest_not >>?
       dest_forall >>?
       dest_exists >>?
-      fun _ -> dummy_form
+      dest_dummy
     end et
 
   (** ** Translating Coq's global and local environments to an Actema environment *)
@@ -380,41 +409,43 @@ module Export = struct
   open FOSign
 
   (* Local environment of Actema definitions *)
-  type varenv = Logic_t.bvar list NameMap.t
+  type varenv = Logic_t.bvar NameMap.t
+  type varsign = varenv * FOSign.t
 
   let shortname (fullname : string) : string =
     fullname |> String.split_on_char '.' |> List.rev |> List.hd
 
-  let env_of_varsign (venv : varenv) (sign : FOSign.t) : Logic_t.env =
+  let env_of_varsign (venv, sign : varsign) : Logic_t.env =
     let open FOSign in
 
     let env_sort =
+      "_dummy" ::
       SortSymbol.values sign.symbols.s_sorts in
     let env_sort_name =
       List.(combine env_sort (map shortname env_sort)) in
 
     let func_names = SortSymbol.values sign.symbols.s_funcs in
     let env_fun =
-      ("dummy", ([], `TVar ("unit", 0))) ::
+      ("_dummy", ([], `TVar "_dummy")) ::
       List.map (fun f -> f, NameMap.find f sign.typing.t_funcs) func_names in
     let env_fun_name =
       List.(combine func_names (map shortname func_names)) in
 
     let pred_names = SortSymbol.values sign.symbols.s_preds in
     let env_prp =
-      ("dummy", []) ::
+      ("_dummy", []) ::
       List.map (fun p -> p, NameMap.find p sign.typing.t_preds) pred_names in
     let env_prp_name =
       List.(combine pred_names (map shortname pred_names)) in
 
     let env_var = NameMap.bindings venv in
 
-    let env_handles = [] in
+    { env_sort; env_sort_name;
+      env_fun; env_fun_name;
+      env_prp; env_prp_name;
+      env_var }
 
-    { env_sort; env_sort_name; env_fun; env_fun_name; env_prp; env_prp_name;
-      env_var; env_handles }
-
-  let add_sort ({ evd; _ } : destenv) name sy ty (env, sign) =
+  let add_sort ({ evd; _ } : destenv) name sy ty (env, sign : varsign) : varsign =
     let sort = ty |> EConstr.destSort evd |> EConstr.ESorts.kind evd in
     if sort <> Sorts.set && sort <> Sorts.type1 then
       raise Constr.DestKO;
@@ -422,14 +453,14 @@ module Export = struct
     let symbols = { sign.symbols with s_sorts } in
     env, { sign with symbols }
   
-  let add_default (e : destenv) t ty (env, sign) =
+  let add_default (e : destenv) t ty (env, sign : varsign) : varsign =
     let sort_sy = dest_symbol (e, ty) in
     if not (SortSymbol.mem sort_sy sign.symbols.s_sorts)
           || SymbolMap.mem sort_sy sign.defaults then
       raise Constr.DestKO;
     (env, { sign with defaults = SymbolMap.add sort_sy t sign.defaults })
   
-  let add_func (e : destenv) name sy ty (env, sign) =
+  let add_func (e : destenv) name sy ty (env, sign : varsign) : varsign =
     let e = { e with sign } in
     let sig_ = dest_functy (e, ty) in
     let s_funcs = SortSymbol.add sy name sign.symbols.s_funcs in
@@ -438,7 +469,7 @@ module Export = struct
     let typing = { sign.typing with t_funcs } in
     env, { sign with symbols; typing }
 
-  let add_strict_func (e : destenv) name sy ty (env, sign) =
+  let add_strict_func (e : destenv) name sy ty (env, sign : varsign) : varsign =
     let e = { e with sign } in
     let sig_ = dest_functy (e, ty) in
     if List.length (fst sig_) = 0 then raise Constr.DestKO;
@@ -448,7 +479,7 @@ module Export = struct
     let typing = { sign.typing with t_funcs } in
     env, { sign with symbols; typing }
 
-  let add_pred (e : destenv) name sy ty (env, sign) =
+  let add_pred (e : destenv) name sy ty (env, sign : varsign) : varsign =
     let e = { e with sign } in
     let arity = dest_predty (e, ty) in
     let s_preds = SortSymbol.add sy name sign.symbols.s_preds in
@@ -457,15 +488,16 @@ module Export = struct
     let typing = { sign.typing with t_preds } in
     env, { sign with symbols; typing }
 
-  let add_var (e : destenv) name ty value (env, sign) =
+  let add_var (e : destenv) name ty value (env, sign : varsign) : varsign =
     let e = { e with sign } in
     let sort = find_sort (e, ty) in
     let destenv = { e with sign } in
     let body = Option.map (fun v -> dest_expr (destenv, EConstr.of_constr v)) value in
-    NameMap.add name [`TVar (sort, 0), body] env, sign
+    NameMap.add name (`TVar sort, body) env, sign
   
   let global_env ({ env = coq_env; sign; _ } as e : destenv) : Fo_t.env * FOSign.t = 
-    (* Add sorts defined as inductive types *)
+    (* Add sorts defined as inductive types, and default elements,
+       functions and predicates defined as their constructors *)
     let venv, sign = Environ.fold_inductives begin fun mi bodies vsign ->
         let _, vsign = Array.fold_left begin fun (i, vsign) body ->
             let id = mi, i in
@@ -477,10 +509,24 @@ module Export = struct
               match body.Declarations.mind_arity with
               | RegularArity ar -> EConstr.of_constr ar.mind_user_arity
               | TemplateArity ar -> EConstr.mkType ar.template_level in
-            i+1, vsign |> begin
-              add_sort e name (Ind id) ty >>?
-              identity
-            end
+            let vsign = vsign |> begin
+                add_sort e name (Ind id) ty >>?
+                identity
+              end in
+            let _, vsign = Array.fold_left begin fun (j, vsign) (cname, cty) ->
+                let name =
+                  let name = Names.Id.to_string cname in
+                  Printf.sprintf "%s.%s" modpath name in
+                let cid = id, j+1 in
+                let ty = EConstr.of_constr cty in
+                let vsign = vsign |> begin
+                    if export_ctr_type then add_func e name (Ctr cid) ty else identity >>?
+                    if export_ctr_prop then add_pred e name (Ctr cid) ty else identity >>?
+                    identity
+                  end in
+                j+1, vsign
+              end (0, vsign) (Array.combine body.mind_consnames body.mind_user_lc) in
+            i+1, vsign
           end (0, vsign) bodies.mind_packets in
         vsign
       end coq_env (NameMap.empty, sign) in
@@ -503,7 +549,7 @@ module Export = struct
         end
       end coq_env (venv, sign) in
 
-    env_of_varsign venv sign, sign
+    env_of_varsign (venv, sign), sign
 
   let local_env ({ env = coq_env; sign; _ } as e : destenv) : Fo_t.env * FOSign.t = 
     (* Add sorts, default elements, functions, predicates and variables defined
@@ -523,30 +569,29 @@ module Export = struct
         end
       end coq_env ~init:(NameMap.empty, sign) in
 
-    env_of_varsign venv sign, sign
+    env_of_varsign (venv, sign), sign
   
   let env (e : destenv) : Fo_t.env * FOSign.t =
     let genv, gsign = global_env e in
     let lenv, lsign = local_env e in
     Utils.Env.concat genv lenv, FOSign.union gsign lsign
 
-  let hyps ({ env = coq_env; evd; _ } as e : destenv) : Logic_t.hyp list * hidmap =
-    let fresh = Uid.fresh () in
-    Environ.fold_named_context begin fun _ decl (hyps, hm) ->
+  let hyps ({ env = coq_env; evd; _ } as e : destenv) : Logic_t.hyp list =
+    Environ.fold_named_context begin fun _ decl hyps ->
       let name = Context.Named.Declaration.get_id decl in
       let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
       if is_prop coq_env evd ty then
-        let h_id = fresh () in
+        let h_id = Names.Id.to_string name in
         let h_form = dest_form (e, ty) in
         let hyp = Logic_t.{ h_id; h_form } in
-        (hyp :: hyps, UidMap.add h_id name hm)
+        hyp :: hyps
       else
-        (hyps, hm)
-    end coq_env ~init:([], UidMap.empty)
+        hyps
+    end coq_env ~init:[]
 
   (* [goal env sign gl] exports the Coq goal [gl] into an Actema goal and a
      mapping from Actema uids to Coq identifiers *)
-  let goal (env : Logic_t.env) (sign : FOSign.t) (goal : Goal.t) : Logic_t.goal * hidmap =
+  let goal (env : Logic_t.env) (sign : FOSign.t) (goal : Goal.t) : Logic_t.goal =
     let coq_env = Goal.env goal in
     let evd = Goal.sigma goal in
     let concl = Goal.concl goal in
@@ -556,10 +601,16 @@ module Export = struct
     let g_env =
       let lenv, _ = local_env e in
       Utils.Env.concat env lenv in
-    let g_hyps, hm = hyps e in
+    let g_hyps = hyps e in
     let g_concl = dest_form (e, concl) in
     
-    Logic_t.{ g_env; g_hyps; g_concl }, hm
+    let goal = Logic_t.{ g_env; g_hyps; g_concl } in
+    if log_goals then begin
+      Log.str (List.to_string (fun (f, _) -> f) g_env.env_fun);
+      Log.str (Utils.string_of_form g_concl);
+      (* Log.str (Utils.string_of_goal goal); *)
+    end;
+    goal
 end
 
 (* -------------------------------------------------------------------- *)
@@ -585,8 +636,7 @@ module Import = struct
   
   let infer_sort (env : Logic_t.env) (e : Logic_t.expr) : string =
     match einfer env e with
-    | `TVar (name, _) -> name
-    | _ -> failwith "Non-atomic sort type"
+    | `TVar name -> name
     
   let nth_sort (sign : FOSign.t) (n : int) : EConstr.t =
     let sorts = sign.symbols.s_sorts |> FOSign.SortSymbol.keys in
@@ -633,20 +683,16 @@ module Import = struct
   let rec type_ (sign : FOSign.t)
       (ty : Fo_t.type_) : EConstr.t =
     match ty with
-    | `TVar (x, _) ->
+    | `TVar x ->
         symbol (FOSign.SortSymbol.dnif x sign.symbols.s_sorts)
-    | `TUnit ->
-        Trm.unit
-    | _ ->
-        failwith "Unsupported type"
   
   let rec expr (sign : FOSign.t) (lenv : Logic_t.lenv)
       (e : Fo_t.expr) : EConstr.t =
     match e with
-    | `EVar (x, i) ->
-        if LEnv.exists lenv (x, i) then begin
+    | `EVar x ->
+        if LEnv.exists lenv x then begin
           let index : int =
-            List.(lenv |> split |> fst |> nth_index i x) in
+            List.(lenv |> split |> fst |> nth_index 0 x) in
           EConstr.mkRel (index + 1)
         end else
           Trm.var x
@@ -659,11 +705,11 @@ module Import = struct
       (env : Logic_t.env) (lenv : Logic_t.lenv) (side : int)
       (e : Fo_t.expr) : EConstr.t =
     match e with
-    | `EVar (x, i) ->
-        if LEnv.exists lenv (x, i) then begin
+    | `EVar x ->
+        if LEnv.exists lenv x then begin
           let s = sort_index sign (infer_sort (Utils.Vars.push_lenv env lenv) e) in
           let index : int =
-            List.(lenv |> split |> fst |> nth_index i x) in
+            List.(lenv |> split |> fst |> nth_index 0 x) in
           let env_index = if side = 0 then 2 else 1 in
           EConstr.(mkApp (mkRel env_index, Trm.[| nat_of_int s; nat_of_int index |]))
         end else
@@ -817,24 +863,28 @@ module Import = struct
   exception UnexpectedDnD
   exception InvalidPath of Logic_t.ipath
 
-  let action (sign : FOSign.t) (hm : hidmap) (goal : Logic_t.goal) (coq_goal : Goal.t)
+  let action (sign : FOSign.t) (goal : Logic_t.goal) (coq_goal : Goal.t)
              (a : Logic_t.action) : unit tactic =
     let open PVMonad in
     match a with
     | `AId ->
         Tacticals.tclIDTAC
+
     | `AExact id ->
-        let name = UidMap.find id hm in
+        let name = Names.Id.of_string id in
         Tactics.exact_check (EConstr.mkVar name)
+
     | `ADef (x, _, e) ->
         let id = Names.Id.of_string x in
         let name = Names.Name.Name id in
         let body = expr sign [] e in
         Tactics.pose_tac name body
-    | `ACut (f, _) ->
+
+    | `ACut f ->
         let id = Goal.fresh_name coq_goal () |> Names.Name.mk_name in
         let form = form sign goal.g_env [] f in
         Tactics.assert_before id form
+
     | `AIntro (iv, wit) ->
         begin match goal.g_concl with
         | `FTrue ->
@@ -871,8 +921,9 @@ module Import = struct
         | _ ->
             raise (UnsupportedAction a)
         end
+
     | `AElim uid ->
-        let id = UidMap.find uid hm in
+        let id = Names.Id.of_string uid in
         let hyp = Utils.get_hyp goal uid in
         let mk_destruct
             (ids : Names.variable list)
@@ -914,6 +965,7 @@ module Import = struct
         | _ ->
             raise (UnsupportedAction a)
         end
+
     | `ALink (src, dst, itr) ->
         let get_eq (p : Logic_t.ipath) : (bool list * bool) option =
           match Stdlib.List.rev p.sub with
@@ -995,9 +1047,9 @@ module Import = struct
                 let eq_hyp, dst_hyp = if eqside then dst, src else src, dst in
                 let fl = Trm.bool_of_bool eqside in
                 let h1 =
-                  let id = UidMap.find eq_hyp.ctxt.handle hm in
+                  let id = Names.Id.of_string eq_hyp.ctxt.handle in
                   EConstr.mkVar id in
-                let id2 = UidMap.find dst_hyp.ctxt.handle hm in
+                let id2 = Names.Id.of_string dst_hyp.ctxt.handle in
                 let h2 = EConstr.mkVar id2 in
                 let h3 =
                   let id = Goal.fresh_name ~basename:(Names.Id.to_string id2) coq_goal () in
@@ -1009,8 +1061,8 @@ module Import = struct
                 let hp2 = Trm.boollist fsub in
                 let hp2' = Trm.natlist esub in
 
-                let log_trace () =
-                  let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                if log_dnd_trace then begin
                   log h1;
                   log h2;
                   log h3;
@@ -1018,17 +1070,17 @@ module Import = struct
                   log hp2;
                   log hp2';
                   log t;
-                  log i in
-                log_trace ();
+                  log i;
+                end;
 
                 let forw = kname "rew_dnd_hyp" in
                 calltac forw [ts; fl; h1; h2; h3; hp1; hp2; hp2'; t; i]
             (* Non-rewrite *)
             | None ->
                 let h1 =
-                  let id = UidMap.find src.ctxt.handle hm in
+                  let id = Names.Id.of_string src.ctxt.handle in
                   EConstr.mkVar id in
-                let id2 = UidMap.find dst.ctxt.handle hm in
+                let id2 = Names.Id.of_string dst.ctxt.handle in
                 let h2 = EConstr.mkVar id2 in
                 let h3 =
                   let id = Goal.fresh_name ~basename:(Names.Id.to_string id2) coq_goal () in
@@ -1039,16 +1091,16 @@ module Import = struct
                 let hp1 = bool_path src.sub in
                 let hp2 = bool_path dst.sub in
                 
-                let log_trace () =
-                  let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                if log_dnd_trace then begin
                   log h1;
                   log h2;
                   log h3;
                   log hp1;
                   log hp2;
                   log t;
-                  log i in
-                log_trace ();
+                  log i;
+                end;
 
                 let forw = kname "forward" in
                 calltac forw [ts; h1; h2; h3; hp1; hp2; t; i]
@@ -1058,7 +1110,7 @@ module Import = struct
         | (hyp, `Hyp), (concl, `Concl)
         | (concl, `Concl), (hyp, `Hyp) ->
             let h =
-              let id = UidMap.find hyp.ctxt.handle hm in
+              let id = Names.Id.of_string hyp.ctxt.handle in
               EConstr.mkVar id in
             
             let t, i =
@@ -1076,15 +1128,15 @@ module Import = struct
                 let gp = Trm.boollist fsub in
                 let gp' = Trm.natlist esub in
 
-                let log_trace () =
-                  let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                if log_dnd_trace then begin
                   log h;
                   log hp;
                   log gp';
                   log gp;
                   log t;
-                  log i; in
-                log_trace ();
+                  log i;
+                end;
 
                 let back = kname "rew_dnd" in
                 calltac back [ts; h; hp; gp'; gp; t; i]
@@ -1094,14 +1146,14 @@ module Import = struct
                 let hp = bool_path hyp.sub in
                 let gp = bool_path concl.sub in
                 
-                let log_trace () =
-                  let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                let log t = Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t; Log.str "" in
+                if log_dnd_trace then begin
                   log h;
                   log hp;
                   log gp;
                   log t;
-                  log i; in
-                log_trace ();
+                  log i;
+                end;
 
                 let back = kname "back" in
                 calltac back [ts; h; hp; gp; t; i]
@@ -1109,6 +1161,7 @@ module Import = struct
 
         | _ -> raise UnexpectedDnD
         end
+
     | `AInstantiate (wit, tgt) ->
         let l = bool_path (tgt.sub @ [0]) in
         let s = infer_sort goal.g_env wit |> sort_index sign |> Trm.nat_of_int in
@@ -1119,7 +1172,7 @@ module Import = struct
           begin match tgt.ctxt.kind with
           (* Forward instantiate *)
           | `Hyp ->
-            let id = UidMap.find tgt.ctxt.handle hm in
+            let id = Names.Id.of_string tgt.ctxt.handle in
             let h = EConstr.mkVar id in
             let id' = Goal.fresh_name ~basename:(Names.Id.to_string id) coq_goal () in
             let h' = EConstr.mkVar id' in
@@ -1131,15 +1184,17 @@ module Import = struct
               raise (InvalidPath tgt)
           end in
 
-          calltac tac args
+        calltac tac args
+
     | `ADuplicate uid ->
-        let id = UidMap.find uid hm in
+        let id = Names.Id.of_string uid in
         let name =
           let name = Goal.fresh_name ~basename:(Names.Id.to_string id) coq_goal () in
           Names.Name.mk_name name in
         let prf = EConstr.mkVar id in
 
         Tactics.pose_proof name prf
+
     | `ASimpl tgt | `ARed tgt | `AIndt tgt ->
         let tac_name =
           begin match a with
@@ -1148,13 +1203,13 @@ module Import = struct
           | `AIndt _ -> "myinduction"
           | _ -> assert false
           end in
+
         let tac_name, args =
           begin match tgt.ctxt.kind with
           | `Hyp ->
-              let hyp = Utils.get_hyp goal tgt.ctxt.handle in
               (* let p = tgt.sub |> fix_sub_eq (`F hyp.h_form) |> Trm.natlist in *)
               let p = tgt.sub |> Trm.natlist in
-              let id = UidMap.find tgt.ctxt.handle hm in
+              let id = Names.Id.of_string tgt.ctxt.handle in
               let h = EConstr.mkVar id in
               tac_name ^ "_hyp", [h; p]
           | `Concl ->
@@ -1164,7 +1219,9 @@ module Import = struct
           | _ ->
               raise (InvalidPath tgt)
           end in 
+
         calltac (kname tac_name) args
+        
     | _ ->
         raise (UnsupportedAction a)
 end
