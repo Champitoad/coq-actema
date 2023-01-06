@@ -473,7 +473,6 @@ export default {
                 window.ipcRenderer.send('undo');
             } catch (e) {
                 this.showErrorMessage(e);
-                window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
             }
         },
 
@@ -491,7 +490,6 @@ export default {
                 window.ipcRenderer.send('redo');
             } catch (e) {
                 this.showErrorMessage(e);
-                window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
             }
         },
 
@@ -513,13 +511,16 @@ export default {
                 window.ipcRenderer.send('action', action);
             } catch (e) {
                 this.showErrorMessage(e);
-                window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
             }
         },
 
         sendActionCode(actionCode) {
-            let action = window.goal.getactionb(actionCode);
-            this.sendAction(action);
+            try {
+                let action = window.goal.getactionb(actionCode);
+                this.sendAction(action);
+            } catch (e) {
+                this.showErrorMessage(e);
+            }
         },
 
         generalize(predicate) {

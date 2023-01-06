@@ -48,7 +48,6 @@ export default {
             this.connected = false;
         });
         window.ipcRenderer.on("error", (_, msg) => {
-            console.log(msg);
             this.$refs.proofCanvas.showErrorMessage(msg);
         });
     },
