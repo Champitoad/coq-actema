@@ -2319,18 +2319,13 @@ module Translate = struct
     
     let open Hidmap.State in
     
-    let* hm = get in
-    let env_handles =
-      run begin
-        env_var |> Map.bindings |>
-        fold begin fun env_handles (x, bodies) ->
-          let pushx env body = Vars.push env (x, body) in
-          let empty = { Env.empty with env_handles } in
-          let* _ = Hidmap.push x in
-          return (List.fold_left pushx empty bodies).env_handles
-        end BiMap.empty
-      end hm in
-    
+    let* env_handles =
+      env_var |> Map.keys |> List.of_enum |>
+      fold begin fun env_handles x ->
+        let* hd = Hidmap.push x in
+        return (BiMap.add (x, 0) hd env_handles)
+      end BiMap.empty in
+
     return {
       env_prp; env_fun;
       env_sort_name; env_prp_name; env_fun_name;
