@@ -1,7 +1,7 @@
 From Actema Require Import Loader.
 
 (** * Peano arithmetic *)
- Definition icl1 : nat -> (list (option (inst1 test))).
+Definition icl1 : nat -> (list (option (inst1 test))).
 intro n; apply cons; try apply nil.
 apply Some; exists 0.
 intros; exact n.
@@ -46,7 +46,9 @@ Fixpoint gtb  (n:nat)(m:nat) :=
   end.
 
 Lemma leb_gtb : forall n m, leb n m = negb (gtb n m).
-actema. actema.
+Set Debug "backtrace".
+actema "perf". actema_force "perf".
+actema.
 Qed.
 
 Fixpoint moins n m :=
@@ -60,7 +62,7 @@ Require Import ssreflect.
 
 Lemma le_ex : forall n m, le n m  ->
                           exists p, n+p = m.
-actema. actema.
+actema.
 Qed.
 
 Lemma le_refl : forall n, le n n.

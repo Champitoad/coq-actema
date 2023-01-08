@@ -55,15 +55,37 @@ let kername (path : string list) (name : string) =
 let const_kname evd t =
   EConstr.destConst evd t |> fst |> Names.Constant.user
 
-let kname_of_constructor env (c : Names.Construct.t) : Names.KerName.t =
-  let ind = Names.inductive_of_constructor c in
+let ind_body env (ind : Names.inductive) : Declarations.one_inductive_body =
   let spec = Inductive.lookup_mind_specif env ind in
   let Declarations.({ mind_packets; _ }, _) = spec in
-  let ind_body = mind_packets.(snd ind) in
-  let modpath = Names.Construct.modpath c in
-  let i = Names.index_of_constructor c in
-  let label = ind_body.mind_consnames.(i-1) |> Names.Label.of_id in
+  mind_packets.(snd ind)
+
+let kname_of_inductive env (ind : Names.inductive) : Names.KerName.t =
+  let body = ind_body env ind in
+  let modpath = Names.Ind.modpath ind in
+  let label = body.Declarations.mind_typename |> Names.Label.of_id in
   Names.KerName.make modpath label
+
+let arity_of_inductive env (ind : Names.inductive) : EConstr.t =
+  let body = ind_body env ind in
+  match body.Declarations.mind_arity with
+  | RegularArity ar -> EConstr.of_constr ar.mind_user_arity
+  | TemplateArity ar -> EConstr.mkType ar.template_level
+
+let kname_of_constructor env (c : Names.Construct.t) : Names.KerName.t =
+  let ind = Names.inductive_of_constructor c in
+  let body = ind_body env ind in
+  let i = Names.index_of_constructor c in
+  let label = body.mind_consnames.(i-1) |> Names.Label.of_id in
+  let modpath = Names.Construct.modpath c in
+  Names.KerName.make modpath label
+
+let type_of_constructor env (c : Names.Construct.t) : EConstr.t =
+  let ind = Names.inductive_of_constructor c in
+  let ind_body = ind_body env ind in
+  let i = Names.index_of_constructor c in
+  let ty = ind_body.mind_user_lc.(i-1) in
+  EConstr.of_constr ty
 
 let construct_kname env evd (t : EConstr.t) : Names.KerName.t =
   let c = EConstr.destConstruct evd t |> fst in
@@ -112,6 +134,9 @@ module Trm = struct
 
   module Logic = struct
     let kname = kername ["Coq"; "Init"; "Logic"]
+
+    let eq_ind (mind, i) name =
+      Names.(KerName.equal (MutInd.canonical mind) (kname name)) && i = 0
 
     let true_ =
       mkInd (Names.MutInd.make1 (kname "True"), 0)

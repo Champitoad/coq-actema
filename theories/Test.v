@@ -1,5 +1,13 @@
 From Actema Require Import Loader.
 
+Set Debug "backtrace".
+
+Parameter (A B C : Prop) (P : nat -> Prop).
+
+Lemma testtrad (D E F : Prop) : forall n, P n.
+actema.
+Abort.
+
 Parameter f : nat -> nat -> nat.
 Lemma test : (forall x y, f x y = 0) ->
 forall x y, 99 = f x y -> True.
@@ -26,12 +34,8 @@ Qed.
 
 Require Import Lia.
 
-Parameters A : Prop.
-
 Lemma test_eq (n m : nat) : 2 + 4 = 6 -> (A -> A) /\ 5 + 4 * 5 = 25.
-  actema. actema "unfold".
-  unfold Nat.add.
-  lia.
+  actema.
 Qed.
 
 (* Lemma yolo (U : Set) (t u : U) (R : Prop) (P : U -> Prop) (f : U -> U -> U) :
@@ -62,12 +66,14 @@ Qed.
 Lemma test_rew t u f :
   t = u -> S (S (f t t)) = f u u -> f (S t) 5 = 42.
 Proof.
-  intros. actema.
+  intros.
+  actema.
 Admitted.
 
 Lemma test_instantiate (n : nat) (P : nat -> Prop) (A : Prop) :
   (forall x, P x) \/ A -> A /\ exists x, P x.
 Proof.
-  intros. actema.
+  intros.
+  actema.
 Admitted.
   

@@ -114,43 +114,33 @@ let load_proof (id : aident) : proof option =
 
 let sign = Translate.peano
 
-let compile_action env sign ((idx, a) : int * Logic_t.action) : unit tactic =
+let compile_action ((idx, a) : int * Logic_t.action) : unit tactic =
   let open PVMonad in
   Goal.enter begin fun coq_goal ->
-    let goal = Export.goal env sign coq_goal in
+    let goal, sign = Export.goal coq_goal in
     Import.action sign goal coq_goal a
   end |>
   let idx = idx + 1 in
   tclFOCUS idx idx
 
-let compile_proof env sign (prf : proof) : unit tactic =
+let compile_proof (prf : proof) : unit tactic =
   let rec aux prf =
     let open PVMonad in
     begin match prf with
     | action :: prf ->
-        let* _ = compile_action env sign action in
+        let* _ = compile_action action in
         aux prf
     | [] ->
         return ()
     end in
   aux prf
 
-let export_env () : (Logic_t.env * FOSign.t) tactic =
-  let result = ref (Utils.Env.empty, sign) in
-  let open PVMonad in
-  let* _ = Goal.enter begin fun goal ->
-    let coq_env, evd = Goal.env goal, Goal.sigma goal in
-    result := Export.env { env = coq_env; evd; sign };
-    return ()
-  end in
-  return !result
-
-let export_goals env sign : Logic_t.goals tactic =
+let export_goals () : Logic_t.goals tactic =
   let open PVMonad in
   let* coq_goals_tacs = Goal.goals in
   Stdlib.List.fold_right begin fun coq_goal_tac acc ->
       let* coq_goal = coq_goal_tac in
-      let goal = Export.goal env sign coq_goal in
+      let goal, _ = Export.goal coq_goal in
       let* goals = acc in
       return (goal :: goals)
   end coq_goals_tacs (return [])
@@ -166,7 +156,7 @@ let get_user_action (goals : Logic_t.goals) : Client.action =
 type history = { mutable before : proof; mutable after : proof }
 exception ApplyUndo
 
-let interactive_proof env sign : proof tactic =
+let interactive_proof () : proof tactic =
   let hist = ref { before = []; after = [] } in
 
   let rec aux () =
@@ -175,7 +165,7 @@ let interactive_proof env sign : proof tactic =
 
     let continue idx a =
       let cont =
-        let* _ = compile_action env sign (idx, a) in
+        let* _ = compile_action (idx, a) in
         aux () in
       tclOR cont begin fun (exn, _ as iexn) ->
         match exn with
@@ -190,7 +180,7 @@ let interactive_proof env sign : proof tactic =
             aux ()
       end in
 
-    let* goals = export_goals env sign in
+    let* goals = export_goals () in
     begin match get_user_action goals with
 
     | Do (idx, a) ->
@@ -224,17 +214,16 @@ let interactive_proof env sign : proof tactic =
 let actema_tac ?(force = false) (action_name : string) : unit tactic =
   let open PVMonad in
   Goal.enter begin fun coq_goal ->
-    let* env, sign = export_env () in
-    let goal = Export.goal env sign coq_goal in
+    let goal, _ = Export.goal coq_goal in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
     let interactive () =
-      let* prf = interactive_proof env sign in
+      let* prf = interactive_proof () in
       save_proof id prf;
       return () in
     if force then interactive () else
     match load_proof id with
     | Some prf ->
-        compile_proof env sign prf
+        compile_proof prf
     | _ ->
         interactive ()
   end

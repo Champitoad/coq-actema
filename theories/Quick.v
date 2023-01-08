@@ -20,9 +20,7 @@ Lemma eduk1 :
   False.
 Proof.
   intros.
-  Set Ltac Profiling.
   actema.
-  Show Ltac Profile CutOff 1.
 Admitted.
 
 Context (A B C D E F G : Prop).

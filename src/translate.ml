@@ -12,15 +12,7 @@ open Extlib
 let log_dnd_trace = false
 
 (** Set to true to print the atdgen-formatted goals exported to Actema *)
-let log_goals = false
-
-(** ** Export *)
-
-(** Set to true to export constructors of inductive types *)
-let export_ctr_type = false
-
-(** Set to true to export constructors of inductive predicates *)
-let export_ctr_prop = false
+let log_goals = true
 
 (* -------------------------------------------------------------------- *)
 (** * First-order signatures *)
@@ -54,11 +46,10 @@ end
 module NameMap = Map.Make(String)
 
 module FOSign = struct
-  module SortSymbol = BiMap(Symbol)(String)
+  module SymbolNames = BiMap(Symbol)(String)
   module SymbolMap = Map.Make(Symbol)
 
-  type symbols =
-    { s_sorts : SortSymbol.t; s_funcs : SortSymbol.t; s_preds : SortSymbol.t }
+  type symbols = SymbolNames.t
   
   type typing =
     { t_funcs : Fo_t.sig_ NameMap.t; t_preds : Fo_t.arity NameMap.t }
@@ -67,10 +58,7 @@ module FOSign = struct
     { symbols : symbols; typing : typing; defaults : EConstr.t SymbolMap.t }
   
   let empty : t =
-    { symbols = {
-        s_sorts = SortSymbol.empty;
-        s_funcs = SortSymbol.empty;
-        s_preds = SortSymbol.empty; };
+    { symbols = SymbolNames.empty;
       typing = {
         t_funcs = NameMap.empty;
         t_preds = NameMap.empty; };
@@ -78,14 +66,22 @@ module FOSign = struct
   
   let union (s1 : t) (s2 : t) : t =
     let f _ x _ = Some x in
-    { symbols = {
-        s_sorts = SortSymbol.union s1.symbols.s_sorts s2.symbols.s_sorts;
-        s_funcs = SortSymbol.union s1.symbols.s_funcs s2.symbols.s_funcs;
-        s_preds = SortSymbol.union s1.symbols.s_preds s2.symbols.s_preds; };
+    { symbols = SymbolNames.union s1.symbols s2.symbols;
       typing = {
         t_funcs = NameMap.union f s1.typing.t_funcs s2.typing.t_funcs;
         t_preds = NameMap.union f s1.typing.t_preds s2.typing.t_preds; };
       defaults = SymbolMap.union f s1.defaults s2.defaults; }
+    
+  let sort_names (sign : t) : string list =
+    sign.symbols |> SymbolNames.values |>
+    List.filter begin fun n ->
+      not (NameMap.mem n sign.typing.t_funcs
+        || NameMap.mem n sign.typing.t_preds)
+    end
+  
+  let sort_symbols (sign : t) : symbol list =
+    sign |> sort_names |> 
+    List.map (fun n -> SymbolNames.dnif n sign.symbols)
 end
 
 let peano : FOSign.t =
@@ -93,16 +89,13 @@ let peano : FOSign.t =
   let open Trm in
   let nat : Fo_t.type_ = `TVar "nat" in
   let symbols =
-    let open SortSymbol in
-    let s_sorts = empty |>
-      add (Ind nat_name) "nat" in
-    let s_funcs = empty |>
-      add (Ctr zero_name) "Z" |>
-      add (Ctr succ_name) "S" |> fun m ->
-      List.fold_left (fun m name -> add (Cst name) "add" m) m Trm.add_names |> fun m ->
-      List.fold_left (fun m name -> add (Cst name) "mult" m) m Trm.mul_names in
-    let s_preds = empty in
-    { s_sorts; s_funcs; s_preds } in
+    let open SymbolNames in
+    empty |>
+    add (Ind nat_name) "nat" |>
+    add (Ctr zero_name) "Z" |>
+    add (Ctr succ_name) "S" |> fun m ->
+    List.fold_left (fun m name -> add (Cst name) "add" m) m Trm.add_names |> fun m ->
+    List.fold_left (fun m name -> add (Cst name) "mult" m) m Trm.mul_names in
   let typing =
     let open NameMap in
     let t_funcs = empty |>
@@ -141,266 +134,402 @@ module Export = struct
         evd t2
     && (x.Context.binder_name = Names.Anonymous || EConstr.Vars.noccurn evd 1 t2)
 
-
   type destenv =
-    { env : Environ.env; evd : Evd.evar_map; sign : FOSign.t }
+    { env : Environ.env; evd : Evd.evar_map }
   
   type destarg = destenv * EConstr.types
 
-  type sdest = destarg -> symbol
+  module State = Monads.State(FOSign)
+  module Dest = Monads.StateOption(FOSign)
 
-  let trydest f g =
-    fun x -> try f x with Constr.DestKO -> g x
+  type 'a sdest = destarg -> 'a Dest.t
 
-  let ( >>? ) = trydest
+  let state_to_dest (m : 'a State.t) : 'a Dest.t =
+    fun sign ->
+      let res, sign = State.run m sign in
+      Some (res, sign)
 
-  let dest_sconst : sdest = fun ({ evd; _ }, t) ->
-    Cst (EConstr.destConst evd t |> fst)
+  let dest_to_state default (m : 'a Dest.t) : 'a State.t =
+    fun sign ->
+      match Dest.run m sign with
+      | None -> (default, sign)
+      | Some (v, sign) -> (v, sign)
 
-  let dest_sconstruct : sdest = fun ({ env; evd; _ }, t) ->
-    Ctr (EConstr.destConstruct evd t |> fst)
-  
-  let dest_sind : sdest = fun ({ evd; _ }, t) ->
-    Ind (EConstr.destInd evd t |> fst)
-  
-  let dest_svar : sdest = fun ({ evd; _ }, t) ->
-    Var (EConstr.destVar evd t)
+  open FOSign
+  open Dest
 
-  let dest_symbol : sdest =
-    dest_sconst >>?
-    dest_sconstruct >>?
-    dest_sind >>?
-    dest_svar
+  let destKO = lift None
 
-  let find_sort ({ sign; _ }, _ as d : destarg) : string =
-    try
-      FOSign.SortSymbol.find (dest_symbol d) sign.symbols.s_sorts
-    with Not_found ->
-      raise Constr.DestKO
+  let destwrap (f : 'a -> 'b) (x : 'a) : 'b Dest.t =
+    try return (f x)
+    with Constr.DestKO -> destKO
 
-  let find_func ({ sign; _ }, _ as d : destarg) : Fo_t.name * Fo_t.sig_ =
-    try
-      let name = FOSign.SortSymbol.find (dest_symbol d) sign.symbols.s_funcs in
-      let sig_ = NameMap.find name sign.typing.t_funcs in
-      name, sig_
-    with Not_found ->
-      raise Constr.DestKO
+  let compdest (f : 'a -> 'b Dest.t) (g : 'a -> 'b Dest.t) (x : 'a) : 'b Dest.t =
+    let* sign = get in
+    match f x sign with
+    | Some (v, sign) ->
+        let* () = put sign in
+        return v
+    | None -> g x
 
-  let find_pred ({ sign; _ }, _ as d : destarg) : Fo_t.name * Fo_t.arity =
-    try
-      let name = FOSign.SortSymbol.find (dest_symbol d) sign.symbols.s_preds in
-      let arity = NameMap.find name sign.typing.t_preds in
-      name, arity
-    with Not_found ->
-      raise Constr.DestKO
+  let trydest (f : 'a -> 'b Dest.t) (g : 'a -> 'b State.t) (x : 'a) : 'b State.t =
+    let open State in
+    let* sign = get in
+    match f x sign with
+    | Some (v, sign) ->
+        let* () = put sign in
+        return v
+    | None -> g x
 
-  let dest_functy ({ evd; _ } as e, t : destarg) : Fo_t.sig_ =
+  let ( @> ) = compdest
+  let ( @>? ) = trydest
+
+  let rec dest_sort ({ evd; _ }, t : destarg) : unit Dest.t =
+    let* sort = destwrap (EConstr.destSort evd) t in
+    let sort = EConstr.ESorts.kind evd sort in
+    if sort <> Sorts.set && sort <> Sorts.type1
+    then destKO
+    else return ()
+
+  and dest_functy ({ evd; _ } as e, t : destarg) : Fo_t.sig_ Dest.t =
     let rec aux arity t =
       if EConstr.isProd evd t then
-        let _, t1, t2 = EConstr.destProd evd t in
-        aux (`TVar (find_sort (e, t1)) :: arity) t2
+        let* _, t1, t2 = destwrap (EConstr.destProd evd) t in
+        let* sort = find_sort (e, t1) in
+        aux (`TVar sort :: arity) t2
       else
-        arity, `TVar (find_sort (e, t)) in
+        let* sort = find_sort (e, t) in
+        return (arity, `TVar sort) in
     aux [] t
 
-  let dest_predty ({ evd; _ } as e, t : destarg) : Fo_t.arity =
+  and dest_predty ({ evd; _ } as e, t : destarg) : Fo_t.arity Dest.t =
     let rec aux arity t =
       if EConstr.isProd evd t then
-        let _, t1, t2 = EConstr.destProd evd t in
-        aux (`TVar (find_sort (e, t1)) :: arity) t2
+        let* _, t1, t2 = destwrap (EConstr.destProd evd) t in
+        let* sort = find_sort (e, t1) in
+        aux (`TVar sort :: arity) t2
       else
-        if t |> EConstr.to_constr evd |> Constr.destSort |> Sorts.is_prop then
-          arity
+        let* sort = t |> EConstr.to_constr evd |> destwrap Constr.destSort in
+        if Sorts.is_prop sort then
+          return arity
         else
-          raise Constr.DestKO in
+          destKO in
     aux [] t
+
+  and add_sort name sy ty (e : destenv) : unit Dest.t =
+    let* () = dest_sort (e, ty) in
+    let* sign = get in
+    let symbols = SymbolNames.add sy name sign.symbols in
+    put { sign with symbols }
+
+  and add_func ?(strict = false) name sy ty (e : destenv) : unit Dest.t =
+    let* sig_ = dest_functy (e, ty) in
+    if strict && List.length (fst sig_) = 0 then destKO else
+    let* sign = get in
+    let symbols = SymbolNames.add sy name sign.symbols in
+    let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
+    let typing = { sign.typing with t_funcs } in
+    put { sign with symbols; typing }
+
+  and add_pred name sy ty (e : destenv) : unit Dest.t =
+    let* arity = dest_predty (e, ty) in
+    let* sign = get in
+    let symbols = SymbolNames.add sy name sign.symbols in
+    let t_preds = NameMap.add name arity sign.typing.t_preds in
+    let typing = { sign.typing with t_preds } in
+    put { sign with symbols; typing }
+
+  and add_default t ty (e : destenv) : unit Dest.t =
+    let* sort_sy = dest_symbol (e, ty) in
+    let* sign = get in
+    if SymbolMap.mem sort_sy sign.defaults then destKO else
+    put { sign with defaults = SymbolMap.add sort_sy t sign.defaults }
   
+  and add_symbol name sy ty e : unit Dest.t =
+    begin
+      add_sort name sy ty @>
+      add_func name sy ty @>
+      add_pred name sy ty @>
+      fun _ -> return ()
+    end e
   
-  type edest = destarg -> Logic_t.expr
+  and add_symbol_lazy sy (info : unit -> string * EConstr.t) e : unit Dest.t =
+    let* sign = get in
+    if not (SymbolNames.mem sy sign.symbols) then
+      let name, ty = info () in
+      add_symbol name sy ty e
+    else
+      return ()
+
+  and find_sort (d : destarg) : string Dest.t =
+    let* sy = dest_symbol d in
+    let* sign = get in
+    match SymbolNames.find_opt sy sign.symbols with
+    | Some name -> return name
+    | None -> destKO
+
+  and find_func (d : destarg) : (Fo_t.name * Fo_t.sig_) Dest.t =
+    let* sy = dest_symbol d in
+    let* sign = get in
+    match SymbolNames.find_opt sy sign.symbols with
+    | Some name ->
+        let arity = NameMap.find name sign.typing.t_funcs in
+        return (name, arity)
+    | None -> destKO
+
+  and find_pred (d : destarg) : (Fo_t.name * Fo_t.arity) Dest.t =
+    let* sy = dest_symbol d in
+    let* sign = get in
+    match SymbolNames.find_opt sy sign.symbols with
+    | Some name ->
+        let arity = NameMap.find name sign.typing.t_preds in
+        return (name, arity)
+    | None -> destKO
+
+  and dest_sconst : symbol sdest = fun ({ env; evd } as e, t) ->
+    let* cst, _ = destwrap (EConstr.destConst evd) t in
+    let sy = Cst cst in
+    let* sign =
+      let info () =
+        let name = Names.Constant.to_string cst in
+        let c = Environ.lookup_constant cst env in
+        let ty = c.const_type |> EConstr.of_constr in
+        name, ty in
+      add_symbol_lazy sy info e in
+    return sy
+
+  and dest_sconstruct : symbol sdest = fun ({ env; evd } as e, t) ->
+    let* ctr, _ = destwrap (EConstr.destConstruct evd) t in
+    let sy = Ctr ctr in
+    let* sign =
+      let info () =
+        let name = kname_of_constructor env ctr |> Names.KerName.to_string in
+        let ty = type_of_constructor env ctr in
+        name, ty in
+      add_symbol_lazy sy info e in
+    return sy
+  
+  and dest_sind : symbol sdest = fun ({ env; evd; _ } as e, t) ->
+    let* ind, _ = destwrap (EConstr.destInd evd) t in
+    let sy = Ind ind in
+    let* sign =
+      let info () =
+        let name = kname_of_inductive env ind |> Names.KerName.to_string in
+        let ty = arity_of_inductive env ind in
+        name, ty in
+      add_symbol_lazy sy info e in
+    return sy
+  
+  and dest_svar : symbol sdest = fun ({ evd; _ }, t) ->
+    let* id = destwrap (EConstr.destVar evd) t in
+    return (Var id)
+
+  and dest_symbol : symbol sdest = fun et ->
+    begin
+      dest_sconst @>
+      dest_sconstruct @>
+      dest_sind @>
+      dest_svar
+    end et
+  
+  type edest = Logic_t.expr sdest 
 
   let rec dest_econst : edest = fun (e, t) ->
-    match find_func (e, t) with
-    | name, ([], _) ->
-        `EFun (name, [])
-    | _ -> raise Constr.DestKO
+    let* name, sig_ = find_func (e, t) in
+    match sig_ with
+    | ([], _) -> return (`EFun (name, []))
+    | _ -> destKO
   
   and dest_evar : edest = fun ({ env; evd; _ }, t) ->
-    let id = EConstr.destVar evd t |> Names.Id.to_string in
-    `EVar id
+    let* id = destwrap (EConstr.destVar evd) t in 
+    let name = Names.Id.to_string id in
+    return (`EVar name)
 
   and dest_erel : edest = fun ({ env; evd; _ }, t) ->
-    let n = EConstr.destRel evd t in
+    let* n = destwrap (EConstr.destRel evd) t in
     let name =
       EConstr.lookup_rel n env |>
       EConstr.to_rel_decl evd |>
       Context.Rel.Declaration.get_name in
     match name with
-    | Name id -> `EVar (Names.Id.to_string id)
-    | _ -> raise Constr.DestKO
+    | Name id -> return (`EVar (Names.Id.to_string id))
+    | _ -> destKO
 
   and dest_eapp : edest = fun ({ evd; _ } as e, t) ->
-    let head, args = EConstr.destApp evd t in
-    match find_func (e, head) with
-    | name, _ ->
-        let targs = Array.map (fun u -> dest_expr (e, u)) args in
-        `EFun (name, Array.to_list targs)
+    let* head, args = destwrap (EConstr.destApp evd) t in
+    let* name, _ = find_func (e, head) in
+    let* targs =
+      args |> Array.to_list |>
+      State.map (fun u -> dest_expr (e, u)) |>
+      state_to_dest in
+    return (`EFun (name, targs))
   
-  and dest_edummy : edest = fun ({ env; evd; _ }, t) ->
+  and dest_edummy : destarg -> Logic_t.expr State.t = fun ({ env; evd; _ }, t) ->
     Log.str (Printf.sprintf "Failed to translate expression:\n%s"
               (Log.string_of_econstr env evd t));
-    dummy_expr
+    State.return dummy_expr
 
-  and dest_expr : edest = fun et ->
+  and dest_expr : destarg -> Logic_t.expr State.t = fun et ->
     begin
-      dest_econst >>?
-      dest_evar >>?
-      dest_erel >>?
-      dest_eapp >>?
+      dest_econst @>?
+      dest_evar @>?
+      dest_erel @>?
+      dest_eapp @>?
       dest_edummy
     end et
 
 
-  type fdest = destarg -> Logic_t.form
+  type fdest = Logic_t.form sdest
 
   let rec dest_pconst : fdest = fun ({ env; evd; _ } as e, t) ->
-    if not (is_prop env evd t) then raise Constr.DestKO;
-    let name, _ = find_pred (e, t) in
-    `FPred (name, [])
+    if not (is_prop env evd t) then destKO else
+    let* name, _ = find_pred (e, t) in
+    return (`FPred (name, []))
 
   and dest_pvar : fdest = fun ({ env; evd; _ }, t) ->
-    if not (is_prop env evd t) then raise Constr.DestKO;
-    let name = EConstr.destVar evd t |> Names.Id.to_string in
-    `FPred (name, [])
+    if not (is_prop env evd t) then destKO else
+    let* id = destwrap (EConstr.destVar evd) t in
+    let name = Names.Id.to_string id in
+    return (`FPred (name, []))
 
   and dest_papp : fdest = fun ({ env; evd; _ } as e, t) ->
-    if not (is_prop env evd t) then raise Constr.DestKO;
-    let head, args = EConstr.destApp evd t in
-    match find_pred (e, head) with
-    | name, _ ->
-        let targs = Array.map (fun u -> dest_expr (e, u)) args in
-        `FPred (name, Array.to_list targs)
+    if not (is_prop env evd t) then destKO else
+    let* head, args = destwrap (EConstr.destApp evd) t in
+    let* name, _ = find_pred (e, head) in
+    let* targs =
+      args |> Array.to_list |>
+      State.map (fun u -> dest_expr (e, u)) |>
+      state_to_dest in
+    Dest.return (`FPred (name, targs))
 
   and dest_eq : fdest = fun ({ env; evd; _ } as e, t) ->
-    let head, args = EConstr.destApp evd t in
-    let (mind, i), _ = EConstr.destInd evd head in
-    let head_is_eq =
-      Names.(KerName.equal (MutInd.canonical mind) (Trm.Logic.kname "eq")) && i = 0 in
-    match head_is_eq, args with
+    let* head, args = destwrap (EConstr.destApp evd) t in
+    let* ind, _ = destwrap (EConstr.destInd evd) head in
+    match Trm.Logic.eq_ind ind "eq", args with
     | true, [| _; t1; t2 |] ->
-        let e1 = dest_expr (e, t1) in
-        let e2 = dest_expr (e, t2) in
-        `FPred ("_EQ", [e1; e2])
+        let* e1 = dest_expr (e, t1) |> state_to_dest in
+        let* e2 = dest_expr (e, t2) |> state_to_dest in
+        return (`FPred ("_EQ", [e1; e2]))
     | _ ->
-        raise Constr.DestKO
+        destKO
 
   and dest_true : fdest = fun ({ env; evd; _ }, t) ->
-    match name_of_inductive env evd t with
-    | "True" ->
-        `FTrue
-    | name ->
-        raise Constr.DestKO
+    let* ind, _ = destwrap (EConstr.destInd evd) t in
+    if Trm.Logic.eq_ind ind "True"
+    then return `FTrue
+    else destKO
 
   and dest_false : fdest = fun ({ env; evd; _ }, t) ->
-    match name_of_inductive env evd t with
-    | "False" ->
-        `FFalse
-    | name ->
-        raise Constr.DestKO
+    let* ind, _ = destwrap (EConstr.destInd evd) t in
+    if Trm.Logic.eq_ind ind "False"
+    then return `FTrue
+    else destKO
 
   and dest_imp : fdest = fun ({ env; evd; _ } as e, t) ->
-    let x, t1, t2 = EConstr.destProd evd t in
-    if not (is_imp (env, evd) x t1 t2) then raise Constr.DestKO;
+    let* x, t1, t2 = destwrap (EConstr.destProd evd) t in
+    if not (is_imp (env, evd) x t1 t2) then destKO else
     let env =
       (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env) in
-    `FConn (`Imp, [dest_form (e, t1); dest_form ({ e with env }, t2)])
+    let* f1 = dest_form (e, t1) |> state_to_dest in
+    let* f2 = dest_form ({ e with env }, t2) |> state_to_dest in
+    return (`FConn (`Imp, [f1; f2]))
 
   and dest_and : fdest = fun ({ env; evd; _ } as e, t) ->
-    let f, args  = EConstr.destApp evd t in
-    match name_of_inductive env evd f, Array.to_list args with
-    | "and", [t1; t2] ->
-        `FConn (`And, [dest_form (e, t1); dest_form (e, t2)])
-    | name, _ ->
-        raise Constr.DestKO
+    let* head, args = destwrap (EConstr.destApp evd) t in
+    let* ind, _ = destwrap (EConstr.destInd evd) head in
+    match Trm.Logic.eq_ind ind "and", args with
+    | true, [| t1; t2 |] ->
+        let* f1 = dest_form (e, t1) |> state_to_dest in
+        let* f2 = dest_form (e, t2) |> state_to_dest in
+        return (`FConn (`And, [f1; f2]))
+    | _ ->
+        destKO
 
   and dest_or : fdest = fun ({ env; evd; _ } as e, t) ->
-    let f, args  = EConstr.destApp evd t in
-    match name_of_inductive env evd f, Array.to_list args with
-    | "or", [t1; t2] ->
-        `FConn (`Or, [dest_form (e, t1); dest_form (e, t2)])
-    | name, _ ->
-        raise Constr.DestKO
+    let* head, args = destwrap (EConstr.destApp evd) t in
+    let* ind, _ = destwrap (EConstr.destInd evd) head in
+    match Trm.Logic.eq_ind ind "or", args with
+    | true, [| t1; t2 |] ->
+        let* f1 = dest_form (e, t1) |> state_to_dest in
+        let* f2 = dest_form (e, t2) |> state_to_dest in
+        return (`FConn (`Or, [f1; f2]))
+    | _ ->
+        destKO
 
   and dest_iff : fdest = fun ({ evd; _ } as e, t) ->
-    let f, args  = EConstr.destApp evd t in
-    match name_of_const evd f, Array.to_list args with
-    | "iff", [t1; t2] ->
-        `FConn (`Equiv, [dest_form (e, t1); dest_form (e, t2)])
-    | name, _ ->
-        raise Constr.DestKO
+    let* head, args = destwrap (EConstr.destApp evd) t in
+    let* ind, _ = destwrap (EConstr.destInd evd) head in
+    match Trm.Logic.eq_ind ind "iff", args with
+    | true, [| t1; t2 |] ->
+        let* f1 = dest_form (e, t1) |> state_to_dest in
+        let* f2 = dest_form (e, t2) |> state_to_dest in
+        return (`FConn (`Equiv, [f1; f2]))
+    | _ ->
+        destKO
 
   and dest_not : fdest = fun ({ evd; _ } as e, t) ->
-    let f, args  = EConstr.destApp evd t in
-    match name_of_const evd f, Array.to_list args with
-    | "not", [t1] ->
-        `FConn (`Not, [dest_form (e, t1)])
-    | name, _ ->
-        raise Constr.DestKO
+    let* head, args = destwrap (EConstr.destApp evd) t in
+    let* ind, _ = destwrap (EConstr.destInd evd) head in
+    match Trm.Logic.eq_ind ind "not", args with
+    | true, [| t1 |] ->
+        let* f1 = dest_form (e, t1) |> state_to_dest in
+        return (`FConn (`Not, [f1]))
+    | _ ->
+        destKO
   
   and dest_forall : fdest = fun ({ env; evd; _ } as e, t) ->
-    let x, t1, t2 = EConstr.destProd evd t in
-    let sort = find_sort (e, t1) in
+    let* x, t1, t2 = destwrap (EConstr.destProd evd) t in
+    let* sort = find_sort (e, t1) in
     match Context.binder_name x with
     | Name id ->
         let name = Names.Id.to_string id in 
         let ty = `TVar sort in
         let env =
           (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env) in
-        let body = dest_form ({ e with env }, t2) in
-        `FBind (`Forall, name, ty, body)
-    | _ -> raise Constr.DestKO
+        let* body = dest_form ({ e with env }, t2) |> state_to_dest in
+        return (`FBind (`Forall, name, ty, body))
+    | _ -> destKO
   
   and dest_exists : fdest = fun ({ env; evd; _ } as e, t) ->
-    let head, args = EConstr.destApp evd t in
-    let (mind, i), _ = EConstr.destInd evd head in
-    let head_is_ex =
-      Names.(KerName.equal (MutInd.canonical mind) (Trm.Logic.kname "ex")) && i = 0 in
-    match head_is_ex, args with
+    let* head, args = destwrap (EConstr.destApp evd) t in
+    let* ind, _ = destwrap (EConstr.destInd evd) head in
+    match Trm.Logic.eq_ind ind "ex", args with
     | true, [| _; t2 |] ->
-        let x, t1, t2 = EConstr.destLambda evd t2 in
-        let sort = find_sort (e, t1) in
+        let* x, t1, t2 = destwrap (EConstr.destLambda evd) t2 in
+        let* sort = find_sort (e, t1) in
         begin match Context.binder_name x with
         | Name id ->
             let name = Names.Id.to_string id in
             let ty = `TVar sort in
             let env =
               (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env) in
-            let body = dest_form ({ e with env }, t2) in
-            `FBind (`Exist, name, ty, body)
-        | _ -> raise Constr.DestKO
+            let* body = dest_form ({ e with env }, t2) |> state_to_dest in
+            return (`FBind (`Exist, name, ty, body))
+        | _ -> destKO
         end
-    | _ -> raise Constr.DestKO
+    | _ -> destKO
 
   
-  and dest_dummy : fdest = fun ({ env; evd; _ }, t) ->
+  and dest_dummy : destarg -> Logic_t.form State.t = fun ({ env; evd; _ }, t) ->
     Log.str (Printf.sprintf "Failed to translate formula:\n%s"
               (Log.string_of_econstr env evd t));
-    dummy_form
+    State.return dummy_form
   
-  and dest_form : fdest = fun et ->
+  and dest_form : destarg -> Logic_t.form State.t = fun et ->
     begin
-      dest_eq >>?
-      dest_true >>?
-      dest_false >>?
-      dest_pconst >>?
-      dest_pvar >>?
-      dest_papp >>?
-      dest_imp >>?
-      dest_and >>?
-      dest_or >>?
-      dest_iff >>?
-      dest_not >>?
-      dest_forall >>?
-      dest_exists >>?
+      dest_imp @>?
+      dest_forall @>?
+      dest_eq @>?
+      dest_exists @>?
+      dest_and @>?
+      dest_or @>?
+      dest_iff @>?
+      dest_not @>?
+      dest_true @>?
+      dest_false @>?
+      dest_papp @>?
+      dest_pconst @>?
+      dest_pvar @>?
       dest_dummy
     end et
 
@@ -419,19 +548,20 @@ module Export = struct
     let open FOSign in
 
     let env_sort =
-      "_dummy" ::
-      SortSymbol.values sign.symbols.s_sorts in
+      "_dummy" :: sort_names sign in
     let env_sort_name =
       List.(combine env_sort (map shortname env_sort)) in
 
-    let func_names = SortSymbol.values sign.symbols.s_funcs in
+    let func_names =
+      sign.typing.t_funcs |> NameMap.bindings |> List.split |> fst in
     let env_fun =
       ("_dummy", ([], `TVar "_dummy")) ::
       List.map (fun f -> f, NameMap.find f sign.typing.t_funcs) func_names in
     let env_fun_name =
       List.(combine func_names (map shortname func_names)) in
 
-    let pred_names = SortSymbol.values sign.symbols.s_preds in
+    let pred_names =
+      sign.typing.t_preds |> NameMap.bindings |> List.split |> fst in
     let env_prp =
       ("_dummy", []) ::
       List.map (fun p -> p, NameMap.find p sign.typing.t_preds) pred_names in
@@ -445,172 +575,87 @@ module Export = struct
       env_prp; env_prp_name;
       env_var }
 
-  let add_sort ({ evd; _ } : destenv) name sy ty (env, sign : varsign) : varsign =
-    let sort = ty |> EConstr.destSort evd |> EConstr.ESorts.kind evd in
-    if sort <> Sorts.set && sort <> Sorts.type1 then
-      raise Constr.DestKO;
-    let s_sorts = SortSymbol.add sy name sign.symbols.s_sorts in
-    let symbols = { sign.symbols with s_sorts } in
-    env, { sign with symbols }
-  
-  let add_default (e : destenv) t ty (env, sign : varsign) : varsign =
-    let sort_sy = dest_symbol (e, ty) in
-    if not (SortSymbol.mem sort_sy sign.symbols.s_sorts)
-          || SymbolMap.mem sort_sy sign.defaults then
-      raise Constr.DestKO;
-    (env, { sign with defaults = SymbolMap.add sort_sy t sign.defaults })
-  
-  let add_func (e : destenv) name sy ty (env, sign : varsign) : varsign =
-    let e = { e with sign } in
-    let sig_ = dest_functy (e, ty) in
-    let s_funcs = SortSymbol.add sy name sign.symbols.s_funcs in
-    let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
-    let symbols = { sign.symbols with s_funcs } in
-    let typing = { sign.typing with t_funcs } in
-    env, { sign with symbols; typing }
+  let add_var name ty value (e : destenv) (venv : varenv) : varenv Dest.t =
+    let* sort = find_sort (e, ty) in
+    let* body =
+      match value with
+      | None -> return None
+      | Some v ->
+          let* body = dest_expr (e, EConstr.of_constr v) |> state_to_dest in
+          return (Some body) in
+    return (NameMap.add name (`TVar sort, body) venv)
 
-  let add_strict_func (e : destenv) name sy ty (env, sign : varsign) : varsign =
-    let e = { e with sign } in
-    let sig_ = dest_functy (e, ty) in
-    if List.length (fst sig_) = 0 then raise Constr.DestKO;
-    let s_funcs = SortSymbol.add sy name sign.symbols.s_funcs in
-    let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
-    let symbols = { sign.symbols with s_funcs } in
-    let typing = { sign.typing with t_funcs } in
-    env, { sign with symbols; typing }
-
-  let add_pred (e : destenv) name sy ty (env, sign : varsign) : varsign =
-    let e = { e with sign } in
-    let arity = dest_predty (e, ty) in
-    let s_preds = SortSymbol.add sy name sign.symbols.s_preds in
-    let t_preds = NameMap.add name arity sign.typing.t_preds in
-    let symbols = { sign.symbols with s_preds } in
-    let typing = { sign.typing with t_preds } in
-    env, { sign with symbols; typing }
-
-  let add_var (e : destenv) name ty value (env, sign : varsign) : varsign =
-    let e = { e with sign } in
-    let sort = find_sort (e, ty) in
-    let destenv = { e with sign } in
-    let body = Option.map (fun v -> dest_expr (destenv, EConstr.of_constr v)) value in
-    NameMap.add name (`TVar sort, body) env, sign
-  
-  let global_env ({ env = coq_env; sign; _ } as e : destenv) : Fo_t.env * FOSign.t = 
-    (* Add sorts defined as inductive types, and default elements,
-       functions and predicates defined as their constructors *)
-    let venv, sign = Environ.fold_inductives begin fun mi bodies vsign ->
-        let _, vsign = Array.fold_left begin fun (i, vsign) body ->
-            let id = mi, i in
-            let modpath = Names.(Ind.modpath id |> ModPath.to_string) in
-            let name =
-              let name = Names.Id.to_string body.Declarations.mind_typename in
-              Printf.sprintf "%s.%s" modpath name in
-            let ty =
-              match body.Declarations.mind_arity with
-              | RegularArity ar -> EConstr.of_constr ar.mind_user_arity
-              | TemplateArity ar -> EConstr.mkType ar.template_level in
-            let vsign = vsign |> begin
-                add_sort e name (Ind id) ty >>?
-                identity
-              end in
-            let _, vsign = Array.fold_left begin fun (j, vsign) (cname, cty) ->
-                let name =
-                  let name = Names.Id.to_string cname in
-                  Printf.sprintf "%s.%s" modpath name in
-                let cid = id, j+1 in
-                let ty = EConstr.of_constr cty in
-                let vsign = vsign |> begin
-                    if export_ctr_type then add_func e name (Ctr cid) ty else identity >>?
-                    if export_ctr_prop then add_pred e name (Ctr cid) ty else identity >>?
-                    identity
-                  end in
-                j+1, vsign
-              end (0, vsign) (Array.combine body.mind_consnames body.mind_user_lc) in
-            i+1, vsign
-          end (0, vsign) bodies.mind_packets in
-        vsign
-      end coq_env (NameMap.empty, sign) in
-    
-    (* Add sorts, default elements, functions and predicates defined as global
-       constants *)
-    let venv, sign = Environ.fold_constants begin fun c _ vsign ->
-        let t = EConstr.mkConst c in
-        (* let name = name_of_const evd t in *)
-        let name = c |> Names.Constant.to_string in
-        let ty =
-          Environ.constant_type_in coq_env (Univ.in_punivs c) |>
-          EConstr.of_constr in
-        vsign |> begin
-          add_sort e name (Cst c) ty >>?
-          add_default e t ty >>?
-          add_func e name (Cst c) ty >>?
-          add_pred e name (Cst c) ty >>?
-          identity
-        end
-      end coq_env (venv, sign) in
-
-    env_of_varsign (venv, sign), sign
-
-  let local_env ({ env = coq_env; sign; _ } as e : destenv) : Fo_t.env * FOSign.t = 
+  let local_env ({ env = coq_env; _ } as e : destenv) : varenv State.t = 
     (* Add sorts, default elements, functions, predicates and variables defined
        as local variables *)
-    let venv, sign = Environ.fold_named_context begin fun _ decl vsign ->
+    State.fold begin fun venv decl ->
         let id = Context.Named.Declaration.get_id decl in
         let name = id |> Names.Id.to_string in
         let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
         let value = Context.Named.Declaration.get_value decl in
-        vsign |> begin
-          add_sort e name (Var id) ty >>?
-          add_default e (EConstr.mkVar id) ty >>?
-          add_strict_func e name (Var id) ty >>?
-          add_pred e name (Var id) ty >>?
-          add_var e name ty value >>?
-          identity
-        end
-      end coq_env ~init:(NameMap.empty, sign) in
 
-    env_of_varsign (venv, sign), sign
-  
-  let env (e : destenv) : Fo_t.env * FOSign.t =
-    let genv, gsign = global_env e in
-    let lenv, lsign = local_env e in
-    Utils.Env.concat genv lenv, FOSign.union gsign lsign
+        let open State in
 
-  let hyps ({ env = coq_env; evd; _ } as e : destenv) : Logic_t.hyp list =
-    Environ.fold_named_context begin fun _ decl hyps ->
+        let* () = dest_to_state () (begin
+            add_sort name (Var id) ty @>
+            add_default (EConstr.mkVar id) ty @>
+            add_func ~strict:true name (Var id) ty @>
+            add_pred name (Var id) ty @>
+            fun _ -> Dest.return ()
+          end e) in
+        
+        let* venv = dest_to_state venv (begin
+            add_var name ty value e @>
+            Dest.return
+          end venv) in
+
+        return venv
+      end NameMap.empty (Environ.named_context coq_env)
+
+  let hyps ({ env = coq_env; evd; _ } as e : destenv) : Logic_t.hyp list State.t =
+    State.fold begin fun hyps decl ->
       let name = Context.Named.Declaration.get_id decl in
       let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
-      if is_prop coq_env evd ty then
-        let h_id = Names.Id.to_string name in
-        let h_form = dest_form (e, ty) in
-        let hyp = Logic_t.{ h_id; h_form } in
-        hyp :: hyps
-      else
-        hyps
-    end coq_env ~init:[]
+      dest_to_state hyps begin
+        let open Dest in
+        if is_prop coq_env evd ty then
+          let h_id = Names.Id.to_string name in
+          let* h_form = dest_form (e, ty) |> state_to_dest in
+          let hyp = Logic_t.{ h_id; h_form } in
+          return (hyps @ [hyp])
+        else
+          return hyps
+      end
+    end [] (Environ.named_context coq_env)
 
   (* [goal env sign gl] exports the Coq goal [gl] into an Actema goal and a
      mapping from Actema uids to Coq identifiers *)
-  let goal (env : Logic_t.env) (sign : FOSign.t) (goal : Goal.t) : Logic_t.goal =
+  let goal (goal : Goal.t) : Logic_t.goal * FOSign.t =
     let coq_env = Goal.env goal in
     let evd = Goal.sigma goal in
     let concl = Goal.concl goal in
     
-    let e = { env = coq_env; evd; sign } in
+    let e = { env = coq_env; evd } in
 
-    let g_env =
-      let lenv, _ = local_env e in
-      Utils.Env.concat env lenv in
-    let g_hyps = hyps e in
-    let g_concl = dest_form (e, concl) in
-    
-    let goal = Logic_t.{ g_env; g_hyps; g_concl } in
+    let open State in
+
+    let goal =
+      let* varenv = local_env e in
+      let* g_hyps = hyps e in
+      let* g_concl = dest_form (e, concl) in
+
+      let* sign = get in
+      let g_env = env_of_varsign (varenv, sign) in
+      
+      return Logic_t.{ g_env; g_hyps; g_concl } in
+
+    let goal, sign = run goal peano in
     if log_goals then begin
-      Log.str (List.to_string (fun (f, _) -> f) g_env.env_fun);
-      Log.str (Utils.string_of_form g_concl);
+      (* Log.str (List.to_string (fun (f, _) -> f) goal.g_env.env_fun); *)
+      Log.str (Utils.string_of_form goal.g_concl);
       (* Log.str (Utils.string_of_goal goal); *)
     end;
-    goal
+    goal, sign
 end
 
 (* -------------------------------------------------------------------- *)
@@ -631,7 +676,7 @@ module Import = struct
     let sorts =
       sign.defaults |> FOSign.SymbolMap.bindings |>
       List.split |> fst |>
-      List.map (fun sy -> FOSign.SortSymbol.find sy sign.symbols.s_sorts) in
+      List.map (fun sy -> FOSign.SymbolNames.find sy sign.symbols) in
     List.nth_index 0 s sorts
   
   let infer_sort (env : Logic_t.env) (e : Logic_t.expr) : string =
@@ -639,7 +684,7 @@ module Import = struct
     | `TVar name -> name
     
   let nth_sort (sign : FOSign.t) (n : int) : EConstr.t =
-    let sorts = sign.symbols.s_sorts |> FOSign.SortSymbol.keys in
+    let sorts = FOSign.sort_symbols sign in
     match List.nth_opt sorts n with
     | None -> Trm.unit
     | Some sy -> symbol sy
@@ -684,7 +729,7 @@ module Import = struct
       (ty : Fo_t.type_) : EConstr.t =
     match ty with
     | `TVar x ->
-        symbol (FOSign.SortSymbol.dnif x sign.symbols.s_sorts)
+        symbol (FOSign.SymbolNames.dnif x sign.symbols)
   
   let rec expr (sign : FOSign.t) (lenv : Logic_t.lenv)
       (e : Fo_t.expr) : EConstr.t =
@@ -697,7 +742,7 @@ module Import = struct
         end else
           Trm.var x
     | `EFun (f, args) ->
-        let head = symbol (FOSign.SortSymbol.dnif f sign.symbols.s_funcs) in
+        let head = symbol (FOSign.SymbolNames.dnif f sign.symbols) in
         let args = List.map (expr sign lenv) args in
         EConstr.mkApp (head, Array.of_list args)
 
@@ -715,7 +760,7 @@ module Import = struct
         end else
           Trm.var x
     | `EFun (f, args) ->
-        let head = symbol (FOSign.SortSymbol.dnif f sign.symbols.s_funcs) in
+        let head = symbol (FOSign.SymbolNames.dnif f sign.symbols) in
         let args = List.map (expr_itrace sign env lenv side) args in
         EConstr.mkApp (head, Array.of_list args)
   
@@ -732,7 +777,7 @@ module Import = struct
         let t2 = expr sign lenv t2 in
         EConstr.mkApp (Trm.Logic.eq ty, [|t1; t2|])
     | `FPred (p, args) ->
-        let head = symbol (FOSign.SortSymbol.dnif p sign.symbols.s_preds) in
+        let head = symbol (FOSign.SymbolNames.dnif p sign.symbols) in
         let args = List.map (expr sign lenv) args in
         EConstr.mkApp (head, Array.of_list args)
     | `FTrue ->

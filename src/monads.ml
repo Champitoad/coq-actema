@@ -33,15 +33,20 @@ end
 module Reader (T : Type) : sig
   include Env with type 'a t = T.t -> 'a
 
+  val get : T.t t
+
   (* Monadic version of List.map *)
   val map : ('a -> 'b t) -> 'a list -> 'b list t
 end = struct
   type env = T.t
   type 'a t = env -> 'a
-  let return x = fun _st -> x
+  let return x = fun _ -> x
   let bind m f = fun st -> f (m st) st
   let ( >>= ) = bind
   let ( let* ) = bind
+
+  let get = fun st -> st
+
   let map f l = fun st ->
     List.map (fun x -> f x st) l
 end
@@ -51,30 +56,44 @@ end
 module State (T : Type) : sig
   include Env with type 'a t = T.t -> 'a * T.t
 
-  (* Monadic version of List.iter and List.fold_left *)
+  (* Monadic version of List.map, List.fold_left and List.iter *)
+  val map : ('a -> 'b t) -> 'a list -> 'b list t
   val fold : ('a -> 'b -> 'a t) -> 'a -> 'b list -> 'a t
   val iter : ('a -> unit t) -> 'a list -> unit t
 
   val get : T.t t
   val put : T.t -> unit t
-  val run : 'a t -> T.t -> 'a
+  val run : 'a t -> T.t -> 'a * T.t
 end = struct
   type env = T.t
   type 'a t = env -> 'a * env
+
   let return x = fun st -> x, st
+
   let bind m f = fun st ->
     let x, st' = m st in
     f x st'
   let ( >>= ) = bind
   let ( let* ) = bind
+
+  let rec map f l =
+    match l with
+    | [] -> return []
+    | x :: l ->
+        let* y = f x in
+        let* l = map f l in
+        return (y :: l)
   let fold f x l = fun st ->
     List.fold_left
       (fun (x, st) y -> f x y st)
       (x, st) l
   let iter f l = fold (fun _ y -> f y) () l
-  let get = fun st -> (st, st)
-  let put st = fun _ -> ((), st)
-  let run m x = fst (m x)
+
+  let get =
+    fun s -> (s, s)
+  let put s =
+    fun _ -> ((), s)
+  let run m x = m x
 end
 
 (** List monad to implement list comprehension *)
@@ -123,3 +142,56 @@ end = struct
   let ( let* ) =
     bind
 end
+
+module StateTransf (T : Type) (M : Core) : sig
+  include Env with type 'a t = T.t -> ('a * T.t) M.t
+
+  val map : ('a -> 'b t) -> 'a list -> 'b list t
+  val fold : ('a -> 'b -> 'a t) -> 'a -> 'b list -> 'a t
+  val iter : ('a -> unit t) -> 'a list -> unit t
+
+  val get : T.t t
+  val put : T.t -> unit t
+  val run : 'a t -> T.t -> ('a * T.t) M.t
+
+  val lift : 'a M.t -> 'a t
+end = struct
+  type env = T.t
+  type 'a t = T.t -> ('a * T.t) M.t
+
+  let return x =
+    fun s -> M.return (x, s)
+
+  let bind m f s =
+    M.bind (m s) (fun (x, s') -> f x s')
+  let (>>=) = bind
+  let (let*) = bind
+
+  let rec map f l =
+    match l with
+    | [] -> return []
+    | x :: l ->
+        let* y = f x in
+        let* l = map f l in
+        return (y :: l)
+  let fold (f : 'a -> 'b -> 'a t) (x : 'a) (l : 'b list) : 'a t = fun s ->
+    Stdlib.List.fold_left begin fun m y ->
+      let open M in
+      let* v, s' = m in
+      f v y s'
+    end (M.return (x, s)) l
+  let iter f l =
+    fold (fun _ y -> f y) () l
+
+  let run m s =
+    M.bind (m s) (fun (x, s) -> M.return (x, s))
+  let get s =
+    M.return (s, s)
+  let put s =
+    fun _ -> M.return ((), s)
+
+  let lift m s =
+    M.bind m (fun x -> M.return (x, s))
+end
+
+module StateOption (T : Type) = StateTransf(T)(Option)
