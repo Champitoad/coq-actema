@@ -56,9 +56,10 @@ let () = Exn.register (fun exn ->
         Some "invalid input (parse error)"
     | DuplicatedEntry (_, name) ->
         Some ("duplicated entry \"" ^ name ^ "\" in goal")
-    | TypingError
+    | TypingError ->
+        Some "invalid goal (typing error)"
     | RecheckFailure ->
-        Some "invalid goal (type error)"
+        Some "invalid goal (recheck failure)"
     | TacticNotApplicable ->
         Some "tactic not applicable"
     | LemmaDB.LemmaNotFound name ->

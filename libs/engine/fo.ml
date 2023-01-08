@@ -1454,8 +1454,9 @@ end = struct
 
     and eq bds env ty1 ty2 =
       match ty1, ty2 with
+      | TVar ("_dummy", 0), _ | _, TVar ("_dummy", 0) ->
+          true
       | TVar a, ty | ty, TVar a ->
-          a = ("_dummy", 0) ||
           eq_alias bds env a ty
 
       | TUnit, TUnit ->
@@ -1786,6 +1787,9 @@ end = struct
         | Some (xty, _) -> xty
       end
 
+    | EFun ("_dummy", _) ->
+        TVar ("_dummy", 0)
+    
     | EFun (f, args) -> begin
         match Funs.get env f with
         | None -> raise TypingError
