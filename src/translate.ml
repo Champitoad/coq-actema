@@ -186,8 +186,7 @@ module Export = struct
   let rec dest_sort ({ evd; _ }, t : destarg) : unit Dest.t =
     let* sort = destwrap (EConstr.destSort evd) t in
     let sort = EConstr.ESorts.kind evd sort in
-    if sort <> Sorts.set && sort <> Sorts.type1
-    then destKO
+    if sort = Sorts.prop then destKO
     else return ()
 
   and dest_functy ({ evd; _ } as e, t : destarg) : Fo_t.sig_ Dest.t =
@@ -671,8 +670,8 @@ module Export = struct
     let goal, sign = run goal peano in
     if log_goals then begin
       (* Log.str (List.to_string (fun (f, _) -> f) goal.g_env.env_fun); *)
-      (* Log.str (Utils.string_of_form goal.g_concl); *)
-      Log.str (Utils.string_of_goal goal);
+      Log.str ( Utils.string_of_form goal.g_concl);
+      (* Log.str (Utils.string_of_goal goal); *)
     end;
     goal, sign
 end
