@@ -580,7 +580,7 @@ object%js (_self)
         span begin
           [span ~a:[Xml.string_attrib "id" _self##idhead] begin
             [span
-              [Xml.pcdata (UTF8.of_latin1 _self##.oname)]] @
+              [Xml.pcdata (_self##.oname)]] @
               spaced [span [Xml.pcdata ":"]] @
               [Notation.t_tohtml (parent##goal).g_env ty]
           end]
@@ -602,7 +602,7 @@ object%js (_self)
       math [
         row begin
           [row ~a:[Xml.string_attrib "id" _self##idhead] begin
-            [mi (UTF8.of_latin1 (Notation.e_tostring (parent##goal).g_env (EVar x)))] @
+            [mi ((Notation.e_tostring (parent##goal).g_env (EVar x)))] @
             [mo ":"] @
             [Notation.t_tomathml (parent##goal).g_env ty]
           end]
