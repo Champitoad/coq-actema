@@ -1258,12 +1258,13 @@ module Import = struct
 
         Tactics.pose_proof name prf
 
-    | `ASimpl tgt | `ARed tgt | `AIndt tgt ->
+    | `ASimpl tgt | `ARed tgt | `AIndt tgt | `ACase tgt ->
         let tac_name =
           begin match a with
           | `ASimpl _ -> "simpl_path"
           | `ARed _ -> "unfold_path"
           | `AIndt _ -> "myinduction"
+	  | `ACase _ -> "mycase"
           | _ -> assert false
           end in
 
