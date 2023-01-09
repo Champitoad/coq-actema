@@ -527,6 +527,7 @@ module CoreLogic : sig
     | `Simpl     of ipath
     | `Red       of ipath
     | `Indt      of ipath
+    | `Case      of ipath
     | `Fold      of vname
     | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
@@ -2334,6 +2335,7 @@ end = struct
     | `Simpl     of ipath
     | `Red       of ipath
     | `Indt      of ipath
+    | `Case      of ipath
     | `Fold      of vname
     | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
@@ -3065,12 +3067,20 @@ end = struct
         highlights = sel;
         kind = `Ctxt;
         action = (gid_of_ipath proof tgt, `Indt tgt) } in
+
+    let case_eq tgt =
+      { description = "Case";
+        icon = Some "arrow-up-right-dots";
+        highlights = sel;
+        kind = `Ctxt;
+        action = (gid_of_ipath proof tgt, `Case tgt) } in
       
     match sel with
     | [tgt] ->
         begin match tgt.ctxt.kind with 
         | `Var `Head -> [
-              induction tgt
+              induction tgt;
+              case_eq tgt
             ]
         | _ -> [
             { description = "Simplify";
@@ -3085,7 +3095,8 @@ end = struct
               kind = `Ctxt;
               action = (gid_of_ipath proof tgt, `Red tgt) };
 
-            induction tgt
+            induction tgt;
+	    case_eq tgt
           ]
         end
     | _ -> []
@@ -3283,6 +3294,9 @@ end = struct
       | `Indt tgt ->
           let* tgt = of_ipath tgt in
           return (`AIndt tgt)
+     | `Case tgt ->
+          let* tgt = of_ipath tgt in
+          return (`ACase tgt)
       | `Hyperlink (lnk, actions) ->
           begin match lnk, actions with
           | ([src], [dst]), [`Subform substs] ->
