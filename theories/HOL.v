@@ -1634,7 +1634,8 @@ Ltac simplify_goal :=
           let ng := srename sg pg in
           try change ng
       end
-  end.
+  end;
+  try discriminate.
 
 Ltac sreify_hyp h :=
   let g := type of h in
@@ -1655,7 +1656,8 @@ Ltac simplify_hyp h :=
           try change nh in h
       end
   end;
- try by elim h.
+  try (elim h; fail);
+  try discriminate.
 
 Ltac nbargs t :=
   match t with
@@ -2501,7 +2503,8 @@ Ltac inst_hyp ts l h h' s o :=
        rewrite /= ?trs_corr in h';
        rewrite /trs /eqnqtdec /eq_rect_r /eq_rect /nat_rec /eq_sym  /nat_rect /sort in h';
        clear x
-   end.
+   end;
+   try discriminate.
 
   
 Ltac inst_hyp_nd ts l h s o :=
@@ -2513,7 +2516,8 @@ Ltac inst_hyp_nd ts l h s o :=
        clear h; move => h;
        rewrite /= ?trs_corr in h;
         rewrite /trs /eqnqtdec /eq_rect_r /eq_rect /nat_rec /eq_sym  /nat_rect /sort /sl  in h
-   end.
+   end;
+   try discriminate.
 
 (*
    Goal (forall X :  Prop,  X) -> False.
@@ -2534,7 +2538,8 @@ Ltac inst_goal ts l s o :=
    | |- coerce _ (@nil nat) ?hc _ =>
       apply (instn_corr ts (pred (length l))  s o (@nil nat) hc tt);
        rewrite /= ?trs_corr
-   end.
+   end;
+  try discriminate.
 
 
 (* Once a back or forward steps is performed, we want to apply simplification
@@ -2696,16 +2701,13 @@ Ltac back ts' h0 hp gp t i :=
          let nt := orename sq tt
          in try change nt;
          simplify_goal
-
-         (* rewrite  ?/ts /trad /trad1 /appist /trl3 /tr3 /convert /cT /cB /trad /trad1 /nthc /list_rect /sort;
-         rewrite  /trs /sl  /eqnqtdec /protect_term /nat_rec /nat_rect /seq.nth /nthc /list_rect /eq_sym
-                  ?eqnqtdec_refl /eq_rect_r
-                 /eq_rect /Logic.eq_sym /eq_sym /trad1 /=; *)
         );
-        try by apply I
+        try by apply I;
+        try discriminate
   end;
-  (* rewrite /sort /trad1 /seq.nth /nthc /list_rect /trs /eqnqtdec /nat_rec /nat_rect /eq_rect_r /eq_rect /eq_sym ; *)
   try clear h; try clear ts.
+
+
 (*
 Parameter A : Prop.
 Print test.
@@ -3228,13 +3230,16 @@ Ltac myinduction p :=
   | _ => pinduction p
   | _ => pinduction ltac:(cdr p)
   end;
-  simplify_goal.
+  simplify_goal;
+try discriminate.
 
 Ltac myinduction_hyp h p :=
   let g := type of h in
   let g' := myinduction_r p g in
   induction g';
-  simplify_goal.
+  simplify_goal;
+  try discriminate.
+
 
 
 Ltac myinduction_nosimpl p :=
