@@ -71,17 +71,16 @@ module FOSign = struct
         t_funcs = NameMap.union f s1.typing.t_funcs s2.typing.t_funcs;
         t_preds = NameMap.union f s1.typing.t_preds s2.typing.t_preds; };
       defaults = SymbolMap.union f s1.defaults s2.defaults; }
-    
-  let sort_names (sign : t) : string list =
-    sign.symbols |> SymbolNames.values |>
-    List.filter begin fun n ->
+  
+  let sort_symbols (sign : t) : SymbolNames.t =
+    sign.symbols |> 
+    SymbolNames.filter begin fun _ n ->
       not (NameMap.mem n sign.typing.t_funcs
         || NameMap.mem n sign.typing.t_preds)
     end
-  
-  let sort_symbols (sign : t) : symbol list =
-    sign |> sort_names |> 
-    List.map (fun n -> SymbolNames.dnif n sign.symbols)
+    
+  let sort_names (sign : t) : string list =
+    sign |> sort_symbols |> SymbolNames.values
 end
 
 let peano : FOSign.t =
@@ -264,7 +263,7 @@ module Export = struct
   and find_sort (d : destarg) : string Dest.t =
     let* sy = dest_symbol d in
     let* sign = get in
-    match SymbolNames.find_opt sy sign.symbols with
+    match SymbolNames.find_opt sy (sort_symbols sign) with
     | Some name -> return name
     | None -> destKO
 
@@ -585,7 +584,7 @@ module Export = struct
       env_prp; env_prp_name;
       env_var }
 
-  let add_var name ty value (e : destenv) (venv : varenv) : varenv Dest.t =
+  let add_var name ty value ({ env; evd} as e : destenv) (venv : varenv) : varenv Dest.t =
     let* sort = find_sort (e, ty) in
     let* body =
       match value with
@@ -609,7 +608,7 @@ module Export = struct
         let* () = dest_to_state () (begin
             add_sort name (Var id) ty @>
             add_default (EConstr.mkVar id) ty @>
-            add_func ~strict:true name (Var id) ty @>
+            add_func name (Var id) ty @>
             add_pred name (Var id) ty @>
             fun _ -> Dest.return ()
           end e) in
@@ -662,8 +661,8 @@ module Export = struct
     let goal, sign = run goal peano in
     if log_goals then begin
       (* Log.str (List.to_string (fun (f, _) -> f) goal.g_env.env_fun); *)
-      Log.str (Utils.string_of_form goal.g_concl);
-      (* Log.str (Utils.string_of_goal goal); *)
+      (* Log.str (Utils.string_of_form goal.g_concl); *)
+      Log.str (Utils.string_of_goal goal);
     end;
     goal, sign
 end
@@ -694,7 +693,7 @@ module Import = struct
     | `TVar name -> name
     
   let nth_sort (sign : FOSign.t) (n : int) : EConstr.t =
-    let sorts = FOSign.sort_symbols sign in
+    let sorts = FOSign.(sort_symbols sign |> SymbolNames.keys) in
     match List.nth_opt sorts n with
     | None -> Trm.unit
     | Some sy -> symbol sy

@@ -22,6 +22,7 @@ module BiMap (K : Map.OrderedType) (V : Map.OrderedType) : sig
   val find_opt : K.t -> t -> V.t option
   val dnif : V.t -> t -> K.t
   val dnif_opt : V.t -> t -> K.t option
+  val filter : (K.t -> V.t -> bool) -> t -> t
 end
 
 module List : sig

@@ -60,6 +60,9 @@ module BiMap (S : Map.OrderedType) (T : Map.OrderedType) = struct
 
   let dnif_opt v (_, l) =
     TMap.find_opt v l
+  
+  let filter f (r, l) =
+    SMap.filter f r, TMap.filter (fun k v -> f v k) l
 end
 
 module List = struct
