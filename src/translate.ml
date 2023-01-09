@@ -422,7 +422,7 @@ module Export = struct
   and dest_false : fdest = fun ({ env; evd; _ }, t) ->
     let* ind, _ = destwrap (EConstr.destInd evd) t in
     if Trm.Logic.eq_ind ind "False"
-    then return `FTrue
+    then return `FFalse
     else destKO
 
   and dest_imp : fdest = fun ({ env; evd; _ } as e, t) ->
@@ -458,24 +458,34 @@ module Export = struct
 
   and dest_iff : fdest = fun ({ evd; _ } as e, t) ->
     let* head, args = destwrap (EConstr.destApp evd) t in
-    let* ind, _ = destwrap (EConstr.destInd evd) head in
-    match Trm.Logic.eq_ind ind "iff", args with
-    | true, [| t1; t2 |] ->
-        let* f1 = dest_form (e, t1) |> state_to_dest in
-        let* f2 = dest_form (e, t2) |> state_to_dest in
-        return (`FConn (`Equiv, [f1; f2]))
-    | _ ->
-        destKO
+    let* sy = dest_sconst (e, head) in
+    match sy with
+    | Cst cst ->
+        let not_cst = Names.Constant.make1 (Trm.Logic.kname "iff") in
+        begin match Names.eq_constant_key cst not_cst, args with
+        | true, [| t1; t2 |] ->
+            let* f1 = dest_form (e, t1) |> state_to_dest in
+            let* f2 = dest_form (e, t2) |> state_to_dest in
+            return (`FConn (`Equiv, [f1; f2]))
+        | _ ->
+            destKO
+        end
+    | _ -> destKO
 
   and dest_not : fdest = fun ({ evd; _ } as e, t) ->
     let* head, args = destwrap (EConstr.destApp evd) t in
-    let* ind, _ = destwrap (EConstr.destInd evd) head in
-    match Trm.Logic.eq_ind ind "not", args with
-    | true, [| t1 |] ->
-        let* f1 = dest_form (e, t1) |> state_to_dest in
-        return (`FConn (`Not, [f1]))
-    | _ ->
-        destKO
+    let* sy = dest_sconst (e, head) in
+    match sy with
+    | Cst cst ->
+        let not_cst = Names.Constant.make1 (Trm.Logic.kname "not") in
+        begin match Names.eq_constant_key cst not_cst, args with
+        | true, [| t1 |] ->
+            let* f1 = dest_form (e, t1) |> state_to_dest in
+            return (`FConn (`Not, [f1]))
+        | _ ->
+            destKO
+        end
+    | _ -> destKO
   
   and dest_forall : fdest = fun ({ env; evd; _ } as e, t) ->
     let* x, t1, t2 = destwrap (EConstr.destProd evd) t in

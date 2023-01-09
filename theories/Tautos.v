@@ -47,8 +47,7 @@ Fixpoint gtb  (n:nat)(m:nat) :=
 
 Lemma leb_gtb : forall n m, leb n m = negb (gtb n m).
 Set Debug "backtrace".
-actema "perf". actema_force "perf".
-actema.
+actema "perf". actema "perf".
 Qed.
 
 Fixpoint moins n m :=
@@ -110,9 +109,8 @@ Qed.
 Lemma S_inj : forall n m, S n = S m -> n = m.
 pose h1 := eqb_eq.
 pose h2 := eq_eqb.
-actema.
+actema. actema.
 Qed.
-
 
 Definition lee n m := ile n m.
 
