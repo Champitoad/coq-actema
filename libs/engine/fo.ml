@@ -471,10 +471,10 @@ end = struct
           "()"
 
       | TVar (x, 0) ->
-          UTF8.of_latin1 (shortname x env.env_sort_name)
+          (shortname x env.env_sort_name)
 
       | TVar (x, i) ->
-          Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i
+          Printf.sprintf "%s{%d}" (x) i
 
       | TProd (t1, t2)
       | TOr (t1, t2) as ty ->
@@ -487,18 +487,18 @@ end = struct
           end in t1 ^ (spaced (UTF8.of_char (UChar.of_char tycon))) ^ t2
 
       | TRec (x, t) ->
-          Format.sprintf "rec %s . %s" (UTF8.of_latin1 x) (for_type env t)
+          Format.sprintf "rec %s . %s" (x) (for_type env t)
 
     and for_expr env = function
       | EVar (x, 0) ->
-          UTF8.of_latin1 x
+          x
 
       | EVar (x, i) ->
-          Format.sprintf "%s{%d}" (UTF8.of_latin1 x) i
+          Format.sprintf "%s{%d}" (x) i
 
       | EFun (f, args) ->
           let args = String.concat ", " (List.map (for_expr env) args) in
-          (UTF8.of_latin1 (shortname f env.env_fun_name)) ^ (pr args)
+          ((shortname f env.env_fun_name)) ^ (pr args)
 
     and for_form ?(is_pr = false) env =
       pr ~doit:is_pr <<| function
@@ -530,19 +530,19 @@ end = struct
             (for_expr env e2)
 
       | FPred (name, []) ->
-          UTF8.of_latin1 (shortname name env.env_prp_name)
+          (shortname name env.env_prp_name)
 
       | FPred (name, args) ->
           let args = List.map (for_expr env) args in
           let args = String.join ", " args in
-          UTF8.of_latin1 (shortname name env.env_prp_name) ^ (pr args)
+          (shortname name env.env_prp_name) ^ (pr args)
 
       | FBind (bd, x, ty, f) ->
           let bd = match bd with
             | `Forall -> "forall"
             | `Exist -> "exists" in
           Format.sprintf "%s %s : %s . %s"
-            (bd) (UTF8.of_latin1 x) (for_type env ty) (for_form env f)
+            (bd) (x) (for_type env ty) (for_form env f)
 
     in (fun f -> for_form f),
        (fun e -> for_expr e),
@@ -564,10 +564,10 @@ end = struct
           "ℕ"
 
       | TVar (x, 0) ->
-          UTF8.of_latin1 (shortname x env.env_sort_name)
+          (shortname x env.env_sort_name)
 
       | TVar (x, i) ->
-          Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i
+          Printf.sprintf "%s{%d}" (x) i
 
       | TProd (t1, t2)
       | TOr (t1, t2) as ty ->
@@ -580,15 +580,18 @@ end = struct
           end in t1 ^ (spaced (UTF8.of_char (UChar.of_char tycon))) ^ t2
 
       | TRec (x, t) ->
-          Format.sprintf "rec %s . %s" (UTF8.of_latin1 x) (for_type env t)
+          Format.sprintf "rec %s . %s" (x) (for_type env t)
 
     and for_expr ?(is_pr = false) env expr =
       match expr with
       | EVar (x, 0) ->
-          UTF8.of_latin1 x
+          x
 
       | EVar (x, i) ->
-          Format.sprintf "%s{%d}" (UTF8.of_latin1 x) i
+          Format.sprintf "%s{%d}" (x) i
+
+      | EFun ("_dummy", _) ->
+          "😬"
       
       | EFun ("Z"    as f, es)
       | EFun ("S"    as f, es)
@@ -624,7 +627,7 @@ end = struct
 
       | EFun (f, args) ->
           let args = String.concat ", " (List.map (for_expr env) args) in
-          (UTF8.of_latin1 (shortname f env.env_fun_name)) ^ (pr args)
+          ((shortname f env.env_fun_name)) ^ (pr args)
 
     and for_form ?(is_pr = false) env =
       pr ~doit:is_pr <<| function
@@ -654,6 +657,9 @@ end = struct
           | (`And | `Or | `Imp | `Not | `Equiv), _ ->
               assert false
         end
+
+      | FPred ("_dummy", _) ->
+          "🫠"
       
       | FPred ("_EQ", [e1; e2]) ->
           Format.sprintf "%s = %s"
@@ -661,19 +667,19 @@ end = struct
             (for_expr env e2)
 
       | FPred (name, []) ->
-          UTF8.of_latin1 (shortname name env.env_prp_name)
+          (shortname name env.env_prp_name)
 
       | FPred (name, args) ->
           let args = List.map (for_expr env) args in
           let args = String.join ", " args in
-          UTF8.of_latin1 (shortname name env.env_prp_name) ^ (pr args)
+          (shortname name env.env_prp_name) ^ (pr args)
 
       | FBind (bd, x, ty, f) ->
           let bd = match bd with
             | `Forall -> UTF8.of_char (UChar.chr 0x2200)
             | `Exist -> UTF8.of_char (UChar.chr 0x2203) in
           Format.sprintf "%s%s : %s . %s"
-            (bd) (UTF8.of_latin1 x) (for_type env ty) (for_form env f)
+            (bd) (x) (for_type env ty) (for_form env f)
 
     in (fun f -> for_form f),
        (fun e -> for_expr e),
@@ -695,10 +701,10 @@ end = struct
             [span [Xml.pcdata "ℕ"]]
 
         | TVar (x, 0) ->
-            [span [Xml.pcdata (UTF8.of_latin1 (shortname x env.env_sort_name))]]
+            [span [Xml.pcdata ((shortname x env.env_sort_name))]]
 
         | TVar (x, i) ->
-            [span [Xml.pcdata (Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i)]]
+            [span [Xml.pcdata (Printf.sprintf "%s{%d}" (x) i)]]
 
         | TProd (t1, t2)
         | TOr   (t1, t2) ->
@@ -713,7 +719,7 @@ end = struct
         | TRec (x, t) ->
             let aout =
                 [[span [Xml.pcdata "rec"]]]
-              @ [[span [Xml.pcdata (UTF8.of_latin1 x)]]]
+              @ [[span [Xml.pcdata (x)]]]
               @ [[span [Xml.pcdata "."]]]
               @ [[span (for_type env t)]]
             in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
@@ -739,10 +745,10 @@ end = struct
       let data =
         match expr with
         | EVar (x, 0) ->
-            [span [Xml.pcdata (UTF8.of_latin1 x)]]
+            [span [Xml.pcdata (x)]]
 
         | EVar (x, i) ->
-            [span [Xml.pcdata (Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i)]]
+            [span [Xml.pcdata (Printf.sprintf "%s{%d}" (x) i)]]
         
         | EFun ("_dummy", _) ->
             [span [Xml.pcdata "😬"]]
@@ -785,7 +791,7 @@ end = struct
         | EFun (name, args) ->
             let args = List.mapi (fun i e -> for_expr env (i :: p) e) args in
             let aout =
-                [[span [Xml.pcdata (UTF8.of_latin1 (shortname name env.env_fun_name))]]]
+                [[span [Xml.pcdata ((shortname name env.env_fun_name))]]]
               @ [pr (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
 
             in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
@@ -848,12 +854,12 @@ end = struct
              span (for_expr ?id env (1 :: p) e2)]
 
         | FPred (name, []) ->
-            [span [Xml.pcdata (UTF8.of_latin1 (shortname name env.env_prp_name))]]
+            [span [Xml.pcdata ((shortname name env.env_prp_name))]]
 
         | FPred (name, args) ->
             let args = List.mapi (fun i e -> for_expr ?id env (i :: p) e) args in
             let aout =
-                [[span [Xml.pcdata (UTF8.of_latin1 (shortname name env.env_prp_name))]]]
+                [[span [Xml.pcdata ((shortname name env.env_prp_name))]]]
               @ [pr (List.flatten (List.join [span [Xml.pcdata ","; Xml.entity "nbsp"]] args))]
 
             in List.flatten (List.join [span [Xml.entity "nbsp"]] aout)
@@ -865,7 +871,7 @@ end = struct
 
             let aout =
                 [[span [Xml.pcdata (bd)]]]
-              @ [[span [Xml.pcdata (UTF8.of_latin1 x)]]]
+              @ [[span [Xml.pcdata (x)]]]
               @ [[span [Xml.pcdata ":"]]]
               @ [[span (for_type env ty)]]
               @ [[span [Xml.pcdata "."]]]
@@ -898,11 +904,11 @@ end = struct
             [mo "ℕ"]
 
         | TVar (x, 0) ->
-            [mi (UTF8.of_latin1 (shortname x env.env_sort_name))]
+            [mi ((shortname x env.env_sort_name))]
 
         | TVar (x, i) ->
-            let x = Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i in
-            [mi (UTF8.of_latin1 x)]
+            let x = Printf.sprintf "%s{%d}" (x) i in
+            [mi (x)]
 
         | TProd (t1, t2)
         | TOr   (t1, t2) ->
@@ -916,8 +922,8 @@ end = struct
 
         | TRec (x, t) ->
             [mo (UTF8.of_char (UChar.of_int 0x03BC));
-             mi (UTF8.of_latin1 x);
-             mo (UTF8.of_latin1 ".")] @ for_type env t
+             mi (x);
+             mo (".")] @ for_type env t
       in
 
       [pr ~doit:is_pr (row data)]
@@ -928,11 +934,11 @@ end = struct
       let data =
         match expr with
         | EVar (x, 0) ->
-            [mi (UTF8.of_latin1 x)]
+            [mi (x)]
 
         | EVar (x, i) ->
-            let x = Printf.sprintf "%s{%d}" (UTF8.of_latin1 x) i in
-            [mi (UTF8.of_latin1 x)]
+            let x = Printf.sprintf "%s{%d}" (x) i in
+            [mi (x)]
         
         | EFun ("Z"    as f, es)
         | EFun ("S"    as f, es)
@@ -972,7 +978,7 @@ end = struct
 
         | EFun (name, args) ->
             let args = List.mapi (fun i e -> for_expr env (i :: p) e) args in
-                [mi (UTF8.of_latin1 (shortname name env.env_fun_name))]
+                [mi ((shortname name env.env_fun_name))]
               @ [pr (row (List.flatten (List.join [mo ","] args)))]
       in
 
@@ -1033,15 +1039,15 @@ end = struct
 
         | FPred ("_EQ", [e1; e2]) ->
               (for_expr ?id env (0 :: p) e1)
-            @ [mo (UTF8.of_latin1 "=")]
+            @ [mo ("=")]
             @ (for_expr ?id env (1 :: p) e2)
 
         | FPred (name, []) ->
-            [mi (UTF8.of_latin1 (shortname name env.env_prp_name))]
+            [mi ((shortname name env.env_prp_name))]
 
         | FPred (name, args) ->
             let args = List.mapi (fun i e -> for_expr ?id env (i :: p) e) args in
-               [mi (UTF8.of_latin1 (shortname name env.env_prp_name))]
+               [mi ((shortname name env.env_prp_name))]
              @ [pr (row (List.flatten (List.join [mo ","] args)))]
 
         | FBind (bd, x, ty, f) ->
@@ -1049,9 +1055,9 @@ end = struct
               | `Forall -> UTF8.of_char (UChar.chr 0x2200)
               | `Exist  -> UTF8.of_char (UChar.chr 0x2203) in
 
-            [mo bd; mi (UTF8.of_latin1 x); mo ":"]
+            [mo bd; mi (x); mo ":"]
           @ (for_type env ty)
-          @ [mo (UTF8.of_latin1 ".")]
+          @ [mo (".")]
           @ (for_form env (0 :: p) f)
 
       in
@@ -1454,8 +1460,9 @@ end = struct
 
     and eq bds env ty1 ty2 =
       match ty1, ty2 with
+      | TVar ("_dummy", 0), _ | _, TVar ("_dummy", 0) ->
+          true
       | TVar a, ty | ty, TVar a ->
-          a = ("_dummy", 0) ||
           eq_alias bds env a ty
 
       | TUnit, TUnit ->
@@ -1786,6 +1793,9 @@ end = struct
         | Some (xty, _) -> xty
       end
 
+    | EFun ("_dummy", _) ->
+        TVar ("_dummy", 0)
+    
     | EFun (f, args) -> begin
         match Funs.get env f with
         | None -> raise TypingError
