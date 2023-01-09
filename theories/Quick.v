@@ -1,6 +1,10 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
+Require Import List.ListNotation.
+
+Lemma f : [0; 1] = [0; 1].
+
 Parameter Rich : nat -> Prop.
 Parameter mother : nat -> nat.
 Parameter h : nat.

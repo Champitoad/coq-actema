@@ -4,10 +4,6 @@ Set Debug "backtrace".
 
 Parameter (A B C : Prop) (P : nat -> Prop).
 
-Lemma testctxtsorts (T : Set) (t : T) (P : bool -> T -> Prop) (f : T -> nat -> bool) :
-  P false t /\ f t 0 = true.
-actema_force.
-
 Parameter f : nat -> nat -> nat.
 Lemma test : (forall x y, f x y = 0) ->
 forall x y, 99 = f x y -> True.

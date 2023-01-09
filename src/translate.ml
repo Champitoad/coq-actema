@@ -12,7 +12,7 @@ open Extlib
 let log_dnd_trace = false
 
 (** Set to true to print the atdgen-formatted goals exported to Actema *)
-let log_goals = true
+let log_goals = false
 
 (* -------------------------------------------------------------------- *)
 (** * First-order signatures *)

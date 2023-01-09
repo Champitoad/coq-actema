@@ -456,7 +456,7 @@ Lemma bw :
 Proof.
   intros.
   actema.
-  Qed. 
+Qed. 
 
 (** * Implication *)
 
