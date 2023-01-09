@@ -57,3 +57,4 @@ src/logic_b.ml*
 src/utils.ml*
 
 actema.proofs
+theories/fundamental-arithmetics

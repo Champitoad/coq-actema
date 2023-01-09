@@ -161,10 +161,6 @@ pose h := PeanoNat.Nat.add_succ_r.
 actema.
 Qed.
 
-Lemma testctxtsorts (T : Type) (t : T) (P : bool -> T -> Prop) (f : T -> nat -> bool) :
-  P false t /\ f t 0 = true.
-actema_force.
-
 Lemma even_aux :
   forall n, (even n) /\ (exists p, n = p + p)
             \/(~even n) /\  (exists p, n = S(p + p)).

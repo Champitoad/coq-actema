@@ -195,7 +195,7 @@ module Export = struct
       if EConstr.isProd evd t then
         let* _, t1, t2 = destwrap (EConstr.destProd evd) t in
         let* sort = find_sort (e, t1) in
-        aux (`TVar sort :: arity) t2
+        aux (arity @ [`TVar sort]) t2
       else
         let* sort = find_sort (e, t) in
         return (arity, `TVar sort) in
@@ -206,7 +206,7 @@ module Export = struct
       if EConstr.isProd evd t then
         let* _, t1, t2 = destwrap (EConstr.destProd evd) t in
         let* sort = find_sort (e, t1) in
-        aux (`TVar sort :: arity) t2
+        aux (arity @ [`TVar sort]) t2
       else
         let* sort = t |> EConstr.to_constr evd |> destwrap Constr.destSort in
         if Sorts.is_prop sort then
@@ -244,19 +244,19 @@ module Export = struct
     if SymbolMap.mem sort_sy sign.defaults then destKO else
     put { sign with defaults = SymbolMap.add sort_sy t sign.defaults }
   
-  and add_symbol name sy ty e : unit Dest.t =
+  and add_symbol ?(strict = false) name sy ty e : unit Dest.t =
     begin
       add_sort name sy ty @>
-      add_func name sy ty @>
+      add_func ~strict name sy ty @>
       add_pred name sy ty @>
       fun _ -> return ()
     end e
   
-  and add_symbol_lazy sy (info : unit -> string * EConstr.t) e : unit Dest.t =
+  and add_symbol_lazy ?(strict = false) sy (info : unit -> string * EConstr.t) e : unit Dest.t =
     let* sign = get in
     if not (SymbolNames.mem sy sign.symbols) then
       let name, ty = info () in
-      add_symbol name sy ty e
+      add_symbol ~strict name sy ty e
     else
       return ()
 
@@ -288,7 +288,7 @@ module Export = struct
   and dest_sconst : symbol sdest = fun ({ env; evd } as e, t) ->
     let* cst, _ = destwrap (EConstr.destConst evd) t in
     let sy = Cst cst in
-    let* sign =
+    let* () =
       let info () =
         let name = Names.Constant.to_string cst in
         let c = Environ.lookup_constant cst env in
@@ -300,7 +300,7 @@ module Export = struct
   and dest_sconstruct : symbol sdest = fun ({ env; evd } as e, t) ->
     let* ctr, _ = destwrap (EConstr.destConstruct evd) t in
     let sy = Ctr ctr in
-    let* sign =
+    let* () =
       let info () =
         let name = kname_of_constructor env ctr |> Names.KerName.to_string in
         let ty = type_of_constructor env ctr in
@@ -308,10 +308,10 @@ module Export = struct
       add_symbol_lazy sy info e in
     return sy
   
-  and dest_sind : symbol sdest = fun ({ env; evd; _ } as e, t) ->
+  and dest_sind : symbol sdest = fun ({ env; evd } as e, t) ->
     let* ind, _ = destwrap (EConstr.destInd evd) t in
     let sy = Ind ind in
-    let* sign =
+    let* () =
       let info () =
         let name = kname_of_inductive env ind |> Names.KerName.to_string in
         let ty = arity_of_inductive env ind in
@@ -319,9 +319,19 @@ module Export = struct
       add_symbol_lazy sy info e in
     return sy
   
-  and dest_svar : symbol sdest = fun ({ evd; _ }, t) ->
+  and dest_svar : symbol sdest = fun ({ env; evd } as e, t) ->
     let* id = destwrap (EConstr.destVar evd) t in
-    return (Var id)
+    let sy = Var id in
+    let* () =
+      let info () =
+        let name = Names.Id.to_string id in
+        let ty =
+          Environ.lookup_named id env |>
+          Context.Named.Declaration.get_type |>
+          EConstr.of_constr in
+        name, ty in
+      add_symbol_lazy ~strict:true sy info e in
+    return sy
 
   and dest_symbol : symbol sdest = fun et ->
     begin
@@ -605,18 +615,18 @@ module Export = struct
 
         let open State in
 
-        let* () = dest_to_state () (begin
-            add_sort name (Var id) ty @>
-            add_default (EConstr.mkVar id) ty @>
-            add_func name (Var id) ty @>
-            add_pred name (Var id) ty @>
-            fun _ -> Dest.return ()
-          end e) in
+        let* () = begin
+            add_sort name (Var id) ty @>?
+            add_default (EConstr.mkVar id) ty @>?
+            add_func ~strict:true name (Var id) ty @>?
+            add_pred name (Var id) ty @>?
+            fun _ -> return ()
+          end e in
         
-        let* venv = dest_to_state venv (begin
-            add_var name ty value e @>
-            Dest.return
-          end venv) in
+        let* venv = begin
+            add_var name ty value e @>?
+            return
+          end venv in
 
         return venv
       end NameMap.empty (Environ.named_context coq_env)
