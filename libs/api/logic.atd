@@ -74,6 +74,7 @@ type action = [
   | ASimpl of ipath
   | ARed of ipath
   | AIndt of ipath
+  | ACase of ipath
   | ACut of form
   | AGeneralize of uid
   | AMove of (uid * uid option)
