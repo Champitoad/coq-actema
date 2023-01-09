@@ -589,6 +589,9 @@ end = struct
 
       | EVar (x, i) ->
           Format.sprintf "%s{%d}" (UTF8.of_latin1 x) i
+
+      | EFun ("_dummy", _) ->
+          "😬"
       
       | EFun ("Z"    as f, es)
       | EFun ("S"    as f, es)
@@ -654,6 +657,9 @@ end = struct
           | (`And | `Or | `Imp | `Not | `Equiv), _ ->
               assert false
         end
+
+      | FPred ("_dummy", _) ->
+          "🫠"
       
       | FPred ("_EQ", [e1; e2]) ->
           Format.sprintf "%s = %s"
