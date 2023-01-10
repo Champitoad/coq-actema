@@ -3070,7 +3070,7 @@ end = struct
 
     let case_eq tgt =
       { description = "Case";
-        icon = Some "arrow-up-right-dots";
+        icon = Some "list";
         highlights = sel;
         kind = `Ctxt;
         action = (gid_of_ipath proof tgt, `Case tgt) } in
