@@ -1857,9 +1857,10 @@ Ltac simpl_path p :=
   match goal with
   | |- ?g =>
       let g' := simpl_path_r p g in
-      change g';
-      simplify_goal
-  end.
+      change g'
+  end;
+  simplify_goal.
+
 
 Ltac simpl_path_hyp h p :=
   let g := type of h in
@@ -3240,6 +3241,48 @@ Ltac myinduction_hyp h p :=
   simplify_goal;
   try discriminate.
 
+Ltac defcase :=
+   match goal with
+   | |- forall x : _, _ =>
+       let nx := fresh x in
+       intro nx; destruct nx
+   | _ => 
+       let arg := fresh "arg" in
+       intro arg; destruct arg
+   end.
+
+Ltac pcase p :=
+  match p with
+  | nil => defcase
+  | cons _ ?p' => intro; pcase p'
+  end.
+
+
+Ltac mydestruct e t:=
+  generalize (refl_equal t);
+  destruct t at -1;
+  intro e.
+
+Ltac mycase p :=
+  match goal with
+  | |- ?g =>
+      let g' := myinduction_r p g in
+      let e := fresh "e" in
+      mydestruct e g'
+  | _ => pcase p
+  | _ => pcase ltac:(cdr p)
+  end;
+  simplify_goal;
+try discriminate.
+
+
+Ltac mycase_hyp h p :=
+  let e := fresh "e" in
+  let g := type of h in
+  let g' := myinduction_r p g in
+  mydestruct e g';
+  simplify_goal;
+  try discriminate.
 
 
 Ltac myinduction_nosimpl p :=
