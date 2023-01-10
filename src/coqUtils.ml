@@ -225,8 +225,10 @@ module Trm = struct
   let nat =
     mkInd nat_name
 
+  let bool_name =
+    (Names.MutInd.make1 bool_kname, 0)
   let bool =
-    mkInd (Names.MutInd.make1 bool_kname, 0)
+    mkInd bool_name
 
   let unit =
     mkInd (Names.MutInd.make1 unit_kname, 0)
