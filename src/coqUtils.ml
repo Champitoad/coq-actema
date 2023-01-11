@@ -1,5 +1,10 @@
 open Proofview
 
+module PVMonad = struct
+  include Proofview.Monad
+  let (let*) = (>>=)
+end
+
 module Log = struct
   let str str =
     Feedback.msg_notice (Pp.str str)
@@ -17,6 +22,21 @@ module Log = struct
   let econstr_debug evd t =
     t |> EConstr.to_constr evd |> Constr.debug_print |>
     Feedback.msg_notice
+
+  let univ_levels evd =
+    let univs : string list =
+      Evd.evar_universe_context evd |> UState.ugraph |>
+      UGraph.domain |> Univ.Level.Set.elements |>
+      List.map Univ.Level.to_string in
+    str Extlib.(List.to_string identity univs)
+
+  let profile (name : string) (chunk : unit -> 'a) : 'a =
+    let start = Sys.time () in
+    let result = chunk () in
+    let end_ = Sys.time () in
+    let duration = end_ -. start in
+    str (Printf.sprintf "%s took %f seconds" name duration);
+    result
 end
 
 let name_of_const evd t =
@@ -35,15 +55,37 @@ let kername (path : string list) (name : string) =
 let const_kname evd t =
   EConstr.destConst evd t |> fst |> Names.Constant.user
 
-let kname_of_constructor env (c : Names.Construct.t) : Names.KerName.t =
-  let ind = Names.inductive_of_constructor c in
+let ind_body env (ind : Names.inductive) : Declarations.one_inductive_body =
   let spec = Inductive.lookup_mind_specif env ind in
   let Declarations.({ mind_packets; _ }, _) = spec in
-  let ind_body = mind_packets.(snd ind) in
-  let modpath = Names.Construct.modpath c in
-  let i = Names.index_of_constructor c in
-  let label = ind_body.mind_consnames.(i-1) |> Names.Label.of_id in
+  mind_packets.(snd ind)
+
+let kname_of_inductive env (ind : Names.inductive) : Names.KerName.t =
+  let body = ind_body env ind in
+  let modpath = Names.Ind.modpath ind in
+  let label = body.Declarations.mind_typename |> Names.Label.of_id in
   Names.KerName.make modpath label
+
+let arity_of_inductive env (ind : Names.inductive) : EConstr.t =
+  let body = ind_body env ind in
+  match body.Declarations.mind_arity with
+  | RegularArity ar -> EConstr.of_constr ar.mind_user_arity
+  | TemplateArity ar -> EConstr.mkType ar.template_level
+
+let kname_of_constructor env (c : Names.Construct.t) : Names.KerName.t =
+  let ind = Names.inductive_of_constructor c in
+  let body = ind_body env ind in
+  let i = Names.index_of_constructor c in
+  let label = body.mind_consnames.(i-1) |> Names.Label.of_id in
+  let modpath = Names.Construct.modpath c in
+  Names.KerName.make modpath label
+
+let type_of_constructor env (c : Names.Construct.t) : EConstr.t =
+  let ind = Names.inductive_of_constructor c in
+  let ind_body = ind_body env ind in
+  let i = Names.index_of_constructor c in
+  let ty = ind_body.mind_user_lc.(i-1) in
+  EConstr.of_constr ty
 
 let construct_kname env evd (t : EConstr.t) : Names.KerName.t =
   let c = EConstr.destConstruct evd t |> fst in
@@ -74,10 +116,13 @@ let calltac (tacname : Names.KerName.t) (args : EConstr.constr list) : unit tact
   with Not_found ->
     let name = Names.KerName.to_string tacname in
     let _ = Log.error (Printf.sprintf "Could not find tactic \"%s\"" name) in
-    Proofview.Monad.return ()
+    PVMonad.return ()
 
 module Trm = struct
   open EConstr
+
+  let var name =
+    EConstr.mkVar (Names.Id.of_string name)
   
   let lambda x ty body =
     let x = Context.annotR (Names.Id.of_string x) in
@@ -89,6 +134,9 @@ module Trm = struct
 
   module Logic = struct
     let kname = kername ["Coq"; "Init"; "Logic"]
+
+    let eq_ind (mind, i) name =
+      Names.(KerName.equal (MutInd.canonical mind) (kname name)) && i = 0
 
     let true_ =
       mkInd (Names.MutInd.make1 (kname "True"), 0)
@@ -155,11 +203,16 @@ module Trm = struct
   let succ_kname =
     kername ["Coq"; "Init"; "Datatypes"] "S"
   
-  let add_kname =
-    kername ["Coq"; "Init"; "Nat"] "add"
+  let add_modpaths = [
+    ["Coq"; "Arith"; "PeanoNat"; "Nat"];
+    ["Coq"; "Init"; "Nat"];
+  ]
+  let add_knames =
+    List.map (fun mp -> kername mp "add") add_modpaths
   
-  let mul_kname =
-    kername ["Coq"; "Init"; "Nat"] "mul"
+  let mul_modpaths = add_modpaths
+  let mul_knames =
+    List.map (fun mp -> kername mp "mul") mul_modpaths
   
   let app_kname =
     kername ["Coq"; "Init"; "Datatypes"] "app"
@@ -172,8 +225,10 @@ module Trm = struct
   let nat =
     mkInd nat_name
 
+  let bool_name =
+    (Names.MutInd.make1 bool_kname, 0)
   let bool =
-    mkInd (Names.MutInd.make1 bool_kname, 0)
+    mkInd bool_name
 
   let unit =
     mkInd (Names.MutInd.make1 unit_kname, 0)
@@ -245,11 +300,11 @@ module Trm = struct
     let succ = mkConstruct succ_name in
     mkApp (succ, [|n|])
   
-  let add_name : Names.Constant.t =
-    Names.Constant.make1 add_kname
+  let add_names : Names.Constant.t list =
+    List.map Names.Constant.make1 add_knames
 
-  let mul_name : Names.Constant.t =
-    Names.Constant.make1 mul_kname
+  let mul_names : Names.Constant.t list =
+    List.map Names.Constant.make1 mul_knames
 
   let app_name : Names.Constant.t =
     Names.Constant.make1 app_kname

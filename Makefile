@@ -1,6 +1,10 @@
 all: Makefile.coq api
 	@$(MAKE) -f Makefile.coq all 
 
+lsp:
+	@$(MAKE) clean
+	dune build || make
+
 # Import actema-desktop API
 
 APIDIR = actema-desktop/prover/_build/default/libs/api
@@ -44,4 +48,4 @@ clean: Makefile.coq
 cleanall: Makefile.coq 
 	@$(MAKE) -f Makefile.coq cleanall
 
-.PHONY: api tests all clean cleanall
+.PHONY: lsp api tests all clean cleanall

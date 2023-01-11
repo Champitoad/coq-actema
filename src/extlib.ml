@@ -30,6 +30,10 @@ module BiMap (S : Map.OrderedType) (T : Map.OrderedType) = struct
   let empty =
     SMap.empty, TMap.empty
   
+  let union (l1, r1) (l2, r2) =
+    let f _ x _ = Some x in
+    SMap.union f l1 l2, TMap.union f r1 r2
+  
   let add k v (r, l) =
     if SMap.mem k r then (r, l)
     else (SMap.add k v r, TMap.add v k l)
@@ -42,6 +46,9 @@ module BiMap (S : Map.OrderedType) (T : Map.OrderedType) = struct
     SMap.remove k r, TMap.remove v l
 
   
+  let mem k (r, _) =
+    SMap.mem k r
+
   let find k (r, _) =
     SMap.find k r
 
@@ -53,6 +60,9 @@ module BiMap (S : Map.OrderedType) (T : Map.OrderedType) = struct
 
   let dnif_opt v (_, l) =
     TMap.find_opt v l
+  
+  let filter f (r, l) =
+    SMap.filter f r, TMap.filter (fun k v -> f v k) l
 end
 
 module List = struct
@@ -72,3 +82,6 @@ module List = struct
   let to_string ?(sep = "; ") ?(left = "[") ?(right = "]") print =
     List.map print |>> String.concat sep |>> fun s -> left ^ s ^ right
 end
+
+let ssystime () =
+  Printf.sprintf "%f" (Sys.time ())

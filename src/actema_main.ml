@@ -26,6 +26,14 @@ type aident = Logic_t.aident
 
 type proof = (int * Logic_t.action) list
 
+let string_of_aident (name, (hyps, concl) : aident) : string =
+  let hyps = hyps |>
+    Extlib.List.to_string begin fun Logic_t.{ h_form; _ } ->
+      Utils.string_of_form h_form
+    end in
+  let concl = concl |> Utils.string_of_form in
+  Printf.sprintf "#%s%s%s" name hyps concl
+
 let string_of_proof (prf : proof) : string =
   Extlib.List.to_string ~sep:"\n" ~left:"PROOF\n" ~right:"\nQED"
   begin fun (idx, action) ->
@@ -99,26 +107,28 @@ let load_proof (id : aident) : proof option =
       close_in ic
     end;
     let prf = List.rev !prf in
+    (* Log.str (string_of_aident id);
+    Log.str (string_of_proof prf); *)
     Some prf
   end
 
 let sign = Translate.peano
 
 let compile_action ((idx, a) : int * Logic_t.action) : unit tactic =
-  let open Proofview.Monad in
+  let open PVMonad in
   Goal.enter begin fun coq_goal ->
-    let sign, goal, hm = Export.goal sign coq_goal in
-    Import.action sign hm goal coq_goal a
+    let goal, sign = Export.goal coq_goal in
+    Import.action sign goal coq_goal a
   end |>
   let idx = idx + 1 in
   tclFOCUS idx idx
 
 let compile_proof (prf : proof) : unit tactic =
   let rec aux prf =
-    let open Proofview.Monad in
+    let open PVMonad in
     begin match prf with
     | action :: prf ->
-        compile_action action >>= fun _ ->
+        let* _ = compile_action action in
         aux prf
     | [] ->
         return ()
@@ -126,17 +136,17 @@ let compile_proof (prf : proof) : unit tactic =
   aux prf
 
 let export_goals () : Logic_t.goals tactic =
-  let open Proofview.Monad in
-  Goal.goals >>= fun coq_goals_tacs ->
+  let open PVMonad in
+  let* coq_goals_tacs = Goal.goals in
   Stdlib.List.fold_right begin fun coq_goal_tac acc ->
-      coq_goal_tac >>= fun coq_goal ->
-      let _, goal, _ = Export.goal sign coq_goal in
-      acc >>= fun goals ->
+      let* coq_goal = coq_goal_tac in
+      let goal, _ = Export.goal coq_goal in
+      let* goals = acc in
       return (goal :: goals)
   end coq_goals_tacs (return [])
 
 let get_user_action (goals : Logic_t.goals) : Client.action =
-  let open Proofview.Monad in
+  let open PVMonad in
   if goals = [] then begin
     Lwt_main.run (Client.qed ());
     Client.Done
@@ -150,20 +160,27 @@ let interactive_proof () : proof tactic =
   let hist = ref { before = []; after = [] } in
 
   let rec aux () =
-    let open Proofview.Monad in
+    let open PVMonad in
     let open Client in
 
     let continue idx a =
       let cont =
-        compile_action (idx, a) >>= fun _ ->
+        let* _ = compile_action (idx, a) in
         aux () in
-      tclOR cont begin fun (exn, _) ->
+      tclOR cont begin fun (exn, _ as iexn) ->
         match exn with
-        | ApplyUndo -> aux ()
-        | _ -> raise exn
+        | ApplyUndo ->
+            aux ()
+        | _ ->
+            let msg =
+              CErrors.iprint_no_report iexn |>
+              Pp.string_of_ppcmds in
+            Lwt_main.run (Client.error msg);
+            !hist.before <- Stdlib.List.tl !hist.before;
+            aux ()
       end in
 
-    export_goals () >>= fun goals ->
+    let* goals = export_goals () in
     begin match get_user_action goals with
 
     | Do (idx, a) ->
@@ -195,12 +212,12 @@ let interactive_proof () : proof tactic =
   aux ()
 
 let actema_tac ?(force = false) (action_name : string) : unit tactic =
-  let open Proofview.Monad in
+  let open PVMonad in
   Goal.enter begin fun coq_goal ->
-    let _, goal, _ = Export.goal sign coq_goal in
+    let goal, _ = Export.goal coq_goal in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
     let interactive () =
-      interactive_proof () >>= fun prf ->
+      let* prf = interactive_proof () in
       save_proof id prf;
       return () in
     if force then interactive () else
@@ -214,7 +231,11 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
 let test_tac : unit tactic =
   let open EConstr in
   Goal.enter begin fun g ->
-    let env, sigma = Goal.(env g, sigma g) in
-    Log.econstr env sigma EConstr.(Trm.lambda "x" Trm.unit (mkRel 1));
-    Proofview.Monad.return ()
+    let env, evd = Goal.(env g, sigma g) in
+    let univs : string list =
+      Evd.evar_universe_context evd |> UState.ugraph |>
+      UGraph.domain |> Univ.Level.Set.elements |>
+      List.map Univ.Level.to_string in
+    Log.str Extlib.(List.to_string identity univs);
+    PVMonad.return ()
   end

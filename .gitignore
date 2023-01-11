@@ -33,6 +33,7 @@ nia.cache
 nlia.cache
 nra.cache
 native_compute_profile_*.data
+.fuse_hidden*
 
 # generated timing files
 *.timing.diff
@@ -54,3 +55,6 @@ src/fo_b.ml*
 src/logic_t.ml*
 src/logic_b.ml*
 src/utils.ml*
+
+actema.proofs
+theories/fundamental-arithmetics
