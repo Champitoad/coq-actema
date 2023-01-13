@@ -1357,7 +1357,10 @@ Qed.
 
 End s_cx.
 
+(* Definition inst1 := {s : nat & env -> env -> sort ts s}. *)
 
+
+  
 Notation "'subst!' y 'for' x 'in' f" :=
  (match y with x => f end) (at level 10, f at level 200).
 
@@ -1960,9 +1963,11 @@ Ltac st_aux n l T :=
   | cons  _ ?l1  => st_aux constr:(S n) l1 T
   end.
 
-Ltac tst ts T := (st_aux constr:(0) constr:(ts) T). 
+Ltac tst ts T :=
+  (st_aux constr:(0) constr:(ts) T). 
 
 (* Definition IDT := fun X:Type => X. *)
+
 
 Inductive listn :=
   niln | consn : nat -> listn -> listn.
@@ -2103,6 +2108,7 @@ Ltac reify_prop_hyp ts h h' p l :=
   let gs := preify_rec ts p l  (@nil nat)(@nil DYN) ltac:(type of h) in
   have h' : (coerce ts (@nil nat) gs tt) by assumption.
 
+                
 (*
 Parameter f : nat -> nat -> nat -> nat.
 Parameter R : nat -> nat -> Prop.
@@ -2354,6 +2360,251 @@ Ltac reify_rec ts' l n env t :=
 end
   end.
 
+Definition t := forall z x, x = 2 /\ z = true.
+Definition cct :=
+  ltac:(let r :=
+          reify_rec test
+                    (cons false (cons false (cons false nil))) (@nil nat)
+                    (@nil DYN)
+                    (forall z x, x = 2 /\ z = true)  in exact r).
+
+Print cct.
+
+Ltac dmDYN T :=
+  constr:(mDYN T ltac:((try constructor);
+                       (trivial; fail);
+                       auto)).
+
+Ltac lmDYN l :=
+  match l with
+  | nil => constr:(@nil DYN)
+  | cons ?T ?l =>
+      let d := dmDYN T in
+      let r := lmDYN l in
+      constr:(cons d r)
+  end.
+
+
+Ltac aDYN T l :=
+  let d := dmDYN T in
+  let lh := eval hnf in l in
+  match lh with
+  | nil => constr:(cons d nil)
+  | cons (mDYN T _)  _ => l
+  | cons ?d' ?l' =>
+      let r := aDYN T l' in
+      constr:(cons d' r)
+  end.
+
+Check ltac: (let r := aDYN nat [:: mDYN bool true] in exact r).
+
+
+Definition test' :=
+  ltac:(let t := eval hnf in test in
+          let r := aDYN unit t in exact r).
+
+Print test.
+
+Ltac find_comp l1o l2o :=
+  let l1 := eval hnf in l1o in
+  let l2 := eval hnf in l2o in
+  match l1 with
+  | nil => l2
+  | cons _ ?l1' =>
+      match l2 with
+      | cons _ ?l2' =>
+          find_comp l1' l2'
+      end
+  end.
+
+
+Check ltac:(let r := find_comp test test' in exact r).
+
+Lemma magic : forall l1 i l2 l3,
+    l1 = l2 ++ l3 ->
+    sort l2 i -> sort l1 i.
+elim => [|[T1 d1] l1 hl1][|i][|[T2 d2] l2] l3.
+done.
+done.
+done.
+done.
+done.
+ simpl.
+move => [e1 e2].
+rewrite e1.
+intros _ x; exact x.
+
+intros; apply def.
+move => [e1 e2 e3].  
+exact (hl1 i l2 l3 e3).
+Defined.
+
+Lemma magic_r : forall l1 i l2 l3,
+    l1 = l2 ++ l3 ->
+    sort l1 i -> sort l2 i.
+elim => [|[T1 d1] l1 hl1][|i][|[T2 d2] l2] l3.
+done.
+done.
+done.
+done.
+done.
+  simpl.
+move => [e1 e2].
+rewrite e1.
+intros _ x; exact x.
+
+intros; apply def.
+move => [e1 e2 e3].  
+exact (hl1 i l2 l3 e3).
+Defined.
+
+
+Lemma magic_env :  forall l1 l2 l3,
+    l1 = l2 ++ l3 -> env l1 -> env l2.
+move => l1 l2 l3 e; rewrite /env.  
+move => f s i.
+apply (@magic_r l1 s l2 l3 e).
+exact (f s i).
+Defined.
+
+Lemma magic_inst1 : forall l1 l2 l3,
+    l1 = l2 ++ l3 -> inst1 l2 -> inst1 l1.
+move => l1 l2 l3 e [s f].  
+exists s.
+move => h1 h2.
+apply (@magic l1 s l2 l3 e).
+apply f.
+ exact (magic_env l1 l2 l3 e h1).  
+ exact (magic_env l1 l2 l3 e h2).  
+Defined.
+
+Definition magic_l : forall l1 l2 l3,
+    l1 = l2 ++ l3 -> list (option (inst1 l2)) ->
+    list (option (inst1 l1)).
+move => l1 l2 l3 e ; elim => [| [d|] l hl].
+  apply nil.
+apply cons.
+exact ( (Some (magic_inst1 l1 l2 l3 e d))).
+exact hl.
+apply cons.
+apply None.
+exact hl.
+Defined.
+  
+         
+Ltac fetch_def T' l' :=
+  let T := eval hnf in T' in
+  let l := eval hnf in l' in
+    match l with
+    | nil =>  constr:(9)
+    | cons (mDYN T ?t) _ =>  constr:(t)
+    | cons _ ?l'' =>
+        fetch_def T l''
+  end.
+
+Print test.
+
+Check ltac:(let r := fetch_def Prop constr:(test)
+            in exact r).
+(* TODO : blinder pour éviter les confusions forall implication *)
+Ltac mkSign l p t :=
+  match p with
+  | nil =>
+      match t with
+      | (@eq ?T _ _) => aDYN T l
+      | _ => l
+      end
+  | cons false ?p =>
+      match t with
+      | ?a /\ ?b => mkSign l p a
+      | ?a \/ ?b => mkSign l p a
+      | ?a -> ?b => mkSign l p a
+      | ~ ?a => mkSign l p a
+      | forall x : ?T, ?body =>
+          let l' := aDYN T l in
+          let d := fetch_def T l' in
+          mkSign l' p (subst! d for x in body)
+      |  exists x : ?T, ?body =>
+          let l' := aDYN T l in
+          let d := fetch_def T l' in
+          mkSign l' p (subst! d for x in body)
+      end
+  | cons true ?p =>
+      match t with
+      | ?a /\ ?b => mkSign l p b
+      | ?a \/ ?b => mkSign l p b
+      | ?a -> ?b => mkSign l p b
+  end
+end.
+
+Ltac rmkSign l' c' t' :=
+  let l := eval hnf in l' in
+  let c := eval hnf in c' in
+    let t := eval hnf in t' in 
+  match c with
+  | impl _ _ ?c' _ =>
+      match t with
+      |_ -> ?u =>
+         rmkSign l c' u
+      end
+  | orl _ _ ?c' _ =>
+      match t with
+      |_ \/ ?u =>
+         rmkSign l c' u
+      end
+  | andl _ _ ?c' _ =>
+      match t with
+      |_ /\ ?u =>
+         rmkSign l c' u
+      end
+  | impr _ _ _ ?c' =>
+      match t with
+      |?u -> _ =>
+         rmkSign l c' u
+      end
+  | orr _ _ _ ?c' =>
+      match t with
+      |?u \/ _ =>
+         rmkSign l c' u
+      end
+  | andr _ _ _ ?c' =>
+      match t with
+      |?u /\ _ =>
+         rmkSign l c' u
+      end
+  | cNot _ _ ?c' =>
+      match t with
+      | ~ ?u =>
+          rmkSign l c' u
+      end
+  | fa _ _ _ _ ?b =>
+      match t with
+      | forall x : ?T, ?body =>
+          let l' := aDYN T constr:(l) in
+          let d := fetch_def T l' in
+          rmkSign l' b (subst! d for x in body)
+      end
+  | ex _ _ _ _ ?b =>
+      match t with
+      | exists x : ?T, ?body =>
+          let l' := aDYN T constr:(l) in
+          let d := fetch_def T l' in
+           rmkSign l' b (subst! d for x in body)
+      end
+  | property _ _ _ _ ?t =>
+      let T := type of t in
+      aDYN T constr:(l)
+  | equality _ _ _ ?t1 _ =>
+      let T1 := type of t1 in
+      let PT1 := eval hnf in T1 in
+        match PT1 with
+        | prod ?T _ => aDYN T constr:(l)
+        end
+  | _ => l
+  end.
+
+
+
 (* same but detecting True and False *)
 
 Ltac reify_rec_at ts' l n env t :=
@@ -2493,7 +2744,7 @@ Ltac reify_hyp_at ts l h :=
    s : number of instantiated sort
    o : instantiating object (of type (sort s) *)
 
-Ltac inst_hyp ts l h h' s o :=
+Ltac inst_hyp_o ts l h h' s o :=
   let x := fresh "x" in
   move: (h) => x;
                reify_hyp ts l x;
@@ -2507,6 +2758,10 @@ Ltac inst_hyp ts l h h' s o :=
    end;
    try discriminate.
 
+Ltac inst_hyp ts' l h h' s o :=
+  let t := type of h in
+  let ts := mkSign ts' l t in
+  inst_hyp_o ts l h h' s o.
   
 Ltac inst_hyp_nd ts l h s o :=
   reify_hyp ts l h;
@@ -2533,7 +2788,7 @@ Abort. *)
 
 
 
-Ltac inst_goal ts l s o :=
+Ltac inst_goal_o ts l s o :=
   reify_goal ts l;
    match goal with
    | |- coerce _ (@nil nat) ?hc _ =>
@@ -2542,6 +2797,12 @@ Ltac inst_goal ts l s o :=
    end;
   try discriminate.
 
+Ltac inst_goal ts' l s o :=
+  match goal with
+  | |- ?g =>
+      let ts := mkSign ts' l g in
+      inst_goal_o ts l s o
+  end.
 
 (* Once a back or forward steps is performed, we want to apply simplification
    (simpl function).
@@ -2672,7 +2933,7 @@ Ltac myhnf_hyp h :=
       change r in h
   end.
 
-Ltac back ts' h0 hp gp t i :=
+Ltac back_o ts' h0 hp gp t i :=
   let ts1 := eval hnf in ts' in
     let ts := fresh "ts" in
     pose ts := ts1;
@@ -2708,6 +2969,15 @@ Ltac back ts' h0 hp gp t i :=
   end;
   try clear h; try clear ts.
 
+Ltac back ts' h0 hp gp t i :=
+  let th := type of h0 in
+  let ts'' := mkSign ts' hp th in
+  match goal with
+  | |- ?g =>
+      let ts := mkSign ts'' gp g in
+      back_o ts' h0 hp gp t i
+  end.
+
 
 (*
 Parameter A : Prop.
@@ -2726,10 +2996,10 @@ rewrite /test. *)
  t : list bool = trace (with the last bool for choice l <-> r)
  i : instantiation *)
 
-Ltac rew_dnd ts' h hp gp gp' t i :=
+Ltac rew_dnd_o ts' h hp gp gp' t i :=
   let tsc := eval compute in ts' in
   let ts := fresh "ts" in
-  pose ts := tsc;
+  pose ts := tsc; 
   reify_prop ts gp gp'; 
   let h' := fresh "h" in
   reify_eq_hyp ts h h' hp;
@@ -2746,18 +3016,22 @@ Ltac rew_dnd ts' h hp gp gp' t i :=
   [idtac| assumption];
   (apply trex_norm_apply ; [split; try reflexivity|idtac]);
   try clear h';
+  try(
   let os :=
     match goal with
     | |- trl3 _ ?o => o
     end
   in
-  rewrite   /b3 /trl3 /o3_norm /coerce /convert  /appist /trad1 /nths   /trs /tr3 /eqnqtdec /nat_rec /nat_rect /eq_rect_r /eq_rect  /eq_ind_r /eq_ind  /eq_sym /list_rect /ts;
+  rewrite   /b3 /trl3 /o3_norm /coerce /convert  /appist /trad1 /nths   /trs /tr3 /eqnqtdec /nat_rec /nat_rect /magic  /magic_inst1 /magic
+            /eq_rect_r /eq_rect /eq_sym /f_equal  /eq_ind_r /eq_ind  /eq_sym
+            
+  /ts;
   match goal with
   | |- ?tt =>
       let nt := orename os tt in
       try
         change nt
-  end;
+  end);
     simplify_goal;
 
 
@@ -2768,7 +3042,22 @@ rewrite ?/ts /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert  /defs /appist ?
   simplify_goal; *)
   rewrite  /sort /sl; try clear ts.
 
-  
+
+Ltac rew_dnd ts' h hp gp gp' t i :=
+  let ts''' := eval hnf in ts' in
+  let th := type of h in
+  let ts'' := mkSign ts''' hp th in
+  let e := fresh "e" in
+  match goal with
+  | |- ?g => 
+      let ts := mkSign ts'' gp' g in
+      let diff := find_comp ts''' ts in
+      let e := constr:(refl_equal ts) in 
+      let i' := constr:(magic_l ts ts''' diff e i) in
+      let i'' := eval hnf in i' in
+        let i''' := eval simpl in i'' in
+      rew_dnd_o ts h hp gp gp' t i'''
+  end.
   
 (*
 Definition iin  : nat -> list (option inst1).
@@ -2805,7 +3094,7 @@ Abort.
  t : list bool = trace (with the last bool for choice l <-> r)
  i : instantiation *)
 
-Ltac rew_dnd_hyp ts' fl  h1 h2 h3 hp1 hp2 hp2' t i :=
+Ltac rew_dnd_hyp_o ts' fl  h1 h2 h3 hp1 hp2 hp2' t i :=
   let tsc := eval compute in ts' in
   let ts := fresh "t" in 
   let i' := eval compute in i in
@@ -2858,7 +3147,23 @@ Ltac rew_dnd_hyp ts' fl  h1 h2 h3 hp1 hp2 hp2' t i :=
    try clear ts;
   simplify_hyp h3;
 try discriminate.
-                                           
+
+
+
+Ltac rew_dnd_hyp ts' fl  h1 h2 h3 hp1 hp2 hp2' t i :=
+  let ts'' := eval hnf in ts' in
+  let th1 := type of h1 in
+  let th2 := type of h2 in
+  let ts''' := mkSign ts'' hp1 th1 in 
+  let ts := mkSign ts''' hp2' th2 in
+  let diff := find_comp ts'' ts in
+  let e := constr:(refl_equal ts) in
+  let i' := constr:(magic_l ts ts'' diff e i) in
+  let i'' := eval hnf in i' in       
+  rew_dnd_hyp ts fl  h1 h2 h3 hp1 hp2 hp2' t i''
+  clear e.
+
+  
 (*
 Parameter P : nat -> Prop.
 Parameter B C : Prop.
@@ -2878,7 +3183,7 @@ rew_dnd_hyp
   (cons true ( (cons false nil)))
   (@nil (option (inst1 test))).
 *)
-Ltac forward ts' h1' h2' h3 hp1 hp2 t i :=
+Ltac forward_o ts' h1' h2' h3 hp1 hp2 t i :=
   let ts1 := eval compute in ts' in
   let ts := fresh "ts" in
   pose ts := ts1;
@@ -2913,8 +3218,14 @@ Ltac forward ts' h1' h2' h3 hp1 hp2 t i :=
     try change nnp in h3;
     simplify_hyp h3;
   try clear ts;
-  try discriminate.
+    try discriminate.
 
+Ltac forward ts' h1' h2' h3 hp1 hp2 t i :=
+  let th1 := type of h1' in
+  let th2 := type of h2' in
+  let ts'' := mkSign ts' hp1 th1 in
+  let ts := mkSign ts'' hp2 th2 in
+  forward_o ts' h1' h2' h3 hp1 hp2 t i.
 
 
       (* /trl3 /f3 /o3_norm  /trad /trad1 /appist /trl3 /tr3 /convert /cT /cB /trad /trad1 /seq.nth /nthc /list_rect  /sort
