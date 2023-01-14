@@ -3044,7 +3044,7 @@ rewrite ?/ts /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert  /defs /appist ?
 
 
 Ltac rew_dnd ts' h hp gp gp' t i :=
-  let ts''' := eval hnf in ts' in
+    let ts''' := eval hnf in ts' in
   let th := type of h in
   let ts'' := mkSign ts''' hp th in
   let e := fresh "e" in
@@ -3094,7 +3094,7 @@ Abort.
  t : list bool = trace (with the last bool for choice l <-> r)
  i : instantiation *)
 
-Ltac rew_dnd_hyp_o ts' fl  h1 h2 h3 hp1 hp2 hp2' t i :=
+Ltac rew_dnd_hyp_o ts' fl  h1 h2 h3 hp1 hp2 hp2' t i := 
   let tsc := eval compute in ts' in
   let ts := fresh "t" in 
   let i' := eval compute in i in
@@ -3151,17 +3151,18 @@ try discriminate.
 
 
 Ltac rew_dnd_hyp ts' fl  h1 h2 h3 hp1 hp2 hp2' t i :=
-  let ts'' := eval hnf in ts' in
+  let tshn := eval hnf in ts' in
+    let ts'' := eval simpl in tshn in
   let th1 := type of h1 in
-  let th2 := type of h2 in
-  let ts''' := mkSign ts'' hp1 th1 in 
-  let ts := mkSign ts''' hp2' th2 in
-  let diff := find_comp ts'' ts in
+  let th2 := type of h2 in 
+  let ts2 := mkSign ts'' hp1 th1 in 
+  let ts := mkSign ts2 hp2 th2 in
+  let diff := find_comp ts'' ts in 
   let e := constr:(refl_equal ts) in
   let i' := constr:(magic_l ts ts'' diff e i) in
   let i'' := eval hnf in i' in       
-  rew_dnd_hyp ts fl  h1 h2 h3 hp1 hp2 hp2' t i''
-  clear e.
+  rew_dnd_hyp_o ts fl  h1 h2 h3 hp1 hp2 hp2' t i''.
+
 
   
 (*
