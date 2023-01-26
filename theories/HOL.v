@@ -1,5 +1,7 @@
 From mathcomp Require Import ssreflect ssreflect.seq.
 
+Inductive TDYN :=
+  tDYN : Type -> TDYN.
 
 Inductive DYN :=
   mDYN : forall A:Type, A -> DYN.
