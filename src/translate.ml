@@ -663,12 +663,6 @@ module Export = struct
       let* g_concl = dest_form (e, concl) in
 
       let* sign = get in
-      let defaults =
-        sign.defaults |>
-        SymbolMap.add (Ind (Trm.bool_name)) (Trm.bool_of_bool true) |>
-        SymbolMap.add (Ind (Trm.nat_name)) (Trm.nat_of_int 0) in
-      let sign = { sign with defaults } in
-      let* () = put sign in
       let g_env = env_of_varsign (varenv, sign) in
       
       return Logic_t.{ g_env; g_hyps; g_concl } in

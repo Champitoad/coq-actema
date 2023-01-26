@@ -2,7 +2,16 @@ From Actema Require Import Loader.
 
 Set Debug "backtrace".
 
-Parameter (A B C : Prop) (P : nat -> Prop).
+Parameter (A B C D E F : Prop).
+Parameter (P Q : nat -> Prop) (R : nat -> nat -> Prop).
+
+Lemma curry_quant (n : nat) :
+  P n ->
+  (forall x, P x -> forall y z, Q y /\ R y z) -> exists (a b c : nat), Q b.
+Proof.
+  intros.
+  actema "demo". (* Translation BUG! *)
+Abort.
 
 Parameter f : nat -> nat -> nat.
 Lemma test : (forall x y, f x y = 0) ->

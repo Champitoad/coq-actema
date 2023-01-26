@@ -6,7 +6,7 @@ Fixpoint leb (n:nat)(m:nat) :=
   | (S _) , 0  => false
   | S n, S m => leb n m
   end.
- 
+
 Fixpoint le (n:nat)(m:nat) :=
   match n,m with
   | 0,_ => True
@@ -14,13 +14,12 @@ Fixpoint le (n:nat)(m:nat) :=
   | S n, S m => le n m
   end.
 
-
 Lemma leb_le : forall n m, (leb n m = true) -> le n m.
-  actema. 
+  actema "demo". 
 Qed.
 
 Lemma le_refl : forall n, le n n.
-  actema.
+  actema "demo".
 Qed.
 
 Fixpoint gtb  (n:nat)(m:nat) :=
@@ -31,7 +30,7 @@ Fixpoint gtb  (n:nat)(m:nat) :=
   end.
   Check negb.
 Lemma leb_gtb : forall n m, leb n m = negb (gtb n m).
-actema_force "perf". 
+actema "demo". 
 Qed.
 
 Fixpoint moins n m :=
@@ -46,12 +45,12 @@ Fixpoint moins n m :=
  avec des match / fix *)
 Lemma le_S : forall n m,
        le n m -> le n (S m).
-actema.
+actema "demo".
 Qed.
 
 
 Lemma leb_lt : forall n m, leb n m = false -> le m n.
-  actema.
+  actema "demo".
 Qed.
 
 
@@ -71,8 +70,8 @@ Definition low n l :=
   | lcons n l => (low n l) /\ (sorted l)
   end.
 
- Lemma le_trans : forall a b c, le a b -> le b c -> le a c.
-actema.
+Lemma le_trans : forall a b c, le a b -> le b c -> le a c.
+actema "demo".
 Qed.
 
 Definition ifthl (b:bool) (n1 : ll) n2 :=
@@ -93,8 +92,9 @@ Lemma insert_sort : forall n l, sorted l ->
                                   forall m, le m n /\ low m l -> low m (insert n l).
  generalize leb_le; intro h1.
  generalize leb_lt; intro h2.
- generalize le_trans; intro h3.
-actema.
+ generalize le_trans; intro h3. 
+ actema "demo".
+ actema "demo".
 Qed.
   
 
@@ -107,7 +107,7 @@ Fixpoint insertion_sort l :=
 Lemma sorted_insertion : forall l,
     sorted (insertion_sort l).
  generalize insert_sort; intro h1.
-  actema.
+  actema "demo".
 Qed.
 
 
@@ -127,19 +127,19 @@ Fixpoint eqr n m :=
 
 
 Lemma eqr_eqb : forall n m, eqr n m -> eqb n m = true.
-  actema.
+  actema "demo".
 Qed.
 
 Lemma eqb_eqr : forall n m, eqb n m = true -> eqr n m.
-  actema.
+  actema "demo".
 Qed.
 
 Lemma eqr_refl : forall n, eqr n n.
-actema.
+actema "demo".
 Qed.
 
 Lemma eqr_eq : forall n m, eqr n m -> n = m.
-  actema.
+  actema "demo".
 Qed.
 
 Definition ifthn (b:bool) (n1:nat) n2 :=
@@ -158,11 +158,11 @@ Lemma eqb_refl : forall n, eqb n n = true.
  generalize eqr_eqb; intro.
  generalize eqb_eqr; intro.
  generalize eqr_refl; intro.
-  actema.
+  actema "demo".
 Qed.
 
 Lemma leb_refl : forall n, leb n n = true.
-  actema.
+  actema "demo".
 Qed.
 
 Lemma count_i1 : forall n l, count n (insert n l) = S (count n l). 
@@ -174,7 +174,7 @@ actema_force.
 
   (* le DnD naturel ne marche pas, en revanche la tactique suivante
 marche 
-  actema. *)
+  actema "demo". *)
 move: (h1 n) => e.
 
   rew_dnd test e (@nil bool)
@@ -183,7 +183,7 @@ move: (h1 n) => e.
           (cons false nil)
           (@nil (option (inst1 test))).
 done.
-actema.
+actema "demo".
 rewrite h1; reflexivity.
 rewrite h1; reflexivity.
 simpl; rewrite e0 IHl; reflexivity.  
