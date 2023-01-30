@@ -540,7 +540,7 @@ Fixpoint b3 (l:trace)(ist:inst')(nh:ct)(hyp : cx nh)(hi : pp nh)
       end
   | (cons false l) =>
       match hyp with
-          | (equality nh' s t u) =>
+         | (equality nh' s t u) =>
               match goal with
               | (property ng' s' P v) =>
                   andl3
@@ -549,7 +549,7 @@ Fixpoint b3 (l:trace)(ist:inst')(nh:ct)(hyp : cx nh)(hi : pp nh)
                      =(trs ts s' s (v (convert ng ng' gi))))))
                     (P ((trs ts s s' (u (convert nh nh' hi))),
                          (convert ng ng' gi)))
-          | _ => bot3
+              | _ => bot3
               end
 
         
@@ -599,7 +599,7 @@ Fixpoint b3 (l:trace)(ist:inst')(nh:ct)(hyp : cx nh)(hi : pp nh)
                    (convert (cons s nh)(cons s n)
                             (p, hi))
                    ng goal gi))
-      | impl  _ _ _  => bot3
+      | impl  nh' h B  => bot3            
       | cNot _ _ => bot3
       | cTop _ => bot3
       | cBot _ => top3
@@ -2724,17 +2724,17 @@ Ltac reify_rec ts' l n env t :=
       | not ?a =>
           let ra := reify_rec ts l' n  env a in
           constr:(cNot _ n ra)
-       | forall x: (wsort _ ?s), @?body' x =>
+ (*    | forall x: (wsort _ ?s), @?body' x =>
           let y := fresh "y" in
           lazymatch constr:(fun y: (wsort ts s) => ltac:(
            let body := beta1 body' y in
               let r := reify_rec ts l' (cons s n) (cons (mDYN (wsort ts s) y) env) body in
               exact r))
-     with
-     | (fun _: (wsort ts s) => ?r) => constr:(fa ts n s (fun x:nat=>x) r) 
-     end
+           with
+        | (fun _: (wsort ts s) => ?r) => constr:(fa ts n s (fun x:nat=>x) r) 
+        end *)
 
-      | ?a -> ?b =>
+     | ?a -> ?b =>
         match type of a with
         | Prop => 
           let rb :=
@@ -3140,26 +3140,21 @@ Ltac reify_hyp_at ts l h :=
    s : number of instantiated sort
    o : instantiating object (of type (sort s) *)
 
-Ltac inst_hyp_o ts l h h' s o :=
+Ltac inst_hyp ts l h h' s o :=
+  let tsw := tmDYN ts in
   let x := fresh "x" in
   move: (h) => x;
-               reify_hyp ts l x;
+               reify_hyp tsw l x;
   let sy := type of x in
    match sy with
    | coerce _ (@nil nat) ?hc _ =>
-       move: (instp_corr ts  (pred (length l))  s o (@nil nat) hc tt h) => h';
+       move: (instp_corr tsw  (pred (length l))  s o (@nil nat) hc tt h) => h';
        rewrite /= ?trs_corr in h';
        rewrite /trs /eqnqtdec /eq_rect_r /eq_rect /nat_rec /eq_sym  /nat_rect /wsort in h';
        clear x
    end;
    try discriminate.
 
-Ltac inst_hyp ts' l h h' s o :=
-  let ts'' := tmDYN ts' in
-  let t := type of h in
-  let ts := mkSign ts'' l t in
-  inst_hyp_o ts l h h' s o.
-  
 Ltac inst_hyp_nd ts l h s o :=
   let ts' := tmDYN ts in
   reify_hyp ts' l h;
@@ -3186,7 +3181,7 @@ Abort. *)
 
 
 
-Ltac inst_goal_o ts' l s o :=
+Ltac inst_goal ts' l s o :=
   let ts := tmDYN ts' in
   reify_goal ts l;
    match goal with
@@ -3195,7 +3190,7 @@ Ltac inst_goal_o ts' l s o :=
        rewrite /= ?trs_corr
    end;
   try discriminate.
-
+(*
 Ltac inst_goal ts' l s o :=
   let ts'' := tmDYN ts' in
   match goal with
@@ -3203,7 +3198,7 @@ Ltac inst_goal ts' l s o :=
       let ts := mkSign ts'' l g in
       inst_goal_o ts l s o
   end.
-
+*)
 (* Once a back or forward steps is performed, we want to apply simplification
    (simpl function).
   For that we need to translate the o3 back into a cx *)
@@ -3429,7 +3424,7 @@ Ltac rew_dnd_o ts' h hp gp gp' t i :=
     | |- trl3 _ ?o => o
     end
   in
-  rewrite   /b3 /trl3 /o3_norm /coerce /convert  /appist /trad1 /nths   /trs /tr3 /eqnqtdec /nat_rec /nat_rect /magic  /magic_inst2 /magic
+  rewrite   /b3 /trl3 /o3_norm /coerce /convert  /appist /trad1 /nths   /trs /tr3 /eqnqtdec /nat_rec /nat_rect /magic  /magic_inst2 /magic /list_rect
             /eq_rect_r /eq_rect /eq_sym /f_equal  /eq_ind_r /eq_ind  /eq_sym
             
   /ts;
@@ -4052,5 +4047,4 @@ Ltac myinduction_hyp_nosimpl h p :=
       end
   end.
 *)
-
 
