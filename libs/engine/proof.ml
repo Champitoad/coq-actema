@@ -2130,7 +2130,7 @@ end = struct
         end in
         fc_fill f (fc_rev ctx), itrace
 
-      | (FPred ("_EQ", [e1; e2]), [i]), _
+      | (FPred ("_EQ", [e1; e2]), [i]), (FPred _, _)
         when e_equal_delta goal.g_env (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
         let res =
           (* L=₁ *)
