@@ -5,8 +5,6 @@ Require Import ssreflect.
 Lemma add_comm :
   forall n m, n + m = m + n.
 Proof.
-  pose proof PeanoNat.Nat.add_0_r.
-  pose proof PeanoNat.Nat.add_succ_r.
 actema.
 Qed.
      
@@ -46,7 +44,7 @@ Lemma eq_eqr : forall n m, n=m -> eqr n m.
   pose proof eqr_refl.
   actema.
 Qed.
-(* vérifier deep qui foire *)
+(* deep ne marche pas car il manque une tactique *)
 
 Lemma eqb_eq : forall n m, eqb n m = true -> n = m.
   actema.
@@ -78,7 +76,7 @@ Lemma le_trans : forall a b c,
 Qed.
 
 Lemma leb_le : forall n m, (leb n m = true) -> le n m.
-  actema. 
+  actema.
 Qed.
 
 Lemma le_refl : forall n, le n n.
@@ -128,6 +126,7 @@ pose h :=  PeanoNat.Nat.add_succ_r.
 actema.
 Qed.
 
+
 Lemma eq_S : forall n m, S n = S m -> n = m.
 pose proof eqr_eq.
 pose proof eq_eqr.
@@ -165,8 +164,9 @@ Lemma plus_moins : forall n m p,
   pose proof PeanoNat.Nat.add_0_r.
   pose proof PeanoNat.Nat.add_succ_r.
   pose proof add_comm.
-  actema.
+actema.
 Qed.
+(* un rew fait dupliquer le but - ok a priori *)
 
 
 Lemma le_ex : forall n m, le m n -> exists p, n = m + p.
@@ -179,7 +179,6 @@ Lemma moins_plus : forall m n,
  actema.
 Qed.
 
-
 Lemma plus_le : forall m n p, n = m + p -> le p n.
   pose proof le_refl.
   pose proof le_S.
@@ -188,29 +187,22 @@ Lemma plus_le : forall m n p, n = m + p -> le p n.
 Qed.
 
 
+Print ls.
+Definition ic : nat -> option (inst1 (cons (tDYN nat) nil)).
+intro n.
+apply Some.
+simpl.
+exists 0; simpl.
+intros; exact n.
+Defined.
+
 Lemma le_moins : forall m n, le m n -> n = (moins n m) + m.
   pose proof le_ex.
   pose proof plus_moins.
   pose proof add_comm.
   actema.
 Qed.
-
-(* reify_eq_hyp (cons (mDYN nat 0) nil)
-               H1
-               h'
-               (cons false (cons false nil))
-               .
-   reify_prop (cons (mDYN nat 0) nil)
-                                        (cons 1 nil)
-                          (cons false (cons false (cons false (cons false nil))))
-            .
-
-
-            
-               
-
-Qed.
- *)
+(* regarder rew sous ex *)
 
 Fixpoint even n :=
   match n with
@@ -218,19 +210,18 @@ Fixpoint even n :=
   | S n => ~ (even n)
   end.
 
+  
 Lemma div_even :
   forall p, even (p+p).
   pose proof PeanoNat.Nat.add_succ_r.
-  pose proof eq_S.
   (* vérifier qu'est-ce qui se passe avec le rewrite quand on bouge le but *)
   actema.
 Qed.
 
-
 Lemma div_odd : 
   forall p, ~even (S (p+p)).
   pose proof PeanoNat.Nat.add_succ_r.
-  pose proof eq_S.
+  pose proof div_even.
   actema.
 Qed.
 
@@ -238,15 +229,26 @@ Lemma even_ex : forall n, even n ->
                           exists p, n = p+p.
   pose proof div.
   pose proof div_even.
-  pose proof div_odd.
   actema.
 Qed.
-  
-(* This would be a text version: 
 
-move => n; move: (H n) => [p [h|h]].
-  by exists p.  
-by rewrite h; move => hh ; elim (H1 p).
 
- *)
-  
+Lemma odd_ex :forall n, ~even n ->
+                          exists p, n = S(p+p).
+  pose proof div.
+  pose proof div_even.
+  actema. actema.
+(* bug côté interface : la trace est trop courte quand
+on rewrite n=p+p dans ~(even n) en forward *)
+Qed.
+
+Goal (even 5) -> 4=5 -> even 7.
+  intro h.
+
+    rew_dnd_rev (cons (tDYN nat) nil) h
+              (cons 0 nil)
+              (@nil nat)
+              (cons false nil)
+              (cons true (cons true nil))
+              (@nil (option (inst1 (cons (tDYN nat) nil)))).
+                             
