@@ -123,7 +123,7 @@ Lemma insert_sort : forall n l, sorted l ->
                                   forall m, le m n /\ low m l -> low m (insert n l).
  generalize leb_le; intro h1.
  generalize leb_lt; intro h2.
-actema.
+ actema.
 Qed.
 
 Fixpoint insertion_sort l :=
@@ -134,7 +134,7 @@ Fixpoint insertion_sort l :=
 
 Lemma sorted_insertion : forall l,
     sorted (insertion_sort l).
- generalize insert_sort; intro h1.
+ pose proof insert_sort.
   actema.
 Qed.
 
@@ -235,7 +235,7 @@ pose proof hl_trans.
  actema.
 Qed.
 
-Fixpoint merge l1 l2 :=
+Fixpoint merge l1 :=
   let fix merge_aux l2 :=
   match l1, l2 with
   | lnil, l => l
@@ -245,34 +245,48 @@ Fixpoint merge l1 l2 :=
           (lcons a (merge m1 l2))
           (lcons b (merge_aux m2))
   end
-  in merge_aux l2.
+  in merge_aux.
 
-Lemma merge_sort : forall l2 l1,
+Lemma merge_sorted : forall l2 l1,
     sorted l1 -> sorted l2 ->
     sorted (merge l1 l2)
     /\ (forall n, low n l1 -> low n l2 -> low n (merge l1 l2)).
+Admitted.
 
 
-  induction l2; induction l1; simpl; try auto.
 
-case e : (leb n0 n); simpl.
-Focus 2.
-  move => [h1 h4][h5 h6].
-split.
-  2 : auto.
+Fixpoint to_heap l :=
+  match l with
+  | lnil => Leaf
+  | lcons x l' => hinsert x (to_heap l')
+  end.
 
-  
-replace  ((fix merge_aux (l0 : ll) : ll :=
-        match l0 with
-        | lnil => lcons n0 l1
-        | lcons b m2 =>
-            ifthl (leb n0 b) (lcons n0 (merge l1 l0))
-              (lcons b (merge_aux m2))
-        end) l2)
-         with (merge (lcons n0 l1) l2) by  reflexivity.
-  
+Fixpoint to_list t :=
+  match t with
+  | Node x t1 t2 => lcons x (merge (to_list t1)(to_list t2))
+  | Leaf => lnil
+  end.
+
+Definition heapsort l := to_list (to_heap l).
+
+Eval compute in (heapsort (lcons 3 (lcons 0 (lcons 2 (lcons 1 lnil))))).
+
+Lemma to_heap_heap : forall l, Heap (to_heap l).
+  pose proof hinsert_heap.
   actema.
+Qed.
 
-destruct (leb n b).
+Lemma to_list_sorted : forall t, Heap t -> sorted (to_list t)
+                                                  /\ forall x, hlow x t -> low x (to_list t).
+  pose proof merge_sorted.
+  actema.
+Qed.
 
-  fold merge.
+
+Lemma heapsort_sorted : forall l, sorted (heapsort l).
+  pose proof to_heap_heap.
+  pose proof to_list_sorted.
+ actema.
+Qed.
+
+

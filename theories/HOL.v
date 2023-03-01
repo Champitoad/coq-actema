@@ -3569,7 +3569,7 @@ rewrite ?/ts /coerce /b3 /trl3 /tr3 /o3_norm ?trs_corr /convert  /defs /appist ?
   rewrite  /wsort /sl; try clear ts.
 
 
-Ltac rew_dnd ts' h hp gp gp' t i :=
+Ltac rew_dnd_oo ts' h hp gp gp' t i :=
   let tsw := tmDYN ts' in
   let iw1 := constr:(restrip tsw i) in
   let iw2 := eval hnf in iw1 in
@@ -3633,6 +3633,10 @@ Ltac rew_dnd_rev ts' h hp hp' gp t i :=
   let iw2 := eval hnf in iw1 in
   let iw := eval simpl in iw2 in
   rew_dnd_rev_o tsw h hp hp' gp t iw.
+
+Ltac rew_dnd ts' h hp gp gp' t i :=
+  (rew_dnd_oo ts' h hp gp gp' t i) +
+    (rew_dnd_rev ts' h gp gp' hp t i).
 
 
 (*
@@ -3718,11 +3722,7 @@ Ltac lpl l :=
   end.
 
 Ltac rew_dnd_hyp_o ts' fl  h1 h2 h3 hp1 hp2 hp2' t i :=
-  match fl with
-  | true => idtac "fl = true"
-  | false => idtac "fl = false"
-  end;
-  lpl t;
+(*  lpl t; *)
   let flt := get_last t in
   let t' := snitch_last t in
   let tsc := eval compute in ts' in
