@@ -674,9 +674,15 @@ with f3 (rw:bool)(l:trace)(b:bool)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
      | false => 
       match h1 with
       | andl n1' h1' B =>
-          f3 rw l b ist n1' h1' (convert n1 n1' i1) n2 h2 i2
+          andl3
+            (f3 rw l b ist n1' h1' (convert n1 n1' i1) n2 h2 i2)
+                            (B (convert n1 n1' i1))
+(*          f3 rw l b ist n1' h1' (convert n1 n1' i1) n2 h2 i2 *)
       | andr n1' B h1' =>
-          f3 rw l b ist n1' h1' (convert n1 n1' i1) n2 h2 i2
+          andr3
+            (B (convert n1 n1' i1))
+            (f3 rw l b ist n1' h1' (convert n1 n1' i1) n2 h2 i2)
+(*          f3 rw l b ist n1' h1' (convert n1 n1' i1) n2 h2 i2 *)
       | orl  n1' h1' B =>
           orl3  (f3 rw l b ist n1' h1' (convert n1 n1' i1) n2 h2 i2)
                 (B (convert n1 n1' i1))
@@ -724,9 +730,13 @@ with f3 (rw:bool)(l:trace)(b:bool)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
    |  true  =>
        match h2 with
        | andl n2' h2' B =>
-           f3 rw l b ist n1 h1 i1  n2' h2' (convert n2 n2' i2)
+           andl3 
+             (f3 rw l b ist n1 h1 i1  n2' h2' (convert n2 n2' i2))
+             (B (convert n2 n2' i2)) 
        | andr n2' B h2' =>
-           f3 rw l b ist n1 h1 i1 n2' h2' (convert n2 n2' i2)
+           andr3
+             (B (convert n2 n2' i2)) 
+             (f3 rw l b ist n1 h1 i1 n2' h2' (convert n2 n2' i2))
        | orl  n2' h2' B =>
            orl3 
              (f3 rw l b ist n1 h1 i1 n2' h2' (convert n2 n2' i2))
