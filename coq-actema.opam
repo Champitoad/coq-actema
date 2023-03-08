@@ -16,7 +16,10 @@ build: ["dune" "build" "-p" name "-j" jobs]
 depends: [
   "ocaml" {>= "4.14"}
   "dune" {>= "2.5"}
-  "coq" {>= "8.15"}
+  "coq" {>= "8.15" & < "8.16"}
+  "coq-mathcomp-ssreflect" {= "1.16.0"}
+  "cohttp-lwt-unix" { = "5.0.0"}
+  "sha" { = "1.15.2"}
 ]
 
 tags: [
