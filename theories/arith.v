@@ -21,7 +21,6 @@ Fixpoint eqr n m :=
   | S n, S m => eqr n m
   | _, _ => False
   end.
-
     
 Lemma eqr_eq : forall n m, eqr n m -> n = m.
   actema.
@@ -90,7 +89,7 @@ Fixpoint gtb  (n:nat)(m:nat) :=
   end.
 
 Lemma leb_gtb : forall n m, leb n m = negb (gtb n m).
-actema. 
+actema.
 Qed.
 
 Fixpoint moins n m :=
@@ -239,9 +238,18 @@ pose proof nneven.
 actema.
 Qed.
 
+Parameter R : nat -> nat -> Prop.
+Lemma bug (refl : forall a, R a a) :
+  forall n, exists m, R n m.
+  actema.
+  
 Lemma even_div2 : forall n, even n -> n = double(div2 n).
 pose proof even_div2_aux.
 pose proof le_refl.
-actema.
+change (forall a, le a a) in H0.
+
+
+
+                                                         actema_force.
 Qed.
 (* Un pb - vérifier mes instanciations *)

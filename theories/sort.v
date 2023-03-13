@@ -210,8 +210,8 @@ Fixpoint hinsert n t :=
   | Leaf => Node n Leaf Leaf
   | Node m t1 t2 =>
       ift (leb n m)
-          (Node n t2 (hinsert m t1))
-          (Node m t2 (hinsert n t1))
+          (Node n (hinsert m t2) t1)
+          (Node m (hinsert n t2) t1)
   end.
 
 Lemma le_trans : forall a b c, le a b -> le b c -> le a c.
@@ -289,4 +289,99 @@ Lemma heapsort_sorted : forall l, sorted (heapsort l).
  actema.
 Qed.
 
+Check count.
+Fixpoint tcount n t :=
+  match t with
+  | Leaf => 0
+  | Node m t1 t2 =>
+      ifthn (eqb n m)
+            (S (tcount n t1)+(tcount n t2))
+            ((tcount n t1)+(tcount n t2))
+  end.
 
+Lemma tcount_hinsert :
+  forall t a b,
+    tcount a (hinsert b t) =
+      ifthn (eqb a b)
+            (S (tcount a t))
+            (tcount a t).
+  pose proof  eqb_refl.
+  pose proof leb_refl.
+   pose proof PeanoNat.Nat.add_succ_r.
+  pose proof  PeanoNat.Nat.add_comm.
+
+  actema.
+Qed.
+
+Lemma count_merge :
+  forall n l1 l2,
+    count n (merge l1 l2) = count n l1 + count n l2.
+pose proof PeanoNat.Nat.add_0_r.
+pose proof PeanoNat.Nat.add_succ_r.
+move => n; elim => [|a l1 hl1]; elim => [|b l2 hl2]//=.
+
+case: leb => //=;
+ case e1: eqb; case e2: eqb => //=; rewrite ?hl2 ?hl1 //= ?e1 ?e2 ?PeanoNat.Nat.add_succ_r //=.
+Qed.
+
+Inductive isort : ll -> Prop :=
+  sort_nil : isort lnil
+| sort_cons : forall a n, isort n -> low a n -> isort (lcons a n).
+
+  
+Goal forall l, sorted l -> isort l.
+  actema_force.
+by constructor.
+ constructor; auto.
+by case H.
+
+
+  (*
+  induction t; simpl.
+move => n m; by case: (eqb _ _).
+move => a b.
+  case  leb => /=.
+  case ean: (eqb a n) => /=; move: (IHt2 a n); rewrite ean /= PeanoNat.Nat.add_comm;
+move => -> //=;
+rewrite  PeanoNat.Nat.add_succ_r //=.
+
+ case eab: (eqb a b) => /=; move: (IHt2 a b);rewrite eab /= PeanoNat.Nat.add_comm;
+move => -> //=;
+rewrite  PeanoNat.Nat.add_succ_r //=;
+case eqb => //=.
+Qed.
+ *)
+
+
+
+
+
+
+=> IH.
+
+  case e2 : eqb;  try rewrite (eqb_eq _ _ e2) //= ?eqb_refl //=; rewrite ?e2;
+    case e3 : eqb; try rewrite (eqb_eq _ _ e3) //= ?eqb_refl //=;
+  rewrite /= ?e2   /=;
+  rewrite //=; try rewrite PeanoNat.Nat.add_comm //=;
+ try (by rewrite (IHt2 _ _) (eqb_refl n) /= PeanoNat.Nat.add_succ_r);
+try (by rewrite (IHt2 _ _) e3).
+  case e4 : eqb; simpl;  try rewrite (eqb_eq _ _ e4) /=.
+  move: (IHt2 n m); rewrite e4 ?(eqb_eq _ _ e4) /=;
+   try move ->;
+ rewrite ?PeanoNat.Nat.add_succ_r.
+  Search (_ + (S _) = _ ).
+
+  try (by rewrite (eqb_refl n) in e4);
+     try (by rewrite e3 in e4).
+by rewrite e3 in e4.
+
+
+  Search eqb.
+
+  Search (_+_ = _ + _).
+
+  simpl.
+
+  actema.
+
+  actema.

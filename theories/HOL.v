@@ -3497,6 +3497,7 @@ Ltac back_o ts' h0 hp gp t i :=
   try clear h; try clear ts.
 
 Ltac back ts h0 hp gp t i :=
+  idtac "back !";
   let tsw := tmDYN ts in
   let iw1 := constr:(restrip tsw i) in
   let iw2 := eval hnf in iw1 in
