@@ -55,22 +55,20 @@ module FOSign = struct
     { t_funcs : Fo_t.sig_ NameMap.t; t_preds : Fo_t.arity NameMap.t }
   
   type t =
-    { symbols : symbols; typing : typing; defaults : EConstr.t SymbolMap.t }
+    { symbols : symbols; typing : typing; }
   
   let empty : t =
     { symbols = SymbolNames.empty;
       typing = {
         t_funcs = NameMap.empty;
-        t_preds = NameMap.empty; };
-      defaults = SymbolMap.empty; }
+        t_preds = NameMap.empty; }; }
   
   let union (s1 : t) (s2 : t) : t =
     let f _ x _ = Some x in
     { symbols = SymbolNames.union s1.symbols s2.symbols;
       typing = {
         t_funcs = NameMap.union f s1.typing.t_funcs s2.typing.t_funcs;
-        t_preds = NameMap.union f s1.typing.t_preds s2.typing.t_preds; };
-      defaults = SymbolMap.union f s1.defaults s2.defaults; }
+        t_preds = NameMap.union f s1.typing.t_preds s2.typing.t_preds; }; }
   
   let sort_symbols (sign : t) : SymbolNames.t =
     sign.symbols |> 
@@ -104,11 +102,7 @@ let peano : FOSign.t =
       add "mult" ([nat; nat], nat) in
     let t_preds = empty in
     { t_funcs; t_preds } in
-  let defaults =
-    let open SymbolMap in
-    empty |>
-    add (Ind nat_name) zero in
-  { symbols; typing; defaults }
+  { symbols; typing }
 
 (* -------------------------------------------------------------------- *)
 (** * Exporting Coq goals to Actema *)
@@ -227,7 +221,7 @@ module Export = struct
     let symbols = SymbolNames.add sy name sign.symbols in
     let t_funcs = NameMap.add name sig_ sign.typing.t_funcs in
     let typing = { sign.typing with t_funcs } in
-    put { sign with symbols; typing }
+    put { symbols; typing }
 
   and add_pred name sy ty (e : destenv) : unit Dest.t =
     let* arity = dest_predty (e, ty) in
@@ -235,13 +229,7 @@ module Export = struct
     let symbols = SymbolNames.add sy name sign.symbols in
     let t_preds = NameMap.add name arity sign.typing.t_preds in
     let typing = { sign.typing with t_preds } in
-    put { sign with symbols; typing }
-
-  and add_default t ty (e : destenv) : unit Dest.t =
-    let* sort_sy = dest_symbol (e, ty) in
-    let* sign = get in
-    if SymbolMap.mem sort_sy sign.defaults then destKO else
-    put { sign with defaults = SymbolMap.add sort_sy t sign.defaults }
+    put { symbols; typing }
   
   and add_symbol ?(strict = false) name sy ty e : unit Dest.t =
     begin
@@ -616,7 +604,6 @@ module Export = struct
 
         let* () = begin
             add_sort name (Var id) ty @>?
-            add_default (EConstr.mkVar id) ty @>?
             add_func ~strict:true name (Var id) ty @>?
             add_pred name (Var id) ty @>?
             fun _ -> return ()
@@ -663,12 +650,6 @@ module Export = struct
       let* g_concl = dest_form (e, concl) in
 
       let* sign = get in
-      let defaults =
-        sign.defaults |>
-        SymbolMap.add (Ind (Trm.bool_name)) (Trm.bool_of_bool true) |>
-        SymbolMap.add (Ind (Trm.nat_name)) (Trm.nat_of_int 0) in
-      let sign = { sign with defaults } in
-      let* () = put sign in
       let g_env = env_of_varsign (varenv, sign) in
       
       return Logic_t.{ g_env; g_hyps; g_concl } in
@@ -697,37 +678,25 @@ module Import = struct
     | Var x -> EConstr.mkVar x
   
   let sort_index (sign : FOSign.t) (s : string) : int =
-    let sorts =
-      sign.defaults |> FOSign.SymbolMap.bindings |>
-      List.split |> fst |>
-      List.map (fun sy -> FOSign.SymbolNames.find sy sign.symbols) in
-    List.nth_index 0 s sorts
+    FOSign.sort_symbols sign |> FOSign.SymbolNames.values |>
+    List.nth_index 0 s
   
   let infer_sort (env : Logic_t.env) (e : Logic_t.expr) : string =
     match einfer env e with
     | `TVar name -> name
-    
-  let nth_sort (sign : FOSign.t) (n : int) : EConstr.t =
-    let sorts = FOSign.(sort_symbols sign |> SymbolNames.keys) in
-    match List.nth_opt sorts n with
-    | None -> Trm.unit
-    | Some sy -> symbol sy
 
-  let dyn_ty () : EConstr.t =
-    EConstr.mkInd (Names.MutInd.make1 (kname "DYN"), 0)
+  let tdyn_ty () : EConstr.t =
+    EConstr.mkInd (Names.MutInd.make1 (kname "TDYN"), 0)
   
-  let mdyn sort default =
+  let tdyn sort =
     let open EConstr in
-    let mdyn = mkConstruct ((Names.MutInd.make1 (kname "DYN"), 0), 1) in
-    mkApp (mdyn, [| sort; default |])
+    let tdyn = mkConstruct ((Names.MutInd.make1 (kname "TDYN"), 0), 1) in
+    mkApp (tdyn, [| sort |])
   
   let sorts (sign : FOSign.t) : EConstr.t =
-    FOSign.SymbolMap.bindings sign.defaults |>
-    List.map begin fun (sort_sy, default) ->
-      let sort = symbol sort_sy in
-      mdyn sort default
-    end |>
-    Trm.of_list (dyn_ty ()) identity
+    FOSign.sort_symbols sign |> FOSign.SymbolNames.keys |>
+    List.map (fun sort_sy -> tdyn (symbol sort_sy)) |>
+    Trm.of_list (tdyn_ty ()) identity
 
   let sort_ty ts (s : EConstr.t) : EConstr.t =
     let name = Names.Constant.make1 (kname "sort") in

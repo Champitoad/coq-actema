@@ -2,6 +2,20 @@ From Actema Require Import Loader.
 
 Set Debug "backtrace".
 
+Require Import ssreflect.
+
+Inductive color := red | blue.
+
+Context (P : color -> Prop).
+Context (x y : color).
+Lemma essai :
+P red -> (forall x, x=red ) -> P blue.
+intros h1 h2.
+(* pose xxx:= blue. *)
+
+actema_force.
+Qed.
+
 Parameter (A B C : Prop) (P : nat -> Prop).
 
 Parameter f : nat -> nat -> nat.
