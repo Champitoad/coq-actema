@@ -484,6 +484,7 @@ module CoreLogic : sig
   val intro          : ?variant:(int * (expr * type_) option) -> tactic
   val elim           : ?clear:bool -> Handle.t -> tactic
   val ivariants      : targ -> string list
+  val evariants      : targ -> Handle.t -> string list
   val forward        : (Handle.t * Handle.t * int list * Form.Subst.subst) -> tactic
 
   type asource =
@@ -522,7 +523,7 @@ module CoreLogic : sig
 
   type action_type = [
     | `Intro     of int
-    | `Elim      of Handle.t
+    | `Elim      of Handle.t * int
     | `Ind       of Handle.t
     | `Simpl     of ipath
     | `Red       of ipath
@@ -831,6 +832,20 @@ end = struct
     | FBind (`Exist, _, _, _) -> ["Ex-intro"]
 
     | _ -> []
+
+
+  let evariants ((pr, id) : targ) hd =
+    match (Proof.Hyps.byid (Proof.byid pr id).g_hyps hd).h_form with
+    | FPred ("_EQ", _) -> ["Rewrite ->"; "Rewrite <-"]
+    | FTrue -> ["destruct"]
+    | FFalse -> ["destruct"]
+    | FConn (`And  , _) -> ["destruct"]
+    | FConn (`Or   , _) -> ["destruct"]
+    | FConn (`Imp  , _) -> ["apply"]
+    | FConn (`Not  , _) -> ["destruct"]
+    | FBind (`Exist, _, _, _) -> ["destruct"]
+    | _ -> []
+
 
   type pnode += TForward of Handle.t * Handle.t
 
@@ -2330,7 +2345,7 @@ end = struct
   
   type action_type = [
     | `Intro     of int
-    | `Elim      of Handle.t
+    | `Elim      of Handle.t * int
     | `Ind       of Handle.t
     | `Simpl     of ipath
     | `Red       of ipath
@@ -3131,11 +3146,20 @@ end = struct
             end 
 
           | `H (rp, _) ->
-              let hg = mk_ipath (Handle.toint hd)
-                ~ctxt:{ kind = `Hyp; handle = Handle.toint rp } in
-              [{ description = "Elim"; icon = None;
-                 highlights = [hg]; kind = `Click hg;
-                 action = (hd, `Elim rp) }]
+              let ev = evariants (proof, hd) rp in
+              let bv = List.length ev <= 1 in
+              List.mapi
+                (fun i x ->
+                  let hg = mk_ipath (Handle.toint hd) 
+                    ~ctxt:{ kind = `Hyp; handle = Handle.toint rp }
+                    ~sub:(if bv
+                          then [] 
+                          else rebuild_pathd (List.length ev) i)
+                  in
+                  { description = x; icon = None;
+                    highlights = [hg]; kind = `Click hg;
+                    action = (hd, `Elim (rp, i)) })
+                ev
 
           | `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
               let rp = Vars.getid goal.g_env x |> Option.get in
@@ -3176,7 +3200,7 @@ end = struct
     match a with
     | `Intro variant ->
         intro ~variant:(variant, None) targ
-    | `Elim subhd ->
+    | `Elim (subhd, _) ->
         let goal = Proof.byid proof hd in
         let form = (Proof.Hyps.byid goal.g_hyps subhd).h_form in 
         let clear =
@@ -3258,7 +3282,7 @@ end = struct
           return (`AIntro (i, wit'))
       | TElim hd ->
           let* id = find hd in
-          return (`AElim id)
+          return (`AElim (id, 0))
       | TLink (src, dst, itrace) ->
           let* src = of_ipath src in
           let* dst = of_ipath dst in
@@ -3276,12 +3300,12 @@ end = struct
       match a with
       | `Intro variant ->
           return (`AIntro (variant, None))
-      | `Elim subhd ->
+      | `Elim (subhd, i) ->
           let goal = Proof.byid proof hd in
           let hyp = (Proof.Hyps.byid goal.g_hyps subhd).h_form in 
           let exact = Form.f_equal goal.g_env hyp goal.g_goal in
           let* uid = find subhd in
-          return (if exact then `AExact uid else `AElim uid)
+          return (if exact then `AExact uid else `AElim (uid, i))
       | `Ind subhd ->
           let* uid = find subhd in
           return (`AInd uid)

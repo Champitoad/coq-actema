@@ -69,7 +69,7 @@ type action = [
   | ADef of (name * type_ * expr)
   | AIntro of (int * (expr * type_) option)
   | AExact of uid
-  | AElim of uid
+  | AElim of (uid * int)
   | AInd of uid
   | ASimpl of ipath
   | ARed of ipath
