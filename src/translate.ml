@@ -960,7 +960,7 @@ module Import = struct
             raise (UnsupportedAction a)
         end
 
-    | `AElim uid ->
+    | `AElim (uid, i) ->
         let id = Names.Id.of_string uid in
         let hyp = Utils.get_hyp goal uid in
         let mk_destruct

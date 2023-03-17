@@ -1,8 +1,12 @@
 From Actema Require Import Loader.
 
+Context (A A' B C : Prop).
+
 Set Debug "backtrace".
 
 Require Import ssreflect.
+
+Parameter f : nat -> nat -> nat.
 
 Inductive color := red | blue.
 
