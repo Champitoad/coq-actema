@@ -837,7 +837,7 @@ end = struct
 
   let evariants ((pr, id) : targ) hd =
     match (Proof.Hyps.byid (Proof.byid pr id).g_hyps hd).h_form with
-    | FPred ("_EQ", _) -> ["Rewrite ->"; "Rewrite <-"]
+    | FPred ("_EQ", _) -> ["rewrite ->"; "rewrite <-"]
     | FTrue -> ["destruct"]
     | FFalse -> ["destruct"]
     | FConn (`And  , _) -> ["destruct"]
