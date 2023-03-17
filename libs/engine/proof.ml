@@ -820,17 +820,15 @@ end = struct
     
   let ivariants ((pr, id) : targ) =
     match (Proof.byid pr id).g_goal with
-    | FPred ("_EQ", _) -> ["EQ-intro"]
-    | FTrue -> ["True-intro"]
-    | FConn (`And  , _) -> ["And-intro"]
-    | FConn (`Or   , _) as f ->
-        let fl = Form.flatten_disjunctions f in
-        List.mapi (fun i _ -> "Or-intro-"^(string_of_int i)) fl
-    | FConn (`Imp  , _) -> ["Imp-intro"]
-    | FConn (`Equiv, _) -> ["Equiv-intro"]
-    | FConn (`Not  , _) -> ["Not-intro"]
-    | FBind (`Forall, _, _, _) -> ["FA-intro"] 
-    | FBind (`Exist, _, _, _) -> ["Ex-intro"]
+    | FPred ("_EQ", _) -> ["reflexivity"]
+    | FTrue -> ["constructor"]
+    | FConn (`And  , _) -> ["split"]
+    | FConn (`Or   , _) -> ["left"; "right"]
+    | FConn (`Imp  , _) -> ["intro"]
+    | FConn (`Equiv, _) -> ["split"]
+    | FConn (`Not  , _) -> ["intro"]
+    | FBind (`Forall, _, _, _) -> ["intro"] 
+    | FBind (`Exist, _, _, _) -> ["exists"]
 
     | _ -> []
 
