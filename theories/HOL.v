@@ -4404,5 +4404,6 @@ Ltac pbp p := point_goal shoot p.
 
 Ltac pbp_hyp h p := point_hyp h shoot p.
 
-Ltac rew_all h := rewrite -> h in *.
+Ltac rew_all_left h := rewrite -> h in *.
 
+Ltac rew_all_right h := rewrite <- h in *.

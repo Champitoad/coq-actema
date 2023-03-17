@@ -1000,8 +1000,15 @@ module Import = struct
             destruct_or
         | `FBind (`Exist, x, _, _) ->
             destruct_ex x
-	| `FPred ("_EQ", _) ->
-	    calltac (kname "rew_all") [(EConstr.mkVar id)]
+        | `FPred ("_EQ", _) ->
+            begin match i with
+            | 0 ->
+                calltac (kname "rew_all_left") [(EConstr.mkVar id)]
+            | 1 ->
+                calltac (kname "rew_all_right") [(EConstr.mkVar id)]
+            | _ ->
+                raise (UnsupportedAction a)
+            end
         | _ ->
             raise (UnsupportedAction a)
         end
@@ -1241,8 +1248,8 @@ module Import = struct
           | `ASimpl _ -> "simpl_path"
           | `ARed _ -> "unfold_path"
           | `AIndt _ -> "myinduction"
-	  | `APbp _ -> "pbp"
-	  | `ACase _ -> "mycase"
+          | `APbp _ -> "pbp"
+          | `ACase _ -> "mycase"
           | _ -> assert false
           end in
 

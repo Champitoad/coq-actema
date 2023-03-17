@@ -1,6 +1,7 @@
 From Actema Require Import Loader.
 
-Context (A A' B C : Prop).
+Goal forall x, x = 3 -> x = 6 -> x = 1.
+actema_force.
 
 Set Debug "backtrace".
 
