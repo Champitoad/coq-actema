@@ -458,7 +458,7 @@ Definition appist sr (g: inst2) n1 c1 n2 c2 :=
   
 (* the main functions as described in our CPP 2022 article *)
 (* "side conditions" are generated (which are actually in the center
-   and not on the side : 
+   and not on the side) : 
     - A->B  for the focused formulas (meant to be A->A in practice)
     - two equalites for equality rewrites which should be two trivial
       reflexive equalities
@@ -3497,7 +3497,6 @@ Ltac back_o ts' h0 hp gp t i :=
   try clear h; try clear ts.
 
 Ltac back ts h0 hp gp t i :=
-  idtac "back !";
   let tsw := tmDYN ts in
   let iw1 := constr:(restrip tsw i) in
   let iw2 := eval hnf in iw1 in
@@ -4280,4 +4279,130 @@ Ltac myinduction_hyp_nosimpl h p :=
       | _ => induction g'
       end
   end.
-*)
+ *)
+Ltac ttest t :=
+  match t with
+  | forall z : ?A, ?t' =>
+      let t'' := constr:(subst! true for z in t') in
+                          let r := (ttest t'') in
+                          constr:(S r)
+  | _ => constr:(0)
+  end.
+
+Check ltac:(let r := ttest    (forall x : nat, forall y, x = y)
+in exact r).
+
+              
+Ltac build_context_r t p l :=
+  match p with
+  | nil => constr:(l)
+  | cons ?n ?p' =>
+      match t with
+      | forall x : ?A, ?t' =>
+          let l' := aDYN A l in
+          build_context_r (subst! true for x in t') p' l'
+      | exists x : ?A , ?t' =>
+          let l' := aDYN A l in
+          build_context_r  (subst! true for x in t') p' l'
+      | ?A /\ ?B =>
+          match n with
+          | 0 =>  build_context_r A p' l
+          | _ => build_context_r B p' l
+          end
+      | ?A \/ ?B  =>
+          match n with
+          | 0 =>  build_context_r A p' l
+          | _ => build_context_r B p' l
+          end
+      | ?A -> ?B  =>
+          match n with
+          | 0 =>  build_context_r A p' l
+          | _ => build_context_r B p' l
+          end
+      | ~ ?A  => build_context_r A p' l
+
+      | _ => l
+      end
+  end.
+
+Ltac build_context t p :=
+build_context_r t p (@nil TDYN).
+
+            
+Ltac point_goal t p :=
+  match p with
+  | nil => ltac:(t)
+  | cons 0 ?p' =>
+      match goal with
+      | |- (_ /\ _) => split; [ point_goal t p' | t]
+      | |- (_\/_) => left; point_goal t p'
+      | |- (_ -> _) =>
+          let h := fresh "h" in
+          intro h; point_hyp h t p'
+      | |- forall x : _, _ =>
+          intro x; point_goal t p'
+      | |- ~ _ =>
+          let h := fresh "h" in
+          intro h; point_hyp h t p'
+      |  _ => idtac
+      end
+  | cons _ ?p' =>
+      match goal with
+      | |- (_ /\ _) => split; [t | point_goal t p']
+      | |- (_\/_) => right; point_goal t p'
+      | |- (_ -> _) => intro;  point_goal t p'
+      | _ => idtac
+      end
+  end
+with point_hyp h t p :=
+    match p with
+    | nil => ltac:(t)
+    | cons 0 ?p' =>
+        match type of h with
+        | (_ /\ _) =>
+            let h' := fresh "h" in
+            move: (h) => [h' _];                         
+             point_hyp h' t p';
+             match p' with
+             | nil => idtac
+             | _ => clear h'
+             end
+        | (?A -> _) =>
+            let a := fresh "a" in
+            cut A; [move => a; move/(_ a): h => h|
+                     point_goal t p']
+        | exists x : _, _ =>
+            let h' := fresh "h" in
+            move: (h) => [x h'];
+            point_hyp h' t p'
+        | ~ _ =>
+          case h; point_goal t p'
+      |  _ => idtac
+        end
+    | cons _ ?p' =>
+        match type of h with
+        | (_ /\ _) =>
+            let h' := fresh "h" in
+            move: (h) => [_ h'];
+             point_hyp h' t p';
+             match p' with
+             | nil => idtac
+             | _ => clear h'
+             end
+       | (?A -> ?B) =>
+            let a := fresh "a" in
+            cut A;
+            [move => a; move/(_ a): h => h;
+             point_hyp h t p' | t]
+        | _ => idtac    
+        end
+    end.
+
+Ltac shoot := trivial.
+
+Ltac pbp p := point_goal shoot p.
+
+Ltac pbp_hyp h p := point_hyp h shoot p.
+
+Ltac rew_all h := rewrite -> h in *.
+

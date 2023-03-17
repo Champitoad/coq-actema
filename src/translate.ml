@@ -1000,6 +1000,8 @@ module Import = struct
             destruct_or
         | `FBind (`Exist, x, _, _) ->
             destruct_ex x
+	| `FPred ("_EQ", _) ->
+	    calltac (kname "rew_all") [(EConstr.mkVar id)]
         | _ ->
             raise (UnsupportedAction a)
         end
@@ -1233,12 +1235,13 @@ module Import = struct
 
         Tactics.pose_proof name prf
 
-    | `ASimpl tgt | `ARed tgt | `AIndt tgt | `ACase tgt ->
+    | `ASimpl tgt | `ARed tgt | `AIndt tgt | `ACase tgt | `APbp tgt ->
         let tac_name =
           begin match a with
           | `ASimpl _ -> "simpl_path"
           | `ARed _ -> "unfold_path"
           | `AIndt _ -> "myinduction"
+	  | `APbp _ -> "pbp"
 	  | `ACase _ -> "mycase"
           | _ -> assert false
           end in
