@@ -110,7 +110,6 @@ Lemma le_nSn : forall n, le n (S n).
   actema.
 Qed.
 
-
 Lemma leb_lt : forall n m, leb n m = false -> le m n.
   actema.
 Qed.
@@ -126,13 +125,12 @@ pose h :=  PeanoNat.Nat.add_succ_r.
 actema.
 Qed.
 
-
 Lemma eq_S : forall n m, S n = S m -> n = m.
 pose proof eqr_eq.
 pose proof eq_eqr.
 actema.
 Qed.
-
+  
 Lemma moinsnn : forall n, moins n n = 0.
   actema.
 Qed.
@@ -182,7 +180,6 @@ Fixpoint even n :=
   | S n => ~ (even n)
   end.
 
-  
 Lemma div_even :
   forall p, even (p+p).
   pose proof PeanoNat.Nat.add_succ_r.
@@ -229,27 +226,35 @@ Qed.
 Lemma S_le : forall n m, le (S n) m -> le n m.
   actema.
 Qed.
-
-
 (* assez moche car des fix apparaissent *)
+
+
 Lemma even_div2_aux : forall m, forall n, le n m -> even n -> n = double(div2 n).
 pose proof S_le.
 pose proof nneven.
 actema.
 Qed.
 
+(* doc bug *)
+
+Parameter f : nat -> nat -> nat.
+Lemma test : (forall x y, f x y = 0) -> forall x y, 99 = f x y -> True.
+  intros h1 x y h2.
+actema_force.
+
+  Check add_comm.
+  
+  
 Parameter R : nat -> nat -> Prop.
+Set Debug "backtrace".
 Lemma bug (refl : forall a, R a a) :
   forall n, exists m, R n m.
-  actema.
+  actema_force.
   
 Lemma even_div2 : forall n, even n -> n = double(div2 n).
 pose proof even_div2_aux.
 pose proof le_refl.
 change (forall a, le a a) in H0.
-
-
-
-                                                         actema_force.
+  actema_force.
 Qed.
 (* Un pb - vérifier mes instanciations *)
