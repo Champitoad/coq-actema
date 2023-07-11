@@ -1,6 +1,5 @@
 From Actema Require Import Loader.
 
-(** * Peano arithmetic *)
 Require Import ssreflect.
 
 Context (Socrates : nat).
@@ -11,7 +10,6 @@ Lemma Aristoteles (hm : forall x, Human x -> Mortal x)
   Mortal Socrates.
   actema.
 Qed.
-
 
 Parameter Rich : nat -> Prop.
 Parameter mother : nat -> nat.
@@ -26,8 +24,13 @@ Proof.
   actema.
   Qed.
 
+(* Algebra *)
 
-
+Parameter f g : nat -> nat.
+Lemma inv_d : (forall y, f (g y) = y) -> (forall x, exists y,  g y = x) ->
+              forall x,  g (f x) = x.
+actema.
+Qed.
 
 (** * Kaustuv's challenge *)
 
@@ -44,16 +47,12 @@ Proof.
   actema.
 Qed.
 
-
-Require Import ssreflect.
-
 Lemma ex_intro :
   P t -> exists x, P x.
 Proof.
   intros.
   actema.
 Qed.
-
 
 Lemma ex_elim :
   (exists x, P x) -> (forall y, P y -> C) -> C.
@@ -299,13 +298,3 @@ Lemma efq : False -> A.
 Proof.
   actema.
 Qed.
-
-
-(* algebra *)
-Parameter f g : nat -> nat.
-Lemma inv_d : (forall y, f (g y) = y) -> (forall x, exists y,  g y = x) ->
-              forall x,  g (f x) = x.
-actema.
-Qed.
-
-

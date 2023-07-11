@@ -58,3 +58,7 @@ src/utils.ml*
 
 actema.proofs
 theories/fundamental-arithmetics
+
+.direnv
+.nix
+.vscode
