@@ -38,7 +38,7 @@
         packages =
           pkgs.lib.getAttrs (builtins.attrNames localPackagesQuery) scope';
       in {
-        legacyPackages = scope';
+        # legacyPackages = scope';
 
         # inherit packages;
 
