@@ -58,7 +58,12 @@ src/utils.ml*
 
 actema.proofs
 theories/fundamental-arithmetics
+theories/flowers
+theories/dndinv.v
 
 .direnv
 .nix
 .vscode
+
+default.nix
+result
