@@ -38,6 +38,9 @@ endif
 Makefile.coq: _CoqProject
 	$(COQBIN)coq_makefile -f _CoqProject -o Makefile.coq
 
+install: all
+	@$(MAKE) -f Makefile.coq install
+
 tests: all
 	@$(MAKE) -C tests -s clean
 	@$(MAKE) -C tests -s all

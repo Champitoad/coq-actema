@@ -67,6 +67,21 @@
     },
     "nixpkgs": {
       "locked": {
+        "lastModified": 1689048911,
+        "narHash": "sha256-pODI2CkjWbSLo5nPMZoLtkRNJU/Nr3VSITXZqqmNtIk=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "8163a64662b43848802092d52015ef60777d6129",
+        "type": "github"
+      },
+      "original": {
+        "id": "nixpkgs",
+        "ref": "nixos-23.05",
+        "type": "indirect"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
         "lastModified": 1682362401,
         "narHash": "sha256-/UMUHtF2CyYNl4b60Z2y4wwTTdIWGKhj9H301EDcT9M=",
         "owner": "nixos",
@@ -81,7 +96,7 @@
         "type": "github"
       }
     },
-    "nixpkgs_2": {
+    "nixpkgs_3": {
       "locked": {
         "lastModified": 1688590700,
         "narHash": "sha256-ZF055rIUP89cVwiLpG5xkJzx00gEuuGFF60Bs/LM3wc=",
@@ -102,7 +117,7 @@
         "flake-compat": "flake-compat",
         "flake-utils": "flake-utils_2",
         "mirage-opam-overlays": "mirage-opam-overlays",
-        "nixpkgs": "nixpkgs",
+        "nixpkgs": "nixpkgs_2",
         "opam-overlays": "opam-overlays",
         "opam-repository": "opam-repository",
         "opam2json": "opam2json"
@@ -155,7 +170,7 @@
     },
     "opam2json": {
       "inputs": {
-        "nixpkgs": "nixpkgs_2"
+        "nixpkgs": "nixpkgs_3"
       },
       "locked": {
         "lastModified": 1671540003,
@@ -171,14 +186,35 @@
         "type": "github"
       }
     },
-    "root": {
+    "prover": {
       "inputs": {
         "flake-utils": "flake-utils",
         "nixpkgs": [
+          "prover",
           "opam-nix",
           "nixpkgs"
         ],
         "opam-nix": "opam-nix"
+      },
+      "locked": {
+        "lastModified": 1689167457,
+        "narHash": "sha256-Q2ZckiCoyHr8gT6Mk09jsSIiFJHuzzzLDqd5SYp/rj8=",
+        "owner": "prover-ui",
+        "repo": "prover",
+        "rev": "298bd81554c7cc3c90d607d6c8e94f3f0f77ffea",
+        "type": "gitlab"
+      },
+      "original": {
+        "owner": "prover-ui",
+        "ref": "peano",
+        "repo": "prover",
+        "type": "gitlab"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "prover": "prover"
       }
     },
     "systems": {
