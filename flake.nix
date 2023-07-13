@@ -1,7 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "nixpkgs/nixos-23.05";
-    prover.url = "gitlab:prover-ui/prover/peano";
+    prover.url = "./actema-desktop/prover";
   };
 
   outputs = { self, nixpkgs, prover }:
@@ -26,7 +26,7 @@
     };
   in {
     devShell.x86_64-linux = pkgs.mkShell {
-      packages = [ coq atdgen cohttp sha ssr ];
+      packages = [ coq atdgen cohttp sha ssr coq-actema ];
     };
     packages.x86_64-linux.default = coq-actema;
   };

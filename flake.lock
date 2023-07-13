@@ -197,18 +197,14 @@
         "opam-nix": "opam-nix"
       },
       "locked": {
-        "lastModified": 1689167457,
-        "narHash": "sha256-Q2ZckiCoyHr8gT6Mk09jsSIiFJHuzzzLDqd5SYp/rj8=",
-        "owner": "prover-ui",
-        "repo": "prover",
-        "rev": "298bd81554c7cc3c90d607d6c8e94f3f0f77ffea",
-        "type": "gitlab"
+        "lastModified": 1,
+        "narHash": "sha256-6CkZkf3QwEg7vbz7qNOP1i/HVji/QZCeXcBDqmf0S0g=",
+        "path": "/nix/store/2s7ky6cvaxiwzkgk4cqgikpcn9sjxg94-source/actema-desktop/prover",
+        "type": "path"
       },
       "original": {
-        "owner": "prover-ui",
-        "ref": "peano",
-        "repo": "prover",
-        "type": "gitlab"
+        "path": "/nix/store/2s7ky6cvaxiwzkgk4cqgikpcn9sjxg94-source/actema-desktop/prover",
+        "type": "path"
       }
     },
     "root": {
