@@ -2,8 +2,8 @@ with import <nixpkgs> {};
 
 mkShell {
     nativeBuildInputs = [
-        nodejs-16_x
-        (yarn.override { nodejs = nodejs-16_x; })
+        nodejs_18
+        (yarn.override { nodejs = nodejs_18; })
         electron
     ];
 
