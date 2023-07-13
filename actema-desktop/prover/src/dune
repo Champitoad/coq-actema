@@ -1,0 +1,21 @@
+(executables
+  (names jsprover)
+  (public_names -)
+  (libraries prover.engine prover.api)
+  (package prover))
+
+(rule
+  (target jsprover.js.bc)
+  (deps (file jsprover.bc))
+  (action (run ocamlfind ocamlc -g -o jsprover.js.bc
+     -package menhirLib,batteries,tyxml,lwt,ocamlgraph,js_of_ocaml,atdgen,base64
+     -linkpkg ../libs/api/api.cma
+     -linkpkg ../libs/engine/engine.cma
+     .jsprover.eobjs/byte/jsprover.cmo)))
+
+(rule
+  (target jsprover.js)
+  (deps (file jsprover.js.bc))
+  (action (run %{bin:js_of_ocaml}
+     --disable genprim --pretty --debug-info
+     --source-map --source-map-inline --no-inline -o %{target} %{deps})))
