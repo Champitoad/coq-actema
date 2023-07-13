@@ -4,7 +4,7 @@ Require Import ssreflect.
 
 Context (Socrates : nat).
 Context (Mortal Human : nat -> Prop).
-        
+
 Lemma Aristoteles (hm : forall x, Human x -> Mortal x)
       (hh : Human Socrates) :
   Mortal Socrates.
@@ -21,8 +21,9 @@ Lemma eduk1 :
   False.
 Proof.
   intros.
+  set john := h.
   actema.
-  Qed.
+Qed.
 
 (* Algebra *)
 
