@@ -1,0 +1,58 @@
+(* -------------------------------------------------------------------- *)
+(** Identifiers *)
+
+type name = string
+
+(* -------------------------------------------------------------------- *)
+(** Types *)
+
+type type_ = [
+  | TVar of name
+]
+
+type arity = type_ list
+type sig_  = (arity * type_)
+
+(* -------------------------------------------------------------------- *)
+(** Expressions *)
+
+type expr = [
+  | EVar of name
+  | EFun of (name * expr list)
+]
+
+(* -------------------------------------------------------------------- *)
+(** Formulas *)
+
+type logcon = [ And | Or | Imp | Equiv | Not ]
+type bkind  = [ Forall | Exist ]
+
+type form = [
+  | FTrue
+  | FFalse
+  | FPred of (name * expr list)
+  | FConn of (logcon * form list)
+  | FBind of (bkind * name * type_ * form)
+]
+
+(* -------------------------------------------------------------------- *)
+(** Terms = Formulas + Expressions *)
+
+type term = [F of form | E of expr]
+
+(* -------------------------------------------------------------------- *)
+(** Environments *)
+
+type bvar = (type_ * expr option)
+
+type env = {
+  env_sort      : name                       list;
+  env_prp       : (name * arity            ) list;
+  env_fun       : (name * sig_             ) list;
+  env_sort_name : (name * name             ) list;
+  env_prp_name  : (name * name             ) list;
+  env_fun_name  : (name * name             ) list;
+  env_var       : (name * bvar             ) list;
+}
+
+type lenv = (name * type_) list

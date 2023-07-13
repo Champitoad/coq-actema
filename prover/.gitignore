@@ -1,0 +1,10 @@
+/_build/
+/_opam/
+html/jspover.js
+*.install
+*.exe
+*.bc
+html/jsprover.js
+*.merlin
+libs/engine/test.ml
+libs/api/*.d

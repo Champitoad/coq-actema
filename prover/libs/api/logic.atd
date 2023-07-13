@@ -1,0 +1,87 @@
+(* -------------------------------------------------------------------- *)
+(** Identifiers *)
+
+type name <ocaml from="Fo"> = abstract
+
+(* -------------------------------------------------------------------- *)
+(** Types *)
+
+type type_ <ocaml from="Fo"> = abstract
+type arity <ocaml from="Fo"> = abstract
+type sig_  <ocaml from="Fo"> = abstract
+
+(* -------------------------------------------------------------------- *)
+(** Expressions *)
+
+type expr <ocaml from="Fo"> = abstract
+
+(* -------------------------------------------------------------------- *)
+(** Formulas *)
+
+type logcon <ocaml from="Fo"> = abstract
+type bkind  <ocaml from="Fo"> = abstract
+type form <ocaml from="Fo"> = abstract
+
+(* -------------------------------------------------------------------- *)
+(** Terms = Formulas + Expressions *)
+
+type term <ocaml from="Fo"> = abstract
+
+(* -------------------------------------------------------------------- *)
+(** Environments *)
+
+type bvar <ocaml from="Fo"> = abstract
+type env <ocaml from="Fo"> = abstract
+type lenv <ocaml from="Fo"> = abstract
+
+(* -------------------------------------------------------------------- *)
+(** Goals *)
+
+type uid = string
+
+type hyp = {
+  h_id : uid;
+  h_form : form;
+}
+
+type goal = {
+  g_env : env;
+  g_hyps : hyp list;
+  g_concl : form;
+}
+
+type goals = goal list
+
+type lgoal = (hyp list * form)
+
+(* -------------------------------------------------------------------- *)
+(** Actions *)
+
+type pkind = [Hyp | Concl | Var of [Head | Body]]
+type ctxt = { kind : pkind; handle : uid }
+type ipath = { ctxt : ctxt; sub : int list }
+
+type choice = (int * (lenv * lenv * expr) option)
+type itrace = choice list
+
+type action = [
+  | AId
+  | ADef of (name * type_ * expr)
+  | AIntro of (int * (expr * type_) option)
+  | AExact of uid
+  | AElim of (uid * int)
+  | AInd of uid
+  | ASimpl of ipath
+  | ARed of ipath
+  | AIndt of ipath
+  | APbp of ipath
+  | ACase of ipath
+  | ACut of form
+  | AGeneralize of uid
+  | AMove of (uid * uid option)
+  | ADuplicate of uid
+  | ALink of (ipath * ipath * itrace)
+  | AInstantiate of (expr * ipath)
+]
+
+type aident = (string * lgoal)
