@@ -1,17 +1,18 @@
 { lib, version ? null
 , coq, coqPackages, ocamlPackages, fetchurl, prover }:
 with lib;
-  coqPackages.mkCoqDerivation {
-  /* namePrefix leads to e.g. `name = coq8.11-mathcomp1.11-multinomials-1.5.2` */
-  # namePrefix = [ "coq" ];
+coqPackages.mkCoqDerivation {
   pname = "actema";
   # owner = "coq-community";
   inherit version;
-  # defaultVersion =  with versions; switch [ coq.version ] [
-  #     { cases = [ "8.15.2" ]; out = "1.0"; }
-  #   ] null;w
+  defaultVersion =
+    let oneOf = a: v: builtins.elem v a; in
+    coqPackages.lib.switch coq.coq-version [
+      { case = oneOf [ "8.10" "8.11" "8.12" "8.13" "8.13.1" "8.14" "8.15" "8.16" "8.17" ];
+        out = "0.1.0"; }
+    ] null;
   release = {
-    "1.0".sha256 = "";
+    "0.1.0".sha256 = "";
   };
 
   src = ./.;
