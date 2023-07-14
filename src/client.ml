@@ -2,7 +2,12 @@ open Lwt
 open Cohttp
 open Cohttp_lwt_unix
 
-let addr = "http://127.0.0.1:8124"
+
+let addr =
+  let ip =
+    try Unix.getenv "ACTEMAIP"
+    with Not_found -> "localhost" in
+  Printf.sprintf "http://%s:8124" ip
 
 let make_req (cmd : string) (param : string) =
   let body = Cohttp_lwt.Body.of_string param in
