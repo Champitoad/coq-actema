@@ -22,7 +22,7 @@
   in {
     devShell.x86_64-linux = pkgs.mkShell {
       inputsFrom = [ coq-actema ];
-      packages = [ coq coq-actema ];
+      packages = [ coq coq-actema ocpkgs.ocaml-lsp ];
     };
     packages.x86_64-linux.default = coq-actema;
   };
