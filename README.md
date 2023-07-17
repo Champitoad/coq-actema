@@ -1,5 +1,16 @@
 # coq-actema
 
+## Prerequisites
+
+If you use `nix` there is nothing to do. Otherwise you will need to install
+some dependencies and set some environment variables manually.
+
+The environment variable APIDIR should be set to the build directory of dune
+for the backend of Actema:
+```bash
+export APIDIR=actema-desktop/prover/_build/default/libs/api
+```
+
 ## Build
 
 For some reason, the `dune` build of the `Loader.v` cannot load dynamically

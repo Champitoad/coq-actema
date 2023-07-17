@@ -7,7 +7,6 @@ lsp:
 
 # Import actema-desktop API
 
-APIDIR = actema-desktop/prover/_build/default/libs/api
 APIDIR_LOCAL = src
 
 APIMODS = fo_t fo_b logic_t logic_b utils
