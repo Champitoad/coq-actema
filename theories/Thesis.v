@@ -64,6 +64,7 @@ Section Surjective.
 Theorem surjective_inverse {A B : Type} (f : A -> B) (g : B -> A) : 
   inverse f g -> surjective f -> inverse g f.  
 Proof.
+  actema.
   unfold inverse, surjective.
   intros H1 H2 b.
   (* Tactic failure when trying to specialize H2 with b through DnD *)

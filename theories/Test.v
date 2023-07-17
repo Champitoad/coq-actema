@@ -1,5 +1,15 @@
 From Actema Require Import Loader.
 
+Section Foo.
+
+Definition foo {A : Type} (x : A) := 3.
+
+End Foo.
+
+Variable (A : Type).
+
+Goal forall (a : A), foo a = foo a. actema_force.
+
 Goal forall x, x = 3 -> x = 6 -> x = 1.
 actema_force.
 
