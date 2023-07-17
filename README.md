@@ -23,7 +23,7 @@ nix develop
 code .
 ```
 
-Otherwise you will need to perform the delicate work of `nix develop` (step 2) manually. Since this process is quite platform-dependent and error-prone, we will only suggest steps to follow, and probably miss some of them.
+Otherwise you will need to perform the delicate work of `nix develop` (step 2) manually. Since this process is quite platform-dependent and error-prone, we only suggest steps to follow, and probably miss some of them.
 
 ### Actema backend
 
