@@ -1,5 +1,9 @@
-{ lib, version ? null
-, coq, coqPackages, ocamlPackages, fetchurl, prover }:
+{ lib
+, version ? null
+, coq
+, coqPackages
+, ocamlPackages
+}:
 with lib;
 coqPackages.mkCoqDerivation {
   pname = "actema";
@@ -8,9 +12,12 @@ coqPackages.mkCoqDerivation {
   defaultVersion =
     let oneOf = a: v: builtins.elem v a; in
     coqPackages.lib.switch coq.coq-version [
-      { case = oneOf [ "8.10" "8.11" "8.12" "8.13" "8.13.1" "8.14" "8.15" "8.16" "8.17" ];
-        out = "0.1.0"; }
-    ] null;
+      {
+        case = oneOf [ "8.10" "8.11" "8.12" "8.13" "8.13.1" "8.14" "8.15" "8.16" "8.17" ];
+        out = "0.1.0";
+      }
+    ]
+      null;
   release = {
     "0.1.0".sha256 = "";
   };
@@ -18,11 +25,6 @@ coqPackages.mkCoqDerivation {
   src = ./.;
 
   mlPlugin = true;
-
-  preBuild =
-    let APIDIR = "${prover}/lib/ocaml/4.14.1/site-lib/prover/api"; in ''
-      cp ${APIDIR}/{fo_t,fo_b,logic_t,logic_b,utils}.{ml,mli} src/
-    '';
 
   buildInputs = [
     coqPackages.mathcomp-ssreflect
