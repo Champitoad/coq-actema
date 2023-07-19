@@ -14,15 +14,3 @@ the following commands:
 When updating the source directory, extra-dependencies can be installed using:
 
 	> opam install --working-dir --deps-only prover
-
-## Building
-
-The project comes with a Makefile. Simply type
-
-	> make build
-
-to build the project. This should create a file
-
-	_build/default/src/form2mathml.exe
-
-that you can run by executing `bin/form2mathml`.
