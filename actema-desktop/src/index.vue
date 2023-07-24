@@ -1,6 +1,7 @@
 <template>
     <div>
         <div class="container-fluid">
+            <!-- Top bar -->
             <div class="row" style="padding-top: 20px; padding-bottom: 20px; background-color: #eee;">
                 <button id="done" class="btn btn-info ml-2" @click="done" title="Done" :disabled="!connected">Done</button>
                 <div class="mx-auto"></div>
@@ -10,6 +11,7 @@
                     <button class="btn btn-outline-secondary btn-redo" @click="redo" :disabled="!connected" title="Undo (ctrl+y)"><i class="fas fa-redo"></i></button>
                 </div>
             </div>
+            <!-- Proof canvas -->
             <div class="row" style="height: calc(100vh - 78px)">
                 <div class="container-fluid pi-canvas" id="prover-canvas" style="padding-left: 0; padding-right: 0;">
                     <proof-canvas ref="proofCanvas"></proof-canvas>
@@ -25,6 +27,10 @@ import Vue from "vue";
 
 const vue2TouchEvents = require("vue2-touch-events");
 Vue.use(vue2TouchEvents);
+
+
+const keywords = ["induction", "fold"];
+
 
 export default {
     components: {
@@ -88,6 +94,7 @@ export default {
     data() {
         return {
             connected: false,
+            speechEnabled: false,
         };
     },
 
@@ -101,10 +108,12 @@ export default {
         },
 
         enterSelectionMode() {
+            /* TODO: Code pour activer le micro */
             this.$refs.proofCanvas.enterSelectMode();
         },
 
         exitSelectionMode() {
+            /* TODO: Code pour désactiver le micro */
             this.$refs.proofCanvas.exitSelectMode();
         },
 
