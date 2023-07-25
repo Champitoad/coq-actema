@@ -8,6 +8,7 @@ module.exports = defineConfig({
       mainProcessFile: 'src/background.js',
       rendererProcessFile: 'src/main.js',
       mainProcessWatch: ['src/server.js'],
+      mainProcessWatch: ['src/speech.js'],
     }
   }
 })

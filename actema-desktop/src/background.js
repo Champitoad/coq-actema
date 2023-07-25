@@ -6,7 +6,8 @@ import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
 import installExtension, { VUEJS_DEVTOOLS } from 'electron-devtools-installer'
 const isDevelopment = process.env.NODE_ENV !== 'production'
 
-import server from "./server"
+import server from "./server";
+import speech from "./speech";
 
 // Scheme must be registered before the app is ready
 protocol.registerSchemesAsPrivileged([
@@ -70,6 +71,7 @@ app.on('ready', async () => {
   }
   const win = await createWindow();
   server.launch(win);
+  speech.bindEvents(win);
 })
 
 // Exit cleanly on request from parent process in development mode.

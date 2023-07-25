@@ -6,7 +6,8 @@
                 <button id="done" class="btn btn-info ml-2" @click="done" title="Done" :disabled="!connected">Done</button>
                 <div class="mx-auto"></div>
                 <div class="buttons text-right mr-2">
-                    <button class="btn btn-outline-secondary btn-select" @click="toggleSelectionMode" :disabled="!connected" title="Undo (ctrl+z)"><i class="fas fa-mouse-pointer fa-sm"></i></button>
+                    <button class="btn btn-outline-secondary btn-speech" @click="toggleSpeechRecognition" :disabled="!connected" title="Toggle Speech Recognition"><i class="fas fa-microphone fa-sm"></i></button>
+                    <button class="btn btn-outline-secondary btn-select" @click="toggleSelectionMode" :disabled="!connected" title="Toggle Selection Mode (shift)"><i class="fas fa-mouse-pointer fa-sm"></i></button>
                     <button class="btn btn-outline-secondary btn-undo" @click="undo" :disabled="!connected" title="Undo (ctrl+z)"><i class="fas fa-undo"></i></button>
                     <button class="btn btn-outline-secondary btn-redo" @click="redo" :disabled="!connected" title="Undo (ctrl+y)"><i class="fas fa-redo"></i></button>
                 </div>
@@ -99,6 +100,17 @@ export default {
     },
 
     methods: {
+        toggleSpeechRecognition() {
+            if (this.speechEnabled) {
+                this.speechEnabled = false;
+                $(".btn-speech").removeClass("active");
+                window.ipcRenderer.send('stopSpeechRecognition');
+            } else {
+                this.speechEnabled = true;
+                $(".btn-speech").addClass("active");
+            }
+        },
+
         toggleSelectionMode() {
             if (this.$refs.proofCanvas.selectMode) {
                 this.exitSelectionMode();
@@ -108,12 +120,12 @@ export default {
         },
 
         enterSelectionMode() {
-            /* TODO: Code pour activer le micro */
+            /* TODO: code pour démarrer la reconnaissance vocale */
             this.$refs.proofCanvas.enterSelectMode();
         },
 
         exitSelectionMode() {
-            /* TODO: Code pour désactiver le micro */
+            /* TODO: code pour arrêter la reconnaissance vocale */
             this.$refs.proofCanvas.exitSelectMode();
         },
 
