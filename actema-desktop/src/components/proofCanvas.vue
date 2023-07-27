@@ -900,6 +900,11 @@ export default {
             this.qed = true;
         },
 
+        getContextualActions() {
+            let query = { kind: "ctxt", selection: this.getActiveSelection() };
+            return this.proofState.actions(query);
+        },
+
         addMenuIcon(faId) {
             if (!this.menuIcons.includes(faId)) {
                 let icon = document.createElement("i");
@@ -924,11 +929,8 @@ export default {
         },
 
         populateActionsMenu() {
-            let query = { kind: "ctxt", selection: this.getActiveSelection() };
-            let actions = this.proofState.actions(query);
-
             let $this = this;
-            actions.forEach((a, i) => {
+            this.getContextualActions().forEach((a, i) => {
                 if (a.ui.kind == 'ctxt') {
                     console.log(a);
                     $this.addActionItem(i+1, a.icon, a.description, a.action);
