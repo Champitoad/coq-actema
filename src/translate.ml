@@ -216,7 +216,6 @@ module Export = struct
 
   and add_func ?(strict = false) name sy ty (e : destenv) : unit Dest.t =
     let* sig_ = dest_functy (e, ty) in
-    Log.str "pouet";
     if strict && List.length (fst sig_) = 0 then destKO else
     let* sign = get in
     let symbols = SymbolNames.add sy name sign.symbols in

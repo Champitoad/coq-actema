@@ -59,7 +59,9 @@ src/utils.ml*
 actema.proofs
 theories/fundamental-arithmetics
 theories/flowers
+theories/thesis
 theories/dndinv.v
+/flake.alectryon.nix
 
 .direnv
 .nix
