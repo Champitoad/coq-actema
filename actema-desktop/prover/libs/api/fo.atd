@@ -43,16 +43,19 @@ type term = [F of form | E of expr]
 (* -------------------------------------------------------------------- *)
 (** Environments *)
 
+(* Body of a variable declaration, holding its type and eventually an expression
+   in the case of a local definition *)
 type bvar = (type_ * expr option)
 
 type env = {
-  env_sort      : name                       list;
-  env_prp       : (name * arity            ) list;
-  env_fun       : (name * sig_             ) list;
+  env_sort      : name                       list; (* Sorts, i.e. atomic types *)
+  env_prp       : (name * arity            ) list; (* Predicate symbols *)
+  env_fun       : (name * sig_             ) list; (* Function symbols *)
   env_sort_name : (name * name             ) list;
   env_prp_name  : (name * name             ) list;
   env_fun_name  : (name * name             ) list;
-  env_var       : (name * bvar             ) list;
+  env_var       : (name * bvar             ) list; (* Variable declarations *)
 }
 
-type lenv = (name * type_) list
+(* Local environment, only maps abstract variables to their type *)
+type lenv = (name * type_) list 
