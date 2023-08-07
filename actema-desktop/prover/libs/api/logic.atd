@@ -31,22 +31,23 @@ type term <ocaml from="Fo"> = abstract
 (** Environments *)
 
 type bvar <ocaml from="Fo"> = abstract
+type varenv <ocaml from="Fo"> = abstract
 type env <ocaml from="Fo"> = abstract
 type lenv <ocaml from="Fo"> = abstract
 
 (* -------------------------------------------------------------------- *)
 (** Goals *)
 
-(* Unique identifiers *)
+(* Unique identifier *)
 type uid = string
 
-(* Hypotheses *)
+(* Hypothesis *)
 type hyp = {
   h_id : uid;
   h_form : form;
 }
 
-(* Goals *)
+(* Goal *)
 type goal = {
   g_env : env;
   g_hyps : hyp list;
@@ -57,9 +58,9 @@ type goals = goal list
 
 type lgoal = (hyp list * form)
 
-(* Abstract goals, without the signature *)
+(* Abstract goal, without the signature *)
 type agoal = {
-  a_vars : (name * bvar) list;
+  a_vars : varenv;
   a_hyps : hyp list;
   a_concl : form;
 }
