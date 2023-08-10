@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { connect } from 'http2';
 
 // "ipc" in "ipcMain" stands for "Inter-Process Communication": this is the
 // object that enables communication between the Renderer process (the browser
@@ -10,6 +11,10 @@ import { ipcMain } from 'electron';
 // mode in the interface.
 
 const net = require('net');
+const Port = 42000;
+var client;
+var State = 0;
+
 
 export default {
     bindEvents: function (win) {
@@ -27,15 +32,72 @@ export default {
             // win.webContents.send('vocalCommand', <command>), où <command> est
             // la string en question.
 
-            console.log("Requesting vocal command...")
+            /*
+            client = new net.Socket();
+            client.connect({ port: Port, host: "localhost" });
+            client.on("data", (data) => {
+                var s = data.toString("utf-8");
+                console.log(s, levenshteinDistance(s, "induction"));
+              })
+            client.write('test!');
+            */
+
+
+
+            console.log("selected smth");
         });
 
         // Bind a listener to a new event named "stopListening", which instructs
         // the speech daemon to stop trying to recognize sentences.
         ipcMain.on('stopSpeechRecognition', _ => {
             // TODO
+
+            /*
+            client = new net.Socket();
+            client.connect({ port: Port, host: "localhost" });
+            client.on("data", (data) => {
+                console.log(data.toString("utf-8"))
+              })
+            client.write('stop!');
+            */
+           State = 0;
+
             
             console.log("Stopping speech recognition");
+        });
+
+        ipcMain.on('startSpeechRecognition', _ => {
+          /*
+            // TODO
+            client = new net.Socket();
+            client.connect({ port: Port, host: "localhost" });
+            client.on("data", (data) => {
+                console.log(data.toString("utf-8"))
+              })
+            client.write('start!');
+          */
+
+            State = 1;
+            client = new net.Socket();
+            client.connect({ port: Port, host: "localhost" });
+            client.on("data", (data) => {
+              if (State){
+                var s = data.toString("utf-8");
+                console.log(s);
+                win.webContents.send('TEST', s);
+                /*
+                const arr = [];
+                var n = search_box.length;
+                for (let i = 0; i < n; i++) {
+                  arr[i] = levenshteinDistance(s, search_box[i]);
+                }
+                console.log(arr);*/
+              }
+              })
+            client.write('start and listen!');
+
+            
+            console.log("Starting speech recognition");
         });
     }
 }

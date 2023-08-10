@@ -30,8 +30,30 @@ const vue2TouchEvents = require("vue2-touch-events");
 Vue.use(vue2TouchEvents);
 
 
-const keywords = ["induction", "fold"];
+//https://www.30secondsofcode.org/js/s/levenshtein-distance/
+const levenshteinDistance = (s, t) => {
+    if (!s.length) return t.length;
+    if (!t.length) return s.length;
+    const arr = [];
+    for (let i = 0; i <= t.length; i++) {
+      arr[i] = [i];
+      for (let j = 1; j <= s.length; j++) {
+        arr[i][j] =
+          i === 0
+            ? j
+            : Math.min(
+                arr[i - 1][j] + 1,
+                arr[i][j - 1] + 1,
+                arr[i - 1][j - 1] + (s[j - 1] === t[i - 1] ? 0 : 1)
+              );
+      }
+    }
+    return arr[t.length][s.length];
+  };
 
+//https://gist.github.com/janosh/099bd8061f15e3fbfcc19be0e6b670b9
+const argFact = (compareFn) => (array) => array.map((el, idx) => [el, idx]).reduce(compareFn)[1]
+const argMin = argFact((max, el) => (el[0] < max[0] ? el : max))
 
 export default {
     components: {
@@ -56,6 +78,35 @@ export default {
         });
         window.ipcRenderer.on("error", (_, msg) => {
             this.$refs.proofCanvas.showErrorMessage(msg);
+        });
+
+        window.ipcRenderer.on("TEST", (_, s) => {
+            console.log(s);
+            var l = this.$refs.proofCanvas.getContextualActions();
+            var n = l.length;
+            if (n){
+
+
+                
+                const keywords = [];
+                    
+                    for (let i = 0; i < n; i++) {
+                        keywords[i] = l[i].description.toLowerCase();
+                    }
+
+                const arr = [];
+                    var n = keywords.length;
+                    for (let i = 0; i < n; i++) {
+                    arr[i] = levenshteinDistance(s, keywords[i]);
+                    }
+                    console.log(arr);
+
+                    var elem = l[argMin(arr)];
+                    console.log(elem.description.toLowerCase());
+                    this.$refs.proofCanvas.sendActionCode(elem.action);
+                    
+            }
+
         });
     },
     updated() {
@@ -108,6 +159,7 @@ export default {
             } else {
                 this.speechEnabled = true;
                 $(".btn-speech").addClass("active");
+                window.ipcRenderer.send('startSpeechRecognition');
             }
         },
 
@@ -120,12 +172,10 @@ export default {
         },
 
         enterSelectionMode() {
-            /* TODO: code pour démarrer la reconnaissance vocale */
             this.$refs.proofCanvas.enterSelectMode();
         },
 
         exitSelectionMode() {
-            /* TODO: code pour arrêter la reconnaissance vocale */
             this.$refs.proofCanvas.exitSelectMode();
         },
 
