@@ -72,6 +72,7 @@ app.on('ready', async () => {
   const win = await createWindow();
   server.launch(win);
   speech.bindEvents(win);
+  speech.startDaemon(win);
 })
 
 // Exit cleanly on request from parent process in development mode.
