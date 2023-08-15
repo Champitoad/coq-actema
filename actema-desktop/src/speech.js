@@ -17,6 +17,9 @@ var State = 0;
 
 
 export default {
+    startDaemon: function (win) {
+      // TODO
+    },
     bindEvents: function (win) {
         // Bind a listener to a new event named "vocalCommand", which just sends
         // back the sentence spoken by the user to the Renderer. The logic of
