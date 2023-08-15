@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import time, logging
 from datetime import datetime
 import threading, collections, queue, os, os.path
@@ -19,24 +21,17 @@ import asyncio
 
 from threading import Event
 
+import os
+
 
 logging.basicConfig(level=20)
 
 
-active = 1
-model_path = "model/deepspeech-0.9.3-models.pbmm"
-scorer_path = "model/deepspeech-0.9.3-models.scorer"
+# We need a model and a scorer for the programm to work:
+# Link: https://github.com/mozilla/DeepSpeech/releases/tag/v0.9.3
+model_path = "speech/" + "model/deepspeech-0.9.3-models.pbmm"
+scorer_path = "speech/" + "model/deepspeech-0.9.3-models.scorer"
 PORT = 42000
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -92,7 +87,6 @@ class Audio(object):
         Microphone may not support our native processing sampling rate, so
         resample from input_rate to RATE_PROCESS here for webrtcvad and
         deepspeech
-
         Args:
             data (binary): Input audio stream
             input_rate (int): Input audio rate to resample from
@@ -272,57 +266,40 @@ if __name__ == '__main__':
 
     sock.listen(1)
 
-    if True:
-        if True:
 
-            print('waiting for a connection')
-            connection, client_address = sock.accept()
-            event = Event()
+
+    print('waiting for a connection')
+    connection, client_address = sock.accept()
+    event = Event()
+    try:
+        print(sys.stderr, 'connection from', client_address)
+
+        # Receive the data in small chunks and retransmit it
+        full_data=""
+        while "!" not in full_data:
+            print("waiting_part")
+            data = connection.recv(16)
+            print(sys.stderr, f'received \"{data}\"')
+            data = data.decode()
+            full_data+=data
+        print(sys.stderr, 'no more data from', client_address)
+
+        if full_data == "start and listen!":
             try:
-                print(sys.stderr, 'connection from', client_address)
-
-                # Receive the data in small chunks and retransmit it
-                full_data=""
-                while "!" not in full_data:
-                    print("waiting_part")
-                    data = connection.recv(16)
-                    print(sys.stderr, f'received \"{data}\"')
-                    data = data.decode()
-                    full_data+=data
-                print(sys.stderr, 'no more data from', client_address)
-
-                if full_data == "test!" and active:
-                    event.set()
-                    event = Event()
-                    x = threading.Thread(target=main_loop, args=(ARGS, connection, client_address, event, ))
-                    x.start()
-                elif full_data == "start and listen!":
-                    active = True
-                    event.set()
-                    event = Event()
-                    x = threading.Thread(target=main_loop, args=(ARGS, connection, client_address, event, ))
-                    x.start()
+                assert(os.path.exists(model_path))
+                assert(os.path.exists(scorer_path))
+            except:
+                connection.sendall(os.getcwd().encode())
 
 
-                elif full_data == "listen!" and active:
-                    event.set()
-                    event = Event()
-                    x = threading.Thread(target=main_loop, args=(ARGS, connection, client_address, event, ))
-                    x.start()
-                elif full_data == "stop!":
-                    print("STOP!!")
-                    event.set()
-                    active = False
-                    connection.sendall("done!".encode())
-                elif full_data == "start!":
-                    active = True
-                    #connection.sendall("done!".encode())
-                else:
-                    connection.sendall("not recognized!".encode())
+            active = True
+            event.set()
+            event = Event()
+            x = threading.Thread(target=main_loop, args=(ARGS, connection, client_address, event, ))
+            x.start()
+        else:
+            connection.sendall("not recognized!".encode())
                 
                     
-            finally:
-                pass
-
-        else:
-            event.set()
+    finally:
+        pass

@@ -80,30 +80,32 @@ export default {
             this.$refs.proofCanvas.showErrorMessage(msg);
         });
 
-        window.ipcRenderer.on("TEST", (_, s) => {
-            console.log(s);
-            var l = this.$refs.proofCanvas.getContextualActions();
-            var n = l.length;
+        window.ipcRenderer.on('Exectute Command from String', (_, s) => {
+            console.log("Will execute an action based on the string: ", s);
+            // We get all possible actions based on the box the user selected
+            var Actions = this.$refs.proofCanvas.getContextualActions();
+            var n = Actions.length;
+            // We need at least one action to execute
             if (n){
-
-
-                
+                // We first want to only recover the description of the actions
                 const keywords = [];
-                    
                     for (let i = 0; i < n; i++) {
-                        keywords[i] = l[i].description.toLowerCase();
+                        keywords[i] = Actions[i].description.toLowerCase();
                     }
 
-                const arr = [];
+                // Then we compute the list of distances from 's' to every element of 'keywords'
+                const distances = [];
                     var n = keywords.length;
                     for (let i = 0; i < n; i++) {
-                    arr[i] = levenshteinDistance(s, keywords[i]);
+                        distances[i] = levenshteinDistance(s, keywords[i]);
                     }
-                    console.log(arr);
+                    console.log("The list of distances: ", distances);
 
-                    var elem = l[argMin(arr)];
-                    console.log(elem.description.toLowerCase());
-                    this.$refs.proofCanvas.sendActionCode(elem.action);
+                    // Finally we get the command with the lowest levenshtein Distance from s
+                    var Element = Actions[argMin(distances)];
+                    console.log("The action we will execute: ", Element.description.toLowerCase());
+                    // We execute the action associated to the action we selected
+                    this.$refs.proofCanvas.sendActionCode(Element.action);
                     
             }
 
