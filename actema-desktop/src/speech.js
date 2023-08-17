@@ -28,8 +28,21 @@ let spawn = require("child_process").spawn;
 
 
 export default {
+    // When starting the programm
     startDaemon: function (win) {
-      // TODO
+        // We run the python programm that will listen to the user
+        exec("python3 speech/server_listen.py", (error, stdout, stderr) => {
+          if (error) {
+              console.log(`[ERROR] openCashDrawer: ${error.message}`);
+              return;
+          }
+          
+          if (stderr) {
+              console.log(`[STDERROR] openCashDrawer: ${stderr}`);
+              return;
+          }
+          console.log(`openCashDrawer: ${stdout}`); // Output response from the terminal
+          });
     },
     bindEvents: function (win) {
         // Bind a listener to a new event named "vocalCommand", which just sends
@@ -48,34 +61,14 @@ export default {
 
         ipcMain.on('startSpeechRecognition', _ => {
 
-
-
-          
-          
-          if (State == -1){
-            exec("python3 speech/server_listen.py", (error, stdout, stderr) => {
-              if (error) {
-                  console.log(`[ERROR] openCashDrawer: ${error.message}`);
-                  return;
-              }
-              
-              if (stderr) {
-                  console.log(`[STDERROR] openCashDrawer: ${stderr}`);
-                  return;
-              }
-          
-              console.log(`openCashDrawer: ${stdout}`); // Output response from the terminal
-              });
-            }
-        
-
-
             State = 1;
             Server_socket = new net.Socket();
             Server_socket.connect({ port: Port, host: "localhost" });
             
             // Executed when receiving back data from the server
             Server_socket.on("data", (data) => {
+              
+              // This will only be executed when the microphone button is on
               if (State){
                 var s = data.toString("utf-8");
                 console.log("received: ", s);

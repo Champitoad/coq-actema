@@ -217,8 +217,7 @@ def main(ARGS, connection, client_address, event):
                 if spinner: spinner.stop()
                 logging.debug("end utterence")
                 text = stream_context.finishStream()
-                text += "!"
-                if len(text) > 1:
+                if len(text) > 0:
                     print("Recognized:", text)
                     connection.sendall(text.encode())
                 return 1

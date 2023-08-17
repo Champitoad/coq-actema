@@ -4,7 +4,9 @@
             <!-- Top bar -->
             <div class="row" style="padding-top: 20px; padding-bottom: 20px; background-color: #eee;">
                 <button id="done" class="btn btn-info ml-2" @click="done" title="Done" :disabled="!connected">Done</button>
-                <div class="mx-auto"></div>
+                <div class="mx-auto">
+                    <p class="VocalCommandBar"> Vocal command </p>
+                </div>
                 <div class="buttons text-right mr-2">
                     <button class="btn btn-outline-secondary btn-speech" @click="toggleSpeechRecognition" :disabled="!connected" title="Toggle Speech Recognition"><i class="fas fa-microphone fa-sm"></i></button>
                     <button class="btn btn-outline-secondary btn-select" @click="toggleSelectionMode" :disabled="!connected" title="Toggle Selection Mode (shift)"><i class="fas fa-mouse-pointer fa-sm"></i></button>
@@ -85,13 +87,15 @@ export default {
             // We get all possible actions based on the box the user selected
             var Actions = this.$refs.proofCanvas.getContextualActions();
             var n = Actions.length;
-            // We need at least one action to execute
-            if (n){
+        
                 // We first want to only recover the description of the actions
                 const keywords = [];
                     for (let i = 0; i < n; i++) {
                         keywords[i] = Actions[i].description.toLowerCase();
                     }
+                    keywords[n]="use cancel";
+                    keywords[n+1]="use redo";
+
 
                 // Then we compute the list of distances from 's' to every element of 'keywords'
                 const distances = [];
@@ -99,16 +103,29 @@ export default {
                     for (let i = 0; i < n; i++) {
                         distances[i] = levenshteinDistance(s, keywords[i]);
                     }
+                    
                     console.log("The list of distances: ", distances);
 
-                    // Finally we get the command with the lowest levenshtein Distance from s
-                    var Element = Actions[argMin(distances)];
-                    console.log("The action we will execute: ", Element.description.toLowerCase());
-                    // We execute the action associated to the action we selected
-                    this.$refs.proofCanvas.sendActionCode(Element.action);
-                    
-            }
-
+                    let i = argMin(distances);
+                    //To prevent default choices, the value is just something I tested and found good
+                    if (distances[i]<=keywords[i].length-2){
+                        console.log("The action we will execute: ", keywords[i]);
+                        document.querySelector(".VocalCommandBar").textContent = keywords[i];
+                        if (i>=n-2){
+                            if (i==n-2){
+                                this.undo();
+                            }
+                            else if(i==n-1){
+                                this.redo();
+                            }
+                        }
+                        else{
+                            // Finally we get the command with the lowest levenshtein Distance from s
+                            var Element = Actions[i];
+                            // We execute the action associated to the action we selected
+                            this.$refs.proofCanvas.sendActionCode(Element.action);
+                        }
+                    }
         });
     },
     updated() {
@@ -266,5 +283,12 @@ div.qed {
 .btn:focus {
     box-shadow: none !important;
     outline: none !important;
+}
+
+.VocalCommandBar{
+    border: 2px solid;
+    background: rgba(100, 200, 255, 0.5);
+    border-radius: 10px 10px 10px 10px;
+    padding: 3px;
 }
 </style>
