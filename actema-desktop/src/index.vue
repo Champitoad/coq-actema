@@ -5,7 +5,7 @@
             <div class="row" style="padding-top: 20px; padding-bottom: 20px; background-color: #eee;">
                 <button id="done" class="btn btn-info ml-2" @click="done" title="Done" :disabled="!connected">Done</button>
                 <div class="mx-auto">
-                    <p class="VocalCommandBar"> Vocal command </p>
+                    <p class="VocalCommandBar"> Use the microphone button to use vocal commands </p>
                 </div>
                 <div class="buttons text-right mr-2">
                     <button class="btn btn-outline-secondary btn-speech" @click="toggleSpeechRecognition" :disabled="!connected" title="Toggle Speech Recognition"><i class="fas fa-microphone fa-sm"></i></button>
@@ -95,6 +95,7 @@ export default {
                     }
                     keywords[n]="use cancel";
                     keywords[n+1]="use redo";
+                    keywords[n+2]="use menu";
 
 
                 // Then we compute the list of distances from 's' to every element of 'keywords'
@@ -111,12 +112,19 @@ export default {
                     if (distances[i]<=keywords[i].length-2){
                         console.log("The action we will execute: ", keywords[i]);
                         document.querySelector(".VocalCommandBar").textContent = keywords[i];
-                        if (i>=n-2){
-                            if (i==n-2){
+                        if (i>=n-3){
+                            if (i==n-3){
                                 this.undo();
                             }
-                            else if(i==n-1){
+                            else if(i==n-2){
                                 this.redo();
+                            }
+                            else if(i==n-1){
+                                this.$refs.proofCanvas.actionsMenu.x = (this.$refs.proofCanvas.actionsMenu.size / 2);
+                                this.$refs.proofCanvas.actionsMenu.y = (this.$refs.proofCanvas.actionsMenu.size / 2);
+            
+                                this.$refs.proofCanvas.populateActionsMenu();
+                                this.$refs.proofCanvas.$refs.actionsMenu.open();
                             }
                         }
                         else{
