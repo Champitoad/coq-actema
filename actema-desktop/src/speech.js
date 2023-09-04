@@ -17,21 +17,24 @@ const { exec } = require("child_process");
 // We will use the net module to establish a tcp connection between electron and 
 // the python server which listen to the user's microphone
 const net = require('net');
-const Port = 42000;
+const Port = Math.floor(Math.random() * (60000 - 40000) + 40000);
+console.log(Port);
 var Server_socket;
 // 'State' is the variable we use to determine whether we listen to the user or not
 // State==0: Speech recognition is off
 // State==1: Speech recognition is on
 var State = -1;
 
-let spawn = require("child_process").spawn;
 
 
 export default {
     // When starting the programm
     startDaemon: function (win) {
+        console.log(Port);
+      
+
         // We run the python programm that will listen to the user
-        exec("python3 speech/server_listen.py", (error, stdout, stderr) => {
+        exec("python3 speech/server_listen.py -p " + Port.toString(), (error, stdout, stderr) => {
           if (error) {
               console.log(`[ERROR] openCashDrawer: ${error.message}`);
               return;

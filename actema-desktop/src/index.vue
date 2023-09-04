@@ -6,6 +6,7 @@
                 <button id="done" class="btn btn-info ml-2" @click="done" title="Done" :disabled="!connected">Done</button>
                 <div class="mx-auto">
                     <p class="VocalCommandBar"> Use the microphone button to use vocal commands </p>
+                    <input type="text" class="VocalTextBar"/>
                 </div>
                 <div class="buttons text-right mr-2">
                     <button class="btn btn-outline-secondary btn-speech" @click="toggleSpeechRecognition" :disabled="!connected" title="Toggle Speech Recognition"><i class="fas fa-microphone fa-sm"></i></button>
@@ -57,6 +58,8 @@ const levenshteinDistance = (s, t) => {
 const argFact = (compareFn) => (array) => array.map((el, idx) => [el, idx]).reduce(compareFn)[1]
 const argMin = argFact((max, el) => (el[0] < max[0] ? el : max))
 
+
+
 export default {
     components: {
         ProofCanvas,
@@ -83,57 +86,7 @@ export default {
         });
 
         window.ipcRenderer.on('Exectute Command from String', (_, s) => {
-            console.log("Will execute an action based on the string: ", s);
-            // We get all possible actions based on the box the user selected
-            var Actions = this.$refs.proofCanvas.getContextualActions();
-            var n = Actions.length;
-        
-                // We first want to only recover the description of the actions
-                const keywords = [];
-                    for (let i = 0; i < n; i++) {
-                        keywords[i] = Actions[i].description.toLowerCase();
-                    }
-                    keywords[n]="use cancel";
-                    keywords[n+1]="use redo";
-                    keywords[n+2]="use menu";
-
-
-                // Then we compute the list of distances from 's' to every element of 'keywords'
-                const distances = [];
-                    var n = keywords.length;
-                    for (let i = 0; i < n; i++) {
-                        distances[i] = levenshteinDistance(s, keywords[i]);
-                    }
-                    
-                    console.log("The list of distances: ", distances);
-
-                    let i = argMin(distances);
-                    //To prevent default choices, the value is just something I tested and found good
-                    if (distances[i]<=keywords[i].length-2){
-                        console.log("The action we will execute: ", keywords[i]);
-                        document.querySelector(".VocalCommandBar").textContent = keywords[i];
-                        if (i>=n-3){
-                            if (i==n-3){
-                                this.undo();
-                            }
-                            else if(i==n-2){
-                                this.redo();
-                            }
-                            else if(i==n-1){
-                                this.$refs.proofCanvas.actionsMenu.x = (this.$refs.proofCanvas.actionsMenu.size / 2);
-                                this.$refs.proofCanvas.actionsMenu.y = (this.$refs.proofCanvas.actionsMenu.size / 2);
-            
-                                this.$refs.proofCanvas.populateActionsMenu();
-                                this.$refs.proofCanvas.$refs.actionsMenu.open();
-                            }
-                        }
-                        else{
-                            // Finally we get the command with the lowest levenshtein Distance from s
-                            var Element = Actions[i];
-                            // We execute the action associated to the action we selected
-                            this.$refs.proofCanvas.sendActionCode(Element.action);
-                        }
-                    }
+            this.executeVocalCommand(s);
         });
     },
     updated() {
@@ -161,6 +114,15 @@ export default {
                 // shift
                 self.enterSelectionMode();
             }
+
+            if (e.key == "p" && e.ctrlKey) {
+                // ctrl+p
+                if ($('.VocalTextBar').is(":focus")) {
+                    var s = document.querySelector(".VocalTextBar").value;
+                    console.log(s);
+                    self.executeVocalCommand(s);
+                }
+            }
         });
 
         $(document).keyup(function (e) {
@@ -174,6 +136,23 @@ export default {
         return {
             connected: false,
             speechEnabled: false,
+            // I used cancel instead of undo since redo and undo are close, the speech recognition would fail
+            // Here we can create commands:
+            Commands:{
+                "use cancel":()=>{
+                    this.undo();
+                },
+                "use redo":()=>{
+                    this.redo();
+                },
+                "use menu":()=>{
+                    this.$refs.proofCanvas.$refs.actionsMenu.close()
+                    this.$refs.proofCanvas.actionsMenu.x = (this.$refs.proofCanvas.actionsMenu.size / 2);
+                        
+                    this.$refs.proofCanvas.populateActionsMenu();
+                    this.$refs.proofCanvas.$refs.actionsMenu.open();
+                }
+            }
         };
     },
 
@@ -188,6 +167,52 @@ export default {
                 $(".btn-speech").addClass("active");
                 window.ipcRenderer.send('startSpeechRecognition');
             }
+        },
+        executeVocalCommand(s){
+            console.log("Will execute an action based on the string: ", s);
+            // We get all possible actions based on the box the user selected
+            var Actions = this.$refs.proofCanvas.getContextualActions();
+            var n = Actions.length;
+        
+                // We first want to only recover the description of the actions
+                const keywords = [];
+                    for (let i = 0; i < n; i++) {
+                        keywords[i] = Actions[i].description.toLowerCase();
+                    }
+                    // j correspond to the number of commands we will now be adding
+                    var j = Object.keys(this.Commands);
+                    var m = j.length;
+                    console.log(m);
+                    for (let i = 0; i < m; i++) {
+                        keywords[n+i] = j[i];
+                    }
+
+                // Then we compute the list of distances from 's' to every element of 'keywords'
+                const distances = [];
+                    var N = keywords.length;
+                    console.log(N);
+                    for (let i = 0; i < N; i++) {
+                        distances[i] = levenshteinDistance(s, keywords[i]);
+                    }
+                    
+                    console.log("The list of distances: ", distances);
+
+                    let i = argMin(distances);
+                    //To prevent default choices, the value is just something I tested and found good
+                    if (distances[i]<=keywords[i].length-2){
+                        console.log("The action we will execute: ", keywords[i]);
+                        document.querySelector(".VocalCommandBar").textContent = keywords[i];
+                        if (i>=n){
+                            var k = i-n;
+                            this.Commands[j[k]]();
+                        }
+                        else{
+                            // Finally we get the command with the lowest levenshtein Distance from s
+                            var Element = Actions[i];
+                            // We execute the action associated to the action we selected
+                            this.$refs.proofCanvas.sendActionCode(Element.action);
+                        }
+                    }
         },
 
         toggleSelectionMode() {

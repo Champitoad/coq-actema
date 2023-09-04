@@ -1,4 +1,7 @@
 #!/usr/bin/python3
+# This code is mostly based on that one: https://github.com/mozilla/DeepSpeech-examples/blob/r0.9/mic_vad_streaming/mic_vad_streaming.py
+
+
 
 import time, logging
 from datetime import datetime
@@ -17,9 +20,6 @@ import sys
 import logging
 import threading
 import time
-import asyncio
-
-from threading import Event
 
 import os
 
@@ -31,7 +31,7 @@ logging.basicConfig(level=20)
 # Link: https://github.com/mozilla/DeepSpeech/releases/tag/v0.9.3
 model_path = "speech/" + "model/deepspeech-0.9.3-models.pbmm"
 scorer_path = "speech/" + "model/deepspeech-0.9.3-models.scorer"
-PORT = 42000
+
 
 
 
@@ -176,14 +176,19 @@ class VADAudio(Audio):
                     yield None
                     ring_buffer.clear()
 
-def main_loop(ARGS, connection, client_address, event):
+def main_loop(ARGS, connection, client_address):
     try:
         while True:
-            main(ARGS, connection, client_address, event)
+            try:
+                main(ARGS, connection, client_address)
+            finally:
+                #Often we had some errors after the programm was opened for too much time
+
+                print("(next) Error skipped, continuing")
     finally:
         connection.close()
 
-def main(ARGS, connection, client_address, event):
+def main(ARGS, connection, client_address):
         try:
          print('Initializing model...')
          #logging.info("ARGS.model: %s", ARGS.model)
@@ -205,9 +210,6 @@ def main(ARGS, connection, client_address, event):
          stream_context = model.createStream()
          wav_data = bytearray()
          for frame in frames:
-             if (not active) or (event.is_set()):
-                 print("breaking")
-                 return 0
 
              if frame is not None:
                  if spinner: spinner.start()
@@ -252,7 +254,12 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--rate', type=int, default=DEFAULT_SAMPLE_RATE,
                         help=f"Input device sample rate. Default: {DEFAULT_SAMPLE_RATE}. Your device may require 44100.")
 
+    parser.add_argument('-p', '--port', type=int, default=DEFAULT_SAMPLE_RATE,
+                        help=f"The port on which the connection will be established")
+
     ARGS = parser.parse_args()
+
+    PORT = ARGS.port
     
     # Create a TCP/IP socket
 
@@ -269,12 +276,11 @@ if __name__ == '__main__':
 
     print('waiting for a connection')
     connection, client_address = sock.accept()
-    event = Event()
     try:
         print(sys.stderr, 'connection from', client_address)
 
         # Receive the data in small chunks and retransmit it
-        full_data=""
+        full_data="" # In there we will store the entire message
         while "!" not in full_data:
             print("waiting_part")
             data = connection.recv(16)
@@ -284,17 +290,7 @@ if __name__ == '__main__':
         print(sys.stderr, 'no more data from', client_address)
 
         if full_data == "start and listen!":
-            try:
-                assert(os.path.exists(model_path))
-                assert(os.path.exists(scorer_path))
-            except:
-                connection.sendall(os.getcwd().encode())
-
-
-            active = True
-            event.set()
-            event = Event()
-            x = threading.Thread(target=main_loop, args=(ARGS, connection, client_address, event, ))
+            x = threading.Thread(target=main_loop, args=(ARGS, connection, client_address, ))
             x.start()
         else:
             connection.sendall("not recognized!".encode())
