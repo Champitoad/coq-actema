@@ -199,11 +199,11 @@
       "locked": {
         "lastModified": 1,
         "narHash": "sha256-/LZ5iCvW9uJAbGCQ9l9+MHEWRRTDqL5HKp/wTEbLG0E=",
-        "path": "/nix/store/wg8jaa2flhcbk58fy2xh3rcg4n12pnf1-source/actema-desktop/prover",
+        "path": "/nix/store/l2myhr0a4j4ny07a6lr2wz7k4zfpbbkm-source/actema-desktop/prover",
         "type": "path"
       },
       "original": {
-        "path": "/nix/store/wg8jaa2flhcbk58fy2xh3rcg4n12pnf1-source/actema-desktop/prover",
+        "path": "/nix/store/l2myhr0a4j4ny07a6lr2wz7k4zfpbbkm-source/actema-desktop/prover",
         "type": "path"
       }
     },
