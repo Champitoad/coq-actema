@@ -699,27 +699,25 @@ module Import = struct
     List.map (fun sort_sy -> tdyn (symbol sort_sy)) |>
     Trm.of_list (tdyn_ty ()) identity
 
-  let sort_ty ts (s : EConstr.t) : EConstr.t =
+  let sort_ty (s : EConstr.t) : EConstr.t =
     let name = Names.Constant.make1 (kname "sort") in
     let ty = EConstr.mkConst name in
-    EConstr.mkApp (ty, [| ts; s |])
+    EConstr.mkApp (ty, [| s |])
 
-  let env_ty ts () : EConstr.t =
+  let env_ty () : EConstr.t =
     let name = Names.Constant.make1 (kname "env") in
-    let ty = EConstr.mkConst name in
-    EConstr.mkApp (ty, [| ts |])
+    EConstr.mkConst name
   
-  let clos_ty ts () : EConstr.t =
+  let clos_ty () : EConstr.t =
     let open EConstr in
-    let sort_s = sort_ty ts (Trm.var "s") in
-    mkArrowR (env_ty ts ()) (mkArrowR (env_ty ts ()) sort_s)
+    let sort_s = sort_ty (Trm.var "s") in
+    mkArrowR (env_ty ()) (mkArrowR (env_ty ()) sort_s)
   
-  let inst1_ty ts () : EConstr.t =
+  let inst1_ty () : EConstr.t =
     let name = Names.Constant.make1 (kname "inst1") in
-    let ty = EConstr.mkConst name in
-    EConstr.mkApp (ty, [| ts |])
+    EConstr.mkConst name
   
-  let rec type_ (sign : FOSign.t)
+  let rec typ_ (sign : FOSign.t)
       (ty : Fo_t.type_) : EConstr.t =
     match ty with
     | `TVar x ->
@@ -741,21 +739,18 @@ module Import = struct
         EConstr.mkApp (head, Array.of_list args)
 
   let rec expr_itrace (sign : FOSign.t)
-      (env : Logic_t.env) (lenv : Logic_t.lenv) (side : int)
+      (env : Logic_t.env) (lenv : Logic_t.lenv)
       (e : Fo_t.expr) : EConstr.t =
     match e with
     | `EVar x ->
         if LEnv.exists lenv x then begin
-          let s = sort_index sign (infer_sort (Utils.Vars.push_lenv env lenv) e) in
-          let index : int =
-            List.(lenv |> split |> fst |> nth_index 0 x) in
-          let env_index = if side = 0 then 2 else 1 in
-          EConstr.(mkApp (mkRel env_index, Trm.[| nat_of_int s; nat_of_int index |]))
+          let index = List.(lenv |> split |> fst |> nth_index 0 x) in
+          EConstr.(mkRel index)
         end else
           Trm.var x
     | `EFun (f, args) ->
         let head = symbol (FOSign.SymbolNames.dnif f sign.symbols) in
-        let args = List.map (expr_itrace sign env lenv side) args in
+        let args = List.map (expr_itrace sign env lenv) args in
         EConstr.mkApp (head, Array.of_list args)
   
   let rec form (sign : FOSign.t)
@@ -766,7 +761,7 @@ module Import = struct
     | `FPred ("_EQ", [t1; t2]) ->
         let ty =
           einfer (Vars.push_lenv env lenv) t1 |>
-          type_ sign in
+          typ_ sign in
         let t1 = expr sign lenv t1 in
         let t2 = expr sign lenv t2 in
         EConstr.mkApp (Trm.Logic.eq ty, [|t1; t2|])
@@ -789,11 +784,11 @@ module Import = struct
     | `FConn (`Not, [f1]) ->
         Trm.Logic.not (form lenv f1)
     | `FBind (`Forall, x, typ, body) ->
-        let ty = type_ sign typ in
+        let ty = typ_ sign typ in
         let lenv = LEnv.enter lenv x typ in
         Trm.Logic.fa x ty (form lenv body)
     | `FBind (`Exist, x, typ, body) ->
-        let ty = type_ sign typ in
+        let ty = typ_ sign typ in
         let lenv = LEnv.enter lenv x typ in
         Trm.Logic.ex x ty (form lenv body)
     | _ ->
@@ -802,7 +797,7 @@ module Import = struct
   let boollist_of_intlist =
     Stdlib.List.map (fun n -> if n = 0 then false else true)
 
-  let itrace ts (sign : FOSign.t) (env : Fo_t.env)
+  let itrace (sign : FOSign.t) (env : Fo_t.env)
       (mode : [`Back | `Forw]) (lp : int list) (rp : int list)
       (lf : Logic_t.form) (rf : Logic_t.form)
       (itr : Logic_t.itrace) : bool list * EConstr.t =
@@ -853,16 +848,19 @@ module Import = struct
         filtered_quant [] mode itr lp lf rp rf |>
         List.map begin fun (side, w) ->
           Option.map begin fun (le1, le2, e) ->
-            let lenv = if side = 0 then le2 else le1 in
-            let ty = infer_sort (Utils.Vars.push_lenv env lenv) e in
-            let s = nat_of_int (sort_index sign ty) in
-            let e =
-              let body = expr_itrace sign env lenv (1 - side) e in
-              lambda "env1" (env_ty ts ()) (lambda "env2" (env_ty ts ()) body) in
-            existT "s" nat (clos_ty ts ()) s e
+            (* let body_ty =
+              let lenv = if side = 0 then le2 else le1 in
+              typ_ sign (`TVar (infer_sort (Utils.Vars.push_lenv env lenv) e)) in *)
+            let lenv = le1 @ le2 in
+            let body = expr_itrace sign env lenv e in
+            List.fold_right begin fun (x, ty) (inst, n) ->
+              let name = Printf.sprintf "%s%d" x n in
+              (lambda name (typ_ sign ty) inst, n+1)
+            end lenv (body, 1)
+            |> fst
           end w
         end in
-      of_list (option (inst1_ty ts ())) (of_option (inst1_ty ts ()) identity) i in
+      of_list (option (inst1_ty ())) (of_option (inst1_ty ()) identity) i in
     t, i
 
   let mk_or_and_intro_pattern (pat : Names.variable list list) : Tactypes.or_and_intro_pattern =
@@ -1076,8 +1074,6 @@ module Import = struct
               end
           end in
 
-        let ts = sorts sign in
-        
         begin match (src, src.ctxt.kind), (dst, dst.ctxt.kind) with
 
         (* Forward DnD *)
@@ -1087,7 +1083,7 @@ module Import = struct
               let rp = dst.sub in
               let lf = (Utils.get_hyp goal src.ctxt.handle).h_form in
               let rf = (Utils.get_hyp goal dst.ctxt.handle).h_form in
-              itrace ts sign goal.g_env `Forw lp rp lf rf itr in
+              itrace sign goal.g_env `Forw lp rp lf rf itr in
             
             begin match rewrite_data with
             (* Rewrite *)
@@ -1122,7 +1118,7 @@ module Import = struct
                 end;
 
                 let forw = kname "rew_dnd_hyp" in
-                calltac forw [ts; fl; h1; h2; h3; hp1; hp2; hp2'; t; i]
+                calltac forw [fl; h1; h2; h3; hp1; hp2; hp2'; t; i]
             (* Non-rewrite *)
             | None ->
                 let h1 =
@@ -1151,7 +1147,7 @@ module Import = struct
                 end;
 
                 let forw = kname "forward" in
-                calltac forw [ts; h1; h2; h3; hp1; hp2; t; i]
+                calltac forw [h1; h2; h3; hp1; hp2; t; i]
             end
 
         (* Backward DnD *)
@@ -1166,7 +1162,7 @@ module Import = struct
               let rp = concl.sub in
               let lf = (Utils.get_hyp goal hyp.ctxt.handle).h_form in
               let rf = goal.g_concl in
-              itrace ts sign goal.g_env `Back lp rp lf rf itr in
+              itrace sign goal.g_env `Back lp rp lf rf itr in
             
             begin match rewrite_data with
             | Some (_, hsub, side, fsub, esub) ->
@@ -1187,7 +1183,7 @@ module Import = struct
                 end;
 
                 let back = kname "rew_dnd" in
-                calltac back [ts; h; hp; gp'; gp; t; i]
+                calltac back [h; hp; gp'; gp; t; i]
             | None ->
                 let t = Trm.boollist t in
 
@@ -1204,7 +1200,7 @@ module Import = struct
                 end;
 
                 let back = kname "back" in
-                calltac back [ts; h; hp; gp; t; i]
+                calltac back [h; hp; gp; t; i]
             end
 
         | _ -> raise UnexpectedDnD
@@ -1214,7 +1210,6 @@ module Import = struct
         let l = bool_path (tgt.sub @ [0]) in
         let s = infer_sort goal.g_env wit |> sort_index sign |> Trm.nat_of_int in
         let o = expr sign [] wit in
-        let ts = sorts sign in
 
         let tac, args =
           begin match tgt.ctxt.kind with
@@ -1224,10 +1219,10 @@ module Import = struct
             let h = EConstr.mkVar id in
             let id' = Goal.fresh_name ~basename:(Names.Id.to_string id) coq_goal () in
             let h' = EConstr.mkVar id' in
-            kname "inst_hyp", [ts; l; h; h'; s; o]
+            kname "inst_hyp", [l; h; h'; s; o]
           (* Backward instantiate *)
           | `Concl ->
-              kname "inst_goal", [ts; l; s; o]
+              kname "inst_goal", [l; s; o]
           | _ ->
               raise (InvalidPath tgt)
           end in

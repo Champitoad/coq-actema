@@ -2,7 +2,7 @@
  (name actema_plugin)
  (public_name coq-actema.plugin)
  (synopsis "Integrating the Actema GUI as a tactic.")
- (flags :standard -rectypes -w -27) ; Coq requires the `-rectypes`
+ (flags :standard -rectypes) ; Coq requires the `-rectypes`
  (libraries coq-core.plugins.ltac atdgen cohttp-lwt-unix sha))
 
 (coq.pp (modules g_actema))
