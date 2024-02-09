@@ -689,10 +689,18 @@ module Import = struct
   let tdyn_ty () : EConstr.t =
     EConstr.mkInd (Names.MutInd.make1 (kname "TDYN"), 0)
   
+  let dYN_ty () : EConstr.t =
+    EConstr.mkInd (Names.MutInd.make1 (kname "DYN"), 0)
+  
   let tdyn sort =
     let open EConstr in
     let tdyn = mkConstruct ((Names.MutInd.make1 (kname "TDYN"), 0), 1) in
     mkApp (tdyn, [| sort |])
+
+  let mdyn sort el =
+    let open EConstr in
+    let mdyn = mkConstruct ((Names.MutInd.make1 (kname "DYN"), 0), 1) in
+    mkApp (mdyn, [| sort ; el|])
   
   let sorts (sign : FOSign.t) : EConstr.t =
     FOSign.sort_symbols sign |> FOSign.SymbolNames.keys |>
@@ -716,7 +724,7 @@ module Import = struct
   let inst1_ty () : EConstr.t =
     let name = Names.Constant.make1 (kname "inst1") in
     EConstr.mkConst name
-  
+
   let rec typ_ (sign : FOSign.t)
       (ty : Fo_t.type_) : EConstr.t =
     match ty with
@@ -844,7 +852,7 @@ module Import = struct
                 filtered_quant acc mode subitr lp lf rp rf
             end
         end in
-      let i =
+      let i, i_ty =
         filtered_quant [] mode itr lp lf rp rf |>
         List.map begin fun (side, w) ->
           Option.map begin fun (le1, le2, e) ->
@@ -853,14 +861,19 @@ module Import = struct
               typ_ sign (`TVar (infer_sort (Utils.Vars.push_lenv env lenv) e)) in *)
             let lenv = le1 @ le2 in
             let body = expr_itrace sign env lenv e in
-            List.fold_right begin fun (x, ty) (inst, n) ->
-              let name = Printf.sprintf "%s%d" x n in
-              (lambda name (typ_ sign ty) inst, n+1)
-            end lenv (body, 1)
-            |> fst
+	    let body_ty =
+	      let ty = `TVar (infer_sort env e) in
+	      typ_ sign ty in
+	    List.fold_right begin fun (x, ty) ((inst, inst_ty), n) ->
+	      let name = Printf.sprintf "%s%d" x n in
+	      (((lambda name (typ_ sign ty) inst),
+	      (prod (typ_ sign ty) inst_ty)), n+1)
+            end lenv ((body, body_ty), 1)
+            |> fst 
           end w
         end in
-      of_list (option (inst1_ty ())) (of_option (inst1_ty ()) identity) i in
+      let inst = mdyn i_ty i in
+	of_list (option (dYN_ty ())) (of_option (dYN_ty ()) identity) inst in
     t, i
 
   let mk_or_and_intro_pattern (pat : Names.variable list list) : Tactypes.or_and_intro_pattern =
