@@ -852,28 +852,27 @@ module Import = struct
                 filtered_quant acc mode subitr lp lf rp rf
             end
         end in
-      let i, i_ty =
+      let insts =
         filtered_quant [] mode itr lp lf rp rf |>
         List.map begin fun (side, w) ->
           Option.map begin fun (le1, le2, e) ->
-            (* let body_ty =
-              let lenv = if side = 0 then le2 else le1 in
-              typ_ sign (`TVar (infer_sort (Utils.Vars.push_lenv env lenv) e)) in *)
             let lenv = le1 @ le2 in
             let body = expr_itrace sign env lenv e in
-	    let body_ty =
-	      let ty = `TVar (infer_sort env e) in
-	      typ_ sign ty in
-	    List.fold_right begin fun (x, ty) ((inst, inst_ty), n) ->
-	      let name = Printf.sprintf "%s%d" x n in
-	      (((lambda name (typ_ sign ty) inst),
-	      (prod (typ_ sign ty) inst_ty)), n+1)
+            let body_ty =
+              let lenv = if side = 0 then le2 else le1 in
+              typ_ sign (`TVar (infer_sort (Utils.Vars.push_lenv env lenv) e)) in
+            (* let body_ty =
+              let ty = `TVar (infer_sort env e) in
+              typ_ sign ty in *)
+            List.fold_right begin fun (x, ty) ((inst, inst_ty), n) ->
+              let name = Printf.sprintf "%s%d" x n in
+              (((lambda name (typ_ sign ty) inst),
+              (prod (typ_ sign ty) inst_ty)), n+1)
             end lenv ((body, body_ty), 1)
             |> fst 
           end w
         end in
-      let inst = mdyn i_ty i in
-	of_list (option (dYN_ty ())) (of_option (dYN_ty ()) identity) inst in
+      of_list (option (dYN_ty ())) (of_option (dYN_ty ()) (fun (i, i_ty) -> mdyn i_ty i)) insts in
     t, i
 
   let mk_or_and_intro_pattern (pat : Names.variable list list) : Tactypes.or_and_intro_pattern =
