@@ -871,7 +871,7 @@ module Import = struct
               (((lambda name (typ_ sign ty) inst),
               (prod (typ_ sign ty) inst_ty)), n+1)
             end lenv ((body, body_ty), 1)
-            |> fst 
+            |> fst
           end w
         end in
       of_list (option (dYN_ty ())) (of_option (dYN_ty ()) (fun (i, i_ty) -> mdyn i_ty i)) insts in
