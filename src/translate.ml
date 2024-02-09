@@ -856,6 +856,8 @@ module Import = struct
         filtered_quant [] mode itr lp lf rp rf |>
         List.map begin fun (side, w) ->
           Option.map begin fun (le1, le2, e) ->
+            Log.str (Printf.sprintf "le1: %d\n" (List.length le1));
+            Log.str (Printf.sprintf "le2: %d\n" (List.length le2));
             let lenv = le1 @ le2 in
             let body = expr_itrace sign env lenv e in
             let body_ty =
