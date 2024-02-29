@@ -12,7 +12,7 @@
 name = "actema-desktop"
 relPath = ""
 subsystem = "nodejs"
-translator = "package-json"
-translators = ["package-json"]
+translator = "yarn-lock"
+translators = ["yarn-lock package-json"]
 
 [actema-desktop.subsystemInfo]
