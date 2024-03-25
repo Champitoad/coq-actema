@@ -117,7 +117,7 @@ let sign = Translate.peano
 let compile_action ((idx, a) : int * Logic_t.action) : unit tactic =
   let open PVMonad in
   Goal.enter begin fun coq_goal ->
-    let goal, sign = Export.goal coq_goal in
+    let goal, sign = Export.goal coq_goal peano in
     Import.action sign goal coq_goal a
   end |>
   let idx = idx + 1 in
@@ -135,12 +135,24 @@ let compile_proof (prf : proof) : unit tactic =
     end in
   aux prf
 
-let export_goals () : Logic_t.goals tactic =
+(*** Export all the lemmas we can translate to actema. *)
+let export_lemmas (init_sign : FOSign.t) : (Logic_t.lemmas * FOSign.t) tactic =
   let open PVMonad in
   let* coq_goals_tacs = Goal.goals in
   Stdlib.List.fold_right begin fun coq_goal_tac acc ->
       let* coq_goal = coq_goal_tac in
-      let goal, _ = Export.goal coq_goal in
+      let* (lemmas, sign) = acc in
+      let new_lemmas, new_sign = Export.lemmas coq_goal sign in
+      return (new_lemmas @ lemmas, new_sign)
+  end coq_goals_tacs (return ([], init_sign))
+  
+(** Export each coq goal to Actema. *)
+let export_goals (init_sign : FOSign.t) : Logic_t.goals tactic =
+  let open PVMonad in
+  let* coq_goals_tacs = Goal.goals in
+  Stdlib.List.fold_right begin fun coq_goal_tac acc ->
+      let* coq_goal = coq_goal_tac in
+      let goal, _ = Export.goal coq_goal init_sign in
       let* goals = acc in
       return (goal :: goals)
   end coq_goals_tacs (return [])
@@ -157,10 +169,13 @@ type history = { mutable before : proof; mutable after : proof }
 exception ApplyUndo
 
 let interactive_proof () : proof tactic =
+  let open PVMonad in
   let hist = ref { before = []; after = [] } in
 
+  (* Export the lemmas only once, at the start of the proof. *)
+  let* lemmas, lemmas_sign = export_lemmas peano in 
+  
   let rec aux () =
-    let open PVMonad in
     let open Client in
 
     let continue idx a =
@@ -180,7 +195,9 @@ let interactive_proof () : proof tactic =
             aux ()
       end in
 
-    let* goals = export_goals () in
+    (* Export the goals and send an action request to the frontend. 
+       We make sure the lemmas signature is part of the environment of each goal. *)
+    let* goals = export_goals lemmas_sign in
     begin match get_user_action goals with
 
     | Do (idx, a) ->
@@ -214,7 +231,7 @@ let interactive_proof () : proof tactic =
 let actema_tac ?(force = false) (action_name : string) : unit tactic =
   let open PVMonad in
   Goal.enter begin fun coq_goal ->
-    let goal, _ = Export.goal coq_goal in
+    let goal, _ = Export.goal coq_goal peano in
     let id = action_name, (goal.g_hyps, goal.g_concl) in
     let interactive () =
       let* prf = interactive_proof () in

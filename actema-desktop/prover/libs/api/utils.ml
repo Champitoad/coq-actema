@@ -288,6 +288,9 @@ let string_of_goal goal =
 let string_of_goals goals =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_goals goals)
 
+let string_of_lemmas lemmas = 
+  Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_lemmas lemmas)
+
 let string_of_itrace itr =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_itrace itr)
 

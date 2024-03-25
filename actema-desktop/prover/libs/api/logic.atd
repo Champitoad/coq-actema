@@ -65,6 +65,12 @@ type agoal = {
   a_concl : form;
 }
 
+(* A single lemma *)
+type lemma = (name * form)
+
+(* A list of lemmas. *)
+type lemmas = lemma list
+
 (* -------------------------------------------------------------------- *)
 (** Actions *)
 

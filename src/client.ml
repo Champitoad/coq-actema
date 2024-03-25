@@ -24,8 +24,20 @@ type action =
 
 
 (** Send a set of lemmas to the frontend, and wait for an (empty) response. *)
-(*let send_lemmas (lemmas : Logic_t.lemmas) : unit t = 
-  failwith "todo"*)
+let send_lemmas (lemmas : Logic_t.lemmas) : unit t = 
+  let open Lwt.Syntax in
+  (* Send request with lemmas. *)
+  let lemmasb = lemmas
+              |> Logic_b.string_of_lemmas 
+              |> Base64.encode_string in
+  let* (resp, body) = make_req "lemmas" lemmasb in
+
+  (* Handle the response. *)
+  let code = resp |> Response.status |> Code.code_of_status in
+  match code with   
+    | 200 -> return ()
+    | _   -> raise (UnsupportedHttpResponseCode code)
+
 
 (** Send the goals to the frontend, and receive an action as response. *)
 let action (goals : Logic_t.goals) : action t =

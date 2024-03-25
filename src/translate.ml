@@ -656,7 +656,7 @@ module Export = struct
     | `FBind (kind, x, ty, f) -> form_contains_dummy f
 
   (** Collect all the lemmas we can translate to Actema. *)
-  let collect_lemmas ({ env = coq_env; evd } as e : destenv) : Fo_t.form NameMap.t State.t =
+  let collect_lemmas ({ env = coq_env; evd } as e : destenv) : Logic_t.lemmas State.t =
     let g_consts = 
       (Environ.Globals.view coq_env.env_globals).constants
       |> Names.Cmap_env.bindings
@@ -675,12 +675,12 @@ module Export = struct
       (*Log.str @@ Format.sprintf "====> %s\n%s" name (Log.string_of_econstr coq_env evd ty);*)
       let* form = dest_form (e, ty) in
       if not (form_contains_dummy form) then
-        return @@ NameMap.add name form lemmas
+        return @@ (name, form) :: lemmas
       else 
         return lemmas
-    end NameMap.empty g_consts
+    end [] g_consts
 
-  let hyps ({ env = coq_env; evd; _ } as e : destenv) : Logic_t.hyp list State.t =
+  let hyps ({ env = coq_env; evd } as e : destenv) : Logic_t.hyp list State.t =
     State.fold begin fun hyps decl ->
       let name = Context.Named.Declaration.get_id decl in
       let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
@@ -696,9 +696,9 @@ module Export = struct
       end
     end [] (Environ.named_context coq_env)
 
-  (* [goal env sign gl] exports the Coq goal [gl] into an Actema goal and a
+  (** [goal env sign gl] exports the Coq goal [gl] into an Actema goal and a
      mapping from Actema uids to Coq identifiers *)
-  let goal (goal : Goal.t) : Logic_t.goal * FOSign.t =
+  let goal (goal : Goal.t) (init_sign : FOSign.t): Logic_t.goal * FOSign.t =
     let coq_env = Goal.env goal in
     let evd = Goal.sigma goal in
     let concl = Goal.concl goal in
@@ -717,7 +717,7 @@ module Export = struct
       
       return Logic_t.{ g_env; g_hyps; g_concl } in
 
-    let goal, sign = run goal peano in
+    let goal, sign = run goal init_sign in
     if log_goals then begin
       (*Log.str (List.to_string (fun (f, _) -> f) goal.g_env.env_fun);
       Log.str ( Utils.string_of_form goal.g_concl);*)
@@ -725,15 +725,22 @@ module Export = struct
     end;
     goal, sign
 
+  (** Get the list of all lemmas we can export to actema. *)
+  let lemmas (goal : Goal.t) (init_sign : FOSign.t) : Logic_t.lemmas * FOSign.t =
+    State.run 
+      (collect_lemmas { env = Goal.env goal; evd = Goal.sigma goal }) 
+      init_sign
+  
+
   let test_global_env (goal : Goal.t) : unit =
     let open State in
     let lemmas = collect_lemmas { env = Goal.env goal; evd = Goal.sigma goal} in 
     let lemmas, sign = run lemmas peano in
     
-    Log.str @@ Format.sprintf "Length of lemmas = %d\n" (List.length @@ NameMap.bindings lemmas);
+    Log.str @@ Format.sprintf "Length of lemmas = %d\n" (List.length lemmas);
     List.iter begin fun (name, form) -> 
       Log.str @@ Format.sprintf "LEMMA %s\n%s" name (Utils.string_of_form form)
-    end (NameMap.bindings lemmas);
+    end lemmas;
     Log.str @@ Utils.string_of_env @@ env_of_varsign (NameMap.empty, sign)
 end
 
