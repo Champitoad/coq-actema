@@ -228,14 +228,16 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
         interactive ()
   end
 
+module Dest = Monads.StateOption(FOSign)
+
+
 let test_tac : unit tactic =
-  let open EConstr in
-  Goal.enter begin fun g ->
-    let env, evd = Goal.(env g, sigma g) in
-    let univs : string list =
-      Evd.evar_universe_context evd |> UState.ugraph |>
-      UGraph.domain |> Univ.Level.Set.elements |>
-      List.map Univ.Level.to_string in
-    Log.str Extlib.(List.to_string identity univs);
+  Goal.enter begin fun coq_goal ->
+    let (env, evd) = Goal.env coq_goal, Goal.sigma coq_goal in
+  
+    Export.test_global_env coq_goal;
+    (*let goal, _ = Export.goal coq_goal in 
+    Log.str (Utils.string_of_goal goal);*)
+
     PVMonad.return ()
-  end
+  end 

@@ -114,7 +114,7 @@ by rewrite  eqnqtdec_refl.
 Qed.
 
 Definition pp := (ppp ts).
-Check nth.
+(*Check nth.*)
 
 
 Definition nthc (c:seq nat)(p : pp c)(n:nat): (sort (nth 0 c n)).
@@ -924,11 +924,11 @@ case: (bf3_corr l) => [_ h]; apply h.
 Qed.
 
 
-Print o3.
+(*Print o3.
 
 
 Check (forall l, (cons 3 l) = l).
-Check fa.
+Check fa.*)
 Fixpoint instp (t:nat)(s : nat)(o : sort s)(n : seq nat)
          (c : pp n)(h : cx n) : Prop :=
   match t with
@@ -1361,15 +1361,15 @@ Abort.
 Notation "'subst!' y 'for' x 'in' f" :=
  (match y with x => f end) (at level 10, f at level 200).
 
-Check (subst! 4 for x in (2=x)).
-Check (match 4 with x => 2=x end).
+(*Check (subst! 4 for x in (2=x)).
+Check (match 4 with x => 2=x end).*)
 
 Ltac beta1 func arg :=
  lazymatch func with
  | (fun a => ?f) => constr:(subst! arg for a in f)
  end.
 
-Check ltac:(let r := beta1 (fun x =>  x+3) 4 in exact r).
+(*Check ltac:(let r := beta1 (fun x =>  x+3) 4 in exact r).*)
 
 Ltac wrap names vals t :=
  lazymatch names with
@@ -1523,7 +1523,7 @@ Ltac app f x :=
   let g := extract f in
     constr:(g x).
 
-Check ltac:(let r := app  (existT (fun T : Type => T) (nat->nat->nat) Nat.add) 5 in exact r).
+(*Check ltac:(let r := app  (existT (fun T : Type => T) (nat->nat->nat) Nat.add) 5 in exact r).*)
 
 Ltac rebuild t :=
   match t with
@@ -1537,10 +1537,10 @@ Ltac test t :=
   let r := rebuild ltac:(list_args t) in r.
 
 
-Check ltac:(let r := rebuild ltac:(list_args (2+3))in exact r).
+(*Check ltac:(let r := rebuild ltac:(list_args (2+3))in exact r).
 
 
-Check nth.
+Check nth.*)
 Definition def_dyn := (existT (fun T : Type => T) nat 666).
 
 Ltac tnth l n :=
@@ -1578,13 +1578,13 @@ Ltac exargp p t :=
 
 
 
-Check  ltac:(let r := extract ltac:(exargp (cons 1 (cons 1 nil)) ((2+3)+(0+5)))in exact r).
+(*Check  ltac:(let r := extract ltac:(exargp (cons 1 (cons 1 nil)) ((2+3)+(0+5)))in exact r).
 
 
 
 Eval compute in (nth def_dyn
   [:: existT (fun X : Type => X) (nat -> nat -> nat) Nat.add;
-      existT (fun X : Type => X) nat 3; existT (fun X : Type => X) nat 5] 1).
+      existT (fun X : Type => X) nat 3; existT (fun X : Type => X) nat 5] 1).*)
 
 
 Fixpoint replace T (d:T) n l :=
@@ -1604,10 +1604,10 @@ Ltac ttreplace d n l :=
       end
   end.
 
-Eval compute in ltac:(let r := ttreplace  99 3 (1::2::3::4::nil) in exact r).
+(*Eval compute in ltac:(let r := ttreplace  99 3 (1::2::3::4::nil) in exact r).
 
 
-Check (@existT Type (fun X => X)  _ 99):dyn.
+Check (@existT Type (fun X => X)  _ 99):dyn.*)
 
 
 Ltac treplace  d t p :=
@@ -1622,8 +1622,8 @@ Ltac treplace  d t p :=
       in r
 end.
 
- Check ltac:(let r := treplace 99 (1+(2+3)) (  (cons 1  (cons 1 nil))) in exact r).
- Check ltac:(let r := treplace 99 ((2+3)) (  ( (cons 0 nil))) in exact r).
+(*Check ltac:(let r := treplace 99 (1+(2+3)) (  (cons 1  (cons 1 nil))) in exact r).
+Check ltac:(let r := treplace 99 ((2+3)) (  ( (cons 0 nil))) in exact r).*)
 
 Ltac find_pat t p :=
    match p with
@@ -1636,8 +1636,8 @@ Ltac find_pat t p :=
 end.
 
 
-Check (fun x : nat =>
-         ltac:(let r := find_pat (2+x) (cons 0 nil) in exact r)).
+(*Check (fun x : nat =>
+         ltac:(let r := find_pat (2+x) (cons 0 nil) in exact r)).*)
 
 Ltac abst  T t p :=
   let x := fresh "xx" in
@@ -1648,7 +1648,7 @@ Ltac vabst v T t p :=
             ltac:( let r := treplace v t p in exact r)).
 
 
-Check (fun x => ltac:(let r := vabst zz  nat  (x+3) ( (cons 0 nil)) in exact r)).
+(*Check (fun x => ltac:(let r := vabst zz  nat  (x+3) ( (cons 0 nil)) in exact r)).*)
 
 (*
   nil*t -> t'
@@ -1686,8 +1686,8 @@ Ltac simpl_path_r p t :=
       end
   end.
 
-Check (
-          ltac:(let r := simpl_path_r (cons 0 (cons 1 (cons 0 nil))) (exists z,(2+2)+1=z) in exact r)).
+(*Check (
+          ltac:(let r := simpl_path_r (cons 0 (cons 1 (cons 0 nil))) (exists z,(2+2)+1=z) in exact r)).*)
 
 Ltac simpl_path p :=
   match goal with
@@ -1718,7 +1718,7 @@ Abort.
 Goal (2+2+1 = 0 /\ True).
 simpl_path (cons 0 (cons 1 (cons 0 nil))).
 Abort.
-Print Nat.add.
+(*Print Nat.add.*)
 
 
 Ltac beta_head t l :=
@@ -1958,7 +1958,7 @@ move => a.
 reify_prop_hyp a b (cons 1 nil)(cons false nil).
  *)
 
-Check equality.
+(*Check equality.*)
 
 Ltac reify_eq_rec l n env t :=  
   lazymatch constr:(l) with
@@ -2068,7 +2068,7 @@ end
 end
   end.
 
-Check ltac:( (match type of True with | Prop => exact 1 | _ => exact 2 end)
+(*Check ltac:( (match type of True with | Prop => exact 1 | _ => exact 2 end)
            ).
 
 
@@ -2076,7 +2076,7 @@ Check ltac:(let r :=
               reify_eq_rec
                 (cons  false nil)
                 (@nil nat)(@nil dyn) (2=2-> 3=3)
-           in exact r ).
+           in exact r ).*)
 
 Ltac reify_eq l :=
   match goal with

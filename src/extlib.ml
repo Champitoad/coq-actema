@@ -81,7 +81,15 @@ module List = struct
 
   let to_string ?(sep = "; ") ?(left = "[") ?(right = "]") print =
     List.map print |>> String.concat sep |>> fun s -> left ^ s ^ right
-end
+
+  let take n l =
+    let rec loop n acc l =  
+      begin match l with 
+      | x :: l' when n > 0 -> loop (n-1) (x :: acc) l'
+      | _                  -> List.rev acc
+      end
+    in loop n [] l
+  end
 
 let ssystime () =
   Printf.sprintf "%f" (Sys.time ())

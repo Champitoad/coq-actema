@@ -2685,7 +2685,7 @@ end = struct
         | `F f1, `F f2 when not drewrite ->
             begin match sp1, sp2 with
             | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
-                f_unify  goal.g_pregoal.g_env LEnv.empty s [f1, f2]
+                f_unify goal.g_pregoal.g_env LEnv.empty s [f1, f2]
             | _ -> None
             end
         (* Deep rewrite *)

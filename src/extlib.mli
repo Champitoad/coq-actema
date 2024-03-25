@@ -32,7 +32,9 @@ module List : sig
 
   val to_string :
     ?sep : string -> ?left : string -> ?right : string ->
-    ('a -> string) -> 'a t -> string 
+    ('a -> string) -> 'a t -> string
+
+  val take : int -> 'a list -> 'a list
 end
 
 val ssystime : unit -> string

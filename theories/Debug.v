@@ -1,6 +1,18 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
+Inductive nlist := 
+  | nnil : nlist
+  | ncons : nat -> nlist -> nlist.
+
+Definition target_const (l : nlist) : l = ncons 42 nnil. Admitted.
+
+Lemma test_ : True.
+  test.
+Admitted.
+
+Check mathcomp.ssreflect.eqtype.option_eqType.
+
 Definition instc2 : inst1.
 exists 0.
 move => _ _; exact 2.

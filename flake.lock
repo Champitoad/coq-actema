@@ -216,12 +216,12 @@
       },
       "locked": {
         "lastModified": 1,
-        "narHash": "sha256-zj3kMUpKdW4PloSiwAy03Ao1weyjWevu0aLoyPRlzqU=",
-        "path": "/nix/store/nwp65h7xrylxfy4rgf4vb6ig5v55kfcy-source/actema-desktop/prover",
+        "narHash": "sha256-JXMF9GNn+QYN16WSAIJeCBK85WA06cp/o2GTQZf6zLA=",
+        "path": "/nix/store/smv5c13khvhq05hzc7rrvfnnv7dba3s4-source/actema-desktop/prover",
         "type": "path"
       },
       "original": {
-        "path": "/nix/store/nwp65h7xrylxfy4rgf4vb6ig5v55kfcy-source/actema-desktop/prover",
+        "path": "/nix/store/smv5c13khvhq05hzc7rrvfnnv7dba3s4-source/actema-desktop/prover",
         "type": "path"
       }
     },

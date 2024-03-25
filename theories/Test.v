@@ -8,11 +8,9 @@ End Foo.
 
 Variable (A : Type).
 
-Goal forall (a : A), foo a = foo a. actema_force.
+Goal forall (a : A), foo a = foo a. Admitted. 
 
-Goal forall x, x = 3 -> x = 6 -> x = 1.
-actema_force.
-
+Goal forall x, x = 3 -> x = 6 -> x = 1. Admitted.
 Set Debug "backtrace".
 
 Require Import ssreflect.
@@ -20,12 +18,31 @@ Require Import ssreflect.
 Parameter f : nat -> nat -> nat.
 
 Inductive color := red | blue.
+Inductive nlist (b : bool) : Set :=
+  | ntriv : nlist b.
+
+Lemma add_comm : prod (@eq bool false false) (false = false).
+Proof. Admitted.
+
+Lemma t2 (f : nat -> Set) : True.
+  test_tac.
+
+Check list. 
+
+Lemma t1 (x : nlist false) : True.
+  test_tac.
+
+Lemma t (H : nduo false 42 42 = nduo false 42 42) : True.
+  test_tac.
 
 Context (P : color -> Prop).
 Context (x y : color).
+
 Lemma essai :
 P red -> (forall x, x=red ) -> P blue.
 intros h1 h2.
+actema.
+test.
 (* pose xxx:= blue. *)
 
 actema_force.

@@ -279,6 +279,9 @@ let string_of_form f =
 let string_of_term t =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_term t)
 
+let string_of_env env =
+  Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_env env)
+
 let string_of_goal goal =
   Bi_io.view ~unhash:biniou_unhash_dict (Logic_b.string_of_goal goal)
 

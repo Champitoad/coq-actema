@@ -22,6 +22,12 @@ type action =
 | Do of int * Logic_t.action
 | Done | Undo | Redo
 
+
+(** Send a set of lemmas to the frontend, and wait for an (empty) response. *)
+(*let send_lemmas (lemmas : Logic_t.lemmas) : unit t = 
+  failwith "todo"*)
+
+(** Send the goals to the frontend, and receive an action as response. *)
 let action (goals : Logic_t.goals) : action t =
   (* Send request with goals *)
 

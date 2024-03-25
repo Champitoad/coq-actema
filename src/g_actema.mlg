@@ -22,6 +22,6 @@ TACTIC EXTEND actema_force_tactic
 END
 
 TACTIC EXTEND test_tactic
-| [ "test" ] ->
+| [ "test_tac" ] ->
   { Actema_main.test_tac }
 END

@@ -58,6 +58,7 @@ val pol_of_ipath : goal -> ipath -> pol
 val string_of_expr : expr -> string
 val string_of_form : form -> string
 val string_of_term : term -> string
+val string_of_env : env -> string
 val string_of_goal : goal -> string
 val string_of_goals : goals -> string
 val string_of_itrace : itrace -> string

@@ -14,6 +14,9 @@ let log_dnd_trace = false
 (** Set to true to print the atdgen-formatted goals exported to Actema *)
 let log_goals = false
 
+(** Set to true to print a the terms that fail to get exported to Actema. *)
+let log_dummy = false
+
 (* -------------------------------------------------------------------- *)
 (** * First-order signatures *)
 
@@ -259,18 +262,21 @@ module Export = struct
     let* sign = get in
     match SymbolNames.find_opt sy sign.symbols with
     | Some name ->
-        let arity = NameMap.find name sign.typing.t_funcs in
-        return (name, arity)
-    | None ->
-        destKO
+        begin match NameMap.find_opt name sign.typing.t_funcs with 
+        | Some arity -> return (name, arity)
+        | None -> destKO
+        end
+    | None -> destKO
 
   and find_pred (d : destarg) : (Fo_t.name * Fo_t.arity) Dest.t =
     let* sy = dest_symbol d in
     let* sign = get in
     match SymbolNames.find_opt sy sign.symbols with
     | Some name ->
-        let arity = NameMap.find name sign.typing.t_preds in
-        return (name, arity)
+        begin match NameMap.find_opt name sign.typing.t_preds with 
+        | Some arity -> return (name, arity)
+        | None -> destKO
+        end
     | None -> destKO
 
   and dest_sconst : symbol sdest = fun ({ env; evd } as e, t) ->
@@ -362,8 +368,10 @@ module Export = struct
     return (`EFun (name, targs))
   
   and dest_edummy : destarg -> Logic_t.expr State.t = fun ({ env; evd; _ }, t) ->
-    Log.str (Printf.sprintf "Failed to translate expression:\n%s"
-              (Log.string_of_econstr env evd t));
+    if log_dummy then 
+      Log.str @@ Format.sprintf 
+        "Failed to translate expression:\n%s"
+        (Log.string_of_econstr env evd t);
     State.return dummy_expr
 
   and dest_expr : destarg -> Logic_t.expr State.t = fun et ->
@@ -403,7 +411,16 @@ module Export = struct
     let* head, args = destwrap (EConstr.destApp evd) t in
     let* ind, _ = destwrap (EConstr.destInd evd) head in
     match Trm.Logic.eq_ind ind "eq", args with
-    | true, [| _; t1; t2 |] ->
+    | true, [| t; t1; t2 |] ->
+        (* Check we are not equating two propositions. *)
+        let* () = 
+          try 
+            let sort = EConstr.destSort evd t in
+            let sort = EConstr.ESorts.kind evd sort in
+            if sort = Sorts.prop then destKO else return ()
+          with destKO -> return ()
+        in
+        (* Destruct the two sides of the equality. *)
         let* e1 = dest_expr (e, t1) |> state_to_dest in
         let* e2 = dest_expr (e, t2) |> state_to_dest in
         return (`FPred ("_EQ", [e1; e2]))
@@ -518,8 +535,10 @@ module Export = struct
 
   
   and dest_dummy : destarg -> Logic_t.form State.t = fun ({ env; evd; _ }, t) ->
-    Log.str (Printf.sprintf "Failed to translate formula:\n%s"
-              (Log.string_of_econstr env evd t));
+    if log_dummy then 
+      Log.str @@ Format.sprintf 
+        "Failed to translate formula:\n%s"
+        (Log.string_of_econstr env evd t);
     State.return dummy_form
   
   and dest_form : destarg -> Logic_t.form State.t = fun et ->
@@ -618,6 +637,49 @@ module Export = struct
         return venv
       end NameMap.empty (Environ.named_context coq_env)
 
+  (** Does an expression contain [_dummy] as a sub-expression ? *)
+  let rec expr_contains_dummy expr : bool = 
+    match expr with 
+    | `EVar name -> false
+    | `EFun (f, exprs) -> 
+        (f = "_dummy" && List.length exprs = 0) || 
+        (List.exists expr_contains_dummy exprs)
+
+  (** Does a formula contain [_dummy] as a sub-formula or sub-expression ? *)    
+  let rec form_contains_dummy form : bool = 
+    match form with 
+    | `FTrue | `FFalse -> false
+    | `FPred (name, exprs) -> 
+        (name = "_dummy" && List.length exprs = 0) ||
+        (List.exists expr_contains_dummy exprs)
+    | `FConn (conn, forms) -> List.exists form_contains_dummy forms
+    | `FBind (kind, x, ty, f) -> form_contains_dummy f
+
+  (** Collect all the lemmas we can translate to Actema. *)
+  let collect_lemmas ({ env = coq_env; evd } as e : destenv) : Fo_t.form NameMap.t State.t =
+    let g_consts = 
+      (Environ.Globals.view coq_env.env_globals).constants
+      |> Names.Cmap_env.bindings
+      (*|> List.filter begin fun (cname, _) -> 
+            let target = Names.Constant.make1 (kername ["Actema"; "Test"] "add_comm") in 
+            Names.Constant.CanOrd.equal cname target
+         end*)
+      |> List.take 10
+    in
+    Log.str (Format.sprintf "Length of g_consts = %d" (List.length g_consts));
+    State.fold begin fun lemmas (id, (ckey, _)) ->
+      let open State in
+      let name = id |> Names.Constant.to_string in
+      let ty = ckey.Declarations.const_type |> EConstr.of_constr in
+      
+      (*Log.str @@ Format.sprintf "====> %s\n%s" name (Log.string_of_econstr coq_env evd ty);*)
+      let* form = dest_form (e, ty) in
+      if not (form_contains_dummy form) then
+        return @@ NameMap.add name form lemmas
+      else 
+        return lemmas
+    end NameMap.empty g_consts
+
   let hyps ({ env = coq_env; evd; _ } as e : destenv) : Logic_t.hyp list State.t =
     State.fold begin fun hyps decl ->
       let name = Context.Named.Declaration.get_id decl in
@@ -657,11 +719,22 @@ module Export = struct
 
     let goal, sign = run goal peano in
     if log_goals then begin
-      (* Log.str (List.to_string (fun (f, _) -> f) goal.g_env.env_fun); *)
-      Log.str ( Utils.string_of_form goal.g_concl);
-      (* Log.str (Utils.string_of_goal goal); *)
+      (*Log.str (List.to_string (fun (f, _) -> f) goal.g_env.env_fun);
+      Log.str ( Utils.string_of_form goal.g_concl);*)
+      Log.str (Utils.string_of_goal goal);
     end;
     goal, sign
+
+  let test_global_env (goal : Goal.t) : unit =
+    let open State in
+    let lemmas = collect_lemmas { env = Goal.env goal; evd = Goal.sigma goal} in 
+    let lemmas, sign = run lemmas peano in
+    
+    Log.str @@ Format.sprintf "Length of lemmas = %d\n" (List.length @@ NameMap.bindings lemmas);
+    List.iter begin fun (name, form) -> 
+      Log.str @@ Format.sprintf "LEMMA %s\n%s" name (Utils.string_of_form form)
+    end (NameMap.bindings lemmas);
+    Log.str @@ Utils.string_of_env @@ env_of_varsign (NameMap.empty, sign)
 end
 
 (* -------------------------------------------------------------------- *)
