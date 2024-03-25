@@ -174,6 +174,7 @@ let interactive_proof () : proof tactic =
 
   (* Export the lemmas only once, at the start of the proof. *)
   let* lemmas, lemmas_sign = export_lemmas peano in 
+  Lwt_main.run @@ Client.send_lemmas lemmas;
   
   let rec aux () =
     let open Client in

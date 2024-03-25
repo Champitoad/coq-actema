@@ -31,6 +31,11 @@ export default {
         ProofCanvas,
     },
     created() {
+        // update the lemma database when an action is received.
+        window.ipcRenderer.on("lemmas", (_, lemmasb) => {
+            this.connected = true;
+            console.log("LEMMAS RECEIVED\n");
+        });
         // update proof canvas with new goal when action request is received
         window.ipcRenderer.on("action", (_, goalsb) => {
             try {

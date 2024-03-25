@@ -10,12 +10,18 @@ export default {
   launch: function (win) {
     // Create a local server to receive data from
     const server = http.createServer((req, res) => {
+      ipcMain.removeAllListeners('lemmas');
       ipcMain.removeAllListeners('action');
       ipcMain.removeAllListeners('done');
       ipcMain.removeAllListeners('undo');
       ipcMain.removeAllListeners('redo');
       ipcMain.removeAllListeners('error');
 
+      ipcMain.once('lemmas', _ => {
+        let rcode = 200;
+        res.writeHead(rcode, { 'Content-Type': 'text/plain' });
+        res.end('');
+      });
       ipcMain.once('action', (_, action) => {
         let rcode = 200;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
@@ -50,6 +56,11 @@ export default {
         let rcode, body;
         let query = parseQueryString(req);
         switch (query.pathname) {
+          case "/lemmas":
+            let lemmas = data;
+            win.webContents.send('lemmas', lemmas);
+            res.end('');
+            break;
           case "/action":
             let goals = data;
             win.webContents.send('action', goals);
