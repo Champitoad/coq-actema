@@ -135,24 +135,28 @@ let compile_proof (prf : proof) : unit tactic =
     end in
   aux prf
 
-(*** Export all the lemmas we can translate to actema. *)
-let export_lemmas (init_sign : FOSign.t) : (Logic_t.lemmas * FOSign.t) tactic =
+(** Export all the lemmas we can translate to actema, 
+    along with their environment. *)
+let export_lemmas () : (Logic_t.lemmas * Fo_t.env) tactic =
   let open PVMonad in
   let* coq_goals_tacs = Goal.goals in
-  Stdlib.List.fold_right begin fun coq_goal_tac acc ->
+  let* (lemmas, sign) = 
+    Stdlib.List.fold_right begin fun coq_goal_tac acc ->
       let* coq_goal = coq_goal_tac in
       let* (lemmas, sign) = acc in
       let new_lemmas, new_sign = Export.lemmas coq_goal sign in
       return (new_lemmas @ lemmas, new_sign)
-  end coq_goals_tacs (return ([], init_sign))
+    end coq_goals_tacs (return ([], peano)) in
+  let env = Export.env_of_varsign (NameMap.empty, sign) in
+  return (lemmas, env)
   
 (** Export each coq goal to Actema. *)
-let export_goals (init_sign : FOSign.t) : Logic_t.goals tactic =
+let export_goals () : Logic_t.goals tactic =
   let open PVMonad in
   let* coq_goals_tacs = Goal.goals in
   Stdlib.List.fold_right begin fun coq_goal_tac acc ->
       let* coq_goal = coq_goal_tac in
-      let goal, _ = Export.goal coq_goal init_sign in
+      let goal, _ = Export.goal coq_goal peano in
       let* goals = acc in
       return (goal :: goals)
   end coq_goals_tacs (return [])
@@ -160,25 +164,32 @@ let export_goals (init_sign : FOSign.t) : Logic_t.goals tactic =
 let get_user_action (goals : Logic_t.goals) : Client.action =
   let open PVMonad in
   if goals = [] then begin
-    Lwt_main.run (Client.qed ());
+    Lwt_main.run (Client.send_qed ());
     Client.Done
   end else
-    Lwt_main.run (Client.action goals)
+    Lwt_main.run (Client.send_goals goals)
 
 type history = { mutable before : proof; mutable after : proof }
 exception ApplyUndo
 
+(** The control flow here is a mess. *)
 let interactive_proof () : proof tactic =
   let open PVMonad in
+
+  (* The proof history used to manage Undo/Redo. *)
   let hist = ref { before = []; after = [] } in
 
-  (* Export the lemmas only once, at the start of the proof. *)
-  let* lemmas, lemmas_sign = export_lemmas peano in 
-  Lwt_main.run @@ Client.send_lemmas lemmas;
+  (* At the start of the proof, translate the lemmas to the API format.
+     TODO : cache this in a file so that only new/changed lemmas (since the last actema command) 
+     are translated. *)
+  let* lemmas, lemmas_env = export_lemmas () in 
   
+  (* This is the main loop of the plugin, where we handle all actions 
+     given by the frontend. *)
   let rec aux () =
     let open Client in
 
+    (** Handle Undo/Redo. *)
     let continue idx a =
       let cont =
         let* _ = compile_action (idx, a) in
@@ -191,23 +202,33 @@ let interactive_proof () : proof tactic =
             let msg =
               CErrors.iprint_no_report iexn |>
               Pp.string_of_ppcmds in
-            Lwt_main.run (Client.error msg);
+            Lwt_main.run (Client.send_error msg);
             !hist.before <- Stdlib.List.tl !hist.before;
             aux ()
       end in
 
-    (* Export the goals and send an action request to the frontend. 
-       We make sure the lemmas signature is part of the environment of each goal. *)
-    let* goals = export_goals lemmas_sign in
-    begin match get_user_action goals with
+    (** Get the next action that is NOT a lemma request. *)
+    let rec handle_lemmas (act : action) : action = 
+      match act with
+      (* We received a lemma request : send the lemmas and get the next action again. *)
+      | Lemmas -> 
+          let act = Lwt_main.run @@ Client.send_lemmas lemmas lemmas_env in
+          handle_lemmas act
+      (* Otherwise we are done here. *)
+      | _ -> act
+    in
 
+    (* Export the goals and get the next action. *)
+    let* goals = export_goals () in
+    let act = handle_lemmas (get_user_action goals) in
+    (* Handle the action. *)
+    begin match act with 
+    | Lemmas -> failwith "interactive_proof: call handle_lemmas on the action."
     | Do (idx, a) ->
         !hist.before <- (idx, a) :: !hist.before;
         continue idx a
-
     | Done ->
         return (Stdlib.List.rev !hist.before)
-
     | Undo ->
         begin match !hist.before with
         | a :: before ->
@@ -216,7 +237,6 @@ let interactive_proof () : proof tactic =
             tclZERO ApplyUndo
         | [] -> aux ()
         end
-
     | Redo ->
         begin match !hist.after with
         | (idx, a) :: after ->
@@ -225,9 +245,9 @@ let interactive_proof () : proof tactic =
             continue idx a
         | [] -> aux ()
         end
-    end in
-
-  aux ()
+    end
+    
+  in aux ()
 
 let actema_tac ?(force = false) (action_name : string) : unit tactic =
   let open PVMonad in
@@ -252,10 +272,6 @@ module Dest = Monads.StateOption(FOSign)
 let test_tac : unit tactic =
   Goal.enter begin fun coq_goal ->
     let (env, evd) = Goal.env coq_goal, Goal.sigma coq_goal in
-  
     Export.test_global_env coq_goal;
-    (*let goal, _ = Export.goal coq_goal in 
-    Log.str (Utils.string_of_goal goal);*)
-
     PVMonad.return ()
   end 

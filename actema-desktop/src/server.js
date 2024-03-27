@@ -57,8 +57,7 @@ export default {
         let query = parseQueryString(req);
         switch (query.pathname) {
           case "/lemmas":
-            let lemmas = data;
-            win.webContents.send('lemmas', lemmas);
+            win.webContents.send('lemmas', data);
             res.end('');
             break;
           case "/action":

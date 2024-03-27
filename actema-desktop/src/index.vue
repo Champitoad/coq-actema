@@ -32,7 +32,7 @@ export default {
     },
     created() {
         // update the lemma database when an action is received.
-        window.ipcRenderer.on("lemmas", (_, lemmasb) => {
+        window.ipcRenderer.on("lemmas", (_, datab) => {
             this.connected = true;
             console.log("LEMMAS RECEIVED\n");
         });
