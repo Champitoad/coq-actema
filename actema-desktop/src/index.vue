@@ -2,12 +2,18 @@
     <div>
         <div class="container-fluid">
             <div class="row" style="padding-top: 20px; padding-bottom: 20px; background-color: #eee;">
-                <button id="done" class="btn btn-info ml-2" @click="done" title="Done" :disabled="!connected">Done</button>
+                <button id="done" class="btn btn-info ml-2" @click="done" title="Done"
+                    :disabled="!connected">Done</button>
+                <button id="lemmas" class="btn btn-info ml-2" @click="lemmas" title="Request lemmas from the plugin."
+                    :disabled="!connected">Request Lemmas</button>
                 <div class="mx-auto"></div>
                 <div class="buttons text-right mr-2">
-                    <button class="btn btn-outline-secondary btn-select" @click="toggleSelectionMode" :disabled="!connected" title="Undo (ctrl+z)"><i class="fas fa-mouse-pointer fa-sm"></i></button>
-                    <button class="btn btn-outline-secondary btn-undo" @click="undo" :disabled="!connected" title="Undo (ctrl+z)"><i class="fas fa-undo"></i></button>
-                    <button class="btn btn-outline-secondary btn-redo" @click="redo" :disabled="!connected" title="Undo (ctrl+y)"><i class="fas fa-redo"></i></button>
+                    <button class="btn btn-outline-secondary btn-select" @click="toggleSelectionMode"
+                        :disabled="!connected" title="Undo (ctrl+z)"><i class="fas fa-mouse-pointer fa-sm"></i></button>
+                    <button class="btn btn-outline-secondary btn-undo" @click="undo" :disabled="!connected"
+                        title="Undo (ctrl+z)"><i class="fas fa-undo"></i></button>
+                    <button class="btn btn-outline-secondary btn-redo" @click="redo" :disabled="!connected"
+                        title="Undo (ctrl+y)"><i class="fas fa-redo"></i></button>
                 </div>
             </div>
             <div class="row" style="height: calc(100vh - 78px)">
@@ -31,13 +37,24 @@ export default {
         ProofCanvas,
     },
     created() {
-        // update the lemma database when an action is received.
-        window.ipcRenderer.on("lemmas", (_, datab) => {
-            this.connected = true;
-            console.log("LEMMAS RECEIVED\n");
+        // update the lemma database when lemmas are received.
+        window.ipcRenderer.on('received_lemmas', (_, datab) => {
+            try {
+                console.log("Received lemmas");
+                // Load the lemmas in the proof engine.
+                let proofState = this.$refs.proofCanvas.getProofState();
+                proofState = proofState.loadlemmas(datab);
+                this.$refs.proofCanvas.setProofState(proofState);
+                // Update the lemma search bar.
+                let propList = this.$refs.proofCanvas.$refs.plist;
+                propList[0].updateLemmaList();
+            } catch (e) {
+                this.$refs.proofCanvas.showErrorMessage(e);
+                window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
+            }
         });
         // update proof canvas with new goal when action request is received
-        window.ipcRenderer.on("action", (_, goalsb) => {
+        window.ipcRenderer.on('action', (_, goalsb) => {
             try {
                 this.connected = true;
                 var proofState = engine.setgoalsb(goalsb);
@@ -48,7 +65,7 @@ export default {
             }
         });
         // trigger fireworks when qed request is received
-        window.ipcRenderer.on("qed", _ => {
+        window.ipcRenderer.on('qed', _ => {
             this.$refs.proofCanvas.QED();
             this.connected = false;
         });
@@ -143,11 +160,22 @@ export default {
             }
         },
 
+        // Called when the "Done" button is clicked.
         done() {
             try {
                 window.ipcRenderer.send('done');
                 this.connected = false;
                 this.$refs.proofCanvas.setProofState(null);
+            } catch (e) {
+                this.$refs.proofCanvas.showErrorMessage(e);
+                window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
+            }
+        },
+
+        // Called when the "Request Lemmas" button is clicked.
+        lemmas() {
+            try {
+                window.ipcRenderer.send('request_lemmas');
             } catch (e) {
                 this.$refs.proofCanvas.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);

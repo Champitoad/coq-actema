@@ -582,7 +582,7 @@ end = struct
       | TRec (x, t) ->
           Format.sprintf "rec %s . %s" (x) (for_type env t)
 
-    and for_expr ?(is_pr = false) env expr =
+    and for_expr ?(_is_pr = false) env expr =
       match expr with
       | EVar (x, 0) ->
           x
@@ -600,7 +600,7 @@ end = struct
           let str es =
             List.combine es (assoc_of_fun f) |>
             List.mapi (fun _ (e, cmp) ->
-              for_expr env ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) e) in
+              for_expr env ~_is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) e) in
 
           begin match f, str es with
           | "Z", [] ->

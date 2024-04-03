@@ -171,7 +171,6 @@
 .btn:focus {
     outline: none !important;
 }
-
 </style>
 
 <template>
@@ -187,32 +186,52 @@
                     <template v-else>
                         <ul class="nav nav-tabs" id="subgoal-tab" role="tablist">
                             <li class="nav-item" v-for="(subgoal, i) in proofState.subgoals()" :key="subgoal.handle">
-                                <a class="nav-link text-danger" :class="{ active: isActiveSubgoal(i) }" :id="getSubgoalId(subgoal) + '-tab'" data-toggle="tab" :href="'#' + getSubgoalId(subgoal)" role="tab" :aria-controls="getSubgoalId(subgoal)" aria-selected="true" :data-subgoal="i" v-html="getSubgoalString(subgoal)" @click="setTab(i)"></a>
+                                <a class="nav-link text-danger" :class="{ active: isActiveSubgoal(i) }"
+                                    :id="getSubgoalId(subgoal) + '-tab'" data-toggle="tab"
+                                    :href="'#' + getSubgoalId(subgoal)" role="tab"
+                                    :aria-controls="getSubgoalId(subgoal)" aria-selected="true" :data-subgoal="i"
+                                    v-html="getSubgoalString(subgoal)" @click="setTab(i)"></a>
                             </li>
                         </ul>
                         <div class="tab-content" id="subgoal-content">
-                            <div v-for="(subgoal, i) in proofState.subgoals()" :key="subgoal.handle" class="tab-pane fade" :class="{show: isActiveSubgoal(i),active: isActiveSubgoal(i)}" :id="getSubgoalId(subgoal)" :aria-labelledby="getSubgoalId(subgoal) + '-tab'">
+                            <div v-for="(subgoal, i) in proofState.subgoals()" :key="subgoal.handle"
+                                class="tab-pane fade" :class="{ show: isActiveSubgoal(i), active: isActiveSubgoal(i) }"
+                                :id="getSubgoalId(subgoal)" :aria-labelledby="getSubgoalId(subgoal) + '-tab'">
                                 <div class="canvas row" style="height: 100%; position: relative;">
-                                    <div class="hypothesis-zone" style=" width: 25%;" @click="deselect" :style="{ width: hypsZoneWidth + 'px', 'border-right': '1px solid rgba(0,0,0,0.1)', 'overflow-y': 'auto', 'height': 'calc(100vh - 120px)' }">
-                                        <proposition-list :goal="subgoal" :context="subgoal.context()" :vars="subgoal.tvars()" :selectMode="selectMode" :displayMode="displayMode" ref="plist"></proposition-list>
+                                    <div class="hypothesis-zone" style=" width: 25%;" @click="deselect"
+                                        :style="{ width: hypsZoneWidth + 'px', 'border-right': '1px solid rgba(0,0,0,0.1)', 'overflow-y': 'auto', 'height': 'calc(100vh - 120px)' }">
+                                        <proposition-list :goal="subgoal" :context="subgoal.context()"
+                                            :vars="subgoal.tvars()" :selectMode="selectMode" :displayMode="displayMode"
+                                            ref="plist"></proposition-list>
                                     </div>
                                     <div class="dragbar"></div>
-                                    <div class="work-zone" droppable="true" @drop="onDropPredicate" @dragover="onDragOverPredicate" @click="deselect" :style="{ width: workZoneWidth + 'px' }">
-                                        <goal :subgoal="subgoal" :key="getGoalKey(i)" :selectMode="selectMode" :displayMode="displayMode" :ref="subgoal.handle"></goal>
-                                        <predicate v-for="(predicate, j) in getPredicatesInWorkZone(subgoal)" :predicate="predicate" :selectMode="selectMode" :displayMode="displayMode" :key="getPredicateKey(i, j)" :ref="predicate.handle"></predicate>
-                                        <expression v-for="expression in getExpressionsInWorkZone(subgoal)" :expression="expression" :selectMode="selectMode" :displayMode="displayMode" :key="expression.handle" draggable="true" :ref="expression.handle"></expression>
+                                    <div class="work-zone" droppable="true" @drop="onDropPredicate"
+                                        @dragover="onDragOverPredicate" @click="deselect"
+                                        :style="{ width: workZoneWidth + 'px' }">
+                                        <goal :subgoal="subgoal" :key="getGoalKey(i)" :selectMode="selectMode"
+                                            :displayMode="displayMode" :ref="subgoal.handle"></goal>
+                                        <predicate v-for="(predicate, j) in getPredicatesInWorkZone(subgoal)"
+                                            :predicate="predicate" :selectMode="selectMode" :displayMode="displayMode"
+                                            :key="getPredicateKey(i, j)" :ref="predicate.handle"></predicate>
+                                        <expression v-for="expression in getExpressionsInWorkZone(subgoal)"
+                                            :expression="expression" :selectMode="selectMode" :displayMode="displayMode"
+                                            :key="expression.handle" draggable="true" :ref="expression.handle">
+                                        </expression>
                                     </div>
                                 </div>
                             </div>
-                            <RadialMenu ref="actionsMenu" :style="{ 'z-index': 10, top: actionsMenu.y + 'px', left: actionsMenu.x + 'px' }" @clicked="actionsMenuClicked" @closed="actionsMenuClosed"
-                                        :menu-items="actionsMenu.items" :size="actionsMenu.size" close-on-click></RadialMenu>
+                            <RadialMenu ref="actionsMenu"
+                                :style="{ 'z-index': 10, top: actionsMenu.y + 'px', left: actionsMenu.x + 'px' }"
+                                @clicked="actionsMenuClicked" @closed="actionsMenuClosed"
+                                :menu-items="actionsMenu.items" :size="actionsMenu.size" close-on-click></RadialMenu>
                         </div>
                     </template>
                 </template>
                 <div class="alert alert-danger mx-auto prover-msg" :class="{ shown: errorMsg !== null }" role="alert">
                     {{ errorMsg }}
                 </div>
-                <div class="alert alert-warning mx-auto prover-msg" :class="{ shown: warningMsg !== null }" role="alert">
+                <div class="alert alert-warning mx-auto prover-msg" :class="{ shown: warningMsg !== null }"
+                    role="alert">
                     {{ warningMsg }}
                 </div>
             </div>
@@ -239,7 +258,7 @@ export default {
         fireworks: FireWorksVue,
         RadialMenu
     },
-    data: function() {
+    data: function () {
         return {
             qed: false,
             proofState: null,
@@ -284,7 +303,7 @@ export default {
             }
         },
     },
-    created: function() {
+    created: function () {
         // just a string -> action dictionnary. Actions are defined by the miniprover and are transparent,
         // but we need to retrieve them when at user-interaction time
         this.actionCodes = {};
@@ -300,7 +319,7 @@ export default {
         this.actionCodes = {}; // remove all defined actions
         this.pathButtonMap = {}; // clean id <-> button map
     },
-    updated: function() {
+    updated: function () {
         /*
             if( this.proofState !== null && this.proofState !== undefined ) {
                 // re-render mathjax after this component is mounted
@@ -308,8 +327,8 @@ export default {
             }
             */
 
-        if( this.displayMode == "mathml" ) {
-            if( this.proofState !== null && this.proofState !== undefined ) {
+        if (this.displayMode == "mathml") {
+            if (this.proofState !== null && this.proofState !== undefined) {
                 // MathJax.Hub.Queue(["Typeset",MathJax.Hub]);
             }
         }
@@ -317,30 +336,30 @@ export default {
         this.bindDragBar();
     },
 
-    mounted: function() {
+    mounted: function () {
         // set a resize watcher
         this.handleResize();
         window.addEventListener("resize", this.handleResize);
         this.hypsZoneWidth = 0.25 * this.docWidth;
     },
 
-    beforeDestroy: function() {
+    beforeDestroy: function () {
         window.removeEventListener("resize", this.handleResize);
     },
 
     methods: {
-        bindDragBar: function() {
+        bindDragBar: function () {
             let self = this;
 
             // Resize horizontally
             var dragBar = $(this.$el).find(".dragbar");
             dragBar.off("mousedown");
-            dragBar.on("mousedown", function(e) {
+            dragBar.on("mousedown", function (e) {
                 e.preventDefault();
-                $(document).mouseup(function(e) {
+                $(document).mouseup(function (e) {
                     $(document).unbind("mousemove");
                 });
-                $(document).mousemove(function(e) {
+                $(document).mousemove(function (e) {
                     // debounce the new size affectation so we won't parse the whole proof too often
                     _.debounce(() => {
                         self.hypsZoneWidth = e.pageX;
@@ -350,15 +369,15 @@ export default {
 
             // same as before but for touch interfaces
             dragBar.off("touchstart");
-            dragBar.on("touchstart", function(e) {
+            dragBar.on("touchstart", function (e) {
                 e.preventDefault();
-                $(document).on("touchend", function(e) {
+                $(document).on("touchend", function (e) {
                     $(document).unbind("touchmove");
                 });
-                $(document).on("touchmove", function(e) {
+                $(document).on("touchmove", function (e) {
                     let pageX = _.get(e, ["changedTouches", 0, "pageX"]);
                     let pageY = _.get(e, ["changedTouches", 0, "pageY"]);
-                    if( pageX && pageY ) {
+                    if (pageX && pageY) {
                         // debounce the new size affectation so we won't parse the whole proof too often
                         _.debounce(() => {
                             self.hypsZoneWidth = pageX;
@@ -606,6 +625,10 @@ export default {
             }
         },
 
+        getProofState() {
+            return this.proofState;
+        },
+
         showErrorMessage(e) {
             console.error(e);
 
@@ -778,11 +801,11 @@ export default {
             this.forceUpdate();
         },
 
-        getSubgoals() {},
+        getSubgoals() { },
 
-        getPredicates(subgoal) {},
+        getPredicates(subgoal) { },
 
-        getExpressions(subgoal) {},
+        getExpressions(subgoal) { },
 
         // If we are in select mode, deselect all selected sub-expressions
         deselect() {
@@ -844,7 +867,7 @@ export default {
         getHypothesisZone() {
             return $(this.$el).find(".hypothesis-zone");
         },
-             
+
         fitHypsZone(btn) {
             btn = $(btn.$el);
             if (btn.hasClass("in-hypothesis-zone")) {
@@ -931,7 +954,7 @@ export default {
             actions.forEach((a, i) => {
                 if (a.ui.kind == 'ctxt') {
                     console.log(a);
-                    $this.addActionItem(i+1, a.icon, a.description, a.action);
+                    $this.addActionItem(i + 1, a.icon, a.description, a.action);
                 }
             });
         },

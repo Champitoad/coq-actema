@@ -221,44 +221,77 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
              "ui"         , aui                            ;
              "action"     , Js.Unsafe.inject a             |]) actions))
 
-  (* Same as [actions], but in async mode. TO BE TESTED *)
+  (** Same as [actions], but in async mode. TO BE TESTED *)
   method pactions path =
     let%lwt _ = Lwt.return () in Lwt.return (_self##actions path)
 
-  (* Apply the action [action] (as returned by [actions]) *)
+  (** Apply the action [action] (as returned by [actions]) *)
   method apply action =
     js_proof_engine (!! (curry CoreLogic.apply) (_self##.proof, action))
   
-  (* Load the lemma database specified by the [lemmas] object into the prover *)
-  method loaddb lemmas =
-    let lemmas : (string * string) list =
-      match Js.to_string (Js.typeof lemmas) with
-      | "object" ->
-          lemmas |> Js.object_keys |> Js.to_array |> Array.to_list |>
-          List.map begin fun name ->
-            let name = Js.as_string InvalidLemmaDB name in
-            let stmt = Js.as_string InvalidLemmaDB (Js.Unsafe.get lemmas name) in
-            (name, stmt)
-          end
-      | _ -> raise InvalidLemmaDB
-      in
-    let pr = Proof.loaddb _self##.proof lemmas in
+  (** Load the lemma database specified by the [data] object into the prover. *)
+  method loadlemmas datab =
+    (* Decode the data. *)
+    let data =
+      datab 
+      |> Js.to_string 
+      |> Base64.decode_exn 
+    in
+    (* Split it in the lemmas and environment (in API format). *)
+    let lemmas, env = 
+      match String.split_on_char '\n' data with 
+      | [ lemmas; env ] -> 
+          ( Api.Logic_b.lemmas_of_string lemmas
+          , Api.Logic_b.env_of_string env )
+      | _ -> failwith "error"
+    in
+    (* Translate the lemmas and env to the actema format. *)
+    let lemmas = 
+      List.map begin fun (name, form) -> 
+        (name, Fo.Translate.to_form form) 
+      end lemmas
+    in  
+    let env = Hidmap.State.run (Fo.Translate.to_env env) (Hidmap.empty) in
+    (* Check the lemmas are all well-typed in the database environment. *)
+    List.iter begin fun (_name, form) -> 
+      Fo.Form.recheck env form
+    end lemmas;
+    (* Create the lemma database. *)
+    let db = 
+      List.fold begin fun db (name, form) -> 
+        LemmaDB.add db name form
+      end (LemmaDB.empty env) lemmas 
+    in 
+    (* Print the lemmas. *)
+    (*Format.printf "Printing lemmas\n";
+    List.iter begin fun (name, form) -> 
+      Format.printf "%s: %s\n" name (Notation.f_tostring (LemmaDB.env db) form)
+    end (LemmaDB.all_lemmas db);*)
+    let pr = Proof.set_db _self##.proof db in
     js_proof_engine pr
 
-  (* Serialize the current lemma database into a JS object. If [selection] is
-     defined, filters out lemmas which cannot be applied to the selection. *)
-  method getdb selection =
-    let selection = selection |> Js.Optdef.to_option |> Option.map Path.of_array in
-    _self##.proof |> CoreLogic.lemmas ?selection |>
-    List.map begin fun (name, form) ->
-      let stmt =
-        Notation.f_tostring (LemmaDB.env (Proof.db _self##.proof)) form |>
-        Js.string |>
-        Js.Unsafe.inject
-      in name, stmt
-    end |>
-    Array.of_list |>
-    Js.Unsafe.obj
+  (** Serialize the current lemma database into a JS object. 
+      If [selection] is defined, filters out lemmas which cannot be linked with the selection.
+      Returns an array of lemmas. Each lemma contains two string : (name, formula) *)
+  method getlemmas _selection =
+    (*let selection = 
+      selection 
+      |> Js.Optdef.to_option 
+      |> Option.map Path.of_array 
+    in*)
+    let db = _self##.proof |> Proof.get_db in
+    db
+    |> LemmaDB.all_lemmas
+    |> List.map begin fun (name, form) ->
+        let stmt =
+          Notation.f_tostring (LemmaDB.env db) form |>
+          Js.string |>
+          Js.Unsafe.inject
+        in name, stmt
+      end 
+    |> Array.of_list 
+    |> Js.Unsafe.obj
+
 end
 
 (* -------------------------------------------------------------------- *)
@@ -372,7 +405,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
   method addlemma name =
     let doit () =
       let name = Js.to_string name in
-      let form = LemmaDB.find (Proof.db parent##.proof) name in
+      let form = LemmaDB.get (Proof.get_db parent##.proof) name in
       CoreLogic.assume form (parent##.proof, _self##.handle)
     in js_proof_engine (!!doit ())
       

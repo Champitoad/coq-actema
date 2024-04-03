@@ -666,7 +666,7 @@ module Export = struct
          end*)
       |> List.take 10
     in
-    Log.str (Format.sprintf "Length of g_consts = %d" (List.length g_consts));
+    (*Log.str (Format.sprintf "Length of g_consts = %d" (List.length g_consts));*)
     State.fold begin fun lemmas (id, (ckey, _)) ->
       let open State in
       let name = id |> Names.Constant.to_string in

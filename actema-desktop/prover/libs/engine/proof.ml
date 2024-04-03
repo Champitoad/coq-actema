@@ -56,8 +56,10 @@ module Proof : sig
   val focused   : proof -> Handle.t -> Handle.t option
   val byid      : proof -> Handle.t -> pregoal
 
-  val db      : proof -> LemmaDB.t
-  val loaddb  : proof -> (string * string) list -> proof
+  (** Get the lemma database. *)
+  val get_db : proof -> LemmaDB.t
+  (** Set the lemma database. *)
+  val set_db : proof -> LemmaDB.t -> proof
 
   type meta = < > Js_of_ocaml.Js.t
 
@@ -258,11 +260,11 @@ end = struct
       p_db   = LemmaDB.empty Env.empty;
       p_hm   = hm }
   
-  let db (proof : proof) =
+  let get_db (proof : proof) =
     proof.p_db
     
-  let loaddb (proof : proof) (lemmas : (string * string) list) =
-    { proof with p_db = LemmaDB.load proof.p_db lemmas }
+  let set_db (proof : proof) (db : LemmaDB.t) =
+    { proof with p_db = db }
 
   type meta = < > Js_of_ocaml.Js.t
 
@@ -552,12 +554,9 @@ module CoreLogic : sig
       action : action; }
 
   val actions : Proof.proof -> asource -> aoutput list
- (* string : doc
-    ipath list : surbrillance
-    osource 
- *)
 
-  val lemmas : ?selection:selection -> Proof.proof -> (string * form) list
+  (** Get the list of lemmas (in the database) that can interact with a given selection. *)
+  (*val filter_lemmas : ?selection:selection -> Proof.proof -> (string * form) list*)
 
   val apply   : Proof.proof -> action -> Proof.proof
 
@@ -2950,13 +2949,9 @@ end = struct
     | `Ctxt
   ]
 
-  (** [lemmas ?selection proof] returns all lemmas for which there is a DnD
-      action involving one subterm of the [selection] in [proof]. If there
-      is no selection or the selection is empty, then it simply returns the
-      entire lemma database.
-  *)
-  let lemmas ?selection (proof : Proof.proof) : (string * form) list =
-    let filter =
+  (*let filter_lemmas ?selection (proof : Proof.proof) : (string * form) list =
+    proof |> Proof.db |> LemmaDB.all_lemmas*)
+    (*let filter =
       hlpred_add [
         hlpred_mult (List.map hlpred_of_lpred [wf_subform_link; intuitionistic_link]);
         (wf_subform_link ~drewrite:true |> hlpred_of_lpred)
@@ -2984,7 +2979,7 @@ end = struct
             search_linkactions filter proof ~fixed_srcs:[src] (dummy_path, lp) in
 
           not (List.is_empty linkactions)
-        end
+        end*)
 
   type aoutput =
     { description : string;

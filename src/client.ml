@@ -1,6 +1,7 @@
 open Cohttp
 open Cohttp_lwt_unix
 open Lwt.Syntax
+open CoqUtils
 
 (* This file defines the HTTP protocol used to communicate between
    the plugin (http client) and the frontend (http server). *)
@@ -45,6 +46,7 @@ let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t
   match code with
   (* The frontend gave a proof action. *)
   | 200 ->
+      Log.str "ACTION response";
       body |>
       String.split_on_char '\n' |>
       begin function
@@ -62,7 +64,9 @@ let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t
   | 202 -> Lwt.return Undo
   | 203 -> Lwt.return Redo
   (* The frontend requested a list of lemmas. *)
-  | 204 -> Lwt.return Lemmas     
+  | 204 -> 
+      Log.str "LEMMA response"; 
+      Lwt.return Lemmas     
   | 501 -> raise (UnsupportedRequestMethod body)
   | 550 -> raise (ActemaError body)
   | _   -> raise (UnsupportedHttpResponseCode code)
