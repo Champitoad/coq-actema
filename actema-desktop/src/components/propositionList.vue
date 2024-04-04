@@ -119,7 +119,7 @@ li.archived .pi-expression {
         <li class="list-group-item">
             <vue-simple-suggest class="search-lemma-bar" placeholder="Search lemma..." v-model="lemmaSearchText"
                 display-attribute="shortName" value-attribute="name" @select="addLemma" :list="lemmaList"
-                :filter-by-query="false" :min-length="0" :preventHide="true" :key="lemmaKey">
+                :filter-by-query="false" :min-length="0" :preventHide="true" :key="lemmaKey" ref="lemmaSearchBar">
                 <div slot="suggestion-item" slot-scope="{ suggestion }">
                     <div>{{ suggestion.shortName }} : {{ suggestion.stmt }}</div>
                 </div>
@@ -328,12 +328,22 @@ export default {
                 return { shortName: shorten(l[0]), name: l[0], stmt: l[1] }
             });
 
+            console.log(this.lemmaList);
+
             // Force a re-render of the lemma list.
             this.lemmaKey += 1;
         },
 
         getLemmaSearchText: function () {
             return this.lemmaSearchText;
+        },
+
+        // TODO: this seems to do nothing.
+        focusLemmaSearchBar: function () {
+            console.log("Focusing on the lemma search bar.");
+            console.log(this.$refs.lemmaSearchBar);
+            this.$refs.lemmaSearchBar.showList();
+            this.$refs.lemmaSearchBar.input.focus();
         }
     }
 };

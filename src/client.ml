@@ -72,11 +72,13 @@ let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t
   | _   -> raise (UnsupportedHttpResponseCode code)
   
 (** Send a set of lemmas to the frontend, and receive an action as response. *)
-let send_lemmas (lemmas : Logic_t.lemmas) (env : Logic_t.env) : action Lwt.t = 
+let send_lemmas (lemmas : Logic_t.lemma list) (env : Logic_t.env) : action Lwt.t = 
   (* Send request with lemmas and environment. *)
   let datab = 
-    (Logic_b.string_of_lemmas lemmas) ^ "\n" ^ (Logic_b.string_of_env env)
-    |> Base64.encode_string in
+    (env, lemmas)
+    |> Logic_b.string_of_lemmadb 
+    |> Base64.encode_string 
+  in
   let* (resp, body) = make_req "lemmas" datab in
   (* Handle the response. *)
   receive_action resp body

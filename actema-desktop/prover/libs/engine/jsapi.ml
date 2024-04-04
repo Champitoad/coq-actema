@@ -232,18 +232,11 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   (** Load the lemma database specified by the [data] object into the prover. *)
   method loadlemmas datab =
     (* Decode the data. *)
-    let data =
+    let env, lemmas =
       datab 
       |> Js.to_string 
       |> Base64.decode_exn 
-    in
-    (* Split it in the lemmas and environment (in API format). *)
-    let lemmas, env = 
-      match String.split_on_char '\n' data with 
-      | [ lemmas; env ] -> 
-          ( Api.Logic_b.lemmas_of_string lemmas
-          , Api.Logic_b.env_of_string env )
-      | _ -> failwith "error"
+      |> Api.Logic_b.lemmadb_of_string
     in
     (* Translate the lemmas and env to the actema format. *)
     let lemmas = 
@@ -263,10 +256,10 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
       end (LemmaDB.empty env) lemmas 
     in 
     (* Print the lemmas. *)
-    (*Format.printf "Printing lemmas\n";*)
+    (*Format.printf "Printing lemmas\n";
     List.iter begin fun (name, form) -> 
       Format.printf "%s: %s\n" name (Notation.f_tostring (LemmaDB.env db) form)
-    end (LemmaDB.all_lemmas db);
+    end (LemmaDB.all_lemmas db);*)
     let new_proof = Proof.set_db _self##.proof db in
     js_proof_engine new_proof
 
@@ -299,7 +292,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
     in
     Format.printf "Got pattern: %s\n" (Option.default "[none]" pattern);
     (* Convert the selection from JS to ocaml. *)
-    let _selection = 
+    let selection = 
       selection 
       |> Js.Optdef.to_option 
       |> Option.map Path.of_array
@@ -311,6 +304,16 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
       match pattern with 
       | None -> proof 
       | Some pattern -> CoreLogic.filter_db_by_name pattern proof
+    in
+    (* Fiter by selection. *)
+    let proof = 
+      match selection with 
+      | None | Some [] -> 
+          Format.printf "No selection\n"; proof 
+      | Some [ selection ] -> 
+          Format.printf "Got selection: %s\n" (CoreLogic.path_of_ipath selection);
+          CoreLogic.filter_db_by_selection selection proof
+      | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
     in
     js_proof_engine proof
 

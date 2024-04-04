@@ -656,7 +656,7 @@ module Export = struct
     | `FBind (kind, x, ty, f) -> form_contains_dummy f
 
   (** Collect all the lemmas we can translate to Actema. *)
-  let collect_lemmas ({ env = coq_env; evd } as e : destenv) : Logic_t.lemmas State.t =
+  let collect_lemmas ({ env = coq_env; evd } as e : destenv) : Logic_t.lemma list State.t =
     let g_consts = 
       (Environ.Globals.view coq_env.env_globals).constants
       |> Names.Cmap_env.bindings
@@ -664,15 +664,13 @@ module Export = struct
             let target = Names.Constant.make1 (kername ["Actema"; "Test"] "add_comm") in 
             Names.Constant.CanOrd.equal cname target
          end*)
-      |> List.take 10
+      |> List.take 100
     in
-    (*Log.str (Format.sprintf "Length of g_consts = %d" (List.length g_consts));*)
     State.fold begin fun lemmas (id, (ckey, _)) ->
       let open State in
       let name = id |> Names.Constant.to_string in
       let ty = ckey.Declarations.const_type |> EConstr.of_constr in
       
-      (*Log.str @@ Format.sprintf "====> %s\n%s" name (Log.string_of_econstr coq_env evd ty);*)
       let* form = dest_form (e, ty) in
       if not (form_contains_dummy form) then
         return @@ (name, form) :: lemmas
@@ -726,7 +724,7 @@ module Export = struct
     goal, sign
 
   (** Get the list of all lemmas we can export to actema. *)
-  let lemmas (goal : Goal.t) (init_sign : FOSign.t) : Logic_t.lemmas * FOSign.t =
+  let lemmas (goal : Goal.t) (init_sign : FOSign.t) : Logic_t.lemma list * FOSign.t =
     State.run 
       (collect_lemmas { env = Goal.env goal; evd = Goal.sigma goal }) 
       init_sign

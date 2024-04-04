@@ -68,8 +68,8 @@ type agoal = {
 (* A single lemma *)
 type lemma = (name * form)
 
-(* A list of lemmas. *)
-type lemmas = lemma list
+(* A lemma database. *)
+type lemmadb = (env * lemma list)
 
 (* -------------------------------------------------------------------- *)
 (** Actions *)

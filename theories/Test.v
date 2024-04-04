@@ -1,19 +1,9 @@
 From Actema Require Import Loader.
-
-Section Foo.
-
-Definition foo {A : Type} (x : A) := 3.
-
-End Foo.
-
-Variable (A : Type).
-
-Goal forall (a : A), foo a = foo a. Admitted. 
-
-Goal forall x, x = 3 -> x = 6 -> x = 1. Admitted.
-Set Debug "backtrace".
-
 Require Import ssreflect.
+
+Lemma dummy (x y : nat) (H : x <= y) : True.
+Proof. 
+  actema_force.
 
 Parameter f : nat -> nat -> nat.
 

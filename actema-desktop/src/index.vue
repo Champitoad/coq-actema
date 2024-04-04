@@ -9,7 +9,8 @@
                 <div class="mx-auto"></div>
                 <div class="buttons text-right mr-2">
                     <button class="btn btn-outline-secondary btn-select" @click="toggleSelectionMode"
-                        :disabled="!connected" title="Undo (ctrl+z)"><i class="fas fa-mouse-pointer fa-sm"></i></button>
+                        :disabled="!connected" title="Toggle selection mode (shift+click)">
+                        <i class="fas fa-mouse-pointer fa-sm"></i></button>
                     <button class="btn btn-outline-secondary btn-undo" @click="undo" :disabled="!connected"
                         title="Undo (ctrl+z)"><i class="fas fa-undo"></i></button>
                     <button class="btn btn-outline-secondary btn-redo" @click="redo" :disabled="!connected"
@@ -54,8 +55,11 @@ export default {
                 proofState = proofState.filterlemmas(selection, pattern);
                 // Load the new proof engine.
                 this.$refs.proofCanvas.setProofState(proofState);
-                // Once the new proof engine is loaded, update the lemma search bar.
+
+                // Once the new proof engine is loaded, update the lemma search bar
+                // and focus it.
                 propList.updateLemmaList();
+                propList.focusLemmaSearchBar();
             } catch (e) {
                 this.$refs.proofCanvas.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
