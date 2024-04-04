@@ -1,7 +1,9 @@
+
 (** This module defines the lemma database. The database consists of :
     - A list of lemmas (name and formula). 
     - An environment containing the predicates & functions used in the lemmas. *)
 
+(** The abstract type of a lemma database. *)
 type t
 
 exception LemmaNotFound of string
@@ -21,3 +23,6 @@ val get : t -> string -> Fo.form
 (** Add a lemma to the database. 
     We assume that the symbols of the lemma are contained in the database env. *)
 val add : t -> string -> Fo.form -> t
+
+(** Filter the database. The predicate takes as input the lemma name and body. *)
+val filter : (string -> Fo.form -> bool) -> t -> t

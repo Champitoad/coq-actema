@@ -119,7 +119,7 @@ li.archived .pi-expression {
         <li class="list-group-item">
             <vue-simple-suggest class="search-lemma-bar" placeholder="Search lemma..." v-model="lemmaSearchText"
                 display-attribute="shortName" value-attribute="name" @select="addLemma" :list="lemmaList"
-                :filter-by-query="false" :min-length="0" :preventHide="true">
+                :filter-by-query="false" :min-length="0" :preventHide="true" :key="lemmaKey">
                 <div slot="suggestion-item" slot-scope="{ suggestion }">
                     <div>{{ suggestion.shortName }} : {{ suggestion.stmt }}</div>
                 </div>
@@ -214,7 +214,11 @@ export default {
         return {
             lemmaList: [],
             dragover: false,
-            lemmaSearchText: ""
+            lemmaSearchText: "",
+            // A variable used to force a re-render of the lemma list when needed.
+            // This is known as the key-changing technique. For more information see :
+            // https://michaelnthiessen.com/force-re-render
+            lemmaKey: 0,
         };
     },
     methods: {
@@ -310,9 +314,7 @@ export default {
 
         updateLemmaList: function () {
             console.log("Updating lemma dropdown.");
-            let selection = this.$parent.getSelection(this.goal);
-            let lemmas = Object.entries(this.$parent.proofState.getlemmas(selection));
-            console.log("Lemma count: " + lemmas.length);
+            let lemmas = Object.entries(this.$parent.proofState.getlemmas());
 
             // Get the short version of a lemma name.
             // Example : "Coq.ZArith.BinInt.Z.Private_Div.NZQuot.add_mod"
@@ -325,6 +327,13 @@ export default {
             this.lemmaList = _.map(lemmas, l => {
                 return { shortName: shorten(l[0]), name: l[0], stmt: l[1] }
             });
+
+            // Force a re-render of the lemma list.
+            this.lemmaKey += 1;
+        },
+
+        getLemmaSearchText: function () {
+            return this.lemmaSearchText;
         }
     }
 };

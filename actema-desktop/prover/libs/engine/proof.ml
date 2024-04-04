@@ -555,8 +555,13 @@ module CoreLogic : sig
 
   val actions : Proof.proof -> asource -> aoutput list
 
-  (** Get the list of lemmas (in the database) that can interact with a given selection. *)
-  (*val filter_lemmas : ?selection:selection -> Proof.proof -> (string * form) list*)
+  (** Filter the lemma database by keeping only the lemmas that have a dnd interaction with a given selection. 
+      This only changes the lemma database. *)
+  val filter_db_by_selection : ipath -> Proof.proof -> Proof.proof
+
+  (** Filter the lemma database by keeping only the lemmas whose name matches a given pattern.
+      This only changes the lemma database.  *)
+  val filter_db_by_name : string -> Proof.proof -> Proof.proof
 
   val apply   : Proof.proof -> action -> Proof.proof
 
@@ -2949,38 +2954,52 @@ end = struct
     | `Ctxt
   ]
 
-  (*let filter_lemmas ?selection (proof : Proof.proof) : (string * form) list =
-    proof |> Proof.db |> LemmaDB.all_lemmas*)
-    (*let filter =
+  let filter_db_by_name pattern proof =
+    let new_db = proof |> Proof.get_db |> LemmaDB.filter 
+      begin fun name _stmt ->
+        (* Check that the pattern is an exact substring of the lemma's name.
+           The test is case-insensitive. *)
+        let name = String.lowercase name in
+        let pattern = String.lowercase pattern in
+        try ignore (String.find name pattern); true
+        with Not_found -> false
+      end 
+    in 
+    Proof.set_db proof new_db
+
+  let filter_db_by_selection selection proof =
+    (* Construct a hyperlink predicate to allow only valid linkactions. *)
+    let filter =
       hlpred_add [
         hlpred_mult (List.map hlpred_of_lpred [wf_subform_link; intuitionistic_link]);
-        (wf_subform_link ~drewrite:true |> hlpred_of_lpred)
-      ] in
-
-    match selection with
-    | None | Some [] -> proof |> Proof.db |> LemmaDB.all
-    | Some ((p :: _) as sel) ->
-        let Proof.{ g_id; g_pregoal = sub } = goal_of_ipath proof p in
-
-        proof |> Proof.db |> LemmaDB.all |>
-        List.filter begin fun (_, stmt) ->
-          let hd = Handle.fresh () in
-          let sub =
-            let hyp = Proof.mk_hyp stmt in
-            let g_hyps = Proof.Hyps.add sub.g_hyps hd hyp in
-            Proof.{ sub with g_hyps } in
-
-          let g_id, proof = Proof.hprogress proof g_id (TAssume (stmt, g_id)) sub in
-          let lp = mk_ipath ~ctxt:{ kind = `Hyp; handle = Handle.toint hd } (Handle.toint g_id) in
-
-          let linkactions =
-            let open Monad.List in
-            sel >>= fun src ->
-            search_linkactions filter proof ~fixed_srcs:[src] (dummy_path, lp) in
-
-          not (List.is_empty linkactions)
-        end*)
-
+        (hlpred_of_lpred @@ wf_subform_link ~drewrite:true)
+      ] 
+    in
+    (* Filter the lemma database. *)
+    let new_db = proof |> Proof.get_db |> LemmaDB.filter 
+      begin fun _name stmt ->
+        (* Make a new goal that has the lemma as a local hypothesis. *)
+        let Proof.{ g_id; g_pregoal = sub } = goal_of_ipath proof selection in
+        let hd = Handle.fresh () in
+        let sub =
+          let hyp = Proof.mk_hyp stmt in
+          let g_hyps = Proof.Hyps.add sub.g_hyps hd hyp in
+          Proof.{ sub with g_hyps } 
+        in
+        (* Create a path to the root of the new hypothesis (representing the lemma). *)
+        let g_id, proof = Proof.hprogress proof g_id (TAssume (stmt, g_id)) sub in
+        let lemma_path = mk_ipath ~ctxt:{ kind = `Hyp; handle = Handle.toint hd } (Handle.toint g_id) in
+        (* Compute all linkactions. *)
+        let linkactions =
+          (* Here the source of the linkaction is fixed to the selection (no subterms),
+             but the destination is not fixed (we consider all subterms of the lemma). *)
+          search_linkactions filter proof ~fixed_srcs:[selection] (dummy_path, lemma_path) 
+        in not @@ List.is_empty linkactions
+      end
+    (* Note that the proof is modified in the predicate of LemmaDB.filter (we add a new hypothesis), 
+       but since it is an immutable structure the changes are not reflected here. *)
+    in Proof.set_db proof new_db
+  
   type aoutput =
     { description : string;
       icon : string option;

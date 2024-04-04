@@ -263,22 +263,16 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
       end (LemmaDB.empty env) lemmas 
     in 
     (* Print the lemmas. *)
-    (*Format.printf "Printing lemmas\n";
+    (*Format.printf "Printing lemmas\n";*)
     List.iter begin fun (name, form) -> 
       Format.printf "%s: %s\n" name (Notation.f_tostring (LemmaDB.env db) form)
-    end (LemmaDB.all_lemmas db);*)
-    let pr = Proof.set_db _self##.proof db in
-    js_proof_engine pr
+    end (LemmaDB.all_lemmas db);
+    let new_proof = Proof.set_db _self##.proof db in
+    js_proof_engine new_proof
 
   (** Serialize the current lemma database into a JS object. 
-      If [selection] is defined, filters out lemmas which cannot be linked with the selection.
-      Returns an array of lemmas. Each lemma contains two string : (name, formula) *)
-  method getlemmas _selection =
-    (*let selection = 
-      selection 
-      |> Js.Optdef.to_option 
-      |> Option.map Path.of_array 
-    in*)
+      Returns an array of lemmas. Each lemma contains two strings : (full-name, pretty-printed-formula) *)
+  method getlemmas =
     let db = _self##.proof |> Proof.get_db in
     db
     |> LemmaDB.all_lemmas
@@ -291,6 +285,34 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
       end 
     |> Array.of_list 
     |> Js.Unsafe.obj
+
+  (** Filter the lemma database according to :
+      - the current selection.
+      - a text pattern (usually the text in the lemma search-bar's input-box). 
+      Both arguments are optional (in javascript-land, they can be undefined). *)
+  method filterlemmas selection pattern =
+    (* Convert the pattern from JS to ocaml. *)
+    let pattern = 
+      pattern 
+      |> Js.Optdef.to_option 
+      |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
+    in
+    Format.printf "Got pattern: %s\n" (Option.default "[none]" pattern);
+    (* Convert the selection from JS to ocaml. *)
+    let _selection = 
+      selection 
+      |> Js.Optdef.to_option 
+      |> Option.map Path.of_array
+    in
+    (* Get the proof. *)
+    let proof = _self##.proof in
+    (* Fitler by name. *)
+    let proof = 
+      match pattern with 
+      | None -> proof 
+      | Some pattern -> CoreLogic.filter_db_by_name pattern proof
+    in
+    js_proof_engine proof
 
 end
 

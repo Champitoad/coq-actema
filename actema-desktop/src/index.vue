@@ -41,13 +41,21 @@ export default {
         window.ipcRenderer.on('received_lemmas', (_, datab) => {
             try {
                 console.log("Received lemmas");
-                // Load the lemmas in the proof engine.
+
                 let proofState = this.$refs.proofCanvas.getProofState();
+                let subgoal_idx = this.$refs.proofCanvas.getActiveSubgoal();
+                let propList = this.$refs.proofCanvas.$refs.plist[subgoal_idx];
+
+                // Load the lemmas in the proof engine.
                 proofState = proofState.loadlemmas(datab);
+                // Filter the lemma database.            
+                let selection = this.$refs.proofCanvas.getActiveSelection();
+                let pattern = propList.getLemmaSearchText();
+                proofState = proofState.filterlemmas(selection, pattern);
+                // Load the new proof engine.
                 this.$refs.proofCanvas.setProofState(proofState);
-                // Update the lemma search bar.
-                let propList = this.$refs.proofCanvas.$refs.plist;
-                propList[0].updateLemmaList();
+                // Once the new proof engine is loaded, update the lemma search bar.
+                propList.updateLemmaList();
             } catch (e) {
                 this.$refs.proofCanvas.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);

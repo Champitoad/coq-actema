@@ -1,9 +1,9 @@
 open Utils
 
-type t = {
-  db_env : Fo.env;
-  db_map : (string, Fo.form) Map.t;
-}
+type t = 
+  { db_env : Fo.env
+  ; db_map : (string, Fo.form) Map.t
+  }
 
 exception LemmaNotFound of string
 
@@ -23,3 +23,6 @@ let add db name form =
 
 let all_lemmas db =
   Map.bindings db.db_map
+
+let filter pred db = 
+  { db with db_map = Map.filter pred db.db_map}
