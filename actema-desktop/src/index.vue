@@ -4,8 +4,9 @@
             <div class="row" style="padding-top: 20px; padding-bottom: 20px; background-color: #eee;">
                 <button id="done" class="btn btn-info ml-2" @click="done" title="Done"
                     :disabled="!connected">Done</button>
-                <button id="lemmas" class="btn btn-info ml-2" @click="lemmas" title="Request lemmas from the plugin."
-                    :disabled="!connected">Request Lemmas</button>
+                <button id="lemmas" class="btn btn-info ml-2" @click="applyLemma"
+                    title="Apply a lemma, filtering by the current selection and text input (ctrl+f)"
+                    :disabled="!connected">Apply lemma</button>
                 <div class="mx-auto"></div>
                 <div class="buttons text-right mr-2">
                     <button class="btn btn-outline-secondary btn-select" @click="toggleSelectionMode"
@@ -102,7 +103,12 @@ export default {
                     // ctrl+z
                     self.undo();
                 } else if (e.key === "m" && e.ctrlKey) {
+                    // ctrl+m
                     self.toggleDisplayMode();
+                }
+                else if (e.key === "f" && e.ctrlKey) {
+                    // ctrl+f
+                    self.applyLemma();
                 }
             }
 
@@ -184,8 +190,8 @@ export default {
             }
         },
 
-        // Called when the "Request Lemmas" button is clicked.
-        lemmas() {
+        // Called when the "Apply lemma" button is clicked.
+        applyLemma() {
             try {
                 window.ipcRenderer.send('request_lemmas');
             } catch (e) {

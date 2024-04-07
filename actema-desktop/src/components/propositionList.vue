@@ -338,12 +338,17 @@ export default {
             return this.lemmaSearchText;
         },
 
-        // TODO: this seems to do nothing.
         focusLemmaSearchBar: function () {
-            console.log("Focusing on the lemma search bar.");
-            console.log(this.$refs.lemmaSearchBar);
-            this.$refs.lemmaSearchBar.showList();
-            this.$refs.lemmaSearchBar.input.focus();
+            //console.log("Focusing on the lemma search bar.");
+            //console.log(this.$refs.lemmaSearchBar);
+            //this.$refs.lemmaSearchBar.showList();
+
+            // For some reason using "setTimeout" is necessary here.
+            // For somewhat of an explanation read :
+            // https://bobbyhadz.com/blog/focus-not-working-in-javascript
+            setTimeout(() => {
+                this.$refs.lemmaSearchBar.input.focus();
+            }, 0);
         }
     }
 };
