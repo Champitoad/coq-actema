@@ -3,8 +3,6 @@ open Utils
 open Fo
 
 (* -------------------------------------------------------------------- *)
-type pnode = ..
-type pnode += TId
 
 exception InvalidGoalId    of Handle.t
 exception InvalidHyphId    of Handle.t
@@ -71,16 +69,16 @@ module Proof : sig
   val sgprogress : pregoal -> ?clear:bool -> subgoal list -> pregoals
 
   val progress :
-    proof -> Handle.t -> pnode -> form list -> proof
+    proof -> Handle.t -> form list -> proof
 
   val sprogress :
-    proof -> ?clear:bool -> Handle.t -> pnode -> subgoal list -> proof
+    proof -> ?clear:bool -> Handle.t -> subgoal list -> proof
 
   val hprogress :
-    proof -> Handle.t -> pnode -> pregoal -> Handle.t * proof
+    proof -> Handle.t -> pregoal -> Handle.t * proof
 
   val xprogress :
-    proof -> Handle.t -> pnode -> pregoals -> proof
+    proof -> Handle.t -> pregoals -> proof
   
   module Translate : sig
     open Hidmap
@@ -186,7 +184,6 @@ end = struct
   type gdep = {
     d_src : Handle.t;
     d_dst : Handle.t list;
-    d_ndn : pnode;
   }
 
   type proof = {
@@ -303,7 +300,7 @@ end = struct
 
   type subgoal = (Handle.t option * form list) list * form
 
-  let hprogress (pr : proof) (id : Handle.t) (pn : pnode) (sub : pregoal) =
+  let hprogress (pr : proof) (id : Handle.t) (sub : pregoal) =
     let _goal = byid pr id in
 
     let g_id = Handle.fresh () in
@@ -315,8 +312,6 @@ end = struct
     let gr, _, go =
       try  List.pivot (Handle.eq id) pr.p_crts
       with Invalid_argument _ -> raise (SubgoalNotOpened id) in
-
-    let dep = { d_src = id; d_dst = [g_id]; d_ndn = pn; } in
 
     let meta =
       match Map.Exceptionless.find id !(pr.p_meta) with
@@ -333,11 +328,9 @@ end = struct
     g_id, { pr with
         p_maps = map;
         p_crts = gr @ [g_id] @ go;
-        p_frwd = Map.add id dep pr.p_frwd;
-        p_bkwd = Map.add g_id dep pr.p_bkwd;
         p_meta = ref meta; }
 
-  let xprogress (pr : proof) (id : Handle.t) (pn : pnode) (subs : pregoals) =
+  let xprogress (pr : proof) (id : Handle.t) (subs : pregoals) =
     let _goal = byid pr id in
 
     let subs =
@@ -352,8 +345,6 @@ end = struct
     let gr, _, go =
       try  List.pivot (Handle.eq id) pr.p_crts
       with Invalid_argument _ -> raise (SubgoalNotOpened id) in
-
-    let dep = { d_src = id; d_dst = sids; d_ndn = pn; } in
 
     let meta =
       match Map.Exceptionless.find id !(pr.p_meta) with
@@ -374,8 +365,6 @@ end = struct
     { pr with
         p_maps = map;
         p_crts = gr @ sids @ go;
-        p_frwd = Map.add id dep pr.p_frwd;
-        p_bkwd = List.fold_right (Map.add^~ dep) sids pr.p_bkwd;
         p_meta = ref meta; }
 
   let sgprogress (goal : pregoal) ?(clear = false) (subs : subgoal list) =
@@ -398,15 +387,15 @@ end = struct
 
     in List.map for1 subs
 
-  let sprogress (pr : proof) ?(clear = false) (id : Handle.t) (pn : pnode) (subs : subgoal list) =
+  let sprogress (pr : proof) ?(clear = false) (id : Handle.t) (subs : subgoal list) =
     let goal = byid pr id in
     let sub = sgprogress goal ~clear subs in
-    xprogress pr id pn sub
+    xprogress pr id sub
 
-  let progress (pr : proof) (id : Handle.t) (pn : pnode) (sub : form list) =
+  let progress (pr : proof) (id : Handle.t) (sub : form list) =
     let goal = byid pr id in
     let sub  = List.map (fun x -> { goal with g_goal = x }) sub in
-    xprogress pr id pn sub
+    xprogress pr id sub
 
   module Translate = struct
     open Api
@@ -576,7 +565,7 @@ end = struct
   type tactic = targ -> Proof.proof
 
   let id_tac : tactic =
-    fun (pr, id) -> Proof.xprogress pr id TId [Proof.byid pr id]
+    fun (pr, id) -> Proof.xprogress pr id [Proof.byid pr id]
   
   let then_tac (t1 : tactic) (t2 : tactic) : tactic =
     fun (_, id as targ) ->
@@ -639,50 +628,43 @@ end = struct
     
     { g_env; g_hyps; g_goal }
 
-  type pnode += TDef of (Fo.name * Fo.type_ * Fo.expr) * Handle.t
-
   let add_local_def ((name, ty, body) : string * Fo.type_ * Fo.expr) ((proof, hd) : targ) =
     let new_goal = add_local (name, ty, Some body) (Proof.byid proof hd) in
-    Proof.xprogress proof hd (TDef ((name, ty, body), hd)) [new_goal]
+    Proof.xprogress proof hd [new_goal]
 
-
-  type pnode += TIntro of (int * (expr * type_) option)
 
   let intro ?(variant = (0, None)) ((pr, id) : targ) =
-    let pterm = TIntro variant in
     let goal = Proof.byid pr id in
     let g_env = goal.g_env in
 
     match variant, (Proof.byid pr id).g_goal with
     | (0, None), FPred ("_EQ", [e1; e2]) when Form.e_equal_delta g_env e1 e2 ->
-        Proof.progress pr id pterm []
+        Proof.progress pr id []
 
     | (0, None), FConn (`And, [f1; f2]) ->
-        Proof.progress pr id pterm [f1; f2]
+        Proof.progress pr id [f1; f2]
 
     | (0, None), FConn (`Imp, [f1; f2]) ->
-        Proof.sprogress pr id pterm
-          [[None, [f1]], f2]
+        Proof.sprogress pr id [[None, [f1]], f2]
 
     | (0, None), FConn (`Equiv, [f1; f2]) ->
-        Proof.progress pr id pterm
-          [Form.f_imp f1 f2; Form.f_imp f2 f1]
+        Proof.progress pr id [Form.f_imp f1 f2; Form.f_imp f2 f1]
 
     | (i, None), (FConn (`Or, _) as f) ->
         let fl = Form.flatten_disjunctions f in
         let g = List.nth fl i in
-        Proof.progress pr id pterm [g]
+        Proof.progress pr id [g]
 
     | (0, None), FConn (`Not, [f]) ->
-        Proof.sprogress pr id pterm [[None, [f]], FFalse]
+        Proof.sprogress pr id [[None, [f]], FFalse]
 
     | (0, None), FTrue ->
-        Proof.progress pr id pterm []
+        Proof.progress pr id []
 
     | (0, None), FBind (`Forall, x, xty, body) ->
         let new_goal = add_local (x, xty, None) goal in
         let new_goal = Proof.{ new_goal with g_goal = body } in
-        Proof.xprogress pr id pterm [new_goal]
+        Proof.xprogress pr id [new_goal]
 
     | (0, Some (e, ety)), FBind (`Exist, x, xty, body) -> begin
         let goal = Proof.byid pr id in
@@ -691,20 +673,16 @@ end = struct
         if not (Form.t_equal goal.g_env xty ety) then
           raise TacticNotApplicable; 
         let goal = Fo.Form.Subst.f_apply1 (x, 0) e body in
-        Proof.sprogress pr id pterm [[], goal]
+        Proof.sprogress pr id [[], goal]
       end
 
     | _ -> raise TacticNotApplicable
-
-  type pnode += OrDrop of Handle.t
 
   let or_drop (h : Handle.t) ((pr, id) : targ) hl =
     let gl   = Proof.byid pr id in
     let _hy  = (Proof.Hyps.byid gl.g_hyps h).h_form in
     let _gll = Form.flatten_disjunctions gl.g_goal in
-    Proof.sprogress pr id (OrDrop id) hl
-
-  type pnode += AndDrop of Handle.t
+    Proof.sprogress pr id hl
 
   let and_drop (h : Handle.t) ((pr, id) : targ) =
     let gl  = Proof.byid pr id in
@@ -712,10 +690,7 @@ end = struct
     let gll = Form.flatten_conjunctions gl.g_goal in
     let ng  = Form.f_ands (remove_form gl.g_env hy gll) in
 
-    Proof.sprogress pr id (AndDrop id) [[None, []], ng]
-
-  type pnode += TExact of Handle.t
-  type pnode += TElim of Handle.t
+    Proof.sprogress pr id [[None, []], ng]
 
   let core_elim (h : Handle.t) ((pr, id) : targ) =
     let result = ref ([]) in 
@@ -724,41 +699,38 @@ end = struct
 
     begin
       if Form.f_equal gl.g_env hyp gl.g_goal
-      then result := [(TExact h), `S []]
+      then result := [`S []]
       else
         let pre, hy, s = prune_premisses_fa hyp in
         begin match Form.f_unify gl.g_env LEnv.empty s [(hy, gl.g_goal)] with
         | Some s when Form.Subst.is_complete s ->  
             let pres = List.map
               (fun (i, x) -> [Some h, []], (Form.Subst.f_iter s i x)) pre in
-            result :=  ((TElim h), `S pres)::!result
+            result :=  `S pres::!result
         | Some _ -> () (* "incomplete match" *)
         | _ -> ();
         end;
         let subs = List.map (fun (_, f) -> [Some h, []], f) pre in
         begin match hy with
         | FConn (`And, [f1; f2]) ->
-            result := ((TElim h), `S (subs @ [[Some h, [f1; f2]], gl.g_goal])) :: !result
+            result := `S (subs @ [[Some h, [f1; f2]], gl.g_goal]) :: !result
         (* clear *) 
         | FConn (`Or, [f1; f2]) ->
-            result := ((TElim h), 
-                       `S (subs @ [[Some h, [f1]], gl.g_goal;
-                               [Some h, [f2]], gl.g_goal])) :: !result
+            result := `S (subs @ [[Some h, [f1]], gl.g_goal;
+                          [Some h, [f2]], gl.g_goal]) :: !result
         | FConn (`Equiv, [f1; f2]) ->
-            result := ((TElim h),
-                       `S (subs @ [[Some h, [Form.f_imp f1 f2;
-                                          Form.f_imp f2 f1]], gl.g_goal])) :: !result
+            result := `S (subs @ [[Some h, [Form.f_imp f1 f2;
+                          Form.f_imp f2 f1]], gl.g_goal]) :: !result
         | FConn (`Not, [f]) ->
-            result := ((TElim h), 
-                       `S (subs @ [[Some h, []], f])) :: !result
-        | FFalse -> result := ((TElim h), `S subs) :: !result
-        | FTrue -> result := ((TElim h), `S (subs @ [[Some h, []], gl.g_goal])) :: !result
+            result := `S (subs @ [[Some h, []], f]) :: !result
+        | FFalse -> result := `S subs :: !result
+        | FTrue -> result := `S (subs @ [[Some h, []], gl.g_goal]) :: !result
         | FBind (`Exist, x, ty, f) ->
             let goal = add_local (x, ty, None) gl in
             let g_hyps = Proof.Hyps.remove goal.g_hyps h in
             let g_hyps = Proof.(Hyps.add g_hyps h (mk_hyp f)) in
             let goal = Proof.{ goal with g_hyps } in
-            result := ((TElim h), `X [goal]) :: !result
+            result := `X [goal] :: !result
         | _ -> ()
         end;
         (* let _ , goal, s = prune_premisses_ex gl.g_goal in
@@ -789,16 +761,13 @@ end = struct
 
   let perform ?clear l pr id =
     match l with
-      | (t, `S l)::_ -> Proof.sprogress ?clear pr id t l
-      | (t, `X l)::_ -> Proof.xprogress pr id t l
+      | `S l :: _ -> Proof.sprogress ?clear pr id l
+      | `X l :: _ -> Proof.xprogress pr id l
       | _ -> raise TacticNotApplicable
   
   let elim ?clear (h : Handle.t) ((pr, id) : targ) =
     perform ?clear (core_elim h (pr, id)) pr id
   
-  
-  type pnode += TInd of Handle.t
-
   let induction (h : Handle.t) ((pr, id) : targ) =
     let goal = Proof.byid pr id in
     let env = goal.g_env in
@@ -820,7 +789,7 @@ end = struct
             let indh = Form.Subst.f_apply1 x (EVar (n, 0)) goal.g_goal in
             Proof.Hyps.add goal.g_hyps (Handle.fresh ()) (Proof.mk_hyp indh) } in
     
-    Proof.xprogress pr id (TInd h) [base_case; ind_case]
+    Proof.xprogress pr id [base_case; ind_case]
 
     
   let ivariants ((pr, id) : targ) =
@@ -850,9 +819,6 @@ end = struct
     | FBind (`Exist, _, _, _) -> ["destruct"]
     | _ -> []
 
-
-  type pnode += TForward of Handle.t * Handle.t
-
   let core_forward (hsrc, hdst, p, s) ((pr, id) : targ)  =
     let gl   = Proof.byid pr id in
     let _src = (Proof.Hyps.byid gl.g_hyps hsrc).h_form in
@@ -873,12 +839,10 @@ end = struct
     in
     let nf = build_dest (dst, p, s) in
 
-    [ (TForward (hsrc, hdst)), `S [[Some hdst, [nf]], gl.g_goal] ]
+    [ `S [[Some hdst, [nf]], gl.g_goal] ]
 
   let forward (hsrc, hdst, p, s) ((pr, id) : targ) =
     perform (core_forward (hsrc, hdst, p, Form.Subst.aslist s) (pr, id)) pr id 
-
-  type pnode += TCut of Fo.form * Handle.t
 
   let cut (form : form) ((proof, hd) : targ) =
     let goal = Proof.byid proof hd in
@@ -887,10 +851,7 @@ end = struct
 
     let subs = [[], form] in
     
-    Proof.sprogress proof hd (TCut (form, hd))
-      (subs @ [[None, [form]], goal.g_goal])
-
-  type pnode += TAssume of Fo.form * Handle.t
+    Proof.sprogress proof hd (subs @ [[None, [form]], goal.g_goal])
 
   let assume (form : form) ((proof, hd) : targ) =
     let goal = Proof.byid proof hd in
@@ -898,21 +859,16 @@ end = struct
 
     Fo.Form.recheck env form;
     
-    Proof.sprogress proof hd (TAssume (form, hd))
-      ([[None, [form]], goal.g_goal])
-
-  type pnode += TGeneralize of Handle.t
+    Proof.sprogress proof hd ([[None, [form]], goal.g_goal])
 
   let generalize (hid : Handle.t) ((proof, id) : targ) =
     let goal = Proof.byid proof id in
     let hyp  = (Proof.Hyps.byid goal.g_hyps hid).h_form in
 
-    Proof.xprogress proof id (TGeneralize hid)
+    Proof.xprogress proof id
       [{ g_env  = goal.g_env;
          g_hyps = Proof.Hyps.remove goal.g_hyps hid;
          g_goal = FConn (`Imp, [hyp; goal.g_goal]) } ]
-
-  type pnode += TMove of Handle.t * Handle.t option
 
   let move (from : Handle.t) (before : Handle.t option) ((proof, id) : targ) =
     let goal    = Proof.byid proof id in
@@ -920,11 +876,8 @@ end = struct
     let _before = Option.map (Proof.Hyps.byid goal.g_hyps) before in (* KEEP *)
     let hyps    = Proof.Hyps.move goal.g_hyps from before in
 
-    Proof.xprogress proof id (TMove (from, before))
-      [{ goal with g_hyps = hyps }]
+    Proof.xprogress proof id [{ goal with g_hyps = hyps }]
 
-  type pnode += TDuplicate of Handle.t
-  
   let duplicate (hd : Handle.t) : tactic =
     fun (proof, id) ->
 
@@ -932,7 +885,7 @@ end = struct
     let form = (Proof.Hyps.byid goal.g_hyps hd).h_form in
     let subgoal = [Some hd, [form]], goal.g_goal in
 
-    Proof.sprogress proof id (TDuplicate hd) [subgoal]
+    Proof.sprogress proof id [subgoal]
   
 
   (** The [close_with_unit] tactic tries to close the goal either with
@@ -1259,12 +1212,10 @@ end = struct
     && List.is_prefix sp.sub p.sub
 
   
-  type pnode += TRewriteAt of term * ipath
-
   (** [rewrite_at p t targ] rewrites the subterm at path [p] in the goal
       into [t]. It automatically shifts variables in [t] to avoid capture by
       binders. *)
-  let rewrite_at (t : term) (p : ipath) ?(pnode = TRewriteAt(t, p)) : tactic =
+  let rewrite_at (t : term) (p : ipath) : tactic =
     let open Proof in fun (proof, _) ->
 
     let { g_id; g_pregoal = goal }, item, (sub, _) = of_ipath proof p in
@@ -1272,12 +1223,12 @@ end = struct
     match item with
     | `C f ->
         let new_concl = rewrite_subterm t (`F f) sub |> form_of_term in
-        progress proof g_id pnode [new_concl]
+        progress proof g_id [new_concl]
     
     | `H (hd, { h_form = f; _ }) ->
         let new_hyp = rewrite_subterm t (`F f) sub |> form_of_term in
         let subgoal = [Some hd, [new_hyp]], goal.g_goal in
-        sprogress ~clear:true proof g_id pnode [subgoal]
+        sprogress ~clear:true proof g_id [subgoal]
     
     | `V (x, (ty, body)) ->
         begin match p.ctxt.kind with
@@ -1288,15 +1239,13 @@ end = struct
             | Some b ->
                 let new_body = rewrite_subterm t (`E b) sub |> expr_of_term in
                 let g_env = Vars.modify goal.g_env (x, (ty, Some new_body)) in
-                xprogress proof g_id pnode [{ goal with g_env }]
+                xprogress proof g_id [{ goal with g_env }]
             | None ->
                 failwith "Cannot modify an abstract definition"
             end
         | _ -> assert false
         end
   
-
-  type pnode += TRewrite of expr * expr * ipath
 
   (** [rewrite red res tgt targ] rewrites every occurrence of the expression
       [red] in the subterm at path [tgt] into the expression [res]. It
@@ -1310,17 +1259,15 @@ end = struct
     let _, it, (sub, _) = of_ipath proof tgt in 
     let goal = Proof.byid proof hd in
     
-    let pnode = TRewrite (red, res, tgt) in
-
     match it with
     | `C f ->
         let new_concl = rewrite_subterm_all goal.g_env (`E red) (`E res) (`F f) sub |> form_of_term in
-        Proof.progress proof hd pnode [new_concl]
+        Proof.progress proof hd [new_concl]
 
     | `H (src, { h_form = f; _ }) ->
         let new_hyp = rewrite_subterm_all goal.g_env (`E red) (`E res) (`F f) sub |> form_of_term in
         let subgoal = [Some src, [new_hyp]], goal.Proof.g_goal in
-        Proof.sprogress ~clear:true proof hd pnode [subgoal]
+        Proof.sprogress ~clear:true proof hd [subgoal]
     
     | `V (x, (ty, b)) ->
         begin match tgt.ctxt.kind with
@@ -1331,7 +1278,7 @@ end = struct
             | Some b ->
                 let new_body = rewrite_subterm_all goal.g_env (`E red) (`E res) (`E b) sub |> expr_of_term in
                 let g_env = Vars.modify goal.g_env (x, (ty, Some new_body)) in
-                Proof.xprogress proof hd pnode [{ goal with g_env }]
+                Proof.xprogress proof hd [{ goal with g_env }]
             | None ->
                 failwith "Cannot rewrite variable names"
             end
@@ -1493,9 +1440,6 @@ end = struct
   let hyperlink_of_link : link -> hyperlink =
     fun (src, dst) -> [src], [dst]
   
-
-  type pnode += TInstantiate of expr * ipath
-
   (** [instantiate wit tgt targ] instantiates the quantifier at path [tgt] with
       the expression [wit]. If the quantifier occurs in a hypothesis, the
       hypothesis is duplicated before instantiation. *)
@@ -1511,8 +1455,7 @@ end = struct
         in targ |> then_tac first
           (fun (pr, id) ->
             let tgt = { tgt with root = Handle.toint id } in
-            let pnode = TInstantiate (wit, tgt) in
-            rewrite_at ~pnode (`F (Form.Subst.f_apply1 (x, 0) wit f)) tgt (pr, id))
+            rewrite_at (`F (Form.Subst.f_apply1 (x, 0) wit f)) tgt (pr, id))
     | _ ->
         raise TacticNotApplicable
   
@@ -1535,8 +1478,6 @@ end = struct
 
   let print_itrace env : itrace -> string =
     Utils.List.to_string (print_choice env) ~left:"" ~right:"" ~sep:" "
-
-  type pnode += TLink of (ipath * ipath * itrace)
 
   (** [link] is the equivalent of Proof by Pointing's [finger_tac], but using
       the interaction rules specific to subformula linking. *)
@@ -1823,7 +1764,7 @@ end = struct
     in
 
     let subgoals = pbp (goal, []) item_src sub_src s_src item_dst sub_dst s_dst in
-    Proof.xprogress proof hd (TLink (src, dst, [])) subgoals
+    Proof.xprogress proof hd subgoals
 
 
   (** [elim_units f] eliminates all occurrences of units
@@ -2294,11 +2235,11 @@ end = struct
     let open Proof in
     let tac =
       thenl_tac
-        (fun (pr, hd) -> sprogress ~clear:false pr hd TId [subgoal])
+        (fun (pr, hd) -> sprogress ~clear:false pr hd [subgoal])
         (fun (pr, hd) ->
           let pr = close_with_unit (pr, hd) in
           let subs = after pr hd |> Option.get |> List.map (byid pr) in
-          xprogress proof g_id (TLink (src, dst, itrace)) subs) in
+          xprogress proof g_id subs) in
     tac (proof, g_id)
 
   
@@ -2993,7 +2934,7 @@ end = struct
           Proof.{ sub with g_hyps ; g_env } 
         in
         (* Create a path to the root of the new hypothesis (representing the lemma). *)
-        let g_id, proof = Proof.hprogress proof g_id (TAssume (stmt, g_id)) sub in
+        let g_id, proof = Proof.hprogress proof g_id sub in
         let lemma_path = mk_ipath ~ctxt:{ kind = `Hyp; handle = Handle.toint hd } (Handle.toint g_id) in
         (* Compute all linkactions. *)
         let linkactions =
@@ -3270,7 +3211,6 @@ end = struct
     open Hidmap
     open State
 
-    exception UnsupportedPNode of pnode
     exception UnsupportedAction of action_type
 
     let of_ctxt (ctxt : ctxt) : Logic_t.ctxt State.t =
@@ -3292,37 +3232,6 @@ end = struct
       List.map begin fun (i, w) ->
         i, Option.map (fun (le1, le2, e) -> of_lenv le1, of_lenv le2, of_expr e) w
       end itrace
-
-    let action_of_pnode (p : pnode) : Logic_t.action State.t =
-      begin match p with
-      | TId ->
-          return `AId
-      | TExact hd ->
-          let* id = find hd in
-          return (`AExact id)
-      | TDef ((name, ty, body), _) ->
-          return (`ADef (name, of_type_ ty, of_expr body))
-      | TIntro (i, wit) ->
-          let wit' = wit |>
-            Option.map begin fun (e, t) ->
-              of_expr e, of_type_ t
-            end in
-          return (`AIntro (i, wit'))
-      | TElim hd ->
-          let* id = find hd in
-          return (`AElim (id, 0))
-      | TLink (src, dst, itrace) ->
-          let* src = of_ipath src in
-          let* dst = of_ipath dst in
-          return (`ALink (src, dst, of_itrace itrace))
-      | TInstantiate (wit, tgt) ->
-          let* tgt = of_ipath tgt in
-          return (`AInstantiate (of_expr wit, tgt))
-      | TDuplicate hd ->
-          let* id = find hd in
-          return (`ADuplicate id)
-      | _ -> raise (UnsupportedPNode p)
-      end
 
     let of_action (proof : Proof.proof) (hd, a : action) : Logic_t.action State.t =
       match a with
