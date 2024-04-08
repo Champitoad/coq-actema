@@ -626,17 +626,7 @@ end = struct
     let _before = Option.map (Proof.Hyps.byid goal.g_hyps) before in (* KEEP *)
     let hyps    = Proof.Hyps.move goal.g_hyps from before in
 
-    Proof.xprogress proof id [{ goal with g_hyps = hyps }]
-
-  let duplicate (hd : Handle.t) : tactic =
-    fun (proof, id) ->
-
-    let goal = Proof.byid proof id in
-    let form = (Proof.Hyps.byid goal.g_hyps hd).h_form in
-    let subgoal = [Some hd, [form]], goal.g_goal in
-
-    Proof.sprogress proof id [subgoal]
-    
+    Proof.xprogress proof id [{ goal with g_hyps = hyps }]    
 
   (* -------------------------------------------------------------------- *)
   (** Items *)
