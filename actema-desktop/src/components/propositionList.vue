@@ -328,8 +328,6 @@ export default {
                 return { shortName: shorten(l[0]), name: l[0], stmt: l[1] }
             });
 
-            console.log(this.lemmaList);
-
             // Force a re-render of the lemma list.
             this.lemmaKey += 1;
         },
@@ -339,10 +337,6 @@ export default {
         },
 
         focusLemmaSearchBar: function () {
-            //console.log("Focusing on the lemma search bar.");
-            //console.log(this.$refs.lemmaSearchBar);
-            //this.$refs.lemmaSearchBar.showList();
-
             // For some reason using "setTimeout" is necessary here.
             // For somewhat of an explanation read :
             // https://bobbyhadz.com/blog/focus-not-working-in-javascript

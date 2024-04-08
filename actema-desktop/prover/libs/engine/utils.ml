@@ -201,6 +201,7 @@ module BiMap : sig
 
   val add         : 'a -> 'b -> ('a, 'b) t -> ('a, 'b) t
   val remove      : 'a -> ('a, 'b) t -> ('a, 'b) t
+  val union       : ('a, 'b) t -> ('a, 'b) t -> ('a, 'b) t
 
   val find        : 'a -> ('a, 'b) t -> 'b
   val find_opt    : 'a -> ('a, 'b) t -> 'b option
@@ -232,6 +233,9 @@ end = struct
     let v = Map.find k r in
     Map.remove k r, Map.remove v l
   
+  let union (r1, l1) (r2, l2) = 
+    (Map.union r1 r2, Map.union l1 l2)
+
   let find k (r, _) =
     Map.find k r
 

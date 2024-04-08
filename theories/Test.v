@@ -1,6 +1,13 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
+
+Lemma my_add0 : forall x : nat, x + 0 = 0 + x.
+Proof. Admitted.
+
+Lemma test (x : nat) : x + 0 = x.
+Proof. actema.
+
 Lemma dummy (x y : nat) (H : x <= y) : True.
 Proof. 
   actema_force.

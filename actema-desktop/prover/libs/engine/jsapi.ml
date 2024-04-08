@@ -255,11 +255,9 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
         LemmaDB.add db name form
       end (LemmaDB.empty env) lemmas 
     in 
-    (* Print the lemmas. *)
-    (*Format.printf "Printing lemmas\n";
-    List.iter begin fun (name, form) -> 
-      Format.printf "%s: %s\n" name (Notation.f_tostring (LemmaDB.env db) form)
-    end (LemmaDB.all_lemmas db);*)
+    (* Print debug info. *)
+    Format.printf "Received lemmas\n";
+    Format.printf "count=%d\n" (List.length lemmas);
     let new_proof = Proof.set_db _self##.proof db in
     js_proof_engine new_proof
 

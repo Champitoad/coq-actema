@@ -1,8 +1,5 @@
 From Actema Require Import Loader.
-Require Import ssreflect.
 
-
-(* We need at least a boolean test, having the propositional one allows more compact specifications *)
 
 Fixpoint eqb n m :=
   match n, m with
@@ -18,7 +15,7 @@ Fixpoint eqr n m :=
   | _, _ => False
   end.
 
-(* This is totally classic and works smoothly in Actema *)
+Require Import ssreflect.
         
 Lemma eqr_eq : forall n m, eqr n m -> n = m.
   actema.
@@ -26,17 +23,20 @@ Qed.
 
 
 Lemma eqr_eqb : forall n m, eqr n m -> eqb n m = true.
-Admitted.
+  actema.
+Qed.
 
 Lemma eqb_eqr : forall n m, eqb n m = true -> eqr n m.
-Admitted.
-
+  actema.
+Qed.
 
 Lemma eqr_refl : forall n, eqr n n.
-Admitted.
+actema.
+Qed.
 
 Lemma eqb_eq : forall n m, eqb n m = true -> n = m.
-Admitted.
+  actema.
+Qed.
   
 Fixpoint leb (n:nat)(m:nat) :=
   match n,m with
@@ -53,10 +53,12 @@ Fixpoint le (n:nat)(m:nat) :=
   end.
 
 Lemma leb_le : forall n m, (leb n m = true) -> le n m.
-Admitted.
+  actema.
+Qed.
 
 Lemma le_refl : forall n, le n n.
-Admitted.
+  actema.
+Qed.
 
 Fixpoint gtb  (n:nat)(m:nat) :=
   match n,m with
@@ -66,29 +68,30 @@ Fixpoint gtb  (n:nat)(m:nat) :=
   end.
 
 Lemma leb_gtb : forall n m, leb n m = negb (gtb n m).
-Admitted.
+actema.
+Qed.
 
-(*Fixpoint moins n m :=
+Fixpoint moins n m :=
   match m,n with
   | 0,_ => n
   | S m, S n => moins n m
   | S _, 0 => 0
-  end.*)
+  end.
 
 Lemma le_S : forall n m,
        le n m -> le n (S m).
-Admitted.
+actema.
+Qed.
+
   
 Lemma leb_lt : forall n m, leb n m = false -> le m n.
-Admitted.
+  actema.
+Qed.
 
-(* We define not parametrized lists *)
 
 Inductive ll :=
-  | lnil
+  lnil
   | lcons : nat -> ll -> ll.
-
-(* being sorted *)
 
 Definition low n l :=
   match l with
@@ -96,96 +99,25 @@ Definition low n l :=
   | lcons m _ => le n m
   end.
 
-
-Fixpoint sorted l :=
+ Fixpoint sorted l :=
   match l with
   | lnil => True
   | lcons n l => (low n l) /\ (sorted l)
   end.
 
-(* To allow Actema to display the code *)
-
 Definition ifthl (b:bool) (n1 : ll) n2 :=
   if b then n1 else n2.
 
-(* We do not need this for sorting, but is gives nice exercises and allows definition of permut *)
-Fixpoint concat l1 l2 :=
-  match l1 with
-  | lcons n l3 => lcons n (concat l3 l2)
-  | _ => l2
-  end.
-
-Fixpoint length l :=
-  match l with
-  | lnil => 0
-  | lcons _ l' => S(length l')
-  end.
-
-(* easy stuff *)
-Lemma concat_length : forall l1 l2, length (concat l1 l2) = length l1 + length l2.
-Admitted.
-
-Lemma concat_ass : forall l1 l2 l3, concat l1 (concat l2 l3) = concat (concat l1 l2) l3.
-Admitted.
-
-Lemma cat_nil : forall l, concat l lnil = l.
-Admitted.
-
-Lemma test l1 l2 l3 : concat (concat l1 lnil) (concat l2 l3) = concat (concat l1 l2) l3.
-Proof. actema.
-
-
-Inductive perm : ll -> ll -> Prop :=
-  perm_refl : forall l, perm l l
-| perm_app : forall a l1 l2,  perm (lcons a (concat l1 l2)) (concat l1 (lcons a l2))
-| perm_trans : forall l1 l2 l3, perm l1 l2 -> perm l2 l3 -> perm l1 l3.
-
-Definition perm_refl' := perm_refl.
-
-Lemma test : forall l, perm l l.
-Proof. actema.
-
-Lemma addnS : forall n m, n + S m = S (n + m).
-Admitted.
-
-Lemma addn0 : forall n, n + 0 = n.
-Admitted.
-
-(* These lemmas are somewaht interesting to prove in Actema *)
-(* We also need to import lemmas in the proof context before launching Actema *)
-(* It is worth checking how a search function would react *)
-
-Lemma perm_length : forall l1 l2,
-         perm l1 l2 -> length l1 = length l2.
-Proof.
-  actema.
-  move: concat_length => h.
-  move: addnS => h1.
-  move: addn0 => h0.
-  actema. 
-Qed.s
-
-(*Lemma test (x y z : nat) : x + (0 + y) = y + x.
-Proof. actema.
-
-Lemma test l1 l2 l3 : concat (concat l1 lnil) (concat l2 l3) = concat (concat l1 l2) l3.
-Proof. actema. *)
-
-(* The insertion function *)
 Fixpoint insert n l :=
   match l with
   | lnil => lcons n lnil
   | lcons m l' =>
       ifthl (leb n m)
        (lcons n l)
-       (lcons m (insert n l'))
+       ( lcons m (insert n l'))
   end.
 
-Lemma insert_length : forall n l, length (insert n l) = S (length l).
-  actema.
-Qed.
 
-(* The specification with the good invariant *)
 Lemma insert_sort : forall n l, sorted l ->
                                 sorted (insert n l) /\
                                   forall m, le m n /\ low m l -> low m (insert n l).
@@ -202,178 +134,10 @@ Fixpoint insertion_sort l :=
 
 Lemma sorted_insertion : forall l,
     sorted (insertion_sort l).
-  pose proof insert_sort.
+ pose proof insert_sort.
   actema.
 Qed.
 
-(* easy and not really useful *)
-Lemma sorting_length : forall l, length l = length (insertion_sort l).
-  move: insert_length => h.
-  actema.
-Qed.
-
-
-
-
-(* Not super useful, comes from BSc exercises *)
-Fixpoint member n l :=
-  match l with
-  | lnil => False
-  | lcons m l =>
-      n=m \/ member n l
-  end.
-
-Lemma member1 : forall n l1 l2, member n l1 -> member n (concat l1 l2).
-  actema.
-Qed.
-
-Lemma member2 : forall n l1 l2, member n l2 -> member n (concat l1 l2).
-  actema.
-Qed.
-
-Lemma member3 : forall n l1 l2, member n (concat l1 l2) ->  member n l1 \/ member n l2.
-actema.
-Qed.
-
-(* One possble way to sow the result of sorting has the same content as the input *)
-(* Counting the elements as done later is easier *)
-
-
-Lemma perm_nil : forall l, perm lnil l -> l = lnil.
-  move: perm_length => h.
-actema.  
-Qed.
-
-Lemma app_cons :
-  forall l1 n l2,
-    concat l1 (lcons n l2) = concat (concat l1 (lcons n lnil)) l2.
-Proof.
-  actema.
-Qed.
-
-(* These lemmas are for putting the propositions in a form which allows the DnDs *)
-Lemma reww : forall a l1 l2, (lcons a (concat l1 l2)) = concat (lcons a l1) l2.
-  done.
-Qed.
-
-Lemma reww1 : forall a l, lcons a l = concat (lcons a lnil) l.
-  done.
-Qed.
-
-(* I leave the textual proofs in the comments *)
-
-Lemma p_cons : forall a l1 l2,
-    perm l1 l2 -> perm (lcons a l1) (lcons a l2).
-  move: perm_trans => h.
-  move: perm_app => h1.
-  move: perm_refl => h0.
-  move: reww => h3.
-  move: reww1 => h2.
-  actema.
-Qed.
-
-  
-(*  
-induction 1.
-- constructor.
-- apply perm_trans with (lcons a0 (lcons a (concat l1 l2))).
-    apply (perm_app a (lcons a0 lnil) (concat l1 l2)).
-  apply (perm_app a0 (lcons a l1) l2).
--  by apply perm_trans with (lcons a l2).
-Qed.
-*)
-
-Lemma perm_comapp : forall l1 l2, perm (concat l1 l2)(concat l2 l1).
-  move:  p_cons => h.
-  move: perm_trans => h1.
-  move: cat_nil => h2.
-  move: perm_app => h3.
-  move: perm_refl => h0.
-  actema.
-Qed.
-
-(*  
-induction l1.
-move => l2.
-simpl; rewrite cat_nil; constructor.
-simpl.
-move => l2; apply perm_trans with (lcons n (concat l2 l1)).
- by apply h.
-constructor.
-Qed.
- *)
-
-Lemma perm_sym : forall l1 l2, perm l1 l2 -> perm l2 l1.
-  move: perm_refl => h0.
-  move: perm_trans => h1.
-  move: perm_comapp => h2.
-    move: perm_app => h3.
-    move:  p_cons => h.
-actema.
-Qed.
-
-(*
-  constructor.
-apply perm_trans with  (concat (lcons a l2) l1).
-  apply perm_comapp.
-   apply p_cons.
-   apply perm_comapp.  
-by apply perm_trans with l2.
-*)
-
-Lemma perm_cons_iter : forall l1 l2 l3,
-    perm l2 l3 -> perm (concat l1 l2)(concat l1 l3).
-Proof.
-  move: perm_refl => h0.
-  move: p_cons => h.
-actema.
-Qed.
-
-(*
-  induction l1; first done.
-move => l2 l3 p23; apply p_cons.
-  by apply IHl1.
- *)
-
-Lemma insert_perm : forall n l, perm (lcons n l)(insert n l).
-move: perm_refl => h0.
-move: perm_trans => h1.
-move: p_cons => h3.
-move: perm_app => h2.
-move: reww => h4.
-move: reww1 => h5.
-actema.
-Qed.
-
-Lemma sort_perm : forall l, perm l (insertion_sort l).
-  move: p_cons => h.
-  move: perm_refl => h0.
-move: perm_trans => h1.
-move:  insert_perm => h2.
-  actema.
-Qed.
-  
-(*
-induction l.
- constructor.
-simpl.
-apply perm_trans with (lcons n (insertion_sort l)).
-  by apply p_cons.
-apply insert_perm.
-Qed.
-*)
-
-(*
-induction l.
- constructor.
-simpl.
-case: leb; simpl.
-  constructor.
-apply perm_trans with (lcons n0 (lcons n l)).
-apply (perm_app n (lcons n0 lnil) l).
-apply p_cons.
-done.
-*)
 
 Definition ifthn (b:bool) (n1:nat) n2 :=
   if b then n1 else n2.
@@ -419,7 +183,6 @@ Lemma insertion_sort_count : forall a l, count a l = count a (insertion_sort l).
   actema.
 Qed.
 
-(* The heap stuff does not worl well because of the merge function 
 
 Inductive Tree :=
   Leaf
@@ -622,5 +385,3 @@ by rewrite e3 in e4.
   actema.
 
   actema.
-
-*)

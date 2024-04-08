@@ -2978,13 +2978,16 @@ end = struct
     (* Filter the lemma database. *)
     let new_db = proof |> Proof.get_db |> LemmaDB.filter 
       begin fun _name stmt ->
-        (* Make a new goal that has the lemma as a local hypothesis. *)
+        (* Make a new goal that has : 
+           - the lemma as a local hypothesis.
+           - its environment extended with the environment of the lemma database. *)
         let Proof.{ g_id; g_pregoal = sub } = goal_of_ipath proof selection in
         let hd = Handle.fresh () in
         let sub =
           let hyp = Proof.mk_hyp stmt in
           let g_hyps = Proof.Hyps.add sub.g_hyps hd hyp in
-          Proof.{ sub with g_hyps } 
+          let g_env = Env.union (proof |> Proof.get_db |> LemmaDB.env) sub.g_env in
+          Proof.{ sub with g_hyps ; g_env } 
         in
         (* Create a path to the root of the new hypothesis (representing the lemma). *)
         let g_id, proof = Proof.hprogress proof g_id (TAssume (stmt, g_id)) sub in

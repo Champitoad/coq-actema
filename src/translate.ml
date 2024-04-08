@@ -661,10 +661,10 @@ module Export = struct
       (Environ.Globals.view coq_env.env_globals).constants
       |> Names.Cmap_env.bindings
       (*|> List.filter begin fun (cname, _) -> 
-            let target = Names.Constant.make1 (kername ["Actema"; "Test"] "add_comm") in 
+            let target = Names.Constant.make1 (kername ["Actema"; "Test"] "my_add0") in 
             Names.Constant.CanOrd.equal cname target
          end*)
-      |> List.take 100
+      (*|> List.take 100*)
     in
     State.fold begin fun lemmas (id, (ckey, _)) ->
       let open State in

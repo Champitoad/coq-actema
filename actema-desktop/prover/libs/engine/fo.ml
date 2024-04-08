@@ -207,6 +207,7 @@ module Env : sig
   val mult : expr -> expr -> expr
 
   val empty : env
+  val union : env -> env -> env
 end = struct
   let nat = TVar ("nat", 0)
   let zero = EFun ("Z", [])
@@ -229,6 +230,18 @@ end = struct
                     add "nat" [None];
     env_evar      = empty;
     env_handles   = BiMap.empty;
+  }
+
+  let union a b = {
+    env_prp       = Map.union   a.env_prp       b.env_prp;
+    env_fun       = Map.union   a.env_fun       b.env_fun;
+    env_prp_name  = Map.union   a.env_prp_name  b.env_prp_name;
+    env_fun_name  = Map.union   a.env_fun_name  b.env_fun_name;
+    env_sort_name = Map.union   a.env_sort_name b.env_sort_name;
+    env_var       = Map.union   a.env_var       b.env_var;
+    env_tvar      = Map.union   a.env_tvar      b.env_tvar;
+    env_evar      = Map.union   a.env_evar      b.env_evar;
+    env_handles   = BiMap.union a.env_handles b.env_handles;
   }
 end
 
