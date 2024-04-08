@@ -472,8 +472,7 @@ module CoreLogic : sig
   val move           : Handle.t -> Handle.t option -> tactic
   val ivariants      : targ -> string list
   val evariants      : targ -> Handle.t -> string list
-  val forward        : (Handle.t * Handle.t * int list * Form.Subst.subst) -> tactic
-
+  
   type asource =
     { kind : asource_kind; selection : selection; }
 
@@ -678,32 +677,6 @@ end = struct
     | FConn (`Not  , _) -> ["destruct"]
     | FBind (`Exist, _, _, _) -> ["destruct"]
     | _ -> []
-
-  let core_forward (hsrc, hdst, p, s) ((pr, id) : targ)  =
-    let gl   = Proof.byid pr id in
-    let _src = (Proof.Hyps.byid gl.g_hyps hsrc).h_form in
-    let dst  = (Proof.Hyps.byid gl.g_hyps hdst).h_form in
-
-    (* Here we eventually should have the call to the proof tactics *)
-    let rec build_dest = function
-      | ((FBind (`Forall, x, ty, f)), 0::p, ((_, Sflex)::s)) ->
-          FBind (`Forall, x, ty, build_dest (f, p, s))
-      | ((FBind (`Forall, x, _, f)), 0::p, ((_, (Sbound e))::s)) ->
-          build_dest ((Form.Subst.f_apply1 (x, 0) e f), p, s)
-      | (FConn (`Imp, [_; f2]), (0::_), s) ->
-          Form.Subst.f_apply (Form.Subst.oflist s) f2
-      | (FConn (`Imp, [f1; f2]), (1::p), s) ->
-          FConn(`Imp, [Form.Subst.f_apply (Form.Subst.oflist s) f1;
-          build_dest (f2, p, s)])
-      | _ -> failwith "cannot build forward"
-    in
-    let nf = build_dest (dst, p, s) in
-
-    [ `S [[Some hdst, [nf]], gl.g_goal] ]
-
-  let forward (hsrc, hdst, p, s) ((pr, id) : targ) =
-    perform (core_forward (hsrc, hdst, p, Form.Subst.aslist s) (pr, id)) pr id 
-
 
   let generalize (hid : Handle.t) ((proof, id) : targ) =
     let goal = Proof.byid proof id in
