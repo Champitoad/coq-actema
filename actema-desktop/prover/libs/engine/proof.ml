@@ -562,44 +562,6 @@ end = struct
       let hd = Option.get (Proof.focused pr id) in
       t2 (pr, hd)
   
-  let thenl_tac (t1 : tactic) (t2 : tactic) : tactic =
-    fun (_, id as targ) ->
-      let pr = t1 targ in
-      List.fold_left (uncurry t2) pr (Proof.after pr id |> Option.get)
-
-  let prune_premisses =
-    let rec doit acc = function
-      | FConn (`Imp, [f1; f2]) -> doit (f1 :: acc) f2
-      | f -> (List.rev acc, f)
-    in fun f -> doit [] f
-
-  let prune_premisses_fa =
-    let rec doit i acc s = function
-      | FConn (`Imp, [f1; f2]) -> doit i ((i, f1) :: acc) s f2
-      | FBind (`Forall, x, _, f) -> doit (i+1) acc ((x,Sflex)::s) f 
-      | f -> (List.rev acc, f, s)
-    in fun f ->
-
-    let pre, hy, s  = doit 0 [] [] f in 
-
-    (pre, hy, Form.Subst.oflist s)
-
-  let prune_premisses_ex =
-    let rec doit i acc s = function
-      | FBind (`Exist, x, _, f) -> doit (i+1) acc ((x, Sflex)::s) f
-      | f -> (List.rev acc, f, s)
-    in fun f ->
-
-    let pre, hy, s = doit 0 [] [] f in
-
-    (pre, hy, Form.Subst.oflist s)
-	
-  let rec remove_form env f = function
-      | [] -> raise TacticNotApplicable
-      | g::l when Form.f_equal env g f -> l
-      | g::l -> g::(remove_form env f l)
-  
-
   let add_local ((name, ty, body) : string * Fo.type_ * Fo.expr option)
       (goal : Proof.pregoal) : Proof.pregoal =
 
@@ -620,36 +582,7 @@ end = struct
   let add_local_def ((name, ty, body) : string * Fo.type_ * Fo.expr) ((proof, hd) : targ) =
     let new_goal = add_local (name, ty, Some body) (Proof.byid proof hd) in
     Proof.xprogress proof hd [new_goal]
-
-  let perform ?clear l pr id =
-    match l with
-      | `S l :: _ -> Proof.sprogress ?clear pr id l
-      | `X l :: _ -> Proof.xprogress pr id l
-      | _ -> raise TacticNotApplicable
-  
-  let induction (h : Handle.t) ((pr, id) : targ) =
-    let goal = Proof.byid pr id in
-    let env = goal.g_env in
-    
-    let ((n, _) as x, (_, _)) = Vars.byid env h |> Option.get in
-    
-    let base_case = { goal with g_env =
-      Vars.modify env (x, Env.(nat, Some Env.zero))} in
-
-    let ind_case =
-      let n = Vars.fresh env ~basename:n () in
-      { goal with
-          g_env = begin
-              let env = Vars.push env (n, (Env.nat, None)) in
-              Vars.modify env (x, Env.(nat, Some (succ (EVar (n, 0)))))
-            end;
-          
-          g_hyps =
-            let indh = Form.Subst.f_apply1 x (EVar (n, 0)) goal.g_goal in
-            Proof.Hyps.add goal.g_hyps (Handle.fresh ()) (Proof.mk_hyp indh) } in
-    
-    Proof.xprogress pr id [base_case; ind_case]
-
+ 
     
   let ivariants ((pr, id) : targ) =
     match (Proof.byid pr id).g_goal with
@@ -1007,121 +940,6 @@ end = struct
     && List.is_prefix sp.sub p.sub
 
   
-  (** [rewrite_at p t targ] rewrites the subterm at path [p] in the goal
-      into [t]. It automatically shifts variables in [t] to avoid capture by
-      binders. *)
-  let rewrite_at (t : term) (p : ipath) : tactic =
-    let open Proof in fun (proof, _) ->
-
-    let { g_id; g_pregoal = goal }, item, (sub, _) = of_ipath proof p in
-    
-    match item with
-    | `C f ->
-        let new_concl = rewrite_subterm t (`F f) sub |> form_of_term in
-        progress proof g_id [new_concl]
-    
-    | `H (hd, { h_form = f; _ }) ->
-        let new_hyp = rewrite_subterm t (`F f) sub |> form_of_term in
-        let subgoal = [Some hd, [new_hyp]], goal.g_goal in
-        sprogress ~clear:true proof g_id [subgoal]
-    
-    | `V (x, (ty, body)) ->
-        begin match p.ctxt.kind with
-        | `Var `Head ->
-            failwith "Cannot modify an abstract definition"
-        | `Var `Body ->
-            begin match body with
-            | Some b ->
-                let new_body = rewrite_subterm t (`E b) sub |> expr_of_term in
-                let g_env = Vars.modify goal.g_env (x, (ty, Some new_body)) in
-                xprogress proof g_id [{ goal with g_env }]
-            | None ->
-                failwith "Cannot modify an abstract definition"
-            end
-        | _ -> assert false
-        end
-  
-
-  (** [rewrite red res tgt targ] rewrites every occurrence of the expression
-      [red] in the subterm at path [tgt] into the expression [res]. It
-      automatically shifts variables in [red] and [res] to avoid capture by
-      binders in [tgt]. *)
-  let rewrite (red : expr) (res : expr) (tgt : ipath) : tactic =
-    fun (proof, hd) ->
-      
-    let tgt = { tgt with root = Handle.toint hd } in
-      
-    let _, it, (sub, _) = of_ipath proof tgt in 
-    let goal = Proof.byid proof hd in
-    
-    match it with
-    | `C f ->
-        let new_concl = rewrite_subterm_all goal.g_env (`E red) (`E res) (`F f) sub |> form_of_term in
-        Proof.progress proof hd [new_concl]
-
-    | `H (src, { h_form = f; _ }) ->
-        let new_hyp = rewrite_subterm_all goal.g_env (`E red) (`E res) (`F f) sub |> form_of_term in
-        let subgoal = [Some src, [new_hyp]], goal.Proof.g_goal in
-        Proof.sprogress ~clear:true proof hd [subgoal]
-    
-    | `V (x, (ty, b)) ->
-        begin match tgt.ctxt.kind with
-        | `Var `Head ->
-            failwith "Cannot rewrite variable names"
-        | `Var `Body ->
-            begin match b with
-            | Some b ->
-                let new_body = rewrite_subterm_all goal.g_env (`E red) (`E res) (`E b) sub |> expr_of_term in
-                let g_env = Vars.modify goal.g_env (x, (ty, Some new_body)) in
-                Proof.xprogress proof hd [{ goal with g_env }]
-            | None ->
-                failwith "Cannot rewrite variable names"
-            end
-        | _ -> assert false
-        end
-    
-
-    let rewrite_in (red : expr) (res : expr) (tgts : ipath list) : tactic =
-      List.fold_left
-        (fun tac tgt -> then_tac (rewrite red res tgt) tac)
-        id_tac tgts
-    
-
-    (** [unfold x tgts targ] unfolds the definition of the local variable [x]
-        in all destinations specified by [tgts]. If [~fold] is set to [true],
-        it will fold it instead. *)
-    let unfold ?(fold = false) (x : vname) (tgts : ipath list) : tactic =
-      fun (proof, hd) ->
-
-      let goal = Proof.byid proof hd in
-      let body = 
-        Vars.get goal.g_env x |>
-        Option.get_exn^~ TacticNotApplicable |>
-        snd |> Option.get_exn^~ TacticNotApplicable in
-      
-      let red, res =
-        if fold
-        then body, EVar x
-        else EVar x, body in
-      
-      rewrite_in red res tgts (proof, hd)
-      
-    
-    let unfold_all ?fold (x : vname) : tactic =
-      fun ((proof, hd) as targ) ->
-      
-      let goal = Proof.{ g_id = hd; g_pregoal = Proof.byid proof hd } in
-
-      let tgts =
-        let id = Vars.getid goal.g_pregoal.g_env x |> Option.get in
-        all_items_ipaths ~heads:false goal |>
-        List.remove_if
-          (fun p -> p.ctxt.handle = Handle.toint id) in
-
-      unfold ?fold x tgts targ
-
-
-
   (* -------------------------------------------------------------------- *)
   (** Polarities *)
 
@@ -1234,26 +1052,6 @@ end = struct
   
   let hyperlink_of_link : link -> hyperlink =
     fun (src, dst) -> [src], [dst]
-  
-  (** [instantiate wit tgt targ] instantiates the quantifier at path [tgt] with
-      the expression [wit]. If the quantifier occurs in a hypothesis, the
-      hypothesis is duplicated before instantiation. *)
-  let instantiate (wit : expr) (tgt : ipath) : tactic =
-    fun ((proof, _) as targ) ->
-  
-    match term_of_ipath proof tgt with
-    | `F FBind (_, x, _, f) ->
-        let first =
-          if tgt.ctxt.kind = `Hyp
-          then duplicate (Handle.ofint tgt.ctxt.handle)
-          else id_tac
-        in targ |> then_tac first
-          (fun (pr, id) ->
-            let tgt = { tgt with root = Handle.toint id } in
-            rewrite_at (`F (Form.Subst.f_apply1 (x, 0) wit f)) tgt (pr, id))
-    | _ ->
-        raise TacticNotApplicable
-  
 
   type choice = (int * (LEnv.lenv * LEnv.lenv * expr) option)
   type itrace = choice list
