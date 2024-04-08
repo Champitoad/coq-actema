@@ -278,8 +278,8 @@ export default {
         },
 
         addLemma: async function (lemma) {
-            //this.$parent.applyAddLemma(this.goal, lemma.name);
             console.log("Clicked on lemma: " + lemma.name);
+            // Get the assume action.
         },
 
         addNewExpression: async function () {

@@ -525,6 +525,7 @@ module CoreLogic : sig
 
   type action_type = [
     | `Intro     of int
+    | `Lemma     of name (** Add a lemma to the hypothesis list. *)
     | `Elim      of Handle.t * int
     | `Ind       of Handle.t
     | `Simpl     of ipath
@@ -893,8 +894,9 @@ end = struct
 
   let assume (form : form) ((proof, hd) : targ) =
     let goal = Proof.byid proof hd in
+    let env = proof |> Proof.get_db |> LemmaDB.env in
 
-    Fo.Form.recheck goal.g_env form;
+    Fo.Form.recheck env form;
     
     Proof.sprogress proof hd (TAssume (form, hd))
       ([[None, [form]], goal.g_goal])
@@ -2348,13 +2350,14 @@ end = struct
   
   type action_type = [
     | `Intro     of int
+    | `Lemma     of name
     | `Elim      of Handle.t * int
     | `Ind       of Handle.t
     | `Simpl     of ipath
     | `Red       of ipath
     | `Indt      of ipath
     | `Case      of ipath
-    | `Pbp      of ipath
+    | `Pbp       of ipath
     | `Fold      of vname
     | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list

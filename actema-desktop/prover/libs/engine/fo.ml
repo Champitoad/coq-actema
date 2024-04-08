@@ -206,8 +206,13 @@ module Env : sig
   val add  : expr -> expr -> expr
   val mult : expr -> expr -> expr
 
+  (** An environment that contains only the basic arithmetic constants (add, mult, etc.). *)
   val empty : env
+  (** The union of two environments. *)
   val union : env -> env -> env
+  (** Given an environment [env] and a formula [f], filter [env] by keeping only the symbols needed to type [f]. *)
+  val restrict_to_form : env -> form -> env
+
 end = struct
   let nat = TVar ("nat", 0)
   let zero = EFun ("Z", [])
@@ -243,6 +248,56 @@ end = struct
     env_evar      = Map.union   a.env_evar      b.env_evar;
     env_handles   = BiMap.union a.env_handles b.env_handles;
   }
+
+  let rec collect_form_symbols env f acc : env = 
+    match f with 
+    | FTrue | FFalse -> acc
+    | FPred (pname, exps) ->
+      (* Recurse on the children. *)
+      let acc = List.fold begin fun acc e -> 
+        collect_exp_symbols env e acc
+      end acc exps in
+      (* Collect the predicate symbol. *)
+      if not (Map.mem pname acc.env_prp) then
+        let ar = Map.find pname acc.env_prp in
+        let pname' = Map.find pname acc.env_prp_name in
+        { acc with env_prp = Map.add pname ar acc.env_prp;
+                   env_prp_name = Map.add pname pname' acc.env_prp_name }
+      else acc
+    | FConn (_ , forms) -> 
+      (* Simply recurse on the children. *)
+      List.fold begin fun acc f -> 
+        collect_form_symbols env f acc
+      end acc forms
+    | FBind (_, _, ty, f) -> 
+      (* Collect the type. *)
+      let acc = collect_type_symbols env ty acc in
+      (* Recurse on the child. *)
+      collect_form_symbols env f acc
+  and collect_exp_symbols env e acc : env = 
+    match e with 
+    | EVar _ -> (* Nothing to do. *) acc 
+    | EFun (fname, exps) ->
+      (* Recurse on the children. *)
+      let acc = List.fold begin fun acc e -> 
+        collect_exp_symbols env e acc
+      end acc exps in
+      (* Collect the function symbol. *)
+      if not (Map.mem fname acc.env_fun) then
+        let sig_ = Map.find fname env.env_fun in
+        let fname' = Map.find fname env.env_fun_name in
+        { acc with env_fun = Map.add fname sig_ acc.env_fun;
+                   env_fun_name = Map.add fname fname' acc.env_fun_name }
+      else acc
+  and collect_type_symbols env t acc : env = 
+    match t with 
+    | TUnit -> acc
+    | TOr (t1, t2) | TProd (t1, t2) -> 
+        let acc = collect_type_symbols env t1 acc in 
+        collect_type_symbols env t2 acc
+    | _ -> acc
+
+  let restrict_to_form env f = collect_form_symbols env f empty
 end
 
 (* -------------------------------------------------------------------- *)
