@@ -147,7 +147,7 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
    *  - icon        : optional id of a FontAwesome icon to be used in the description
    *  - ui          : the UI action
    *  - highlight   : a JS array of IDs to highlight
-   *  - action      : the related action (see [apply])
+   *  - action      : the related action
    *)
   method actions asource =
     let actions =
@@ -224,10 +224,6 @@ let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
   (** Same as [actions], but in async mode. TO BE TESTED *)
   method pactions path =
     let%lwt _ = Lwt.return () in Lwt.return (_self##actions path)
-
-  (** Apply the action [action] (as returned by [actions]) *)
-  method apply action =
-    js_proof_engine (!! (curry CoreLogic.apply) (_self##.proof, action))
   
   (** Load the lemma database specified by the [data] object into the prover. *)
   method loadlemmas datab =
@@ -368,23 +364,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
     let goal  = Proof.byid parent##.proof _self##.handle in
     js_form _self (_self##.handle, `C) goal.g_goal
 
-  (* [this#intro [variant : int]] applies the relevant introduction
-   * rule to the conclusion of the subgoal [this]. The parameter
-   * [variant] gives the variant of the introduction rule to be applied.
-   *
-   * See [#ivariants] *)
-
-  method intro variant =
-    js_proof_engine (!!(CoreLogic.intro ~variant) (parent##.proof, handle))
-
-  (* [this#elim (target : handle<js_hyps>)]] applies the relevant elimination
-   * rule to the hypothesis [target] of the subgoal [this].
-   *
-   * Raise an exception if [target] does not belong to [this] *)
-  method elim target =
-    let data = (target, (parent##.proof, handle)) in
-    js_proof_engine (!!(curry CoreLogic.elim) data)
-
+ 
   (* [this#ivariants] Return the available introduction rules that can
    * be applied to the conclusion of [this] as a string array. The strings
    * are only for documentation purposes - only their position in the
@@ -395,16 +375,6 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
     let aout = Array.of_list (List.map Js.string aout) in
     Js.array aout
 
-  (* [this#cut (form : string)] parses [form] in the goal [context] and
-   * cut it. *)
-  method cut form =
-    let doit () =
-      let goal = _self##goal in
-      let form = String.trim (Js.to_string form) in
-      let form = Io.parse_form (Io.from_string form) in
-      let form = Form.check goal.g_env form in
-      CoreLogic.cut form (parent##.proof, _self##.handle)
-    in js_proof_engine (!!doit ())
   
   (* [this#getcutb (form : string)] parses [form] in the current goal, and
    * returns the base64-encoded string of the corresponding ACut action. *)
@@ -428,8 +398,10 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
   method addlemma name =
     let doit () =
       let name = Js.to_string name in
-      let form = LemmaDB.get (Proof.get_db parent##.proof) name in
-      CoreLogic.assume form (parent##.proof, _self##.handle)
+      let _form = LemmaDB.get (Proof.get_db parent##.proof) name in
+      Format.printf "Jsapi.addlemma: TODO";
+      parent##.proof
+      (*CoreLogic.assume form (parent##.proof, _self##.handle)*)
     in js_proof_engine (!!doit ())
       
 

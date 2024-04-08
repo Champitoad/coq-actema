@@ -554,15 +554,15 @@ export default {
             }
         },
 
-        applyCutHypothesis(subgoal, text) {
+        /* applyCutHypothesis(subgoal, text) {
             try {
                 var proof = subgoal.cut(text);
                 this.resetSelection();
                 this.setProofState(proof);
-            } catch (e) {
+            } catch(e) {
                 this.showErrorMessage(e);
             }
-        },
+        },*/
 
         sendCutHypothesis(subgoal, text) {
             try {

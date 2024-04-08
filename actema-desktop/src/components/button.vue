@@ -1,5 +1,4 @@
 <style lang="scss">
-
 .pi-btn:focus,
 .pi-btn:active {
     outline: none !important;
@@ -95,8 +94,11 @@ span.MathJax {
 
 
 $btn-duration: 0.25s;
-$btn-duration-total: ($btn-duration * 4) * 2;
+$btn-duration-total: (
+    $btn-duration * 4) * 2;
+
 .pi-btn.pi-goal.loading {
+
     &::before,
     &::after,
     span::before,
@@ -106,6 +108,7 @@ $btn-duration-total: ($btn-duration * 4) * 2;
 }
 
 .pi-btn.predicate.loading {
+
     &::before,
     &::after,
     span::before,
@@ -115,16 +118,19 @@ $btn-duration-total: ($btn-duration * 4) * 2;
 }
 
 .pi-btn.expression.loading {
+
     &::before,
     &::after,
     span::before,
     span::after {
         background: #00ff00;
     }
+
     &::before {
         right: 0;
         top: 0;
     }
+
     &::after {
         bottom: 0;
         left: 0;
@@ -163,6 +169,7 @@ $btn-duration-total: ($btn-duration * 4) * 2;
 .pi-btn.loading {
     //border-width: 1px;
     border-color: transparent;
+
     &::before,
     &::after,
     span::before,
@@ -176,52 +183,63 @@ $btn-duration-total: ($btn-duration * 4) * 2;
         position: absolute;
         transition: opacity 1s ease;
     }
+
     &::before,
     &::after {
         height: 2px;
         width: 0%;
     }
+
     &::before {
         right: 0;
         top: 0;
     }
+
     &::after {
         bottom: 0;
         left: 0;
     }
+
     span::before,
     span::after {
         height: 0%;
         width: 2px;
     }
+
     span::before {
         left: 0;
         top: 0;
     }
+
     span::after {
         bottom: 0;
         right: 0;
     }
+
     &::before,
     &::after,
     span::before,
     span::after {
         opacity: 1;
     }
+
     &::before {
         animation-name: btn-border-top;
         animation-duration: $btn-duration-total;
     }
+
     &::after {
         animation-name: btn-border-bottom;
         animation-delay: $btn-duration * 2;
         animation-duration: $btn-duration-total;
     }
+
     span::before {
         animation-name: btn-border-span-left;
         animation-delay: $btn-duration;
         animation-duration: $btn-duration-total;
     }
+
     span::after {
         animation-name: btn-border-span-right;
         animation-delay: $btn-duration * 3;
@@ -237,34 +255,45 @@ $btn-duration-total: ($btn-duration * 4) * 2;
 
 @mixin btnAnimations($name, $anchor, $edge) {
     $anchor-op: "left";
-    @if $anchor== "left" {
+
+    @if $anchor=="left" {
         $anchor-op: "right";
-    } @else if $anchor== "top" {
+    }
+
+    @else if $anchor=="top" {
         $anchor-op: "bottom";
-    } @else if $anchor== "bottom" {
+    }
+
+    @else if $anchor=="bottom" {
         $anchor-op: "top";
     }
+
     @keyframes #{$name} {
         0% {
             #{$anchor-op}: auto;
             #{$anchor}: 0;
             #{$edge}: 0%;
         }
+
         12.5% {
             #{$anchor-op}: auto;
             #{$anchor}: 0;
             #{$edge}: 100%;
         }
+
         12.6% {
             #{$anchor-op}: 0;
             #{$anchor}: auto;
         }
+
         50% {
             #{$edge}: 100%;
         }
+
         62.5% {
             #{$edge}: 0%;
         }
+
         100% {
             #{$anchor-op}: 0;
             #{$anchor}: auto;
@@ -273,7 +302,8 @@ $btn-duration-total: ($btn-duration * 4) * 2;
     }
 }
 
-@include btnAnimations(btn-border-top, "right", "width");
+@include btnAnimations(btn-border-top, "right", "width"
+);
 @include btnAnimations(btn-border-bottom, "left", "width");
 @include btnAnimations(btn-border-span-left, "top", "height");
 @include btnAnimations(btn-border-span-right, "bottom", "height");
@@ -290,13 +320,13 @@ import _ from "lodash";
 
 export default {
     props: ["selectMode", "displayMode"],
-    data: function() {
+    data: function () {
         return {
             html: "",
             decorated: false,
         };
     },
-    created: function() {
+    created: function () {
         // we start in a "no drag" state
         this.drag = false;
         this.startX = null;
@@ -322,7 +352,7 @@ export default {
 
         this.cloneMetadata();
     },
-    mounted: function() {
+    mounted: function () {
         if (this.displayMode === "html") {
             this.updateHTML();
             this.hide();
@@ -337,12 +367,12 @@ export default {
             });
         }
     },
-    beforeUpdate: function() {
+    beforeUpdate: function () {
         this.decorated = false; // our HTML decoration is now wrong
         this.binded = false;
         this.resetDndActions(); // reset action scouting
     },
-    updated: function() {
+    updated: function () {
         //this.hide();
         if (this.displayMode === "mathml") {
             this.showMathMl();
@@ -365,7 +395,7 @@ export default {
         this.$proofCanvas.fitHypsZone(this);
     },
     computed: {
-        $proofCanvas: function() {
+        $proofCanvas: function () {
             var parent = this.$parent;
             while (!parent.proofState) {
                 parent = parent.$parent;
@@ -422,7 +452,7 @@ export default {
             throw "Should be overspecified in the specific logic component";
         },
 
-        updateHTML: async function() {
+        updateHTML: async function () {
             if (!this.decorated) {
                 // first get the direct html from prover, then when ready, get the decorated HTML
 
@@ -441,14 +471,14 @@ export default {
 
                 // Register all paths to subitems into proof canvas
                 let self = this;
-                $(item).each(function() {
+                $(item).each(function () {
                     let id = $(this).attr("id");
                     if (id) {
                         self.$proofCanvas.registerPath(id, self);
                     }
                 });
 
-                subitems.each(function() {
+                subitems.each(function () {
                     let elementId = $(this).attr("id");
                     if (elementId) {
                         self.$proofCanvas.registerPath(elementId, self);
@@ -493,7 +523,7 @@ export default {
         bindDecoratedHTMLActions() {
             var self = this;
 
-            var applyAction = function() {
+            var applyAction = function () {
                 //console.log(this.getRootId() + " is doing something !");
                 // check what actions are available
                 var id = $(this).attr("id");
@@ -528,14 +558,14 @@ export default {
                 if (this.selectMode) {
                     $(this.$el)
                         .find("span")
-                        .on("mouseenter", function() {
+                        .on("mouseenter", function () {
                             // filter out divs that are not at the bottom
                             if ($(this).find("span").length == 0) {
                                 $(this)
                                     .closest("[id]")
                                     .addClass("selectable")
                                     .off("click")
-                                    .on("click", function(e) {
+                                    .on("click", function (e) {
                                         e.preventDefault();
                                         e.stopPropagation();
 
@@ -552,7 +582,7 @@ export default {
                                             // unselect all parents that were selected before
                                             $(this)
                                                 .parents("[id]")
-                                                .each(function() {
+                                                .each(function () {
                                                     let id = $(this).attr("id");
                                                     self.removeSelectedPath(id);
                                                 });
@@ -569,7 +599,7 @@ export default {
                                     });
                             }
                         })
-                        .on("mouseleave", function() {
+                        .on("mouseleave", function () {
                             if ($(this).find("span").length == 0) {
                                 $(this)
                                     .closest("[id]")
@@ -597,7 +627,7 @@ export default {
             }
         },
 
-        setDraggingFromCanvas: function(b, event) {
+        setDraggingFromCanvas: function (b, event) {
             $(this.$proofCanvas.$el).off("mousemove");
             $(this.$proofCanvas.$el).off("mouseup");
             $(event.target).off("touchmove");
@@ -644,7 +674,7 @@ export default {
             });
         },
 
-        mousedown: function(e) {
+        mousedown: function (e) {
             e = e || window.event;
             e.preventDefault();
 
@@ -680,14 +710,14 @@ export default {
             }, 300);
         },
 
-        mousemove: async function(e) {
+        mousemove: async function (e) {
             e = e || window.event;
             e.preventDefault();
 
             this.doDragAndDrop(e);
         },
 
-        mouseup: function(e) {
+        mouseup: function (e) {
             e = e || window.event;
             e.preventDefault();
 
@@ -695,9 +725,9 @@ export default {
             this.stopDragAndDrop(e);
         },
 
-        tap: function(e) {
+        tap: function (e) {
             // check that it's a touch event, because it captures click too
-            if( e.changedTouches ) {
+            if (e.changedTouches) {
                 $(this.$el)
                     .find(".action")
                     .eq(0)
@@ -705,11 +735,11 @@ export default {
             }
         },
 
-        long: function(e) {
+        long: function (e) {
             console.log("longtap !");
         },
 
-        touchstart: function(e) {
+        touchstart: function (e) {
             e = e || window.event;
             e.preventDefault();
 
@@ -755,10 +785,10 @@ export default {
             }, 300);
         },
 
-        touchcancel: function(e) {
+        touchcancel: function (e) {
         },
 
-        touchmove: function(e) {
+        touchmove: function (e) {
             e = e || window.event;
             if (e.preventDefault) {
                 e.preventDefault();
@@ -767,7 +797,7 @@ export default {
             this.doDragAndDrop(e);
         },
 
-        touchend: function(e) {
+        touchend: function (e) {
             e = e || window.event;
             if (e) {
                 e.preventDefault();
@@ -796,7 +826,7 @@ export default {
         },
 
         // executed when user starts a drag and drop
-        startDragAndDrop: async function(e) {
+        startDragAndDrop: async function (e) {
             // start dragging get the mouse cursor position at startup
             this.drag = true;
             if (!this.isInWorkZone()) {
@@ -823,7 +853,7 @@ export default {
         },
 
         // executed continuously while user perform drag and drop
-        doDragAndDrop: async function(e) {
+        doDragAndDrop: async function (e) {
             if (this.drag) {
                 // set new position
                 let { clientX, clientY } = this.getEventCoordinates(e);
@@ -864,7 +894,7 @@ export default {
         },
 
         // executed when users finally drops the drag item
-        stopDragAndDrop: async function(e) {
+        stopDragAndDrop: async function (e) {
             if (this.drag) {
                 this.setDraggingFromCanvas(false, e);
                 this.drag = false;
@@ -976,7 +1006,7 @@ export default {
             let thisRect = this.$el.getBoundingClientRect();
             let overlapedElement = null;
 
-            $(".predicate-dropspace").each(function() {
+            $(".predicate-dropspace").each(function () {
                 var rect = $(this)[0].getBoundingClientRect();
 
                 if (self.overlap(thisRect, rect)) {
@@ -997,7 +1027,7 @@ export default {
             let overlapedElements = [];
 
             // find the highlighted span overlaped with this element
-            $(".pi-btn:not(.dragged) span.highlight").each(function() {
+            $(".pi-btn:not(.dragged) span.highlight").each(function () {
                 var rect = $(this)[0].getBoundingClientRect();
 
                 if (self.overlap(thisRect, rect)) {
@@ -1041,7 +1071,7 @@ export default {
             let overlapedElements = [];
 
             // find the highlighted span overlaped with this element
-            $(".pi-btn:not(.dragged) span[id]").each(function() {
+            $(".pi-btn:not(.dragged) span[id]").each(function () {
                 var rect = $(this)[0].getBoundingClientRect();
 
                 if (self.overlap(thisRect, rect)) {
@@ -1108,7 +1138,7 @@ export default {
             let intersectedElements = [];
 
             // find the highlighted span overlaped with this element
-            $(".pi-btn:not(.dragged) span[id]").each(function() {
+            $(".pi-btn:not(.dragged) span[id]").each(function () {
                 if (self.intersectWithId($(this).attr("id"))) {
                     intersectedElements.push(this);
                 }
@@ -1181,12 +1211,12 @@ export default {
                 } else {
                     console.error(
                         "Error caught: prover wanted to highlights an unexisting div: " +
-                            divId
+                        divId
                     );
                     console.error(
                         'Run for more info: window.goal.actions({"kind": "dnd", "source": "' +
-                            divId +
-                            '"})'
+                        divId +
+                        '"})'
                     );
                 }
             });
@@ -1199,7 +1229,7 @@ export default {
                 let generalizeRect = generalizeDiv[0].getBoundingClientRect();
                 if (this.overlap(thisRect, generalizeRect)) {
                     if (!this.predicate) {
-                        throw "generalize can't only be done on predicates !";
+                        throw "generalize can only be done on predicates !";
                     }
                     return { generalize: true, predicate: this.predicate };
                 } else {
@@ -1521,7 +1551,7 @@ export default {
 
             if (security >= 100) {
                 throw "failed to assign a random clean position to " +
-                    this.toString();
+                this.toString();
             }
         },
 
@@ -1558,9 +1588,9 @@ export default {
         // intersect(rect, x, y) returns true if the point (x, y) is inside rect
         intersect(rect, x, y) {
             return x <= rect.left ||
-                   x >= rect.right ||
-                   y <= rect.top ||
-                   y >= rect.bottom;
+                x >= rect.right ||
+                y <= rect.top ||
+                y >= rect.bottom;
         },
 
         // [intersectWithId(id)] returns true if the div at path [id] intersects
@@ -1572,7 +1602,7 @@ export default {
         // predicate/expression and the div is in a goal, and we check for an
         // intersection with the right border. 
         intersectWithId(id) {
-            const intersectIntervals = function(i1, i2) {
+            const intersectIntervals = function (i1, i2) {
                 return i1.min <= i2.max && i1.max >= i2.min;
             };
 
@@ -1583,8 +1613,8 @@ export default {
 
             const btn = this.$proofCanvas.getButton(id);
             const pointerLeft = this.is("subgoal") ||
-                                (this.is("predicate") || this.is("expression")) &&
-                                (btn.is("predicate") || btn.is("expression"));
+                (this.is("predicate") || this.is("expression")) &&
+                (btn.is("predicate") || btn.is("expression"));
 
             const x = pointerLeft ? thisRect.left : thisRect.right;
             const hThis = { min: x, max: x };
@@ -1726,7 +1756,7 @@ export default {
             var mainDiv = $(domNodes);
 
             // return all actions for a div
-            var getDivActions = function(divId) {
+            var getDivActions = function (divId) {
                 var divActions = [];
                 _.each(actions, action => {
                     _.each(action.highlight, hlId => {

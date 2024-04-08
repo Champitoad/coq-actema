@@ -467,13 +467,9 @@ module CoreLogic : sig
 
   type pol = Pos | Neg | Sup
 
-  val cut            : Fo.form -> tactic
-  val assume         : Fo.form -> tactic
   val add_local_def  : string * Fo.type_ * Fo.expr -> tactic
   val generalize     : Handle.t -> tactic
   val move           : Handle.t -> Handle.t option -> tactic
-  val intro          : ?variant:(int * (expr * type_) option) -> tactic
-  val elim           : ?clear:bool -> Handle.t -> tactic
   val ivariants      : targ -> string list
   val evariants      : targ -> Handle.t -> string list
   val forward        : (Handle.t * Handle.t * int list * Form.Subst.subst) -> tactic
@@ -553,8 +549,6 @@ module CoreLogic : sig
       This only changes the lemma database.  *)
   val filter_db_by_name : string -> Proof.proof -> Proof.proof
 
-  val apply   : Proof.proof -> action -> Proof.proof
-
   module Translate : sig
     open Hidmap
     exception UnsupportedAction of action_type
@@ -632,141 +626,11 @@ end = struct
     let new_goal = add_local (name, ty, Some body) (Proof.byid proof hd) in
     Proof.xprogress proof hd [new_goal]
 
-
-  let intro ?(variant = (0, None)) ((pr, id) : targ) =
-    let goal = Proof.byid pr id in
-    let g_env = goal.g_env in
-
-    match variant, (Proof.byid pr id).g_goal with
-    | (0, None), FPred ("_EQ", [e1; e2]) when Form.e_equal_delta g_env e1 e2 ->
-        Proof.progress pr id []
-
-    | (0, None), FConn (`And, [f1; f2]) ->
-        Proof.progress pr id [f1; f2]
-
-    | (0, None), FConn (`Imp, [f1; f2]) ->
-        Proof.sprogress pr id [[None, [f1]], f2]
-
-    | (0, None), FConn (`Equiv, [f1; f2]) ->
-        Proof.progress pr id [Form.f_imp f1 f2; Form.f_imp f2 f1]
-
-    | (i, None), (FConn (`Or, _) as f) ->
-        let fl = Form.flatten_disjunctions f in
-        let g = List.nth fl i in
-        Proof.progress pr id [g]
-
-    | (0, None), FConn (`Not, [f]) ->
-        Proof.sprogress pr id [[None, [f]], FFalse]
-
-    | (0, None), FTrue ->
-        Proof.progress pr id []
-
-    | (0, None), FBind (`Forall, x, xty, body) ->
-        let new_goal = add_local (x, xty, None) goal in
-        let new_goal = Proof.{ new_goal with g_goal = body } in
-        Proof.xprogress pr id [new_goal]
-
-    | (0, Some (e, ety)), FBind (`Exist, x, xty, body) -> begin
-        let goal = Proof.byid pr id in
-
-        Fo.Form.erecheck goal.g_env ety e;
-        if not (Form.t_equal goal.g_env xty ety) then
-          raise TacticNotApplicable; 
-        let goal = Fo.Form.Subst.f_apply1 (x, 0) e body in
-        Proof.sprogress pr id [[], goal]
-      end
-
-    | _ -> raise TacticNotApplicable
-
-  let or_drop (h : Handle.t) ((pr, id) : targ) hl =
-    let gl   = Proof.byid pr id in
-    let _hy  = (Proof.Hyps.byid gl.g_hyps h).h_form in
-    let _gll = Form.flatten_disjunctions gl.g_goal in
-    Proof.sprogress pr id hl
-
-  let and_drop (h : Handle.t) ((pr, id) : targ) =
-    let gl  = Proof.byid pr id in
-    let hy  = (Proof.Hyps.byid gl.g_hyps h).h_form in
-    let gll = Form.flatten_conjunctions gl.g_goal in
-    let ng  = Form.f_ands (remove_form gl.g_env hy gll) in
-
-    Proof.sprogress pr id [[None, []], ng]
-
-  let core_elim (h : Handle.t) ((pr, id) : targ) =
-    let result = ref ([]) in 
-    let gl = Proof.byid pr id in
-    let hyp = (Proof.Hyps.byid gl.g_hyps h).h_form in
-
-    begin
-      if Form.f_equal gl.g_env hyp gl.g_goal
-      then result := [`S []]
-      else
-        let pre, hy, s = prune_premisses_fa hyp in
-        begin match Form.f_unify gl.g_env LEnv.empty s [(hy, gl.g_goal)] with
-        | Some s when Form.Subst.is_complete s ->  
-            let pres = List.map
-              (fun (i, x) -> [Some h, []], (Form.Subst.f_iter s i x)) pre in
-            result :=  `S pres::!result
-        | Some _ -> () (* "incomplete match" *)
-        | _ -> ();
-        end;
-        let subs = List.map (fun (_, f) -> [Some h, []], f) pre in
-        begin match hy with
-        | FConn (`And, [f1; f2]) ->
-            result := `S (subs @ [[Some h, [f1; f2]], gl.g_goal]) :: !result
-        (* clear *) 
-        | FConn (`Or, [f1; f2]) ->
-            result := `S (subs @ [[Some h, [f1]], gl.g_goal;
-                          [Some h, [f2]], gl.g_goal]) :: !result
-        | FConn (`Equiv, [f1; f2]) ->
-            result := `S (subs @ [[Some h, [Form.f_imp f1 f2;
-                          Form.f_imp f2 f1]], gl.g_goal]) :: !result
-        | FConn (`Not, [f]) ->
-            result := `S (subs @ [[Some h, []], f]) :: !result
-        | FFalse -> result := `S subs :: !result
-        | FTrue -> result := `S (subs @ [[Some h, []], gl.g_goal]) :: !result
-        | FBind (`Exist, x, ty, f) ->
-            let goal = add_local (x, ty, None) gl in
-            let g_hyps = Proof.Hyps.remove goal.g_hyps h in
-            let g_hyps = Proof.(Hyps.add g_hyps h (mk_hyp f)) in
-            let goal = Proof.{ goal with g_hyps } in
-            result := `X [goal] :: !result
-        | _ -> ()
-        end;
-        (* let _ , goal, s = prune_premisses_ex gl.g_goal in
-        let pre, hy = prune_premisses hyp in
-        let pre = List.map (fun x -> [(Some h), []],x) pre in
-        begin match Form.f_unify gl.g_env LEnv.empty s [(hy, goal)] with
-        | Some s when Form.Subst.is_complete s ->
-            result := ((TElim h), `S pre) :: !result
-        | Some _ -> () (* failwith "incomplete ex match" *)
-        | None ->
-            match goal with
-            | FConn (`Or , _) ->
-              let gll = Form.flatten_disjunctions goal in
-              let rec aux = function
-                | [] -> false
-                | g::l -> begin match Form.f_unify gl.g_env LEnv.empty s [(hyp, g)] with
-                    | Some s when Form.Subst.is_complete s -> true
-                    | _ -> aux l
-                  end
-              in 
-              if aux gll 
-              then result := ((TElim h), `S []) :: !result
-              else ()
-            | _ -> ()
-        end; *)
-      end;
-    !result
-
   let perform ?clear l pr id =
     match l with
       | `S l :: _ -> Proof.sprogress ?clear pr id l
       | `X l :: _ -> Proof.xprogress pr id l
       | _ -> raise TacticNotApplicable
-  
-  let elim ?clear (h : Handle.t) ((pr, id) : targ) =
-    perform ?clear (core_elim h (pr, id)) pr id
   
   let induction (h : Handle.t) ((pr, id) : targ) =
     let goal = Proof.byid pr id in
@@ -844,22 +708,6 @@ end = struct
   let forward (hsrc, hdst, p, s) ((pr, id) : targ) =
     perform (core_forward (hsrc, hdst, p, Form.Subst.aslist s) (pr, id)) pr id 
 
-  let cut (form : form) ((proof, hd) : targ) =
-    let goal = Proof.byid proof hd in
-
-    Fo.Form.recheck goal.g_env form;
-
-    let subs = [[], form] in
-    
-    Proof.sprogress proof hd (subs @ [[None, [form]], goal.g_goal])
-
-  let assume (form : form) ((proof, hd) : targ) =
-    let goal = Proof.byid proof hd in
-    let env = proof |> Proof.get_db |> LemmaDB.env in
-
-    Fo.Form.recheck env form;
-    
-    Proof.sprogress proof hd ([[None, [form]], goal.g_goal])
 
   let generalize (hid : Handle.t) ((proof, id) : targ) =
     let goal = Proof.byid proof id in
@@ -886,28 +734,6 @@ end = struct
     let subgoal = [Some hd, [form]], goal.g_goal in
 
     Proof.sprogress proof id [subgoal]
-  
-
-  (** The [close_with_unit] tactic tries to close the goal either with
-      the falsity elimination rule, or the truth introduction rule. *)
-  let close_with_unit : tactic =
-    fun (proof, g_id as targ) ->
-
-    let open Proof in
-
-    let goal = byid proof g_id in
-
-    (* Truth intro *)
-    if goal.g_goal = FTrue then intro targ else
-
-    (* Falsity elim *)
-    Hyps.to_list goal.g_hyps
-    |>
-    List.find_map_opt
-      (fun (hd, { h_form = f; _ }) ->
-       if f = FFalse then Some (elim hd targ) else None)
-    |>
-    Option.default (id_tac targ)
     
 
   (* -------------------------------------------------------------------- *)
@@ -2224,25 +2050,6 @@ end = struct
 
     subgoal, itrace
   
-  let dlink_tac (src, dst : link) (s_src, s_dst : Form.Subst.subst * Form.Subst.subst) : tactic =
-    fun (proof, g_id) ->
-    let goal = Proof.byid proof g_id in
-
-    let subgoal, itrace = dlink (src, dst) (s_src, s_dst) proof in
-
-    js_log (Printf.sprintf "itrace: %s" (print_itrace goal.g_env itrace));
-
-    let open Proof in
-    let tac =
-      thenl_tac
-        (fun (pr, hd) -> sprogress ~clear:false pr hd [subgoal])
-        (fun (pr, hd) ->
-          let pr = close_with_unit (pr, hd) in
-          let subs = after pr hd |> Option.get |> List.map (byid pr) in
-          xprogress proof g_id subs) in
-    tac (proof, g_id)
-
-  
   (* -------------------------------------------------------------------- *)
   (** Logical actions *)
 
@@ -3162,47 +2969,6 @@ end = struct
       
       | `Ctxt ->
         ctxt_actions p.selection proof
-
-
-  let apply (proof : Proof.proof) ((hd, a) : action) =
-    let targ = (proof, hd) in
-    match a with
-    | `Intro variant ->
-        intro ~variant:(variant, None) targ
-    | `Elim (subhd, _) ->
-        let goal = Proof.byid proof hd in
-        let form = (Proof.Hyps.byid goal.g_hyps subhd).h_form in 
-        let clear =
-          Form.f_equal goal.g_env form FTrue in
-        elim ~clear subhd targ
-    | `Ind subhd ->
-        induction subhd targ
-    | `Unfold x ->
-        unfold_all x targ
-    | `Fold x ->
-        unfold_all ~fold:true x targ
-    | `DisjDrop (subhd, fl) ->
-        or_drop subhd targ (List.map (fun x -> [Some hd, []],x) fl)
-    | `ConjDrop subhd ->
-        and_drop subhd targ
-    | `Forward (src, dst, p, s) ->
-        forward (src, dst, p, s) targ
-    | `Hyperlink (lnk, actions) ->
-        begin match lnk, actions with
-        | ([src], [dst]), [`Subform substs] ->
-            dlink_tac (src, dst) substs targ
-        | _, [`Instantiate (wit, tgt)] ->
-            instantiate wit tgt targ
-        | _, [`Rewrite (red, res, tgts)] ->
-            rewrite_in red res tgts targ
-        | _, [`Fold (x, tgts)] ->
-            unfold ~fold:true x tgts targ
-        | _, [`Unfold (x, tgts)] ->
-            unfold x tgts targ
-        | _, _ :: _ :: _ -> failwith "Cannot handle multiple link actions yet"
-        | _, _ -> raise TacticNotApplicable
-        end
-    | _ -> raise TacticNotApplicable
 
   module Translate = struct
     open Api
