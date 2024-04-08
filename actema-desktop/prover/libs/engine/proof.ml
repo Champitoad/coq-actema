@@ -510,7 +510,6 @@ module CoreLogic : sig
 
   type action_type = [
     | `Intro     of int
-    | `Lemma     of name (** Add a lemma to the hypothesis list. *)
     | `Elim      of Handle.t * int
     | `Ind       of Handle.t
     | `Simpl     of ipath
@@ -521,7 +520,6 @@ module CoreLogic : sig
     | `Fold      of vname
     | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
-    | `Forward   of Handle.t * Handle.t * (int list) * Form.Subst.subst 
   ]
 
   type action = Handle.t * action_type
@@ -2096,7 +2094,6 @@ end = struct
   
   type action_type = [
     | `Intro     of int
-    | `Lemma     of name
     | `Elim      of Handle.t * int
     | `Ind       of Handle.t
     | `Simpl     of ipath
@@ -2107,7 +2104,6 @@ end = struct
     | `Fold      of vname
     | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
-    | `Forward   of Handle.t * Handle.t * (int list) * Form.Subst.subst 
   ]
 
   type action = Handle.t * action_type
@@ -3017,10 +3013,10 @@ end = struct
       | `Indt tgt ->
           let* tgt = of_ipath tgt in
           return (`AIndt tgt)
-     | `Case tgt ->
+      | `Case tgt ->
           let* tgt = of_ipath tgt in
           return (`ACase tgt)
-     | `Pbp tgt ->
+      | `Pbp tgt ->
           let* tgt = of_ipath tgt in
           return (`APbp tgt)
       | `Hyperlink (lnk, actions) ->
