@@ -522,8 +522,6 @@ module CoreLogic : sig
     | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
     | `Forward   of Handle.t * Handle.t * (int list) * Form.Subst.subst 
-    | `DisjDrop  of Handle.t * form list
-    | `ConjDrop  of Handle.t
   ]
 
   type action = Handle.t * action_type
@@ -2110,8 +2108,6 @@ end = struct
     | `Unfold    of vname
     | `Hyperlink of hyperlink * linkaction list
     | `Forward   of Handle.t * Handle.t * (int list) * Form.Subst.subst 
-    | `DisjDrop  of Handle.t * form list
-    | `ConjDrop  of Handle.t
   ]
 
   type action = Handle.t * action_type
