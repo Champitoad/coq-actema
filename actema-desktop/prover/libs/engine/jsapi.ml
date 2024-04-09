@@ -4,7 +4,7 @@ open Fo
 open Proof
 
 (* -------------------------------------------------------------------- *)
-type source = Handle.t * [`C | `H of Handle.t]
+type source = Handle.t * [ `C | `H of Handle.t ]
 
 (* -------------------------------------------------------------------- *)
 exception InvalidASource
@@ -12,25 +12,21 @@ exception InvalidLemmaDB
 
 (* -------------------------------------------------------------------- *)
 module Exn : sig
-  val register  : (exn -> string option) -> unit
+  val register : (exn -> string option) -> unit
   val translate : exn -> string option
 end = struct
   type tx_t = exn -> string option
 
   let translators = ref ([] : tx_t list)
-
-  let register (tx : tx_t) : unit =
-    translators := !translators @ [tx]
+  let register (tx : tx_t) : unit = translators := !translators @ [ tx ]
 
   let translate (e : exn) =
-    let module E = struct exception Found of string end in
-
+    let module E = struct
+      exception Found of string
+    end in
     try
-      List.iter
-        (fun tx -> tx e |> Option.may (fun msg -> raise (E.Found msg)))
-        !translators;
+      List.iter (fun tx -> tx e |> Option.may (fun msg -> raise (E.Found msg))) !translators;
       None
-
     with E.Found msg -> Some msg
 end
 
@@ -43,40 +39,32 @@ end = struct
   include Js_of_ocaml.Js
 
   let as_string exn (v : 'a t) =
-    let v = Unsafe.coerce v in 
-    match to_string (typeof v) with
-    | "string" -> to_string v
-    | _ -> raise exn
+    let v = Unsafe.coerce v in
+    match to_string (typeof v) with "string" -> to_string v | _ -> raise exn
 end
 
 (* -------------------------------------------------------------------- *)
-let () = Exn.register (fun exn ->
-    match exn with
-    | Syntax.ParseError _ ->
-        Some "invalid input (parse error)"
-    | DuplicatedEntry (_, name) ->
-        Some ("duplicated entry \"" ^ name ^ "\" in goal")
-    | TypingError ->
-        Some "invalid goal (typing error)"
-    | RecheckFailure ->
-        Some "invalid goal (recheck failure)"
-    | CoreLogic.TacticNotApplicable ->
-        Some "tactic not applicable"
-    | LemmaDB.LemmaNotFound name ->
-        Some ("lemma \"" ^ name ^ "\" does not exist")
-    | _ ->
-        None
-  )
+let () =
+  Exn.register (fun exn ->
+      match exn with
+      | Syntax.ParseError _ -> Some "invalid input (parse error)"
+      | DuplicatedEntry (_, name) -> Some ("duplicated entry \"" ^ name ^ "\" in goal")
+      | TypingError -> Some "invalid goal (typing error)"
+      | RecheckFailure -> Some "invalid goal (recheck failure)"
+      | CoreLogic.TacticNotApplicable -> Some "tactic not applicable"
+      | LemmaDB.LemmaNotFound name -> Some ("lemma \"" ^ name ^ "\" does not exist")
+      | _ -> None)
 
 (* -------------------------------------------------------------------- *)
-let (!!) f = fun x ->
-  try f x with e ->
+let ( !! ) f x =
+  try f x
+  with e ->
     let msg =
       Option.default_delayed
-        (fun () ->
-          Format.sprintf "internal error: %s" (Printexc.to_string e))
+        (fun () -> Format.sprintf "internal error: %s" (Printexc.to_string e))
         (Exn.translate e)
-    in Js.Js_error.(raise_ (of_error (new%js Js.error_constr (Js.string msg))))
+    in
+    Js.Js_error.(raise_ (of_error (new%js Js.error_constr (Js.string msg))))
 
 module Path : sig
   val of_obj : 'a Js.t -> CoreLogic.ipath
@@ -87,734 +75,687 @@ end = struct
   let of_array obj = obj |> Js.to_array |> Array.to_list |> List.map of_obj
   let of_opt obj = obj |> Js.Opt.to_option |> Option.map of_obj
 end
-  
+
 (* -------------------------------------------------------------------- *)
-let rec js_proof_engine (proof : Proof.proof) = object%js (_self)
-  val proof  = proof
-  val handle = Handle.fresh ()
+let rec js_proof_engine (proof : Proof.proof) =
+  object%js (_self)
+    val proof = proof
+    val handle = Handle.fresh ()
 
-  (* Return a [js_subgoal] array of all the opened subgoals *)
-  method subgoals =
-    let subgoals = Proof.opened proof in
-    let subgoals = List.map (js_subgoal _self) subgoals in
-    Js.array (Array.of_list subgoals)
+    (* Return a [js_subgoal] array of all the opened subgoals *)
+    method subgoals =
+      let subgoals = Proof.opened proof in
+      let subgoals = List.map (js_subgoal _self) subgoals in
+      Js.array (Array.of_list subgoals)
 
-  (* Return true when there are no opened subgoals left *)
-  method closed =
-    Js.bool (Proof.closed proof)
+    (* Return true when there are no opened subgoals left *)
+    method closed = Js.bool (Proof.closed proof)
 
-  (* Return the given action as a binary, base64-encoded string *)
-  method getactionb action =
-    action |>
-    !!(CoreLogic.Translate.export_action (Proof.hidmap _self##.proof) _self##.proof) |>
-    fun pr -> js_log (pr |> Api.Utils.string_of_action); pr |>
-    Api.Logic_b.string_of_action |>
-    Base64.encode_string |>
-    Js.string
+    (* Return the given action as a binary, base64-encoded string *)
+    method getactionb action =
+      action |> !!(CoreLogic.Translate.export_action (Proof.hidmap _self##.proof) _self##.proof)
+      |> fun pr ->
+      js_log (pr |> Api.Utils.string_of_action);
+      pr |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string
 
-  (* Get the meta-data attached to this proof engine *)
-  method getmeta =
-    Js.Opt.option (Proof.get_meta proof _self##.handle)
+    (* Get the meta-data attached to this proof engine *)
+    method getmeta = Js.Opt.option (Proof.get_meta proof _self##.handle)
 
-  (* Attach meta-data to the proof engine *)
-  method setmeta meta =
-    Proof.set_meta proof _self##.handle (Js.Opt.to_option meta)
+    (* Attach meta-data to the proof engine *)
+    method setmeta meta = Proof.set_meta proof _self##.handle (Js.Opt.to_option meta)
 
-  (* Get all the proof actions that can be applied to the
-   * goal targetted by [asource] as an array of actions.
-   *
-   * The source is described as a record with the following
-   * properties:
-   *
-   *  - kind (string): the type of the source.
-   *    Can be "click", "ctxt" or "dnd".
-   *
-   *  - path (string) [only for the kind "click"]
-   *    ID of the "clicked" item
-   *
-   *  - source (string) [only for the kind "dnd"]
-   *    ID of the item that is being dropped
-   *
-   *  - destination (string option) [only for the kind "dnd"]
-   *    ID of the subterm that received the dropped item
-   *
-   *  - selection (string list) [all actions]
-   *    List of IDs of selected subterms
-   *
-   * An output action is an object with the following properties:
-   *
-   *  - description : the textual description of the action
-   *  - icon        : optional id of a FontAwesome icon to be used in the description
-   *  - ui          : the UI action
-   *  - highlight   : a JS array of IDs to highlight
-   *  - action      : the related action
-   *)
-  method actions asource =
-    let actions =
-      let kinds =
-        match Js.to_string (Js.typeof asource) with
-        | "string" ->
-          [`Click (Path.of_obj asource)]
-        | "object" -> begin
-          let asource = Js.Unsafe.coerce asource in
-          match Js.as_string InvalidASource asource##.kind with
-            | "click" ->
-                let path = Path.of_obj asource##.path in
-                [`Click path]
-            | "ctxt" ->
-                [`Ctxt]
-            | "dnd" ->
-                let source = Path.of_obj asource##.source in
-                let destination = Path.of_opt asource##.destination in
-                [`DnD CoreLogic.{ source; destination; }]
-            | "any" ->
-                let path = Path.of_obj asource##.path in
-                [`Click path; `DnD CoreLogic.{ source = path; destination = None; }]
-            | _ -> raise InvalidASource
-          end
-        | _ -> raise InvalidASource
+    (* Get all the proof actions that can be applied to the
+     * goal targetted by [asource] as an array of actions.
+     *
+     * The source is described as a record with the following
+     * properties:
+     *
+     *  - kind (string): the type of the source.
+     *    Can be "click", "ctxt" or "dnd".
+     *
+     *  - path (string) [only for the kind "click"]
+     *    ID of the "clicked" item
+     *
+     *  - source (string) [only for the kind "dnd"]
+     *    ID of the item that is being dropped
+     *
+     *  - destination (string option) [only for the kind "dnd"]
+     *    ID of the subterm that received the dropped item
+     *
+     *  - selection (string list) [all actions]
+     *    List of IDs of selected subterms
+     *
+     * An output action is an object with the following properties:
+     *
+     *  - description : the textual description of the action
+     *  - icon        : optional id of a FontAwesome icon to be used in the description
+     *  - ui          : the UI action
+     *  - highlight   : a JS array of IDs to highlight
+     *  - action      : the related action
+     *)
+    method actions asource =
+      let actions =
+        let kinds =
+          match Js.to_string (Js.typeof asource) with
+          | "string" -> [ `Click (Path.of_obj asource) ]
+          | "object" -> (
+              let asource = Js.Unsafe.coerce asource in
+              match Js.as_string InvalidASource asource##.kind with
+              | "click" ->
+                  let path = Path.of_obj asource##.path in
+                  [ `Click path ]
+              | "ctxt" -> [ `Ctxt ]
+              | "dnd" ->
+                  let source = Path.of_obj asource##.source in
+                  let destination = Path.of_opt asource##.destination in
+                  [ `DnD CoreLogic.{ source; destination } ]
+              | "any" ->
+                  let path = Path.of_obj asource##.path in
+                  [ `Click path; `DnD CoreLogic.{ source = path; destination = None } ]
+              | _ -> raise InvalidASource)
+          | _ -> raise InvalidASource
+        and selection = Path.of_array asource##.selection in
 
-      and selection = Path.of_array asource##.selection in
+        let asource = List.map (fun kind -> CoreLogic.{ kind; selection }) kinds in
 
-      let asource =
-        List.map (fun kind -> CoreLogic.{ kind; selection; }) kinds in
+        List.flatten (List.map !!(CoreLogic.actions _self##.proof) asource)
+      in
 
-      List.flatten (List.map (!!(CoreLogic.actions _self##.proof)) asource)
-    in
+      Js.array
+        (Array.of_list
+           (List.map
+              (fun CoreLogic.{ description = p; icon = ic; highlights = ps; kind = aui; action = a } ->
+                let ps = List.map CoreLogic.path_of_ipath ps in
+                let ps = Js.array (Array.of_list (List.map Js.string ps)) in
 
-    Js.array (
-      Array.of_list
-        (List.map (fun CoreLogic.{ description = p; icon = ic;
-                                   highlights = ps; kind = aui; action = a } -> 
-           let ps = List.map CoreLogic.path_of_ipath ps in
-           let ps = Js.array (Array.of_list (List.map Js.string ps)) in
+                let aui =
+                  let p2p = CoreLogic.path_of_ipath in
 
-           let aui =
-             let p2p = CoreLogic.path_of_ipath in
+                  match aui with
+                  | `Click p ->
+                      Js.Unsafe.obj
+                        [| ("kind", Js.Unsafe.inject (Js.string "click"))
+                         ; ("target", Js.Unsafe.inject (Js.string (p2p p)))
+                        |]
+                  | `DnD (src, dst) ->
+                      Js.Unsafe.obj
+                        [| ("kind", Js.Unsafe.inject (Js.string "dnd"))
+                         ; ("source", Js.Unsafe.inject (Js.string (p2p src)))
+                         ; ("destination", Js.Unsafe.inject (Js.string (p2p dst)))
+                        |]
+                  | `Ctxt -> Js.Unsafe.obj [| ("kind", Js.Unsafe.inject (Js.string "ctxt")) |]
+                in
 
-             match aui with
-             | `Click p -> Js.Unsafe.obj [|
-                 "kind"  , Js.Unsafe.inject (Js.string "click");
-                 "target", Js.Unsafe.inject (Js.string (p2p p));
-               |]
+                let icon =
+                  match ic with
+                  | Some s -> Js.Unsafe.inject (Js.string s)
+                  | None -> Js.Unsafe.inject Js.undefined
+                in
 
-             | `DnD (src, dst) -> Js.Unsafe.obj [|
-                 "kind"       , Js.Unsafe.inject (Js.string "dnd");
-                 "source"     , Js.Unsafe.inject (Js.string (p2p src));
-                 "destination", Js.Unsafe.inject (Js.string (p2p dst));
-               |]
+                Js.Unsafe.obj
+                  [| ("description", Js.Unsafe.inject (Js.string p))
+                   ; ("icon", icon)
+                   ; ("highlight", Js.Unsafe.inject ps)
+                   ; ("ui", aui)
+                   ; ("action", Js.Unsafe.inject a)
+                  |])
+              actions))
 
-             | `Ctxt -> Js.Unsafe.obj [|
-                 "kind"       , Js.Unsafe.inject (Js.string "ctxt");
-               |]
-           in
+    (** Same as [actions], but in async mode. TO BE TESTED *)
+    method pactions path =
+      let%lwt _ = Lwt.return () in
+      Lwt.return (_self##actions path)
 
-           let icon =
-             match ic with
-             | Some s -> Js.Unsafe.inject (Js.string s)
-             | None -> Js.Unsafe.inject Js.undefined in
+    (** Load the lemma database specified by the [data] object into the prover. *)
+    method loadlemmas datab =
+      (* Decode the data. *)
+      let env, lemmas =
+        datab |> Js.to_string |> Base64.decode_exn |> Api.Logic_b.lemmadb_of_string
+      in
+      (* Translate the lemmas and env to the actema format. *)
+      let lemmas = List.map (fun (name, form) -> (name, Fo.Translate.to_form form)) lemmas in
+      let env = Hidmap.State.run (Fo.Translate.to_env env) Hidmap.empty in
+      (* Check the lemmas are all well-typed in the database environment. *)
+      List.iter (fun (_name, form) -> Fo.Form.recheck env form) lemmas;
+      (* Create the lemma database. *)
+      let db =
+        List.fold (fun db (name, form) -> LemmaDB.add db name form) (LemmaDB.empty env) lemmas
+      in
+      (* Print debug info. *)
+      Format.printf "Received lemmas\n";
+      Format.printf "count=%d\n" (List.length lemmas);
+      let new_proof = Proof.set_db _self##.proof db in
+      js_proof_engine new_proof
 
-           Js.Unsafe.obj [|
-             "description", Js.Unsafe.inject (Js.string p) ;
-             "icon"       , icon                           ;
-             "highlight"  , Js.Unsafe.inject ps            ;
-             "ui"         , aui                            ;
-             "action"     , Js.Unsafe.inject a             |]) actions))
-
-  (** Same as [actions], but in async mode. TO BE TESTED *)
-  method pactions path =
-    let%lwt _ = Lwt.return () in Lwt.return (_self##actions path)
-  
-  (** Load the lemma database specified by the [data] object into the prover. *)
-  method loadlemmas datab =
-    (* Decode the data. *)
-    let env, lemmas =
-      datab 
-      |> Js.to_string 
-      |> Base64.decode_exn 
-      |> Api.Logic_b.lemmadb_of_string
-    in
-    (* Translate the lemmas and env to the actema format. *)
-    let lemmas = 
-      List.map begin fun (name, form) -> 
-        (name, Fo.Translate.to_form form) 
-      end lemmas
-    in  
-    let env = Hidmap.State.run (Fo.Translate.to_env env) (Hidmap.empty) in
-    (* Check the lemmas are all well-typed in the database environment. *)
-    List.iter begin fun (_name, form) -> 
-      Fo.Form.recheck env form
-    end lemmas;
-    (* Create the lemma database. *)
-    let db = 
-      List.fold begin fun db (name, form) -> 
-        LemmaDB.add db name form
-      end (LemmaDB.empty env) lemmas 
-    in 
-    (* Print debug info. *)
-    Format.printf "Received lemmas\n";
-    Format.printf "count=%d\n" (List.length lemmas);
-    let new_proof = Proof.set_db _self##.proof db in
-    js_proof_engine new_proof
-
-  (** Serialize the current lemma database into a JS object. 
+    (** Serialize the current lemma database into a JS object. 
       Returns an array of lemmas. Each lemma contains two strings : (full-name, pretty-printed-formula) *)
-  method getlemmas =
-    let db = _self##.proof |> Proof.get_db in
-    db
-    |> LemmaDB.all_lemmas
-    |> List.map begin fun (name, form) ->
-        let stmt =
-          Notation.f_tostring (LemmaDB.env db) form |>
-          Js.string |>
-          Js.Unsafe.inject
-        in name, stmt
-      end 
-    |> Array.of_list 
-    |> Js.Unsafe.obj
+    method getlemmas =
+      let db = _self##.proof |> Proof.get_db in
+      db |> LemmaDB.all_lemmas
+      |> List.map (fun (name, form) ->
+             let stmt =
+               Notation.f_tostring (LemmaDB.env db) form |> Js.string |> Js.Unsafe.inject
+             in
+             (name, stmt))
+      |> Array.of_list |> Js.Unsafe.obj
 
-  (** Filter the lemma database according to :
+    (** Filter the lemma database according to :
       - the current selection.
       - a text pattern (usually the text in the lemma search-bar's input-box). 
       Both arguments are optional (in javascript-land, they can be undefined). *)
-  method filterlemmas selection pattern =
-    (* Convert the pattern from JS to ocaml. *)
-    let pattern = 
-      pattern 
-      |> Js.Optdef.to_option 
-      |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
-    in
-    Format.printf "Got pattern: %s\n" (Option.default "[none]" pattern);
-    (* Convert the selection from JS to ocaml. *)
-    let selection = 
-      selection 
-      |> Js.Optdef.to_option 
-      |> Option.map Path.of_array
-    in
-    (* Get the proof. *)
-    let proof = _self##.proof in
-    (* Fitler by name. *)
-    let proof = 
-      match pattern with 
-      | None -> proof 
-      | Some pattern -> CoreLogic.filter_db_by_name pattern proof
-    in
-    (* Fiter by selection. *)
-    let proof = 
-      match selection with 
-      | None | Some [] -> 
-          Format.printf "No selection\n"; proof 
-      | Some [ selection ] -> 
-          Format.printf "Got selection: %s\n" (CoreLogic.path_of_ipath selection);
-          CoreLogic.filter_db_by_selection selection proof
-      | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
-    in
-    js_proof_engine proof
-
-end
+    method filterlemmas selection pattern =
+      (* Convert the pattern from JS to ocaml. *)
+      let pattern =
+        pattern |> Js.Optdef.to_option
+        |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
+      in
+      Format.printf "Got pattern: %s\n" (Option.default "[none]" pattern);
+      (* Convert the selection from JS to ocaml. *)
+      let selection = selection |> Js.Optdef.to_option |> Option.map Path.of_array in
+      (* Get the proof. *)
+      let proof = _self##.proof in
+      (* Fitler by name. *)
+      let proof =
+        match pattern with
+        | None -> proof
+        | Some pattern -> CoreLogic.filter_db_by_name pattern proof
+      in
+      (* Fiter by selection. *)
+      let proof =
+        match selection with
+        | None | Some [] ->
+            Format.printf "No selection\n";
+            proof
+        | Some [ selection ] ->
+            Format.printf "Got selection: %s\n" (CoreLogic.path_of_ipath selection);
+            CoreLogic.filter_db_by_selection selection proof
+        | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
+      in
+      js_proof_engine proof
+  end
 
 (* -------------------------------------------------------------------- *)
 (* JS wrapper for subgoals                                              *)
-and js_subgoal parent (handle : Handle.t) = object%js (_self)
-  (* back-link to the [js_proof_engine] this subgoal belongs to *)
-  val parent = parent
+and js_subgoal parent (handle : Handle.t) =
+  object%js (_self)
+    (* back-link to the [js_proof_engine] this subgoal belongs to *)
+    val parent = parent
 
-  (* the handle (UID) of the subgoal *)
-  val handle = handle
+    (* the handle (UID) of the subgoal *)
+    val handle = handle
 
-  (* the OCaml subgoal *)
-  method goal =
-    Proof.byid parent##.proof _self##.handle
+    (* the OCaml subgoal *)
+    method goal = Proof.byid parent##.proof _self##.handle
 
-  (* Return all the functional variables as a [string array] *)
-  method fvars =
-    let goal = _self##goal in
-    let fvars : string list =
-      Funs.all goal.g_env |>
-      Map.bindings |>
-      List.map (fun (f, (ar, res)) ->
-        let ar = List.to_string ~sep:" & " ~left:"" ~right:"" (Notation.t_tostring goal.Proof.g_env) ar in
-        let res = Notation.t_tostring goal.g_env res in
-        Printf.sprintf "%s : %s -> %s" f ar res) in
-    Js.array (Array.of_list (List.map Js.string fvars))
-
-  (* Return all the propositional variables as a [string array] *)
-  method pvars =
-    let goal = _self##goal in
-    let pvars = List.fst (Map.bindings (Prps.all goal.g_env)) in
-    Js.array (Array.of_list (List.map Js.string pvars))
-
-  (* Return all the local variables as a [js_tvar array] *)
-  method tvars =
-    let goal  = _self##goal in
-    let tvars = Vars.to_list goal.g_env in
-    let aout  = List.mapi (fun i (id, x, b) ->
-      js_tvar _self (i, (id, x, b))) tvars in
-    Js.array (Array.of_list aout)
-
-  (* Return all the local hypotheses (context) as a [js_hyps array] *)
-  method context =
-    let goal = _self##goal in
-    let hyps = List.rev (Proof.Hyps.to_list goal.g_hyps) in
-
-    Js.array (Array.of_list (List.mapi (fun i x -> js_hyps _self (i, x)) hyps))
-
-  (* Return the subgoal conclusion as a [js_form] *)
-  method conclusion =
-    let goal  = Proof.byid parent##.proof _self##.handle in
-    js_form _self (_self##.handle, `C) goal.g_goal
-
- 
-  (* [this#ivariants] Return the available introduction rules that can
-   * be applied to the conclusion of [this] as a string array. The strings
-   * are only for documentation purposes - only their position in the
-   * returned array is meaningful and can be used as argument to [#intro]
-   * to select the desired introduction rule. *)
-  method ivariants =
-    let aout = !!CoreLogic.ivariants (parent##.proof, handle) in
-    let aout = Array.of_list (List.map Js.string aout) in
-    Js.array aout
-
-  
-  (* [this#getcutb (form : string)] parses [form] in the current goal, and
-   * returns the base64-encoded string of the corresponding ACut action. *)
-  method getcutb form =
-    !! begin fun () ->
+    (* Return all the functional variables as a [string array] *)
+    method fvars =
       let goal = _self##goal in
-      let form = form |>
-        Js.to_string |> String.trim |>
-        Io.from_string |> Io.parse_form |>
-        Form.check goal.g_env |>
-        Fo.Translate.of_form in
-      `ACut form |>
-      Api.Logic_b.string_of_action |>
-      Base64.encode_string |>
-      Js.string
-    end ()
-    
-  
-  (* [this#addlemma (name : string)] retrieves the lemma [name] in the database,
-     and adds it as a new hypothesis in the current goal. *)
-  method addlemma name =
-    let doit () =
-      let name = Js.to_string name in
-      let _form = LemmaDB.get (Proof.get_db parent##.proof) name in
-      Format.printf "Jsapi.addlemma: TODO";
-      parent##.proof
-      (*CoreLogic.assume form (parent##.proof, _self##.handle)*)
-    in js_proof_engine (!!doit ())
-      
+      let fvars : string list =
+        Funs.all goal.g_env |> Map.bindings
+        |> List.map (fun (f, (ar, res)) ->
+               let ar =
+                 List.to_string ~sep:" & " ~left:"" ~right:""
+                   (Notation.t_tostring goal.Proof.g_env)
+                   ar
+               in
+               let res = Notation.t_tostring goal.g_env res in
+               Printf.sprintf "%s : %s -> %s" f ar res)
+      in
+      Js.array (Array.of_list (List.map Js.string fvars))
 
-  (* [this#add_local (name : string) (expr : string) parses [expr] in the goal
-   * [context] and adds it to the local [context] under the name [name]. *)
-  method addlocal name expr =
-    let doit () =
+    (* Return all the propositional variables as a [string array] *)
+    method pvars =
       let goal = _self##goal in
-      let expr = String.trim (Js.to_string expr) in
-      let expr = Io.parse_expr (Io.from_string expr) in
-      let expr, ty = Form.echeck goal.g_env expr in
-      CoreLogic.add_local_def (Js.to_string name, ty, expr) (parent##.proof, _self##.handle)
+      let pvars = List.fst (Map.bindings (Prps.all goal.g_env)) in
+      Js.array (Array.of_list (List.map Js.string pvars))
 
-    in js_proof_engine (!!doit ())
-
-  (* [this#add_alias (nexpr : string) parses [nexpr] as a named expression
-   * in the goal [context] and add it to the local [context]. *)
-  method addalias expr =
-    let doit () =
+    (* Return all the local variables as a [js_tvar array] *)
+    method tvars =
       let goal = _self##goal in
-      let expr = String.trim (Js.to_string expr) in
-      let name, expr = Io.parse_nexpr (Io.from_string expr) in
-      let expr, ty = Form.echeck goal.g_env expr in
-      CoreLogic.add_local_def (Location.unloc name, ty, expr) (parent##.proof, _self##.handle)
+      let tvars = Vars.to_list goal.g_env in
+      let aout = List.mapi (fun i (id, x, b) -> js_tvar _self (i, (id, x, b))) tvars in
+      Js.array (Array.of_list aout)
 
-    in js_proof_engine (!!doit ())
-
-  (* [this#getaliasb (nexpr : string) parses [nexpr] as a named expression
-   * in the current goal, and returns the base64-encoded string of the
-   * corresponding ADef action. *)
-  method getaliasb expr =
-    !! begin fun () ->
+    (* Return all the local hypotheses (context) as a [js_hyps array] *)
+    method context =
       let goal = _self##goal in
-      let expr = String.trim (Js.to_string expr) in
-      let name, expr = Io.parse_nexpr (Io.from_string expr) in
-      let expr, ty = Form.echeck goal.g_env expr in
-      let name = Location.unloc name in
-      let expr, ty = Fo.Translate.(of_expr expr, of_type_ ty) in
-      `ADef (name, ty, expr) |>
-      Api.Logic_b.string_of_action |>
-      Base64.encode_string |>
-      Js.string
-    end ()
+      let hyps = List.rev (Proof.Hyps.to_list goal.g_hyps) in
 
-  (* [this#move_hyp (from : handle<js_hyp>) (before : handle<js_hyp> option)] move
-   * hypothesis [from] before hypothesis [before]. Both hypothesis
-   * must be part of this sub-goal. *)
-  method movehyp from before =
-    let doit () =
-      CoreLogic.move
-        from (Js.Opt.to_option before)
-        (parent##.proof, _self##.handle)
-    in js_proof_engine (!!doit ())
+      Js.array (Array.of_list (List.mapi (fun i x -> js_hyps _self (i, x)) hyps))
 
-  (* [this#generalize (h : handle<js_hyps>) generalizes the hypothesis [h] *)
-  method generalize hid =
-    let doit () =
-      CoreLogic.generalize hid (parent##.proof, _self##.handle)
-    in js_proof_engine (!!doit ())
+    (* Return the subgoal conclusion as a [js_form] *)
+    method conclusion =
+      let goal = Proof.byid parent##.proof _self##.handle in
+      js_form _self (_self##.handle, `C) goal.g_goal
 
-  method getmeta =
-    Js.Opt.option (Proof.get_meta parent##.proof _self##.handle)
+    (* [this#ivariants] Return the available introduction rules that can
+     * be applied to the conclusion of [this] as a string array. The strings
+     * are only for documentation purposes - only their position in the
+     * returned array is meaningful and can be used as argument to [#intro]
+     * to select the desired introduction rule. *)
+    method ivariants =
+      let aout = !!CoreLogic.ivariants (parent##.proof, handle) in
+      let aout = Array.of_list (List.map Js.string aout) in
+      Js.array aout
 
-  method setmeta meta =
-    Proof.set_meta parent##.proof _self##.handle (Js.Opt.to_option meta)
-  
-  method toascii =
-    let funs : string list =
-      _self##fvars |> Js.to_array |> Array.to_list |> List.map Js.to_string in
-    let props : string list =
-      _self##pvars |> Js.to_array |> Array.to_list |> List.map Js.to_string in
-    let vars : string list =
-      _self##tvars |> Js.to_array |> Array.to_list |> List.map (fun v -> v##toascii |> Js.to_string) in
-    let hyps : string list =
-      _self##context |> Js.to_array |> Array.to_list |> List.map (fun h -> h##toascii |> Js.to_string) in
-    let concl : string =
-      _self##conclusion |> fun c -> c##toascii |> Js.to_string in
-    
-    let to_string = List.to_string ~sep:", " ~left:"" ~right:"" identity in
-    let comma =
-      "" |> List.fold_left (fun s l ->
-        if String.is_empty s then
-          if List.is_empty l then ""
-          else to_string l
-        else
-          if List.is_empty l then s
-          else s ^ ", " ^ to_string l) in
+    (* [this#getcutb (form : string)] parses [form] in the current goal, and
+     * returns the base64-encoded string of the corresponding ACut action. *)
+    method getcutb form =
+      !!(fun () ->
+          let goal = _self##goal in
+          let form =
+            form |> Js.to_string |> String.trim |> Io.from_string |> Io.parse_form
+            |> Form.check goal.g_env |> Fo.Translate.of_form
+          in
+          `ACut form |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string)
+        ()
 
-    Js.string (Printf.sprintf "%s; %s |- %s"
-      (comma [funs; vars; props])
-      (to_string hyps)
-      concl)
+    (* [this#addlemma (name : string)] retrieves the lemma [name] in the database,
+       and adds it as a new hypothesis in the current goal. *)
+    method addlemma name =
+      let doit () =
+        let name = Js.to_string name in
+        let _form = LemmaDB.get (Proof.get_db parent##.proof) name in
+        Format.printf "Jsapi.addlemma: TODO";
+        parent##.proof
+        (*CoreLogic.assume form (parent##.proof, _self##.handle)*)
+      in
+      js_proof_engine (!!doit ())
 
-  method tostring =
-    let hyps : string list =
-      _self##context |> Js.to_array |> Array.to_list |> List.map (fun h -> h##tostring |> Js.to_string) in
-    let concl : string =
-      _self##conclusion |> fun c -> c##tostring |> Js.to_string in
-    
-    let to_string = List.to_string ~sep:", " ~left:"" ~right:"" identity in
+    (* [this#add_local (name : string) (expr : string) parses [expr] in the goal
+     * [context] and adds it to the local [context] under the name [name]. *)
+    method addlocal name expr =
+      let doit () =
+        let goal = _self##goal in
+        let expr = String.trim (Js.to_string expr) in
+        let expr = Io.parse_expr (Io.from_string expr) in
+        let expr, ty = Form.echeck goal.g_env expr in
+        CoreLogic.add_local_def (Js.to_string name, ty, expr) (parent##.proof, _self##.handle)
+      in
 
-    Js.string (Printf.sprintf "%s ⊢ %s"
-      (to_string hyps)
-      concl)
-end
+      js_proof_engine (!!doit ())
+
+    (* [this#add_alias (nexpr : string) parses [nexpr] as a named expression
+     * in the goal [context] and add it to the local [context]. *)
+    method addalias expr =
+      let doit () =
+        let goal = _self##goal in
+        let expr = String.trim (Js.to_string expr) in
+        let name, expr = Io.parse_nexpr (Io.from_string expr) in
+        let expr, ty = Form.echeck goal.g_env expr in
+        CoreLogic.add_local_def (Location.unloc name, ty, expr) (parent##.proof, _self##.handle)
+      in
+
+      js_proof_engine (!!doit ())
+
+    (* [this#getaliasb (nexpr : string) parses [nexpr] as a named expression
+     * in the current goal, and returns the base64-encoded string of the
+     * corresponding ADef action. *)
+    method getaliasb expr =
+      !!(fun () ->
+          let goal = _self##goal in
+          let expr = String.trim (Js.to_string expr) in
+          let name, expr = Io.parse_nexpr (Io.from_string expr) in
+          let expr, ty = Form.echeck goal.g_env expr in
+          let name = Location.unloc name in
+          let expr, ty = Fo.Translate.(of_expr expr, of_type_ ty) in
+          `ADef (name, ty, expr)
+          |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string)
+        ()
+
+    (* [this#move_hyp (from : handle<js_hyp>) (before : handle<js_hyp> option)] move
+     * hypothesis [from] before hypothesis [before]. Both hypothesis
+     * must be part of this sub-goal. *)
+    method movehyp from before =
+      let doit () =
+        CoreLogic.move from (Js.Opt.to_option before) (parent##.proof, _self##.handle)
+      in
+      js_proof_engine (!!doit ())
+
+    (* [this#generalize (h : handle<js_hyps>) generalizes the hypothesis [h] *)
+    method generalize hid =
+      let doit () = CoreLogic.generalize hid (parent##.proof, _self##.handle) in
+      js_proof_engine (!!doit ())
+
+    method getmeta = Js.Opt.option (Proof.get_meta parent##.proof _self##.handle)
+    method setmeta meta = Proof.set_meta parent##.proof _self##.handle (Js.Opt.to_option meta)
+
+    method toascii =
+      let funs : string list =
+        _self##fvars |> Js.to_array |> Array.to_list |> List.map Js.to_string
+      in
+      let props : string list =
+        _self##pvars |> Js.to_array |> Array.to_list |> List.map Js.to_string
+      in
+      let vars : string list =
+        _self##tvars |> Js.to_array |> Array.to_list
+        |> List.map (fun v -> v##toascii |> Js.to_string)
+      in
+      let hyps : string list =
+        _self##context |> Js.to_array |> Array.to_list
+        |> List.map (fun h -> h##toascii |> Js.to_string)
+      in
+      let concl : string = _self##conclusion |> fun c -> c##toascii |> Js.to_string in
+
+      let to_string = List.to_string ~sep:", " ~left:"" ~right:"" identity in
+      let comma =
+        ""
+        |> List.fold_left (fun s l ->
+               if String.is_empty s
+               then if List.is_empty l then "" else to_string l
+               else if List.is_empty l
+               then s
+               else s ^ ", " ^ to_string l)
+      in
+
+      Js.string (Printf.sprintf "%s; %s |- %s" (comma [ funs; vars; props ]) (to_string hyps) concl)
+
+    method tostring =
+      let hyps : string list =
+        _self##context |> Js.to_array |> Array.to_list
+        |> List.map (fun h -> h##tostring |> Js.to_string)
+      in
+      let concl : string = _self##conclusion |> fun c -> c##tostring |> Js.to_string in
+
+      let to_string = List.to_string ~sep:", " ~left:"" ~right:"" identity in
+
+      Js.string (Printf.sprintf "%s ⊢ %s" (to_string hyps) concl)
+  end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for a context hypothesis                                  *)
-and js_hyps parent (i, (handle, hyp) : int * (Handle.t * Proof.hyp)) =
-object%js (_self)
-  (* back-link to the [js_subgoal] this hypothesis belongs to *)
-  val parent = parent
+and js_hyps parent ((i, (handle, hyp)) : int * (Handle.t * Proof.hyp)) =
+  object%js (_self)
+    (* back-link to the [js_subgoal] this hypothesis belongs to *)
+    val parent = parent
 
-  (* the handle (UID) of the hypothesis *)
-  val handle = handle
+    (* the handle (UID) of the hypothesis *)
+    val handle = handle
 
-  (* the handle (UID) of the parent hypothesis *)
-  val phandle = Js.Opt.option hyp.h_src
+    (* the handle (UID) of the parent hypothesis *)
+    val phandle = Js.Opt.option hyp.h_src
 
-  (* the handle position in its context *)
-  val position = i
+    (* the handle position in its context *)
+    val position = i
 
-  (* if the hypothesis is fresh / new *)
-  val fresh = Js.bool (hyp.h_gen <= 1)
+    (* if the hypothesis is fresh / new *)
+    val fresh = Js.bool (hyp.h_gen <= 1)
 
-  (* the hypothesis as a [js_form] *)
-  val form = js_form parent (parent##.handle, `H handle) hyp.h_form
+    (* the hypothesis as a [js_form] *)
+    val form = js_form parent (parent##.handle, `H handle) hyp.h_form
 
-  (* The enclosing proof engine *)
-  val proof = parent##.parent
+    (* The enclosing proof engine *)
+    val proof = parent##.parent
 
-  (* Return the [html] of the enclosed formula *)  
-  method html =
-    _self##.form##html
+    (* Return the [html] of the enclosed formula *)
+    method html = _self##.form##html
 
-  (* Return the [mathml] of the enclosed formula *)  
-  method mathml =
-    _self##.form##mathml
+    (* Return the [mathml] of the enclosed formula *)
+    method mathml = _self##.form##mathml
 
-  (* Return an UTF8 string representation of the enclosed formula *)
-  method tostring =
-    _self##.form##tostring
+    (* Return an UTF8 string representation of the enclosed formula *)
+    method tostring = _self##.form##tostring
 
-  (* Return an ASCII string representation of the enclosed formula *)
-  method toascii =
-    _self##.form##toascii
+    (* Return an ASCII string representation of the enclosed formula *)
+    method toascii = _self##.form##toascii
+    method getmeta = Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
 
-  method getmeta =
-    Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
-
-  method setmeta meta =
-    Proof.set_meta _self##.proof##.proof _self##.handle (Js.Opt.to_option meta)
-end
+    method setmeta meta =
+      Proof.set_meta _self##.proof##.proof _self##.handle (Js.Opt.to_option meta)
+  end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for a local variable                                      *)
 and js_tvar parent ((i, (handle, x, (ty, b))) : int * (Handle.t * vname * bvar)) =
-object%js (_self)
-  (* back-link to the [js_subgoal] this local variable belongs to *)
-  val parent = parent
+  object%js (_self)
+    (* back-link to the [js_subgoal] this local variable belongs to *)
+    val parent = parent
 
-  (* the handle of the local variable *)
-  val handle = handle
+    (* the handle of the local variable *)
+    val handle = handle
 
-  (* the handle position in its context *)
-  val position = i
+    (* the handle position in its context *)
+    val position = i
 
-  (* the local variable name, as an OCaml string *)
-  val oname = Notation.e_tostring (parent##goal).g_env (EVar x)
+    (* the local variable name, as an OCaml string *)
+    val oname = Notation.e_tostring (parent##goal).g_env (EVar x)
 
-  (* the local variable name *)
-  method name = Js.string _self##.oname
+    (* the local variable name *)
+    method name = Js.string _self##.oname
 
-  (* the local variable type as a [js_type] *)
-  val type_ = js_type parent ty
+    (* the local variable type as a [js_type] *)
+    val type_ = js_type parent ty
 
-  (* the local definition - return an optional expression *)
-  val body =
-    Js.Opt.option (Option.map (js_expr parent) b)
+    (* the local definition - return an optional expression *)
+    val body = Js.Opt.option (Option.map (js_expr parent) b)
 
-  (* the enclosing proof engine *)
-  val proof = parent##.parent
+    (* the enclosing proof engine *)
+    val proof = parent##.parent
 
-  method prefix (b : bool) =
-    Format.sprintf "%d/V%s#%d%s"
-      (Handle.toint _self##.parent##.handle)
-      (if b then "b" else "h")
-      (Handle.toint _self##.handle)
-      (if b then "" else ":")
-  
-  (* the path to the local variable's head *)
-  method idhead = _self##prefix false
+    method prefix (b : bool) =
+      Format.sprintf "%d/V%s#%d%s"
+        (Handle.toint _self##.parent##.handle)
+        (if b then "b" else "h")
+        (Handle.toint _self##.handle)
+        (if b then "" else ":")
 
-  (* the path to the local variable's body *)
-  method idbody = _self##prefix true
+    (* the path to the local variable's head *)
+    method idhead = _self##prefix false
 
-  (* Return the [html] of the enclosed local variable *)  
-  method html =
-    let open Tyxml in
-    let open Utils.Html in
+    (* the path to the local variable's body *)
+    method idbody = _self##prefix true
 
-    let dt =
-      span [
-        span begin
-          [span ~a:[Xml.string_attrib "id" _self##idhead] begin
-            [span
-              [Xml.pcdata (_self##.oname)]] @
-              spaced [span [Xml.pcdata ":"]] @
-              [Notation.t_tohtml (parent##goal).g_env ty]
-          end]
-          @
-          match b with
-          | Some b ->
-              spaced [span [Xml.pcdata ":="]] @
-              [Notation.e_tohtml ~id:(Some _self##idbody) (parent##goal).g_env b]
-          | None -> []
-        end]
-    in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
+    (* Return the [html] of the enclosed local variable *)
+    method html =
+      let open Tyxml in
+      let open Utils.Html in
+      let dt =
+        span
+          [ span
+              ([ span
+                   ~a:[ Xml.string_attrib "id" _self##idhead ]
+                   ([ span [ Xml.pcdata _self##.oname ] ]
+                   @ spaced [ span [ Xml.pcdata ":" ] ]
+                   @ [ Notation.t_tohtml (parent##goal).g_env ty ])
+               ]
+              @
+              match b with
+              | Some b ->
+                  spaced [ span [ Xml.pcdata ":=" ] ]
+                  @ [ Notation.e_tohtml ~id:(Some _self##idbody) (parent##goal).g_env b ]
+              | None -> [])
+          ]
+      in
+      Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
 
-  (* Return the [mathml] of the enclosed local variable *)  
-  method mathml =
-    let open Tyxml in
-    let open Utils.Mathml in
+    (* Return the [mathml] of the enclosed local variable *)
+    method mathml =
+      let open Tyxml in
+      let open Utils.Mathml in
+      let dt =
+        math
+          [ row
+              ([ row
+                   ~a:[ Xml.string_attrib "id" _self##idhead ]
+                   ([ mi (Notation.e_tostring (parent##goal).g_env (EVar x)) ]
+                   @ [ mo ":" ]
+                   @ [ Notation.t_tomathml (parent##goal).g_env ty ])
+               ]
+              @
+              match b with
+              | Some b ->
+                  [ mo ":=" ]
+                  @ [ Notation.e_tomathml ~id:(Some _self##idbody) (parent##goal).g_env b ]
+              | None -> [])
+          ]
+      in
+      Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
 
-    let dt =
-      math [
-        row begin
-          [row ~a:[Xml.string_attrib "id" _self##idhead] begin
-            [mi ((Notation.e_tostring (parent##goal).g_env (EVar x)))] @
-            [mo ":"] @
-            [Notation.t_tomathml (parent##goal).g_env ty]
-          end]
-          @
-          match b with
-          | Some b ->
-              [mo ":="] @
-              [Notation.e_tomathml ~id:(Some _self##idbody) (parent##goal).g_env b]
-          | None -> []
-        end]
-    in Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
+    (* Return an UTF8 string representation of the enclosed local variable *)
+    method tostring =
+      match b with
+      | Some b ->
+          Js.string
+            (Format.sprintf "%s : %s := %s"
+               (Notation.e_tostring (parent##goal).g_env (EVar x))
+               (Notation.t_tostring (parent##goal).g_env ty)
+               (Notation.e_tostring (parent##goal).g_env b))
+      | None ->
+          Js.string
+            (Format.sprintf "%s : %s"
+               (Notation.e_tostring (parent##goal).g_env (EVar x))
+               (Notation.t_tostring (parent##goal).g_env ty))
 
-  (* Return an UTF8 string representation of the enclosed local variable *)
-  method tostring =
-    match b with
-    | Some b ->
-        Js.string (Format.sprintf "%s : %s := %s"
-          (Notation.e_tostring (parent##goal).g_env (EVar x))
-          (Notation.t_tostring (parent##goal).g_env ty)
-          (Notation.e_tostring (parent##goal).g_env b))
-    | None ->
-        Js.string (Format.sprintf "%s : %s"
-          (Notation.e_tostring (parent##goal).g_env (EVar x))
-          (Notation.t_tostring (parent##goal).g_env ty))
+    (* Return an ASCII string representation of the enclosed local variable *)
+    method toascii =
+      match b with
+      | Some b ->
+          Js.string
+            (Format.sprintf "%s := %s"
+               (Notation.e_tostring (parent##goal).g_env (EVar x))
+               (Notation.e_toascii (parent##goal).g_env b))
+      | None ->
+          Js.string
+            (Format.sprintf "%s : %s"
+               (Notation.e_tostring (parent##goal).g_env (EVar x))
+               (Notation.t_toascii (parent##goal).g_env ty))
 
-  (* Return an ASCII string representation of the enclosed local variable *)
-  method toascii =
-    match b with
-    | Some b ->
-        Js.string (Format.sprintf "%s := %s"
-          (Notation.e_tostring (parent##goal).g_env (EVar x))
-          (Notation.e_toascii (parent##goal).g_env b))
-    | None ->
-        Js.string (Format.sprintf "%s : %s"
-          (Notation.e_tostring (parent##goal).g_env (EVar x))
-          (Notation.t_toascii (parent##goal).g_env ty))
+    method getmeta = Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
 
-  method getmeta =
-    Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
-
-  method setmeta meta =
-    Proof.set_meta _self##.proof##.proof _self##.handle (Js.Opt.to_option meta)
-end
+    method setmeta meta =
+      Proof.set_meta _self##.proof##.proof _self##.handle (Js.Opt.to_option meta)
+  end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for formulas                                              *)
-and js_form parent (source : source) (form : form) = object%js (_self)
-  (* The prefix for all subpaths of the formula *)
-  val prefix =
-    match source with
-    | h, `H i -> Format.sprintf "%d/H#%d" (Handle.toint h) (Handle.toint i)
-    | h, `C   -> Format.sprintf "%d/C#0" (Handle.toint h)
-  
-  (* Return the [mathml] of the formula *)  
-  method mathml =
-    _self##mathmltag true
+and js_form parent (source : source) (form : form) =
+  object%js (_self)
+    (* The prefix for all subpaths of the formula *)
+    val prefix =
+      match source with
+      | h, `H i -> Format.sprintf "%d/H#%d" (Handle.toint h) (Handle.toint i)
+      | h, `C -> Format.sprintf "%d/C#0" (Handle.toint h)
 
-  (* Return the [html] of the formula *)  
-  method html =
-    _self##htmltag true
+    (* Return the [mathml] of the formula *)
+    method mathml = _self##mathmltag true
 
-  (* Return the [mathml] of the formula *)  
-  method mathmltag (id : bool) =
-    let prefix =
-      if not id then None else Some _self##.prefix in
-    Js.string
-      (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Utils.Mathml.math [Notation.f_tomathml (parent##goal).g_env ~id:prefix form]))
+    (* Return the [html] of the formula *)
+    method html = _self##htmltag true
 
-  (* Return the [html] of the formula *)  
-  method htmltag (id : bool) =
-    let prefix =
-      if not id then None else Some _self##.prefix in
-    Js.string
-      (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Notation.f_tohtml (parent##goal).g_env ~id:prefix form))
+    (* Return the [mathml] of the formula *)
+    method mathmltag (id : bool) =
+      let prefix = if not id then None else Some _self##.prefix in
+      Js.string
+        (Format.asprintf "%a" (Tyxml.Xml.pp ())
+           (Utils.Mathml.math [ Notation.f_tomathml (parent##goal).g_env ~id:prefix form ]))
 
-  (* Return an UTF8 string representation of the formula *)
-  method tostring =
-    Js.string (Notation.f_tostring (parent##goal).g_env form)
+    (* Return the [html] of the formula *)
+    method htmltag (id : bool) =
+      let prefix = if not id then None else Some _self##.prefix in
+      Js.string
+        (Format.asprintf "%a" (Tyxml.Xml.pp ())
+           (Notation.f_tohtml (parent##goal).g_env ~id:prefix form))
 
-  (* Return an ASCII string representation of the formula *)
-  method toascii =
-    Js.string (Notation.f_toascii (parent##goal).g_env form)
-end
+    (* Return an UTF8 string representation of the formula *)
+    method tostring = Js.string (Notation.f_tostring (parent##goal).g_env form)
+
+    (* Return an ASCII string representation of the formula *)
+    method toascii = Js.string (Notation.f_toascii (parent##goal).g_env form)
+  end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for expressions                                           *)
-and js_expr parent (expr : expr) = object%js (_self)
-  (* Return the [mathml] of the formula *)  
-  method mathml =
-    _self##mathmltag
+and js_expr parent (expr : expr) =
+  object%js (_self)
+    (* Return the [mathml] of the formula *)
+    method mathml = _self##mathmltag
 
-  (* Return the [html] of the formula *)  
-  method html =
-    _self##htmltag
+    (* Return the [html] of the formula *)
+    method html = _self##htmltag
 
-  (* Return the [mathml] of the formula *)  
-  method mathmltag =
-    Js.string
-      (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Utils.Mathml.math [Notation.e_tomathml (parent##goal).g_env expr]))
+    (* Return the [mathml] of the formula *)
+    method mathmltag =
+      Js.string
+        (Format.asprintf "%a" (Tyxml.Xml.pp ())
+           (Utils.Mathml.math [ Notation.e_tomathml (parent##goal).g_env expr ]))
 
-  (* Return the [html] of the formula *)  
-  method htmltag =
-    Js.string
-      (Format.asprintf "%a" (Tyxml.Xml.pp ())
-      (Notation.e_tohtml (parent##goal).g_env expr))
+    (* Return the [html] of the formula *)
+    method htmltag =
+      Js.string
+        (Format.asprintf "%a" (Tyxml.Xml.pp ()) (Notation.e_tohtml (parent##goal).g_env expr))
 
-  (* Return an UTF8 string representation of the expression *)
-  method tostring =
-    Js.string (Notation.e_tostring (parent##goal).g_env expr)
-end
+    (* Return an UTF8 string representation of the expression *)
+    method tostring = Js.string (Notation.e_tostring (parent##goal).g_env expr)
+  end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for types                                                 *)
-and js_type parent (ty : type_) = object%js (_self)
-  (* Return the raw [mathml] of the type *)
-  method rawmathml =
-    Utils.Mathml.math [Notation.t_tomathml (parent##goal).g_env ty]
+and js_type parent (ty : type_) =
+  object%js (_self)
+    (* Return the raw [mathml] of the type *)
+    method rawmathml = Utils.Mathml.math [ Notation.t_tomathml (parent##goal).g_env ty ]
 
-  (* Return the raw [html] of the type *)
-  method rawhtml =
-    Notation.t_tohtml (parent##goal).g_env ty
+    (* Return the raw [html] of the type *)
+    method rawhtml = Notation.t_tohtml (parent##goal).g_env ty
 
-  (* Return the raw string representation of the type *)
-  method rawstring =
-    Notation.t_tostring (parent##goal).g_env ty
+    (* Return the raw string representation of the type *)
+    method rawstring = Notation.t_tostring (parent##goal).g_env ty
 
-  (* Return the [mathml] of the type *)  
-  method mathml =
-    Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) _self##rawmathml)
+    (* Return the [mathml] of the type *)
+    method mathml = Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) _self##rawmathml)
 
-  (* Return the [html] of the type *)  
-  method html =
-    Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) _self##rawhtml)
+    (* Return the [html] of the type *)
+    method html = Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) _self##rawhtml)
 
-  (* Return an UTF8 string representation of the formula *)
-  method tostring =
-    Js.string _self##rawstring
-end
+    (* Return an UTF8 string representation of the formula *)
+    method tostring = Js.string _self##rawstring
+  end
 
 (* -------------------------------------------------------------------- *)
 let export (name : string) : unit =
-  Js.export name (object%js
-    (* [this#parse input] parse the goal [input] and return a
-     * [js_proof_engine] for it.
-     *
-     * Raise an exception if [input] is invalid *)
-    method parse x =
-      let env, hyps, goal = !!(fun () ->
-        let goal = String.trim (Js.to_string x) in
-        let goal = Io.parse_goal (Io.from_string goal) in
-        Goal.check goal
-      ) () in js_proof_engine (Proof.init env hyps goal)
+  Js.export name
+    (object%js
+       (* [this#parse input] parse the goal [input] and return a
+        * [js_proof_engine] for it.
+        *
+        * Raise an exception if [input] is invalid *)
+       method parse x =
+         let env, hyps, goal =
+           !!(fun () ->
+               let goal = String.trim (Js.to_string x) in
+               let goal = Io.parse_goal (Io.from_string goal) in
+               Goal.check goal)
+             ()
+         in
+         js_proof_engine (Proof.init env hyps goal)
 
-    (* [this#parseToUnicode input] parses the goal [input] and returns
-     * its unicode representation.
-     *
-     * Raise an exception if [input] is invalid *)
-    method parseToUnicode x =
-      let env, hyps, goal = !!(fun () ->
-          let goal = String.trim (Js.to_string x##.input) in
-          let goal = Io.parse_goal (Io.from_string goal) in
-          Goal.check goal
-        ) () in
+       (* [this#parseToUnicode input] parses the goal [input] and returns
+        * its unicode representation.
+        *
+        * Raise an exception if [input] is invalid *)
+       method parseToUnicode x =
+         let env, hyps, goal =
+           !!(fun () ->
+               let goal = String.trim (Js.to_string x##.input) in
+               let goal = Io.parse_goal (Io.from_string goal) in
+               Goal.check goal)
+             ()
+         in
 
-      Js.string (Printf.sprintf "%s⊢ %s"
-        (Js.Optdef.case x##.printHyps
-          (fun _ -> "")
-          (fun b -> if not (Js.to_bool b) then ""
-                    else List.to_string
-                           ~sep:", " ~left:"" ~right:" "
-                           (Notation.f_tostring env) hyps))
-        (Notation.f_tostring env goal))
+         Js.string
+           (Printf.sprintf "%s⊢ %s"
+              (Js.Optdef.case x##.printHyps
+                 (fun _ -> "")
+                 (fun b ->
+                   if not (Js.to_bool b)
+                   then ""
+                   else List.to_string ~sep:", " ~left:"" ~right:" " (Notation.f_tostring env) hyps))
+              (Notation.f_tostring env goal))
 
-    (* Return a new proof engine whose goals are the base64, binary decoding of [goalsb]  *)
-    method setgoalsb goalsb =
-      let goals =
-        goalsb |>
-        Js.to_string |>
-        Base64.decode_exn |>
-        Api.Logic_b.goals_of_string in
-      let gls, hms = goals |> !!(List.map Proof.Translate.import_goal) |> List.split in
-      let hm = List.fold_left Hidmap.union Hidmap.empty hms in
-      js_proof_engine (!!(Proof.ginit hm) gls)
-  end)
+       (* Return a new proof engine whose goals are the base64, binary decoding of [goalsb]  *)
+       method setgoalsb goalsb =
+         let goals = goalsb |> Js.to_string |> Base64.decode_exn |> Api.Logic_b.goals_of_string in
+         let gls, hms = goals |> !!(List.map Proof.Translate.import_goal) |> List.split in
+         let hm = List.fold_left Hidmap.union Hidmap.empty hms in
+         js_proof_engine (!!(Proof.ginit hm) gls)
+    end)

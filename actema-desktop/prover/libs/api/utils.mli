@@ -4,8 +4,10 @@ val biniou_unhash_dict : int -> string option
 
 module Uid : sig
   include Map.OrderedType
+
   val fresh : unit -> unit -> t
-end with type t = int
+end
+with type t = int
 
 module Env : sig
   val empty : env
@@ -32,7 +34,6 @@ val t_equal : type_ -> type_ -> bool
 exception TypingError
 
 val einfer : env -> expr -> type_
-
 val form_of_term : term -> form
 val expr_of_term : term -> expr
 
@@ -54,7 +55,6 @@ type pol = Pos | Neg | Sup
 
 val term_of_ipath : goal -> ipath -> term
 val pol_of_ipath : goal -> ipath -> pol
-
 val string_of_expr : expr -> string
 val string_of_form : form -> string
 val string_of_term : term -> string
@@ -63,5 +63,4 @@ val string_of_goal : goal -> string
 val string_of_goals : goals -> string
 val string_of_itrace : itrace -> string
 val string_of_action : action -> string
-
 val get_hyp : goal -> uid -> hyp

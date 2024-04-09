@@ -1,4 +1,3 @@
-
 (** This module defines the lemma database. The database consists of :
     - A list of lemmas (name and formula). 
     - An environment containing the predicates & functions used in the lemmas. *)
