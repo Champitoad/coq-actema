@@ -10,7 +10,7 @@
     "electron:serve": "vue-cli-service electron:serve",
     "postinstall": "electron-builder install-app-deps",
     "postuninstall": "electron-builder install-app-deps",
-    "build-prover": "opam exec -- make -C prover build; cp prover/_build/default/src/jsprover.js public/prover.js"
+    "build-prover": "(cd prover ; nix develop --command make) ; cp prover/_build/default/src/jsprover.js public/prover.js"
   },
   "dependencies": {
     "core-js": "^3.8.3",
