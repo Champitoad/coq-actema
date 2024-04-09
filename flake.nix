@@ -26,7 +26,7 @@
         packages.default = coq-actema;
         devShells.default = pkgs.mkShell {
           inputsFrom = [ coq-actema ];
-          packages = [ coq ocpkgs.ocaml-lsp ocpkgs.dune_3 ];
+          packages = [ coq ocpkgs.ocaml-lsp ocpkgs.dune_3 ocpkgs.opam-format ];
           APIDIR = "${prover-pkg}/lib/ocaml/4.14.1/site-lib/prover/api";
         };
         apps.vscoq-actema = {

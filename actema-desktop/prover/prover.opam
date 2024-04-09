@@ -22,6 +22,7 @@ depends: [
   "ocamlgraph" {>= "1.8"}
   "yojson" {>= "1.7"}
   "atdgen" {>= "2.10.0"}
+  "ocamlformat" {>= "0.24.1"}
   "base64" {>= "3.5.0"}
 ]
 build: [

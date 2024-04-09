@@ -4,25 +4,25 @@
  (libraries atdgen))
 
 (rule
- (targets logic_b.ml
-          logic_b.mli)
- (deps    logic.atd)
- (action  (run atdgen -b %{deps})))
+ (targets logic_b.ml logic_b.mli)
+ (deps logic.atd)
+ (action
+  (run atdgen -b %{deps})))
 
 (rule
- (targets logic_t.ml
-          logic_t.mli)
- (deps    logic.atd)
- (action  (run atdgen -t %{deps})))
+ (targets logic_t.ml logic_t.mli)
+ (deps logic.atd)
+ (action
+  (run atdgen -t %{deps})))
 
 (rule
- (targets fo_b.ml
-          fo_b.mli)
- (deps    fo.atd)
- (action  (run atdgen -b %{deps})))
+ (targets fo_b.ml fo_b.mli)
+ (deps fo.atd)
+ (action
+  (run atdgen -b %{deps})))
 
 (rule
- (targets fo_t.ml
-          fo_t.mli)
- (deps    fo.atd)
- (action  (run atdgen -t %{deps})))
+ (targets fo_t.ml fo_t.mli)
+ (deps fo.atd)
+ (action
+  (run atdgen -t %{deps})))

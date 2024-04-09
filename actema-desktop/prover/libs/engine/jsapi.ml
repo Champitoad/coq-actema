@@ -60,7 +60,7 @@ let () = Exn.register (fun exn ->
         Some "invalid goal (typing error)"
     | RecheckFailure ->
         Some "invalid goal (recheck failure)"
-    | TacticNotApplicable ->
+    | CoreLogic.TacticNotApplicable ->
         Some "tactic not applicable"
     | LemmaDB.LemmaNotFound name ->
         Some ("lemma \"" ^ name ^ "\" does not exist")
@@ -385,7 +385,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
         Js.to_string |> String.trim |>
         Io.from_string |> Io.parse_form |>
         Form.check goal.g_env |>
-        Translate.of_form in
+        Fo.Translate.of_form in
       `ACut form |>
       Api.Logic_b.string_of_action |>
       Base64.encode_string |>
@@ -439,7 +439,7 @@ and js_subgoal parent (handle : Handle.t) = object%js (_self)
       let name, expr = Io.parse_nexpr (Io.from_string expr) in
       let expr, ty = Form.echeck goal.g_env expr in
       let name = Location.unloc name in
-      let expr, ty = Translate.(of_expr expr, of_type_ ty) in
+      let expr, ty = Fo.Translate.(of_expr expr, of_type_ ty) in
       `ADef (name, ty, expr) |>
       Api.Logic_b.string_of_action |>
       Base64.encode_string |>
