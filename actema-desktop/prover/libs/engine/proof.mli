@@ -74,7 +74,9 @@ val get_meta : proof -> Handle.t -> meta option
 val sgprogress : pregoal -> ?clear:bool -> subgoal list -> pregoals
 
 (** In a proof, replace a goal by a list of pregoals. 
-    Returns the handles of the goals freshly created and the new proof state. *)
+    Returns the handles of the goals freshly created and the new proof state.
+    BEWARE: after calling [xprogress], any [ipath] into the replaced goal will become invalid 
+    (i.e. the [root] field of the [ipath] will point to a closed goal). *)
 val xprogress : proof -> Handle.t -> pregoals -> Handle.t list * proof
 
 (** A module to translate goals between API format (api/logic.atd) and Actema format (engine/fo.ml).

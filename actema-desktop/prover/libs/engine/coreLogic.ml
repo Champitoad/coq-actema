@@ -174,7 +174,7 @@ let mk_ipath ?(ctxt : ctxt = { kind = `Concl; handle = 0 }) ?(sub : int list = [
   { root; ctxt; sub }
 
 let item_ipath { root; ctxt; _ } = { root; ctxt; sub = [] }
-let dummy_path = mk_ipath 0
+
 let concl_ipath Proof.{ g_id; _ } = mk_ipath (Handle.toint g_id)
 
 let all_hyps_ipaths Proof.{ g_id; g_pregoal } =
@@ -1603,23 +1603,22 @@ let filter_db_by_selection selection proof =
                let g_env = Env.union (proof |> Proof.get_db |> LemmaDB.env) sub.g_env in
                Proof.{ sub with g_hyps; g_env }
              in
-             (* Create a path to the root of the new hypothesis (representing the lemma). *)
+             (* Replace the current goal by the new goal. *)
              let g_ids, proof = Proof.xprogress proof g_id [ sub ] in
-             let g_id =
-               match g_ids with
-               | [ id ] -> id
-               | _ ->
-                   failwith
-                     "Proof.filter_db_by_selection: unexpected return value of Proof.xprogress."
-             in
+             let g_id = List.hd g_ids in
+             (* Create a path to the root of the new hypothesis (representing the lemma). *)
              let lemma_path =
                mk_ipath ~ctxt:{ kind = `Hyp; handle = Handle.toint hd } (Handle.toint g_id)
+             in
+             (* Make sure the path to the selection is in the new goal. *)
+             let selection = 
+               mk_ipath ~ctxt:selection.ctxt ~sub:selection.sub (Handle.toint g_id)
              in
              (* Compute all linkactions. *)
              let linkactions =
                (* Here the source of the linkaction is fixed to the selection (no subterms),
                   but the destination is not fixed (we consider all subterms of the lemma). *)
-               search_linkactions filter proof ~fixed_srcs:[ selection ] (dummy_path, lemma_path)
+               search_linkactions filter proof ~fixed_srcs:[ selection ] (mk_ipath (Handle.toint g_id), lemma_path)
              in
              not @@ List.is_empty linkactions
          end
@@ -1675,7 +1674,7 @@ let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) : ao
 
   let srcs, fixed_srcs =
     begin
-      match srcsel with [] -> ([ dnd.source ], None) | srcs -> ([ dummy_path ], Some srcs)
+      match srcsel with [] -> ([ dnd.source ], None) | srcs -> ([ mk_ipath (Handle.toint g_id) ], Some srcs)
     end
   in
 
@@ -1693,7 +1692,7 @@ let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) : ao
             end
           in
           (dsts, None)
-      | dsts -> ([ dummy_path ], Some dsts)
+      | dsts -> ([ mk_ipath (Handle.toint g_id) ], Some dsts)
     end
   in
 
