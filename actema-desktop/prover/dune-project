@@ -1,4 +1,4 @@
-(lang dune 1.11)
+(lang dune 3.7)
 
 (using menhir 2.0)
 
@@ -23,8 +23,6 @@
  (name prover)
  (synopsis "A simple prover")
  (depends
-  (dune
-   (>= 1.11))
   (batteries
    (>= 2.8))
   (ocamlfind
