@@ -48,6 +48,7 @@ type linkaction =
 type action_type =
   [ `Intro of int
   | `Elim of Handle.t * int
+  | `Lemma of name
   | `Ind of Handle.t
   | `Simpl of ipath
   | `Red of ipath

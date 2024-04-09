@@ -987,6 +987,10 @@ module Import = struct
     | `AId ->
         Tacticals.tclIDTAC
 
+    | `ALemma name ->
+        Log.str (Format.sprintf "Importing lemma action: %s\n" name);
+        Tacticals.tclIDTAC
+
     | `AExact id ->
         let name = Names.Id.of_string id in
         Tactics.exact_check (EConstr.mkVar name)

@@ -228,7 +228,7 @@ let rec js_proof_engine (proof : Proof.proof) =
       js_proof_engine new_proof
 
     (** Serialize the current lemma database into a JS object. 
-      Returns an array of lemmas. Each lemma contains two strings : (full-name, pretty-printed-formula) *)
+        Returns an array of lemmas. Each lemma contains two strings : (full-name, pretty-printed-formula) *)
     method getlemmas =
       let db = _self##.proof |> Proof.get_db in
       db |> LemmaDB.all_lemmas
@@ -240,9 +240,9 @@ let rec js_proof_engine (proof : Proof.proof) =
       |> Array.of_list |> Js.Unsafe.obj
 
     (** Filter the lemma database according to :
-      - the current selection.
-      - a text pattern (usually the text in the lemma search-bar's input-box). 
-      Both arguments are optional (in javascript-land, they can be undefined). *)
+        - the current selection.
+        - a text pattern (usually the text in the lemma search-bar's input-box). 
+        Both arguments are optional (in javascript-land, they can be undefined). *)
     method filterlemmas selection pattern =
       (* Convert the pattern from JS to ocaml. *)
       let pattern =
@@ -316,54 +316,59 @@ and js_subgoal parent (handle : Handle.t) =
       let aout = List.mapi (fun i (id, x, b) -> js_tvar _self (i, (id, x, b))) tvars in
       Js.array (Array.of_list aout)
 
-    (* Return all the local hypotheses (context) as a [js_hyps array] *)
+    (** Return all the local hypotheses (context) as a [js_hyps array] *)
     method context =
       let goal = _self##goal in
       let hyps = List.rev (Proof.Hyps.to_list goal.g_hyps) in
 
       Js.array (Array.of_list (List.mapi (fun i x -> js_hyps _self (i, x)) hyps))
 
-    (* Return the subgoal conclusion as a [js_form] *)
+    (** Return the subgoal conclusion as a [js_form] *)
     method conclusion =
       let goal = Proof.byid parent##.proof _self##.handle in
       js_form _self (_self##.handle, `C) goal.g_goal
 
-    (* [this#ivariants] Return the available introduction rules that can
-     * be applied to the conclusion of [this] as a string array. The strings
-     * are only for documentation purposes - only their position in the
-     * returned array is meaningful and can be used as argument to [#intro]
-     * to select the desired introduction rule. *)
+    (** [this#ivariants] Return the available introduction rules that can
+        be applied to the conclusion of [this] as a string array. The strings
+        are only for documentation purposes - only their position in the
+        returned array is meaningful and can be used as argument to [#intro]
+        to select the desired introduction rule. *)
     method ivariants =
       let aout = !!CoreLogic.ivariants (parent##.proof, handle) in
       let aout = Array.of_list (List.map Js.string aout) in
       Js.array aout
 
-    (* [this#getcutb (form : string)] parses [form] in the current goal, and
-     * returns the base64-encoded string of the corresponding ACut action. *)
+    (** [this#getcutb (form : string)] parses [form] in the current goal, and
+        returns the base64-encoded string of the corresponding ACut action. *)
     method getcutb form =
-      !!(fun () ->
-          let goal = _self##goal in
-          let form =
-            form |> Js.to_string |> String.trim |> Io.from_string |> Io.parse_form
-            |> Form.check goal.g_env |> Fo.Translate.of_form
-          in
-          `ACut form |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string)
-        ()
+      let doit () =
+        let goal = _self##goal in
+        let form =
+          form |> Js.to_string |> String.trim |> Io.from_string |> Io.parse_form
+          |> Form.check goal.g_env |> Fo.Translate.of_form
+        in
+        `ACut form |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string
+      in
+      !!doit ()
 
-    (* [this#addlemma (name : string)] retrieves the lemma [name] in the database,
-       and adds it as a new hypothesis in the current goal. *)
-    method addlemma name =
+    (** [this#addlemmab (name : string)] return the base64-encoded string of the corresponding ALemma action. *)
+    method addlemmab name =
       let doit () =
         let name = Js.to_string name in
-        let _form = LemmaDB.get (Proof.get_db parent##.proof) name in
-        Format.printf "Jsapi.addlemma: TODO";
-        parent##.proof
-        (*CoreLogic.assume form (parent##.proof, _self##.handle)*)
+        Format.printf "addlemmab %s\n" name;
+        (* Check the lemma database contains the lemma name (and raise LemmaNotFound if it doesn't),
+           and recheck the lemma's statement (just to make sure). *)
+        let db = Proof.get_db parent##.proof in
+        let stmt = LemmaDB.get db name in
+        Form.recheck (LemmaDB.env db) stmt;
+        Format.printf "recheck ok\n";
+        (* Construct the action and encode it. *)
+        `ALemma name |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string
       in
-      js_proof_engine (!!doit ())
+      !!doit ()
 
-    (* [this#add_local (name : string) (expr : string) parses [expr] in the goal
-     * [context] and adds it to the local [context] under the name [name]. *)
+    (** [this#add_local (name : string) (expr : string)] parses [expr] in the goal
+        [context] and adds it to the local [context] under the name [name]. *)
     method addlocal name expr =
       let doit () =
         let goal = _self##goal in
@@ -372,11 +377,10 @@ and js_subgoal parent (handle : Handle.t) =
         let expr, ty = Form.echeck goal.g_env expr in
         CoreLogic.add_local_def (Js.to_string name, ty, expr) (parent##.proof, _self##.handle)
       in
-
       js_proof_engine (!!doit ())
 
-    (* [this#add_alias (nexpr : string) parses [nexpr] as a named expression
-     * in the goal [context] and add it to the local [context]. *)
+    (** [this#add_alias (nexpr : string)] parses [nexpr] as a named expression
+        in the goal [context] and add it to the local [context]. *)
     method addalias expr =
       let doit () =
         let goal = _self##goal in
@@ -385,34 +389,33 @@ and js_subgoal parent (handle : Handle.t) =
         let expr, ty = Form.echeck goal.g_env expr in
         CoreLogic.add_local_def (Location.unloc name, ty, expr) (parent##.proof, _self##.handle)
       in
-
       js_proof_engine (!!doit ())
 
-    (* [this#getaliasb (nexpr : string) parses [nexpr] as a named expression
-     * in the current goal, and returns the base64-encoded string of the
-     * corresponding ADef action. *)
+    (** [this#getaliasb (nexpr : string)] parses [nexpr] as a named expression
+        in the current goal, and returns the base64-encoded string of the
+        corresponding ADef action. *)
     method getaliasb expr =
-      !!(fun () ->
-          let goal = _self##goal in
-          let expr = String.trim (Js.to_string expr) in
-          let name, expr = Io.parse_nexpr (Io.from_string expr) in
-          let expr, ty = Form.echeck goal.g_env expr in
-          let name = Location.unloc name in
-          let expr, ty = Fo.Translate.(of_expr expr, of_type_ ty) in
-          `ADef (name, ty, expr)
-          |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string)
-        ()
+      let doit () =
+        let goal = _self##goal in
+        let expr = String.trim (Js.to_string expr) in
+        let name, expr = Io.parse_nexpr (Io.from_string expr) in
+        let expr, ty = Form.echeck goal.g_env expr in
+        let name = Location.unloc name in
+        let expr, ty = Fo.Translate.(of_expr expr, of_type_ ty) in
+        `ADef (name, ty, expr) |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string
+      in
+      !!doit ()
 
-    (* [this#move_hyp (from : handle<js_hyp>) (before : handle<js_hyp> option)] move
-     * hypothesis [from] before hypothesis [before]. Both hypothesis
-     * must be part of this sub-goal. *)
+    (** [this#move_hyp (from : handle<js_hyp>) (before : handle<js_hyp> option)] move
+        hypothesis [from] before hypothesis [before]. Both hypothesis
+        must be part of this sub-goal. *)
     method movehyp from before =
       let doit () =
         CoreLogic.move from (Js.Opt.to_option before) (parent##.proof, _self##.handle)
       in
       js_proof_engine (!!doit ())
 
-    (* [this#generalize (h : handle<js_hyps>) generalizes the hypothesis [h] *)
+    (** [this#generalize (h : handle<js_hyps>)] generalizes the hypothesis [h] *)
     method generalize hid =
       let doit () = CoreLogic.generalize hid (parent##.proof, _self##.handle) in
       js_proof_engine (!!doit ())

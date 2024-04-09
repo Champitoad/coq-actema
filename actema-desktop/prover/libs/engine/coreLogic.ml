@@ -174,7 +174,6 @@ let mk_ipath ?(ctxt : ctxt = { kind = `Concl; handle = 0 }) ?(sub : int list = [
   { root; ctxt; sub }
 
 let item_ipath { root; ctxt; _ } = { root; ctxt; sub = [] }
-
 let concl_ipath Proof.{ g_id; _ } = mk_ipath (Handle.toint g_id)
 
 let all_hyps_ipaths Proof.{ g_id; g_pregoal } =
@@ -1060,6 +1059,7 @@ let string_of_linkaction proof =
 type action_type =
   [ `Intro of int
   | `Elim of Handle.t * int
+  | `Lemma of name
   | `Ind of Handle.t
   | `Simpl of ipath
   | `Red of ipath
@@ -1611,14 +1611,13 @@ let filter_db_by_selection selection proof =
                mk_ipath ~ctxt:{ kind = `Hyp; handle = Handle.toint hd } (Handle.toint g_id)
              in
              (* Make sure the path to the selection is in the new goal. *)
-             let selection = 
-               mk_ipath ~ctxt:selection.ctxt ~sub:selection.sub (Handle.toint g_id)
-             in
+             let selection = mk_ipath ~ctxt:selection.ctxt ~sub:selection.sub (Handle.toint g_id) in
              (* Compute all linkactions. *)
              let linkactions =
                (* Here the source of the linkaction is fixed to the selection (no subterms),
                   but the destination is not fixed (we consider all subterms of the lemma). *)
-               search_linkactions filter proof ~fixed_srcs:[ selection ] (mk_ipath (Handle.toint g_id), lemma_path)
+               search_linkactions filter proof ~fixed_srcs:[ selection ]
+                 (mk_ipath (Handle.toint g_id), lemma_path)
              in
              not @@ List.is_empty linkactions
          end
@@ -1674,7 +1673,9 @@ let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) : ao
 
   let srcs, fixed_srcs =
     begin
-      match srcsel with [] -> ([ dnd.source ], None) | srcs -> ([ mk_ipath (Handle.toint g_id) ], Some srcs)
+      match srcsel with
+      | [] -> ([ dnd.source ], None)
+      | srcs -> ([ mk_ipath (Handle.toint g_id) ], Some srcs)
     end
   in
 
@@ -1894,6 +1895,7 @@ module Translate = struct
         let exact = Form.f_equal goal.g_env hyp goal.g_goal in
         let* uid = find subhd in
         return (if exact then `AExact uid else `AElim (uid, i))
+    | `Lemma name -> return (`ALemma name)
     | `Ind subhd ->
         let* uid = find subhd in
         return (`AInd uid)

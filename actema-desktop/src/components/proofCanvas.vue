@@ -554,16 +554,7 @@ export default {
             }
         },
 
-        /* applyCutHypothesis(subgoal, text) {
-            try {
-                var proof = subgoal.cut(text);
-                this.resetSelection();
-                this.setProofState(proof);
-            } catch(e) {
-                this.showErrorMessage(e);
-            }
-        },*/
-
+        // Send a [cut] action to the plugin.
         sendCutHypothesis(subgoal, text) {
             try {
                 let action = subgoal.getcutb(text);
@@ -573,11 +564,11 @@ export default {
             }
         },
 
-        applyAddLemma(subgoal, name) {
+        // Send an [lemma] action to the plugin.
+        sendLemma(subgoal, name) {
             try {
-                var proof = subgoal.addlemma(name);
-                this.resetSelection();
-                this.setProofState(proof);
+                let action = subgoal.addlemmab(name);
+                this.sendAction(action);
             } catch (e) {
                 this.showErrorMessage(e);
             }

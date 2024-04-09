@@ -89,6 +89,7 @@ type itrace = choice list
 type action = [
   | AId                                     (* The empty action which does nothing *)
   | ADef of (name * type_ * expr)           (* Introduction of a local definition *)
+  | ALemma of name                          (* Add a lemma to the hypotheses. *)
   | AIntro of (int * (expr * type_) option) (* Click on a conclusion *)
   | AExact of uid                           (* Proof by assumption *)
   | AElim of (uid * int)                    (* Click on a hypothesis *)

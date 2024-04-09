@@ -43,7 +43,7 @@ export default {
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end('');
       });
-      // Receive lemmas from the backend.
+
       ipcMain.once('error', (_, msg) => {
         let rcode = 550;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });

@@ -277,9 +277,9 @@ export default {
             }
         },
 
+        // Callback invoked when we click on an entry in the lemma dropdown (list).
         addLemma: async function (lemma) {
-            console.log("Clicked on lemma: " + lemma.name);
-            // Get the assume action.
+            this.$parent.sendLemma(this.goal, lemma.name);
         },
 
         addNewExpression: async function () {
