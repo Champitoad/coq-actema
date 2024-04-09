@@ -68,17 +68,10 @@ module Proof : sig
 
   val sgprogress : pregoal -> ?clear:bool -> subgoal list -> pregoals
 
-  val progress :
-    proof -> Handle.t -> form list -> proof
-
-  val sprogress :
-    proof -> ?clear:bool -> Handle.t -> subgoal list -> proof
-
-  val hprogress :
-    proof -> Handle.t -> pregoal -> Handle.t * proof
-
+  (** In a proof, replace a subgoal by a list of pregoals. 
+      Returns the handles of the subgoals freshly created and the new proof state. *)
   val xprogress :
-    proof -> Handle.t -> pregoals -> proof
+    proof -> Handle.t -> pregoals -> Handle.t list * proof
   
   module Translate : sig
     open Hidmap
@@ -300,36 +293,7 @@ end = struct
 
   type subgoal = (Handle.t option * form list) list * form
 
-  let hprogress (pr : proof) (id : Handle.t) (sub : pregoal) =
-    let _goal = byid pr id in
-
-    let g_id = Handle.fresh () in
-    let sub =
-      let hyps = Hyps.bump sub.g_hyps in
-      let sub  = { sub with g_hyps = hyps } in
-      { g_id; g_pregoal = sub; } in
-
-    let gr, _, go =
-      try  List.pivot (Handle.eq id) pr.p_crts
-      with Invalid_argument _ -> raise (SubgoalNotOpened id) in
-
-    let meta =
-      match Map.Exceptionless.find id !(pr.p_meta) with
-      | None ->
-          !(pr.p_meta)
-
-      | Some meta ->
-          Map.add g_id meta !(pr.p_meta)
-    in
-
-    let map =
-      Map.add sub.g_id sub pr.p_maps in
-
-    g_id, { pr with
-        p_maps = map;
-        p_crts = gr @ [g_id] @ go;
-        p_meta = ref meta; }
-
+ 
   let xprogress (pr : proof) (id : Handle.t) (subs : pregoals) =
     let _goal = byid pr id in
 
@@ -362,7 +326,7 @@ end = struct
         (fun sub map -> Map.add sub.g_id sub map)
         subs pr.p_maps in
 
-    { pr with
+    sids, { pr with
         p_maps = map;
         p_crts = gr @ sids @ go;
         p_meta = ref meta; }
@@ -386,16 +350,6 @@ end = struct
       { g_env = goal.g_env; g_hyps = hyps; g_goal = concl; }
 
     in List.map for1 subs
-
-  let sprogress (pr : proof) ?(clear = false) (id : Handle.t) (subs : subgoal list) =
-    let goal = byid pr id in
-    let sub = sgprogress goal ~clear subs in
-    xprogress pr id sub
-
-  let progress (pr : proof) (id : Handle.t) (sub : form list) =
-    let goal = byid pr id in
-    let sub  = List.map (fun x -> { goal with g_goal = x }) sub in
-    xprogress pr id sub
 
   module Translate = struct
     open Api
@@ -553,9 +507,11 @@ end = struct
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
 
+  (** Simply replace a subgoal by itself. *)
   let id_tac : tactic =
-    fun (pr, id) -> Proof.xprogress pr id [Proof.byid pr id]
+    fun (pr, id) -> snd @@ Proof.xprogress pr id [Proof.byid pr id]
   
+  (** Sequence tactics. *)
   let then_tac (t1 : tactic) (t2 : tactic) : tactic =
     fun (_, id as targ) ->
       let pr = t1 targ in
@@ -581,7 +537,7 @@ end = struct
 
   let add_local_def ((name, ty, body) : string * Fo.type_ * Fo.expr) ((proof, hd) : targ) =
     let new_goal = add_local (name, ty, Some body) (Proof.byid proof hd) in
-    Proof.xprogress proof hd [new_goal]
+    snd @@ Proof.xprogress proof hd [new_goal]
  
     
   let ivariants ((pr, id) : targ) =
@@ -615,7 +571,7 @@ end = struct
     let goal = Proof.byid proof id in
     let hyp  = (Proof.Hyps.byid goal.g_hyps hid).h_form in
 
-    Proof.xprogress proof id
+    snd @@ Proof.xprogress proof id
       [{ g_env  = goal.g_env;
          g_hyps = Proof.Hyps.remove goal.g_hyps hid;
          g_goal = FConn (`Imp, [hyp; goal.g_goal]) } ]
@@ -626,7 +582,7 @@ end = struct
     let _before = Option.map (Proof.Hyps.byid goal.g_hyps) before in (* KEEP *)
     let hyps    = Proof.Hyps.move goal.g_hyps from before in
 
-    Proof.xprogress proof id [{ goal with g_hyps = hyps }]    
+    snd @@ Proof.xprogress proof id [{ goal with g_hyps = hyps }]    
 
   (* -------------------------------------------------------------------- *)
   (** Items *)
@@ -1347,7 +1303,7 @@ end = struct
     in
 
     let subgoals = pbp (goal, []) item_src sub_src s_src item_dst sub_dst s_dst in
-    Proof.xprogress proof hd subgoals
+    snd @@ Proof.xprogress proof hd subgoals
 
 
   (** [elim_units f] eliminates all occurrences of units
@@ -2494,7 +2450,11 @@ end = struct
           Proof.{ sub with g_hyps ; g_env } 
         in
         (* Create a path to the root of the new hypothesis (representing the lemma). *)
-        let g_id, proof = Proof.hprogress proof g_id sub in
+        let g_ids, proof = Proof.xprogress proof g_id [sub] in
+        let g_id = match g_ids with 
+          | [id] -> id 
+          | _ -> failwith "Proof.filter_db_by_selection: unexpected return value of Proof.xprogress." 
+        in
         let lemma_path = mk_ipath ~ctxt:{ kind = `Hyp; handle = Handle.toint hd } (Handle.toint g_id) in
         (* Compute all linkactions. *)
         let linkactions =
