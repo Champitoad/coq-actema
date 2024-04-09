@@ -46,13 +46,17 @@ module Proof : sig
 
   and goal = { g_id: Handle.t; g_pregoal: pregoal; }
 
-  val init      : env -> form list -> form -> proof
-  val ginit     : Hidmap.hidmap -> pregoal list -> proof
-  (** Test whether all goals are closed in the proof. *)
-  val closed    : proof -> bool
-  (** Return a list of (the handles of) all opened goals in the proof. *)
-  val opened    : proof -> Handle.t list
-  val byid      : proof -> Handle.t -> pregoal
+  (** Create a fresh proof that contains a single goal. *)
+  val init : env -> form list -> form -> proof
+  (** Create a proof that contains several goals 
+      and some potentially already existing data (in hidmap). *)
+  val ginit : Hidmap.hidmap -> pregoal list -> proof
+  (** Test whether the proof has some remaining active goals. *)
+  val closed : proof -> bool
+  (** Return a list of (the handles of) all active goals in the proof. *)
+  val opened : proof -> Handle.t list
+  (** Retrieve an active goal by its handle. *)
+  val byid : proof -> Handle.t -> pregoal
 
   (** Get the lemma database. *)
   val get_db : proof -> LemmaDB.t
@@ -176,9 +180,9 @@ end = struct
   type goal = { g_id: Handle.t; g_pregoal: pregoal; }
 
   type proof = {
-    p_maps : (Handle.t, goal) Map.t;
-    p_crts : Handle.t list;
-    p_meta : (Handle.t, < > Js.t) Map.t ref;
+    p_goals : (Handle.t, goal) Map.t; 
+    (** A map from goal handles to goals. Contains only the opened (i.e. currently active) goals. *)
+    p_meta : (Handle.t, < > Js.t) Map.t ref; (** Metadata associated to each goal. *)
     p_db   : LemmaDB.t; (** The lemma database. *)
     p_hm   : Hidmap.hidmap;
   }
@@ -197,42 +201,34 @@ end = struct
     let g_hyps = List.fold_left
       (fun hs f -> Hyps.add hs (Handle.fresh ()) (mk_hyp f))
       Hyps.empty hyps in
-    let root = { g_id = uid; g_pregoal = {
+    let goal = { 
+      g_id = uid; 
+      g_pregoal = {
         g_env  = env;
         g_hyps;
         g_goal = goal;
       }
     } in
 
-    { p_maps = Map.singleton uid root;
-      p_crts = [uid];
+    { p_goals = Map.singleton uid goal;
       p_meta = ref Map.empty;
       p_db   = LemmaDB.empty env;
       p_hm   = Hidmap.empty }
 
   let ginit (hm : Hidmap.hidmap) (pregoals : pregoal list) : proof =
+    (* Make sure the goals all typecheck. *)
     let check { g_env; g_hyps; g_goal } =
       Form.recheck g_env g_goal;
       Hyps.iter (fun hyp -> Form.recheck g_env hyp.h_form) g_hyps; in
     List.iter check pregoals;
     
-    let root = 
-      let dummy_goal =
-        { g_env = Env.empty; g_hyps = Hyps.empty; g_goal = FTrue } in
-      let g_id = Handle.fresh () in
-      { g_id; g_pregoal = dummy_goal } in
-
-    let goals = List.map begin fun g_pregoal ->
+    (* Assign a handle to each goal. *)
+    let p_goals = List.fold_left begin fun map g_pregoal -> 
         let g_id = Handle.fresh () in
-        { g_id; g_pregoal }
-      end pregoals in
-    
-    let p_maps = List.fold_left
-      (fun m g -> Map.add g.g_id g m)
-      (Map.singleton root.g_id root) goals in
+        Map.add g_id { g_id; g_pregoal } map 
+    end Map.empty pregoals in
 
-    { p_maps;
-      p_crts = List.map (fun g -> g.g_id) goals;
+    { p_goals;
       p_meta = ref Map.empty;
       p_db   = LemmaDB.empty Env.empty;
       p_hm   = hm }
@@ -257,24 +253,22 @@ end = struct
     Map.Exceptionless.find id !(proof.p_meta)
 
   let closed (proof : proof) =
-    List.is_empty proof.p_crts
+    Map.is_empty proof.p_goals
 
   let opened (proof : proof) =
-    proof.p_crts
+    Map.keys proof.p_goals |> List.of_enum
 
   let byid (proof : proof) (id : Handle.t) : pregoal =
     let goal =
       Option.get_exn
-        (Map.Exceptionless.find id proof.p_maps)
+        (Map.Exceptionless.find id proof.p_goals)
         (InvalidGoalId id)
     in goal.g_pregoal
 
   type subgoal = (Handle.t option * form list) list * form
-
  
   let xprogress (pr : proof) (id : Handle.t) (subs : pregoals) =
-    let _goal = byid pr id in
-
+    (* Promote the pregoals to actual goals. *)
     let subs =
       let for1 sub =
         let hyps = Hyps.bump sub.g_hyps in
@@ -282,12 +276,10 @@ end = struct
         { g_id = Handle.fresh (); g_pregoal = sub; }
       in List.map for1 subs in
 
-    let sids = List.map (fun x -> x.g_id) subs in
+    (* The handles of the new goals. *)
+    let g_new = List.map (fun x -> x.g_id) subs in
 
-    let gr, _, go =
-      try  List.pivot (Handle.eq id) pr.p_crts
-      with Invalid_argument _ -> raise (SubgoalNotOpened id) in
-
+    (* The new goals get the same metadata as the old goal. *)
     let meta =
       match Map.Exceptionless.find id !(pr.p_meta) with
       | None ->
@@ -296,18 +288,20 @@ end = struct
       | Some meta ->
           List.fold_left
             (fun map id -> Map.add id meta map)
-            !(pr.p_meta) sids
+            !(pr.p_meta) g_new
     in
 
-    let map =
-      List.fold_right
-        (fun sub map -> Map.add sub.g_id sub map)
-        subs pr.p_maps in
-
-    sids, { pr with
-        p_maps = map;
-        p_crts = gr @ sids @ go;
-        p_meta = ref meta; }
+    (* Remove the old goal and add the new goals. *)
+    let p_goals =
+      pr.p_goals 
+      |> Map.remove id 
+      |> List.fold_right 
+          begin fun sub map -> 
+            Map.add sub.g_id sub map
+          end subs 
+    in
+    (* Don't forget to return the handles of the new goals. *)
+    g_new, { pr with p_goals; p_meta = ref meta; }
 
   let sgprogress (goal : pregoal) ?(clear = false) (subs : subgoal list) =
     let for1 (newlc, concl) =
