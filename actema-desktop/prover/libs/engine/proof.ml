@@ -48,10 +48,10 @@ module Proof : sig
 
   val init      : env -> form list -> form -> proof
   val ginit     : Hidmap.hidmap -> pregoal list -> proof
+  (** Test whether all goals are closed in the proof. *)
   val closed    : proof -> bool
+  (** Return a list of (the handles of) all opened goals in the proof. *)
   val opened    : proof -> Handle.t list
-  val after     : proof -> Handle.t -> Handle.t list option
-  val focused   : proof -> Handle.t -> Handle.t option
   val byid      : proof -> Handle.t -> pregoal
 
   (** Get the lemma database. *)
@@ -68,8 +68,8 @@ module Proof : sig
 
   val sgprogress : pregoal -> ?clear:bool -> subgoal list -> pregoals
 
-  (** In a proof, replace a subgoal by a list of pregoals. 
-      Returns the handles of the subgoals freshly created and the new proof state. *)
+  (** In a proof, replace a goal by a list of pregoals. 
+      Returns the handles of the goals freshly created and the new proof state. *)
   val xprogress :
     proof -> Handle.t -> pregoals -> Handle.t list * proof
   
@@ -81,10 +81,11 @@ module Proof : sig
 end = struct
   module Js = Js_of_ocaml.Js
 
+  (** The type of a single hypothesis. *)
   type hyp = {
-    h_src  : Handle.t option;
+    h_src  : Handle.t option; (** A unique identifier for the hypothesis. *)
     h_gen  : int;
-    h_form : form;
+    h_form : form; (** The formula contained in the hypothesis. *)
   }
 
   module Hyps : sig
@@ -174,19 +175,11 @@ end = struct
 
   type goal = { g_id: Handle.t; g_pregoal: pregoal; }
 
-  type gdep = {
-    d_src : Handle.t;
-    d_dst : Handle.t list;
-  }
-
   type proof = {
-    p_root : Handle.t;
     p_maps : (Handle.t, goal) Map.t;
     p_crts : Handle.t list;
-    p_frwd : (Handle.t, gdep) Map.t;
-    p_bkwd : (Handle.t, gdep) Map.t;
     p_meta : (Handle.t, < > Js.t) Map.t ref;
-    p_db   : LemmaDB.t;
+    p_db   : LemmaDB.t; (** The lemma database. *)
     p_hm   : Hidmap.hidmap;
   }
 
@@ -211,11 +204,8 @@ end = struct
       }
     } in
 
-    { p_root = uid;
-      p_maps = Map.singleton uid root;
+    { p_maps = Map.singleton uid root;
       p_crts = [uid];
-      p_frwd = Map.empty;
-      p_bkwd = Map.empty;
       p_meta = ref Map.empty;
       p_db   = LemmaDB.empty env;
       p_hm   = Hidmap.empty }
@@ -241,11 +231,8 @@ end = struct
       (fun m g -> Map.add g.g_id g m)
       (Map.singleton root.g_id root) goals in
 
-    { p_root = root.g_id;
-      p_maps;
+    { p_maps;
       p_crts = List.map (fun g -> g.g_id) goals;
-      p_frwd = Map.empty;
-      p_bkwd = Map.empty;
       p_meta = ref Map.empty;
       p_db   = LemmaDB.empty Env.empty;
       p_hm   = hm }
@@ -274,15 +261,6 @@ end = struct
 
   let opened (proof : proof) =
     proof.p_crts
-
-  let after (proof : proof) (id : Handle.t) =
-    try Some (Map.find id proof.p_frwd).d_dst
-    with Not_found -> None
-
-  let focused (proof : proof) (id : Handle.t) =
-    let open Monad.Option in
-    let* subs = after proof id in
-    List.at_opt subs 0
 
   let byid (proof : proof) (id : Handle.t) : pregoal =
     let goal =
@@ -507,17 +485,6 @@ end = struct
   type targ   = Proof.proof * Handle.t
   type tactic = targ -> Proof.proof
 
-  (** Simply replace a subgoal by itself. *)
-  let id_tac : tactic =
-    fun (pr, id) -> snd @@ Proof.xprogress pr id [Proof.byid pr id]
-  
-  (** Sequence tactics. *)
-  let then_tac (t1 : tactic) (t2 : tactic) : tactic =
-    fun (_, id as targ) ->
-      let pr = t1 targ in
-      let hd = Option.get (Proof.focused pr id) in
-      t2 (pr, hd)
-  
   let add_local ((name, ty, body) : string * Fo.type_ * Fo.expr option)
       (goal : Proof.pregoal) : Proof.pregoal =
 
