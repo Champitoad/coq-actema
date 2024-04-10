@@ -2,7 +2,10 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 Lemma test (x : nat) : (exists x, x + 0 <= 1) -> forall y, y = x.
-Proof. actema_force. Admitted.
+Proof.
+Search "leq".
+pose proof (H4 := ssrnat.leqnn).
+actema_force. Admitted.
 
 Lemma dummy (x y : nat) (H : x <= y) : True.
 Proof. 

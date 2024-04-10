@@ -979,6 +979,53 @@ module Import = struct
   exception UnsupportedAction of Logic_t.action
   exception UnexpectedDnD
   exception InvalidPath of Logic_t.ipath
+  (** Contains the lemma name and an error message. *)
+  exception InvalidLemma of string * string 
+  
+  let mpath_to_string mpath = 
+    let prefix = 
+      match mpath with 
+      | Names.ModPath.MPfile _ -> "MPfile::"
+      | Names.ModPath.MPbound _ -> "MPbound::"
+      | Names.ModPath.MPdot _ -> "MPdot::"
+    in prefix ^ Names.ModPath.to_string mpath
+
+  let print_kername kname = 
+    let mpath = Names.KerName.modpath kname in
+    let label = Names.KerName.label kname in
+    Log.str @@ Format.sprintf "%s::%s"
+      (mpath_to_string mpath) 
+      (Names.Label.to_string label)
+
+  (** Find a lemma by name in the coq environment.
+      The difficuly here is that the name is a string, 
+      i.e. we lost the information about which part is the MPfile/MPdot. *)
+  let find_lemma (name : string) (coq_env : Environ.env) 
+    : Names.Constant.t list =
+    (* Split a module path into a list of strings. *)
+    let rec split_mpath mpath = 
+      match mpath with 
+      | Names.ModPath.MPdot (mpath, label) -> 
+          split_mpath mpath @ [Names.Label.to_string label]
+      | Names.ModPath.MPfile dirpath -> 
+          List.rev_map Names.Id.to_string @@ Names.DirPath.repr dirpath
+      | Names.ModPath.MPbound bid -> 
+          let (_, id, dirpath) = Names.MBId.repr bid in
+          (List.rev_map Names.Id.to_string @@ Names.DirPath.repr dirpath) @ [Names.Id.to_string id]
+    in
+    (* Filter the constant map. *)
+    let split = String.split_on_char '.' name in
+    (Environ.Globals.view coq_env.env_globals).constants
+    |> Names.Cmap_env.bindings
+    |> List.filter_map 
+        begin fun (cname, _) ->
+          let mpath = Names.KerName.modpath @@ Names.Constant.canonical cname in
+          let label = Names.KerName.label @@ Names.Constant.canonical cname in
+          if split = split_mpath mpath @ [Names.Label.to_string label] then 
+            Some cname 
+          else 
+            None
+        end
 
   let action (sign : FOSign.t) (goal : Logic_t.goal) (coq_goal : Goal.t)
              (a : Logic_t.action) : unit tactic =
@@ -987,9 +1034,23 @@ module Import = struct
     | `AId ->
         Tacticals.tclIDTAC
 
-    | `ALemma name ->
-        Log.str (Format.sprintf "Importing lemma action: %s\n" name);
-        Tacticals.tclIDTAC
+    | `ALemma full_name ->
+        (* Check the lemma exists in the environment,
+           and retrieve its coq name. *)
+        let cname = 
+          match find_lemma full_name (Goal.env coq_goal) with 
+          | [] -> raise @@ InvalidLemma (full_name, "Name matches no lemma the COQ environment.")
+          | [ cname ] -> cname
+          | _ -> raise @@ InvalidLemma (full_name, "Name matches multiples lemmas in the COQ environment.")
+        in 
+        (* Choose a name for the hypothesis. *)
+        let basename = Extlib.List.last @@ String.split_on_char '.' full_name in
+        let hyp_name = Names.Name.mk_name @@ Goal.fresh_name ~basename coq_goal () in
+        (* Create a term containing the lemma. *)
+        let ((_, inst), _) = UnivGen.fresh_constant_instance (Goal.env coq_goal) cname in 
+        let stmt = EConstr.mkConstU (cname, EConstr.EInstance.make inst) in
+        (* Add the lemma as a hypothesis. *)
+        Tactics.pose_proof hyp_name stmt
 
     | `AExact id ->
         let name = Names.Id.of_string id in

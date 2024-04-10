@@ -89,7 +89,22 @@ module List = struct
       | _                  -> List.rev acc
       end
     in loop n [] l
-  end
+
+  let snoc (l : 'a list) (x : 'a) : 'a list  = l @ [x]
+
+  let rec unsnoc (l : 'a list) : ('a list * 'a) option = 
+    match l with 
+    | [] -> None
+    | hd :: tl -> 
+        match unsnoc tl with 
+        | Some (init, last) -> Some (hd :: init, last)
+        | None -> Some ([], hd)
+
+  let last (l : 'a list) : 'a = 
+    match unsnoc l with 
+    | Some (_, x) -> x
+    | None -> failwith "List.last : got an empty list"
+end
 
 let ssystime () =
   Printf.sprintf "%f" (Sys.time ())

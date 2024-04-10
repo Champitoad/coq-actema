@@ -34,7 +34,18 @@ module List : sig
     ?sep : string -> ?left : string -> ?right : string ->
     ('a -> string) -> 'a t -> string
 
+  (** Returns the first [n] elements of a list [l]. 
+      If [l] has less than [n] elements, returns [l]. *)
   val take : int -> 'a list -> 'a list
+
+  (** Like [cons], but in reverse. *)
+  val snoc : 'a list -> 'a -> 'a list
+  
+  (** The opposite of [snoc] : seperate a list into its last element and the initial portion. *)
+  val unsnoc : 'a list -> ('a list * 'a) option
+
+  (** Get the last element of a list. Raises [Failure] if the list is empty. *)
+  val last : 'a list -> 'a
 end
 
 val ssystime : unit -> string
