@@ -696,7 +696,7 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
       let Proof.{ g_id = hd; g_pregoal = goal }, item, (_, _) = IPath.destr proof path in
       match item with
       | `C _ -> begin
-          let iv = ivariants (proof, hd) in
+          let iv = Proof.Tactics.ivariants proof ~goal_id:hd in
           let bv = List.length iv <= 1 in
           List.mapi
             (fun i x ->
@@ -713,7 +713,7 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
             iv
         end
       | `H (rp, _) ->
-          let ev = evariants (proof, hd) rp in
+          let ev = Proof.Tactics.evariants proof ~goal_id:hd ~hyp_id:rp in
           let bv = List.length ev <= 1 in
           List.mapi
             (fun i x ->
@@ -813,7 +813,7 @@ let filter_db_by_selection selection proof =
                Proof.{ sub with g_hyps; g_env }
              in
              (* Replace the current goal by the new goal. *)
-             let g_ids, proof = Proof.xprogress proof g_id [ sub ] in
+             let g_ids, proof = Proof.Tactics.xprogress proof g_id [ sub ] in
              let g_id = List.hd g_ids in
              (* Create a path to the root of the new hypothesis (representing the lemma). *)
              let lemma_path =

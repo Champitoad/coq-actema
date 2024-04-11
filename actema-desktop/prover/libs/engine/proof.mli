@@ -71,13 +71,33 @@ val set_meta : proof -> Handle.t -> meta option -> unit
 (** Get the metadata attached to a goal. *)
 val get_meta : proof -> Handle.t -> meta option
 
-val sgprogress : pregoal -> ?clear:bool -> subgoal list -> pregoals
+(** A set of (basic) functions that modify a proof. *)
+module Tactics : sig
+  exception TacticNotApplicable
 
-(** In a proof, replace a goal by a list of pregoals. 
-    Returns the handles of the goals freshly created and the new proof state.
-    BEWARE: after calling [xprogress], any [ipath] into the replaced goal will become invalid 
-    (i.e. the [root] field of the [ipath] will point to a closed goal). *)
-val xprogress : proof -> Handle.t -> pregoals -> Handle.t list * proof
+  val sgprogress : pregoal -> ?clear:bool -> subgoal list -> pregoals
+
+  (** In a proof, replace a goal by a list of pregoals. 
+      Returns the handles of the goals freshly created and the new proof state.
+      BEWARE: after calling [xprogress], any [ipath] into the replaced goal will become invalid 
+      (i.e. the [root] field of the [ipath] will point to a closed goal). *)
+  val xprogress : proof -> Handle.t -> pregoals -> Handle.t list * proof
+
+  (** Add a local definition (in a given goal). *)
+  val add_local_def : proof -> goal_id:Handle.t -> string * Fo.type_ * Fo.expr -> proof
+
+  (** Generalize a hypothesis (in a given goal). *)
+  val generalize : proof -> goal_id:Handle.t -> hyp_id:Handle.t -> proof
+
+  (** Move a hypothesis BEFORE another hypothesis. *)
+  val move : proof -> goal_id:Handle.t -> hyp_id:Handle.t -> dest_id:Handle.t option -> proof
+
+  (** Get all the introduction variants (in a given goal). *)
+  val ivariants : proof -> goal_id:Handle.t -> string list
+
+  (** Get all the elimination variants of a given hypothesis (in a given goal). *)
+  val evariants : proof -> goal_id:Handle.t -> hyp_id:Handle.t -> string list
+end
 
 (** A module to translate goals between API format (api/logic.atd) and Actema format (engine/fo.ml).
     See also CoreLogic.Translate. *)

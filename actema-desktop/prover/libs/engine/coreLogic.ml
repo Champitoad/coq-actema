@@ -1,79 +1,8 @@
 open Fo
 open Utils
 
-exception TacticNotApplicable
 exception InvalidSubFormPath of int list
 exception InvalidSubExprPath of int list
-
-type targ = Proof.proof * Handle.t
-type tactic = targ -> Proof.proof
-
-
-let add_local ((name, ty, body) : string * Fo.type_ * Fo.expr option) (goal : Proof.pregoal) :
-    Proof.pregoal =
-  Option.map_default (Fo.Form.erecheck goal.g_env ty) () body;
-
-  let g_env = Fo.Vars.push goal.g_env (name, (ty, body)) in
-  let g_env = Fo.Vars.map g_env (Option.map (Fo.Form.e_shift (name, 0))) in
-
-  let g_hyps =
-    Proof.Hyps.(map (fun h -> { h with h_form = Form.f_shift (name, 0) h.h_form }) goal.g_hyps)
-  in
-
-  let g_goal = Form.f_shift (name, 0) goal.g_goal in
-
-  { g_env; g_hyps; g_goal }
-
-let add_local_def ((name, ty, body) : string * Fo.type_ * Fo.expr) ((proof, hd) : targ) =
-  let new_goal = add_local (name, ty, Some body) (Proof.byid proof hd) in
-  snd @@ Proof.xprogress proof hd [ new_goal ]
-
-let ivariants ((pr, id) : targ) =
-  match (Proof.byid pr id).g_goal with
-  | FPred ("_EQ", _) -> [ "reflexivity" ]
-  | FTrue -> [ "constructor" ]
-  | FConn (`And, _) -> [ "split" ]
-  | FConn (`Or, _) -> [ "left"; "right" ]
-  | FConn (`Imp, _) -> [ "intro" ]
-  | FConn (`Equiv, _) -> [ "split" ]
-  | FConn (`Not, _) -> [ "intro" ]
-  | FBind (`Forall, _, _, _) -> [ "intro" ]
-  | FBind (`Exist, _, _, _) -> [ "exists" ]
-  | _ -> []
-
-let evariants ((pr, id) : targ) hd =
-  match (Proof.Hyps.byid (Proof.byid pr id).g_hyps hd).h_form with
-  | FPred ("_EQ", _) -> [ "rewrite->"; "rewrite<-" ]
-  | FTrue -> [ "destruct" ]
-  | FFalse -> [ "destruct" ]
-  | FConn (`And, _) -> [ "destruct" ]
-  | FConn (`Or, _) -> [ "destruct" ]
-  | FConn (`Imp, _) -> [ "apply" ]
-  | FConn (`Not, _) -> [ "destruct" ]
-  | FBind (`Exist, _, _, _) -> [ "destruct" ]
-  | _ -> []
-
-let generalize (hid : Handle.t) ((proof, id) : targ) =
-  let goal = Proof.byid proof id in
-  let hyp = (Proof.Hyps.byid goal.g_hyps hid).h_form in
-
-  snd
-  @@ Proof.xprogress proof id
-       [ { g_env = goal.g_env
-         ; g_hyps = Proof.Hyps.remove goal.g_hyps hid
-         ; g_goal = FConn (`Imp, [ hyp; goal.g_goal ])
-         }
-       ]
-
-let move (from : Handle.t) (before : Handle.t option) ((proof, id) : targ) =
-  let goal = Proof.byid proof id in
-  let _from = Proof.Hyps.byid goal.g_hyps in
-  (* KEEP *)
-  let _before = Option.map (Proof.Hyps.byid goal.g_hyps) before in
-  (* KEEP *)
-  let hyps = Proof.Hyps.move goal.g_hyps from before in
-
-  snd @@ Proof.xprogress proof id [ { goal with g_hyps = hyps } ]
 
 (* -------------------------------------------------------------------- *)
 (** Items *)
@@ -97,9 +26,6 @@ let term_of_item ?where it =
   with Invalid_argument _ -> (
     try `E (expr_of_item ?where it)
     with Invalid_argument _ -> raise (Invalid_argument "Expected an expression or formula item"))
-
-(* -------------------------------------------------------------------- *)
-(** Paths *)
 
 let direct_subterm (t : term) (i : int) : term =
   let open Form in
@@ -153,7 +79,6 @@ let subform (f : form) (p : int list) =
 let subexpr (t : term) (p : int list) =
   match subterm t p with `E e -> e | _ -> raise (InvalidSubExprPath p)
 
-
 module IPath = struct
   type pkind = [ `Hyp | `Concl | `Var of [ `Head | `Body ] ]
   type ctxt = { kind : pkind; handle : int }
@@ -166,19 +91,19 @@ module IPath = struct
       (fun m (a, b) -> BiMap.add a b m)
       BiMap.empty
       [ (`Hyp, "H"); (`Concl, "C"); (`Var `Head, "Vh"); (`Var `Body, "Vb") ]
-  
+
   let string_of_pkind : pkind -> string = BiMap.find ^~ pkind_codes
   let pkind_of_string : string -> pkind = BiMap.find ^~ BiMap.inverse pkind_codes
 
-let make ?(ctxt : ctxt = { kind = `Concl; handle = 0 }) ?(sub : int list = []) (root : int) =
-  { root; ctxt; sub }
+  let make ?(ctxt : ctxt = { kind = `Concl; handle = 0 }) ?(sub : int list = []) (root : int) =
+    { root; ctxt; sub }
 
   let to_string (p : t) =
     let pp_sub =
       Format.pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt "/") Format.pp_print_int
     in
     Format.asprintf "%d/%s#%d:%a" p.root (string_of_pkind p.ctxt.kind) p.ctxt.handle pp_sub p.sub
-  
+
   let of_string (str : string) =
     let root, ({ handle; _ } as ctxt), sub =
       try
@@ -186,26 +111,26 @@ let make ?(ctxt : ctxt = { kind = `Concl; handle = 0 }) ?(sub : int list = []) (
             (x1, { kind = pkind_of_string x2; handle = x3 }, x4))
       with Scanf.Scan_failure _ | Not_found | End_of_file -> raise (Invalid_argument str)
     in
-  
+
     if root < 0 || handle < 0 then raise (InvalidPath str);
-  
+
     let sub =
       let sub = if sub = "" then [] else String.split_on_char '/' sub in
-  
+
       try List.map int_of_string sub with Failure _ -> raise (InvalidPath str)
     in
-  
+
     if List.exists (fun x -> x < 0) sub then raise (InvalidPath str);
-  
+
     { root; ctxt; sub }
-  
+
   let destr (proof : Proof.proof) (p : t) : Proof.goal * item * (uid list * term) =
     let exn = InvalidPath (to_string p) in
-  
+
     let { root; ctxt; sub } = p in
-  
+
     let goal = try Proof.byid proof (Handle.ofint root) with Proof.InvalidGoalId _ -> raise exn in
-  
+
     let item, t_item =
       match (ctxt.kind, ctxt.handle) with
       | `Concl, 0 ->
@@ -219,26 +144,28 @@ let make ?(ctxt : ctxt = { kind = `Concl; handle = 0 }) ?(sub : int list = []) (
           with Proof.InvalidHyphId _ -> raise exn
         end
       | `Var part, hd ->
-          let ((x, (_, body)) as def) = Option.get_exn (Vars.byid goal.g_env (Handle.ofint hd)) exn in
+          let ((x, (_, body)) as def) =
+            Option.get_exn (Vars.byid goal.g_env (Handle.ofint hd)) exn
+          in
           let expr = match part with `Head -> EVar x | `Body -> Option.get_exn body exn in
           (`V def, `E expr)
       | _ -> raise exn
     in
     let target = subterm t_item sub in
-  
+
     let goal = Proof.{ g_id = Handle.ofint root; g_pregoal = goal } in
     (goal, item, (sub, target))
-  
+
   let goal proof p =
     let g, _, _ = destr proof p in
     g
-  
+
   let gid proof p = (goal proof p).g_id
-  
+
   let term proof p =
     let _, _, (_, t) = destr proof p in
     t
-  
+
   let env proof p =
     let goal, item, (sub, _) = destr proof p in
     let env = goal.g_pregoal.g_env in
@@ -255,18 +182,15 @@ let make ?(ctxt : ctxt = { kind = `Concl; handle = 0 }) ?(sub : int list = []) (
               | `F _, _ -> aux env (direct_subterm t i) sub)
         in
         aux env (`F f) sub
-  
+
   let subpath p sp =
     p.root = sp.root && p.ctxt.handle = sp.ctxt.handle
     && (p.ctxt.kind = sp.ctxt.kind || (p.ctxt.kind = `Var `Head && sp.ctxt.kind = `Var `Body))
     && List.is_prefix sp.sub p.sub
-  
 
-let erase_sub { root; ctxt; _ } = { root; ctxt; sub = [] }
-let to_concl Proof.{ g_id; _ } = make (Handle.toint g_id)
-
+  let erase_sub { root; ctxt; _ } = { root; ctxt; sub = [] }
+  let to_concl Proof.{ g_id; _ } = make (Handle.toint g_id)
 end
-
 
 (* -------------------------------------------------------------------- *)
 (** Polarities *)

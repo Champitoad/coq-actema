@@ -1,35 +1,49 @@
 open Fo
 
-exception TacticNotApplicable
 exception InvalidSubFormPath of int list
 exception InvalidSubExprPath of int list
 
-type targ = Proof.proof * Handle.t
-type tactic = targ -> Proof.proof
-
+(** An item in a goal. *)
 type item =
-  [ `C of form  (** Conslusion. *)
+  [ `C of form  (** Conclusion. *)
   | `H of Handle.t * Proof.hyp  (** Hypothesis. *)
   | `V of vname * bvar  (** Variable. *) ]
 
-module IPath : sig 
+(** This module defines paths to items in a goal. 
+    A path can point to : 
+    - A subterm of the conclusion. 
+    - A subterm of a hypothesis. 
+    - A variable definition : either to the head (variable name) or a subterm of the definition's body. 
+    A path points to an item in a specific goal. *)
+module IPath : sig
+  (** What kind of object does the path point to ? *)
   type pkind = [ `Hyp | `Concl | `Var of [ `Head | `Body ] ]
+
+  (** What object does a path point to ? *)
   type ctxt = { kind : pkind; handle : int }
-  type t = { root : int; ctxt : ctxt; sub : int list }
-  
+
+  (** A path to a subterm of an item. *)
+  type t =
+    { root : int  (** The index of the goal we point to. *)
+    ; ctxt : ctxt  (** The object we point to. *)
+    ; sub : int list  (** The position in the term we point to. *)
+    }
+
   (** The [string] argument contains the path (encoded as text). *)
   exception InvalidPath of string
-  
+
   (** Create a new path. *)
   val make : ?ctxt:ctxt -> ?sub:int list -> int -> t
+
   (** Destruct a path, i.e. get all the information relevant to a path. *)
   val destr : Proof.proof -> t -> Proof.goal * item * (Utils.uid list * term)
 
   (** Decode a path encoded as a string. *)
   val of_string : string -> t
+
   (** Encode a path to a string. *)
   val to_string : t -> string
- 
+
   (** [IPath.subpath p1 p2] checks whether [p1] is a subpath of [p2]. *)
   val subpath : t -> t -> bool
 
@@ -41,10 +55,13 @@ module IPath : sig
 
   (** Return the goal that contains the path. *)
   val goal : Proof.proof -> t -> Proof.goal
+
   (** Return the identifer of the goal that contains the path. *)
   val gid : Proof.proof -> t -> Handle.t
+
   (** Return the subterm pointed at by the path. *)
   val term : Proof.proof -> t -> term
+
   (** Given that the path points to a subterm [t], return the environment that is valid at [t] 
       (i.e. contains local variables bound by quantifiers above [t]). *)
   val env : Proof.proof -> t -> env
@@ -53,12 +70,6 @@ end
 val form_of_item : item -> form
 val expr_of_item : ?where:[< `Body | `Head > `Body ] -> item -> expr
 val term_of_item : ?where:[< `Body | `Head > `Body ] -> item -> term
-
-val add_local_def : string * Fo.type_ * Fo.expr -> tactic
-val generalize : Handle.t -> tactic
-val move : Handle.t -> Handle.t option -> tactic
-val ivariants : targ -> string list
-val evariants : targ -> Handle.t -> string list
 val direct_subterm : term -> int -> term
 val subterm : term -> int list -> term
 val modify_direct_subterm : (term -> term) -> term -> int -> term

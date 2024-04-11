@@ -6,6 +6,7 @@ exception InvalidGoalId of Handle.t
 exception InvalidHyphId of Handle.t
 exception SubgoalNotOpened of Handle.t
 
+
 (** The type of a single hypothesis. *)
 type hyp =
   { h_src : Handle.t option  (** A unique identifier for the hypothesis. *)
@@ -73,6 +74,8 @@ type pregoal = { g_env : env; g_hyps : Hyps.t; g_goal : form }
 type pregoals = pregoal list
 type goal = { g_id : Handle.t; g_pregoal : pregoal }
 
+type meta = < > Js_of_ocaml.Js.t
+
 type proof =
   { p_goals : (Handle.t, goal) Map.t
         (** A map from goal handles to goals. Contains only the opened (i.e. currently active) goals. *)
@@ -80,6 +83,7 @@ type proof =
   ; p_db : LemmaDB.t  (** The lemma database. *)
   ; p_hm : Hidmap.hidmap
   }
+
 
 let mk_hyp ?(src : Handle.t option) ?(gen : int = 0) form =
   { h_src = src; h_gen = gen; h_form = form }
@@ -124,8 +128,6 @@ let ginit (hm : Hidmap.hidmap) (pregoals : pregoal list) : proof =
 let get_db (proof : proof) = proof.p_db
 let set_db (proof : proof) (db : LemmaDB.t) = { proof with p_db = db }
 
-type meta = < > Js_of_ocaml.Js.t
-
 let set_meta (proof : proof) (id : Handle.t) (meta : meta option) : unit =
   match meta with
   | None -> proof.p_meta := Map.remove id !(proof.p_meta)
@@ -142,6 +144,58 @@ let byid (proof : proof) (id : Handle.t) : pregoal =
   goal.g_pregoal
 
 type subgoal = (Handle.t option * form list) list * form
+
+module Translate = struct
+  open Api
+  open Fo.Translate
+  open Hidmap
+  open State
+
+  let of_hyp ((hd, { h_form; _ }) : Handle.t * hyp) : Logic_t.hyp State.t =
+    let* h_id = find hd in
+    return Logic_t.{ h_id; h_form = of_form h_form }
+
+  let of_hyps (hyps : Hyps.t) : Logic_t.hyp list State.t =
+    hyps |> Hyps.to_list
+    |> fold
+         (fun hyps hyp ->
+           let* h = of_hyp hyp in
+           return (hyps @ [ h ]))
+         []
+
+  let to_hyp (Logic_t.{ h_id; h_form } : Logic_t.hyp) : (Handle.t * hyp) State.t =
+    let* hd = push h_id in
+    return (hd, mk_hyp (to_form h_form))
+
+  let to_hyps (hyps : Logic_t.hyp list) : Hyps.t State.t =
+    let* hyps =
+      fold
+        (fun hyps hyp ->
+          let* h = to_hyp hyp in
+          return (hyps @ [ h ]))
+        [] hyps
+    in
+    hyps |> Hyps.of_list |> return
+
+  let export_goal (({ g_env; g_hyps; g_goal }, hm) : pregoal * hidmap) : Logic_t.goal =
+    Logic_t.{ g_env = of_env g_env; g_hyps = run (of_hyps g_hyps) hm; g_concl = of_form g_goal }
+
+  let import_goal (Logic_t.{ g_env; g_hyps; g_concl } : Logic_t.goal) : pregoal * hidmap =
+    let g_env, g_hyps, hm =
+      HandleMap.empty
+      |> run
+           (let* env = to_env g_env in
+            let* hyps = to_hyps g_hyps in
+            let* hm = get in
+            return (env, hyps, hm))
+    in
+    ({ g_env; g_hyps; g_goal = to_form g_concl }, hm)
+end
+
+module Tactics = struct
+
+  exception TacticNotApplicable
+
 
 let xprogress (pr : proof) (id : Handle.t) (subs : pregoals) =
   (* Promote the pregoals to actual goals. *)
@@ -194,49 +248,65 @@ let sgprogress (goal : pregoal) ?(clear = false) (subs : subgoal list) =
 
   List.map for1 subs
 
-module Translate = struct
-  open Api
-  open Fo.Translate
-  open Hidmap
-  open State
 
-  let of_hyp ((hd, { h_form; _ }) : Handle.t * hyp) : Logic_t.hyp State.t =
-    let* h_id = find hd in
-    return Logic_t.{ h_id; h_form = of_form h_form }
+  let add_local (goal : pregoal) ((name, ty, body) : string * Fo.type_ * Fo.expr option) : pregoal =
+    Option.map_default (Fo.Form.erecheck goal.g_env ty) () body;
 
-  let of_hyps (hyps : Hyps.t) : Logic_t.hyp list State.t =
-    hyps |> Hyps.to_list
-    |> fold
-         (fun hyps hyp ->
-           let* h = of_hyp hyp in
-           return (hyps @ [ h ]))
-         []
+    let g_env = Fo.Vars.push goal.g_env (name, (ty, body)) in
+    let g_env = Fo.Vars.map g_env (Option.map (Fo.Form.e_shift (name, 0))) in
 
-  let to_hyp (Logic_t.{ h_id; h_form } : Logic_t.hyp) : (Handle.t * hyp) State.t =
-    let* hd = push h_id in
-    return (hd, mk_hyp (to_form h_form))
-
-  let to_hyps (hyps : Logic_t.hyp list) : Hyps.t State.t =
-    let* hyps =
-      fold
-        (fun hyps hyp ->
-          let* h = to_hyp hyp in
-          return (hyps @ [ h ]))
-        [] hyps
+    let g_hyps =
+      Hyps.(map (fun h -> { h with h_form = Form.f_shift (name, 0) h.h_form }) goal.g_hyps)
     in
-    hyps |> Hyps.of_list |> return
 
-  let export_goal (({ g_env; g_hyps; g_goal }, hm) : pregoal * hidmap) : Logic_t.goal =
-    Logic_t.{ g_env = of_env g_env; g_hyps = run (of_hyps g_hyps) hm; g_concl = of_form g_goal }
+    let g_goal = Form.f_shift (name, 0) goal.g_goal in
 
-  let import_goal (Logic_t.{ g_env; g_hyps; g_concl } : Logic_t.goal) : pregoal * hidmap =
-    let g_env, g_hyps, hm =
-      HandleMap.empty
-      |> run
-           (let* env = to_env g_env in
-            let* hyps = to_hyps g_hyps in
-            let* hm = get in
-            return (env, hyps, hm))
-    in
-    ({ g_env; g_hyps; g_goal = to_form g_concl }, hm)
+    { g_env; g_hyps; g_goal }
+
+  let add_local_def proof ~goal_id (name, ty, body) =
+    let new_goal = add_local (byid proof goal_id) (name, ty, Some body) in
+    snd @@ xprogress proof goal_id [ new_goal ]
+
+  let ivariants proof ~goal_id =
+    match (byid proof goal_id).g_goal with
+    | FPred ("_EQ", _) -> [ "reflexivity" ]
+    | FTrue -> [ "constructor" ]
+    | FConn (`And, _) -> [ "split" ]
+    | FConn (`Or, _) -> [ "left"; "right" ]
+    | FConn (`Imp, _) -> [ "intro" ]
+    | FConn (`Equiv, _) -> [ "split" ]
+    | FConn (`Not, _) -> [ "intro" ]
+    | FBind (`Forall, _, _, _) -> [ "intro" ]
+    | FBind (`Exist, _, _, _) -> [ "exists" ]
+    | _ -> []
+
+  let evariants proof ~goal_id ~hyp_id =
+    match (Hyps.byid (byid proof goal_id).g_hyps hyp_id).h_form with
+    | FPred ("_EQ", _) -> [ "rewrite->"; "rewrite<-" ]
+    | FTrue -> [ "destruct" ]
+    | FFalse -> [ "destruct" ]
+    | FConn (`And, _) -> [ "destruct" ]
+    | FConn (`Or, _) -> [ "destruct" ]
+    | FConn (`Imp, _) -> [ "apply" ]
+    | FConn (`Not, _) -> [ "destruct" ]
+    | FBind (`Exist, _, _, _) -> [ "destruct" ]
+    | _ -> []
+
+  let generalize proof ~goal_id ~hyp_id =
+    let goal = byid proof goal_id in
+    let hyp = (Hyps.byid goal.g_hyps hyp_id).h_form in
+
+    snd
+    @@ xprogress proof goal_id
+         [ { g_env = goal.g_env
+           ; g_hyps = Hyps.remove goal.g_hyps hyp_id
+           ; g_goal = FConn (`Imp, [ hyp; goal.g_goal ])
+           }
+         ]
+
+  let move proof ~goal_id ~hyp_id ~dest_id =
+    let goal = byid proof goal_id in
+    let hyps = Hyps.move goal.g_hyps hyp_id dest_id in
+
+    snd @@ xprogress proof goal_id [ { goal with g_hyps = hyps } ]
 end

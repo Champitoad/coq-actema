@@ -75,7 +75,7 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
   let _, item_dst, (sub_dst, t_dst) = IPath.destr proof dst in
 
   begin
-    match (t_src, t_dst) with `F _, `E _ | `E _, `F _ -> raise TacticNotApplicable | _ -> ()
+    match (t_src, t_dst) with `F _, `E _ | `E _, `F _ -> raise Tactics.TacticNotApplicable | _ -> ()
   end;
 
   (* [well_scoped lenv e] returns [true] if all variables in the
@@ -238,7 +238,7 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
           end
       | _ ->
           js_log "No backward rule matched\n";
-          raise TacticNotApplicable
+          raise Tactics.TacticNotApplicable
     end
   in
 
@@ -401,7 +401,7 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
           forward [] [] ((LEnv.empty, s), (LEnv.empty, s')) ((h, subh), (h', subh'))
         in
         (([ (Some hid, []); (Some hid', [ form |> elim_units ]) ], goal.g_goal), itrace)
-    | _ -> raise TacticNotApplicable
+    | _ -> raise Tactics.TacticNotApplicable
   in
   let itrace = List.rev itrace in
 

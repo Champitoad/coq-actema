@@ -50,7 +50,7 @@ let () =
       | DuplicatedEntry (_, name) -> Some ("duplicated entry \"" ^ name ^ "\" in goal")
       | TypingError -> Some "invalid goal (typing error)"
       | RecheckFailure -> Some "invalid goal (recheck failure)"
-      | CoreLogic.TacticNotApplicable -> Some "tactic not applicable"
+      | Proof.Tactics.TacticNotApplicable -> Some "tactic not applicable"
       | LemmaDB.LemmaNotFound name -> Some ("lemma \"" ^ name ^ "\" does not exist")
       | _ -> None)
 
@@ -65,11 +65,9 @@ let ( !! ) f x =
     in
     Js.Js_error.(raise_ (of_error (new%js Js.error_constr (Js.string msg))))
 
-let ipath_of_obj obj = 
-  obj |> Js.as_string InvalidASource |> CoreLogic.IPath.of_string
+let ipath_of_obj obj = obj |> Js.as_string InvalidASource |> CoreLogic.IPath.of_string
 let ipath_of_array obj = obj |> Js.to_array |> Array.to_list |> List.map ipath_of_obj
 let ipath_of_opt obj = obj |> Js.Opt.to_option |> Option.map ipath_of_obj
-
 
 (* -------------------------------------------------------------------- *)
 let rec js_proof_engine (proof : Proof.proof) =
@@ -326,7 +324,7 @@ and js_subgoal parent (handle : Handle.t) =
         returned array is meaningful and can be used as argument to [#intro]
         to select the desired introduction rule. *)
     method ivariants =
-      let aout = !!CoreLogic.ivariants (parent##.proof, handle) in
+      let aout = !!Proof.Tactics.ivariants parent##.proof ~goal_id:handle in
       let aout = Array.of_list (List.map Js.string aout) in
       Js.array aout
 
@@ -367,7 +365,7 @@ and js_subgoal parent (handle : Handle.t) =
         let expr = String.trim (Js.to_string expr) in
         let expr = Io.parse_expr (Io.from_string expr) in
         let expr, ty = Form.echeck goal.g_env expr in
-        CoreLogic.add_local_def (Js.to_string name, ty, expr) (parent##.proof, _self##.handle)
+        Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle (Js.to_string name, ty, expr)
       in
       js_proof_engine (!!doit ())
 
@@ -379,7 +377,7 @@ and js_subgoal parent (handle : Handle.t) =
         let expr = String.trim (Js.to_string expr) in
         let name, expr = Io.parse_nexpr (Io.from_string expr) in
         let expr, ty = Form.echeck goal.g_env expr in
-        CoreLogic.add_local_def (Location.unloc name, ty, expr) (parent##.proof, _self##.handle)
+        Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle (Location.unloc name, ty, expr)
       in
       js_proof_engine (!!doit ())
 
@@ -403,13 +401,13 @@ and js_subgoal parent (handle : Handle.t) =
         must be part of this sub-goal. *)
     method movehyp from before =
       let doit () =
-        CoreLogic.move from (Js.Opt.to_option before) (parent##.proof, _self##.handle)
+        Proof.Tactics.move parent##.proof ~goal_id:_self##.handle ~hyp_id:from ~dest_id:(Js.Opt.to_option before) 
       in
       js_proof_engine (!!doit ())
 
     (** [this#generalize (h : handle<js_hyps>)] generalizes the hypothesis [h] *)
     method generalize hid =
-      let doit () = CoreLogic.generalize hid (parent##.proof, _self##.handle) in
+      let doit () = Proof.Tactics.generalize parent##.proof ~goal_id:_self##.handle ~hyp_id:hid in
       js_proof_engine (!!doit ())
 
     method getmeta = Js.Opt.option (Proof.get_meta parent##.proof _self##.handle)
