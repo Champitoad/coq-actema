@@ -1,5 +1,7 @@
 open Fo
 
-exception UnsupportedAction of CoreLogic.action_type
+exception UnsupportedAction of Link.action_type
 
-val export_action : Hidmap.hidmap -> Proof.proof -> CoreLogic.action -> Api.Logic_t.action
+(** Export an Actema action to an API action. 
+    This can perform some amount deep interaction between subformulas. *)
+val export_action : Hidmap.hidmap -> Proof.proof -> Link.action -> Api.Logic_t.action

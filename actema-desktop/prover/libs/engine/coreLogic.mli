@@ -22,65 +22,60 @@ type item =
 (** A polarity : positive, negative or superposed (i.e. both positive and negative). *)
 type pol = Pos | Neg | Sup
 
+val form_of_item : item -> form
+val expr_of_item : ?where:[< `Body | `Head > `Body ] -> item -> expr
+val term_of_item : ?where:[< `Body | `Head > `Body ] -> item -> term
 val ipath_of_path : path -> ipath
+val path_of_ipath : ipath -> path
+val destr_ipath : Proof.proof -> ipath -> Proof.goal * item * (Utils.uid list * term)
+
+val mk_ipath : ?ctxt : ctxt -> ?sub:int list -> int -> ipath
+val item_ipath : ipath -> ipath
+val concl_ipath : Proof.goal -> ipath
+
+
+val goal_of_ipath : Proof.proof -> ipath -> Proof.goal
+val gid_of_ipath : Proof.proof -> ipath -> Handle.t 
+val term_of_ipath : Proof.proof -> ipath -> term
+val env_of_ipath : Proof.proof -> ipath -> env
+val is_sub_path : ipath -> ipath -> bool
+
+
 val add_local_def : string * Fo.type_ * Fo.expr -> tactic
 val generalize : Handle.t -> tactic
 val move : Handle.t -> Handle.t option -> tactic
 val ivariants : targ -> string list
 val evariants : targ -> Handle.t -> string list
 
-type asource = { kind : asource_kind; selection : selection }
-and asource_kind = [ `Click of ipath | `DnD of adnd | `Ctxt ]
-and adnd = { source : ipath; destination : ipath option }
-and selection = ipath list
+(** [opp p] returns the opposite polarity of [p] *)
+val opp : pol -> pol
 
-type osource = [ `Click of ipath | `DnD of link | `Ctxt ]
+(** [direct_subform_pol (p, f) i] returns the [i]th direct subformula of [f]
+      together with its polarity, given that [f]'s polarity is [p] *)
+val direct_subform_pol : pol * form -> int -> pol * form
 
-type linkaction =
-  [ `Nothing
-  | `Both of linkaction * linkaction
-  | `Subform of Form.Subst.subst * Form.Subst.subst
-  | `Instantiate of expr * ipath
-  | `Rewrite of expr * expr * ipath list
-  | `Fold of vname * ipath list
-  | `Unfold of vname * ipath list ]
+val direct_subterm_pol : pol * term -> int -> pol * term
 
-type action_type =
-  [ `Intro of int
-  | `Elim of Handle.t * int
-  | `Lemma of name
-  | `Ind of Handle.t
-  | `Simpl of ipath
-  | `Red of ipath
-  | `Indt of ipath
-  | `Case of ipath
-  | `Pbp of ipath
-  | `Fold of vname
-  | `Unfold of vname
-  | `Hyperlink of hyperlink * linkaction list ]
+(** [subform_pol (p, f) sub] returns the subformula of [f] at path [sub] together
+      with its polarity, given that [f]'s polarity is [p] *)
+val subform_pol : pol * form -> int list -> pol * Fo.form
 
-type action = Handle.t * action_type
+(** [neg_count f sub] counts the number of negations in [f] along path [sub] *)
+val neg_count : form -> int list -> int
 
-type aoutput =
-  { description : string
-  ; icon : string option
-  ; highlights : ipath list
-  ; kind : osource
-  ; action : action
-  }
+(** [pol_of_item it] returns the polarity of the item [it] *)
+val pol_of_item : item -> pol
 
-val path_of_ipath : ipath -> path
+(** [pol_of_ipath proof p] returns the polarity of the subformula
+    at path [p] in [proof] *)
+val pol_of_ipath : Proof.proof -> ipath -> pol
 
-(** Get the list of all valid actions on a given proof state. *)
-val actions : Proof.proof -> asource -> aoutput list
+val direct_subterm : term -> int -> term
+val subterm : term -> int list -> term
+val modify_direct_subterm : (term -> term) -> term -> int -> term
 
-(** Filter the lemma database by keeping only the lemmas that have a dnd interaction with a given selection. 
-    This only changes the lemma database. *)
-val filter_db_by_selection : ipath -> Proof.proof -> Proof.proof
-
-(** Filter the lemma database by keeping only the lemmas whose name matches a given pattern.
-    This only changes the lemma database.  *)
-val filter_db_by_name : string -> Proof.proof -> Proof.proof
+val modify_subterm :
+  ('a -> term -> term) -> (int -> term -> 'a -> 'a) -> 'a -> term -> int list -> term
 
 (*********************************************************************************)
 type choice = int * (LEnv.lenv * LEnv.lenv * expr) option

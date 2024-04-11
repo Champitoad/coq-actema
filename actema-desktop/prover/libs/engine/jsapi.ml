@@ -1,7 +1,6 @@
 (* -------------------------------------------------------------------- *)
 open Utils
 open Fo
-open Proof
 
 (* -------------------------------------------------------------------- *)
 type source = Handle.t * [ `C | `H of Handle.t ]
@@ -93,8 +92,7 @@ let rec js_proof_engine (proof : Proof.proof) =
 
     (* Return the given action as a binary, base64-encoded string *)
     method getactionb action =
-      action |> !!(Export.export_action (Proof.hidmap _self##.proof) _self##.proof)
-      |> fun pr ->
+      action |> !!(Export.export_action (Proof.hidmap _self##.proof) _self##.proof) |> fun pr ->
       js_log (pr |> Api.Utils.string_of_action);
       pr |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string
 
@@ -148,23 +146,23 @@ let rec js_proof_engine (proof : Proof.proof) =
               | "dnd" ->
                   let source = Path.of_obj asource##.source in
                   let destination = Path.of_opt asource##.destination in
-                  [ `DnD CoreLogic.{ source; destination } ]
+                  [ `DnD Link.{ source; destination } ]
               | "any" ->
                   let path = Path.of_obj asource##.path in
-                  [ `Click path; `DnD CoreLogic.{ source = path; destination = None } ]
+                  [ `Click path; `DnD Link.{ source = path; destination = None } ]
               | _ -> raise InvalidASource)
           | _ -> raise InvalidASource
         and selection = Path.of_array asource##.selection in
 
-        let asource = List.map (fun kind -> CoreLogic.{ kind; selection }) kinds in
+        let asource = List.map (fun kind -> Link.{ kind; selection }) kinds in
 
-        List.flatten (List.map !!(CoreLogic.actions _self##.proof) asource)
+        List.flatten (List.map !!(Link.actions _self##.proof) asource)
       in
 
       Js.array
         (Array.of_list
            (List.map
-              (fun CoreLogic.{ description = p; icon = ic; highlights = ps; kind = aui; action = a } ->
+              (fun Link.{ description = p; icon = ic; highlights = ps; kind = aui; action = a } ->
                 let ps = List.map CoreLogic.path_of_ipath ps in
                 let ps = Js.array (Array.of_list (List.map Js.string ps)) in
 
@@ -258,7 +256,7 @@ let rec js_proof_engine (proof : Proof.proof) =
       let proof =
         match pattern with
         | None -> proof
-        | Some pattern -> CoreLogic.filter_db_by_name pattern proof
+        | Some pattern -> Link.filter_db_by_name pattern proof
       in
       (* Fiter by selection. *)
       let proof =
@@ -268,7 +266,7 @@ let rec js_proof_engine (proof : Proof.proof) =
             proof
         | Some [ selection ] ->
             Format.printf "Got selection: %s\n" (CoreLogic.path_of_ipath selection);
-            CoreLogic.filter_db_by_selection selection proof
+            Link.filter_db_by_selection selection proof
         | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
       in
       js_proof_engine proof
