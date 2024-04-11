@@ -254,9 +254,7 @@ let rec js_proof_engine (proof : Proof.proof) =
       let proof = _self##.proof in
       (* Fitler by name. *)
       let proof =
-        match pattern with
-        | None -> proof
-        | Some pattern -> Link.filter_db_by_name pattern proof
+        match pattern with None -> proof | Some pattern -> Link.filter_db_by_name pattern proof
       in
       (* Fiter by selection. *)
       let proof =

@@ -2,6 +2,9 @@ open CoreLogic
 open Fo
 open Utils
 
+type link = ipath * ipath
+type hyperlink = ipath list * ipath list
+
 type asource = { kind : asource_kind; selection : selection }
 and asource_kind = [ `Click of ipath | `DnD of adnd | `Ctxt ]
 and adnd = { source : ipath; destination : ipath option }
@@ -44,6 +47,8 @@ type aoutput =
 
 type lpred = Proof.proof -> link -> linkaction list
 type hlpred = Proof.proof -> hyperlink -> linkaction list
+
+let hyperlink_of_link : link -> hyperlink = fun (src, dst) -> ([ src ], [ dst ])
 
 let hlpred_of_lpred : lpred -> hlpred =
  fun p pr -> function [ src ], [ dst ] -> p pr (src, dst) | _ -> []
@@ -95,7 +100,6 @@ let all_vars_ipaths ?(heads = true) Proof.{ g_id; g_pregoal } =
 
 let all_items_ipaths ?heads goal =
   (concl_ipath goal :: all_hyps_ipaths goal) @ all_vars_ipaths ?heads goal
-
 
 (** [t_subs f] returns all the paths leading to a subterm in [t]. *)
 let t_subs (t : term) : int list list =
@@ -161,43 +165,39 @@ let e_subs (f : form) : int list list =
 
   f_aux [] f
 
+let remove_nothing =
+  let rec doit = function
+    | [] -> []
+    | a :: l -> (
+        match a with
+        | `Nothing -> doit l
+        | `Both (a, a') -> begin
+            match doit [ a; a' ] with
+            | [] -> doit l
+            | [ a ] -> a :: doit l
+            | [ a; a' ] -> `Both (a, a') :: doit l
+            | _ -> assert false
+          end
+        | _ -> a :: doit l)
+  in
+  doit
 
-  let remove_nothing =
-    let rec doit = function
-      | [] -> []
-      | a :: l -> (
-          match a with
-          | `Nothing -> doit l
-          | `Both (a, a') -> begin
-              match doit [ a; a' ] with
-              | [] -> doit l
-              | [ a ] -> a :: doit l
-              | [ a; a' ] -> `Both (a, a') :: doit l
-              | _ -> assert false
-            end
-          | _ -> a :: doit l)
-    in
-    doit
-  
-  let string_of_linkaction proof =
-    let rec doit = function
-      | `Nothing -> "⊥"
-      | `Both (a, a') -> Printf.sprintf "(%s, %s)" (doit a) (doit a')
-      | `Subform _ -> "SFL"
-      | `Instantiate _ -> "Instantiate"
-      | `Rewrite (red, res, tgts) ->
-          Printf.sprintf "%s[%s ~> %s]"
-            (List.to_string ~sep:", " ~left:"{" ~right:"}"
-               (fun p ->
-                 let Proof.{ g_pregoal; _ }, _, (_, t) = destr_ipath proof p in
-                 Notation.tostring g_pregoal.g_env t)
-               tgts)
-            red res
-    in
-    doit
-  
-  
-
+let string_of_linkaction proof =
+  let rec doit = function
+    | `Nothing -> "⊥"
+    | `Both (a, a') -> Printf.sprintf "(%s, %s)" (doit a) (doit a')
+    | `Subform _ -> "SFL"
+    | `Instantiate _ -> "Instantiate"
+    | `Rewrite (red, res, tgts) ->
+        Printf.sprintf "%s[%s ~> %s]"
+          (List.to_string ~sep:", " ~left:"{" ~right:"}"
+             (fun p ->
+               let Proof.{ g_pregoal; _ }, _, (_, t) = destr_ipath proof p in
+               Notation.tostring g_pregoal.g_env t)
+             tgts)
+          red res
+  in
+  doit
 
 let search_linkactions ?(fixed_srcs : ipath list option) ?(fixed_dsts : ipath list option)
     (hlp : hlpred) proof ((src, dst) : link) : (hyperlink * linkaction list) list =
@@ -674,17 +674,16 @@ let single_subterm_sel : selpred =
     end
   | _ -> []
 
-  let rebuild_path i =
-    let rec aux l = function 0 -> 0 :: l | i -> aux (1 :: l) (i - 1) in
-    List.rev (aux [] i)
-  
-  let rebuild_pathd l i =
-    if i + 1 = l
-    then [ 1 ]
-    else
-      let rec aux = function 0 -> [] | i -> 0 :: aux (i - 1) in
-      if i = 0 then aux (l - 1) else aux (l - i - 1) @ [ 1 ]
-  
+let rebuild_path i =
+  let rec aux l = function 0 -> 0 :: l | i -> aux (1 :: l) (i - 1) in
+  List.rev (aux [] i)
+
+let rebuild_pathd l i =
+  if i + 1 = l
+  then [ 1 ]
+  else
+    let rec aux = function 0 -> [] | i -> 0 :: aux (i - 1) in
+    if i = 0 then aux (l - 1) else aux (l - i - 1) @ [ 1 ]
 
 let ctxt_actions (sel : selection) (proof : Proof.proof) : aoutput list =
   let selpred = selpred_add [ single_subterm_sel ] in

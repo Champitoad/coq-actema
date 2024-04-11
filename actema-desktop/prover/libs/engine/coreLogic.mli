@@ -11,8 +11,6 @@ type path = string
 type pkind = [ `Hyp | `Concl | `Var of [ `Head | `Body ] ]
 type ctxt = { kind : pkind; handle : int }
 type ipath = { root : int; ctxt : ctxt; sub : int list }
-type link = ipath * ipath
-type hyperlink = ipath list * ipath list
 
 type item =
   [ `C of form  (** Conslusion. *)
@@ -28,19 +26,14 @@ val term_of_item : ?where:[< `Body | `Head > `Body ] -> item -> term
 val ipath_of_path : path -> ipath
 val path_of_ipath : ipath -> path
 val destr_ipath : Proof.proof -> ipath -> Proof.goal * item * (Utils.uid list * term)
-
-val mk_ipath : ?ctxt : ctxt -> ?sub:int list -> int -> ipath
+val mk_ipath : ?ctxt:ctxt -> ?sub:int list -> int -> ipath
 val item_ipath : ipath -> ipath
 val concl_ipath : Proof.goal -> ipath
-
-
 val goal_of_ipath : Proof.proof -> ipath -> Proof.goal
-val gid_of_ipath : Proof.proof -> ipath -> Handle.t 
+val gid_of_ipath : Proof.proof -> ipath -> Handle.t
 val term_of_ipath : Proof.proof -> ipath -> term
 val env_of_ipath : Proof.proof -> ipath -> env
 val is_sub_path : ipath -> ipath -> bool
-
-
 val add_local_def : string * Fo.type_ * Fo.expr -> tactic
 val generalize : Handle.t -> tactic
 val move : Handle.t -> Handle.t option -> tactic
@@ -77,8 +70,15 @@ val modify_direct_subterm : (term -> term) -> term -> int -> term
 val modify_subterm :
   ('a -> term -> term) -> (int -> term -> 'a -> 'a) -> 'a -> term -> int list -> term
 
-(*********************************************************************************)
-type choice = int * (LEnv.lenv * LEnv.lenv * expr) option
-type itrace = choice list
+(** [rewrite_subterm_all env red res t sub] rewrites all occurrences of [red]
+      in the subterm of [t] at subpath [sub] into [res], shifting variables in
+      [red] and [res] whenever a binder is encountered along the path. *)
+val rewrite_subterm_all : env -> term -> term -> term -> int list -> term
 
-val dlink : link -> Form.Subst.subst * Form.Subst.subst -> Proof.proof -> Proof.subgoal * itrace
+(** [rewrite_subterm res t sub] rewrites the subterm of [t] at subpath
+            [sub] into [res], shifting variables in [res] whenever a binder is
+            encountered along the path. *)
+val rewrite_subterm : term -> term -> int list -> term
+
+val subform : form -> int list -> form
+val subexpr : term -> int list -> expr

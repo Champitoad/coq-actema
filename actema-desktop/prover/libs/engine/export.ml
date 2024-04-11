@@ -5,6 +5,7 @@ open Proof
 open Hidmap
 open State
 open CoreLogic
+open Interact
 
 exception UnsupportedAction of Link.action_type
 

@@ -1,6 +1,9 @@
 open CoreLogic
 open Fo
 
+type link = ipath * ipath
+type hyperlink = ipath list * ipath list
+
 type asource = { kind : asource_kind; selection : selection }
 and asource_kind = [ `Click of ipath | `DnD of adnd | `Ctxt ]
 and adnd = { source : ipath; destination : ipath option }
@@ -40,6 +43,8 @@ type aoutput =
   ; kind : osource
   ; action : action
   }
+
+val hyperlink_of_link : link -> hyperlink
 
 (** Get the list of all valid actions on a given proof state. *)
 val actions : Proof.proof -> asource -> aoutput list
