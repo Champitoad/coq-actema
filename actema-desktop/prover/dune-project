@@ -8,16 +8,17 @@
 
 (license CeCILL-B)
 
-(authors "Pierre-Yves Strub <pierre-yves@strub.nu>")
+(authors
+ "Pierre-Yves Strub <pierre-yves@strub.nu>, Mathis Bouverot-Dupuis <mathis.bouverot@ens.psl.eu>")
 
-(maintainers "pierre-yves@strub.nu")
+(maintainers "pierre-yves@strub.nu" , "mathis.bouverot@ens.psl.eu")
 
-(homepage "https://gitlab.com/prover-ui/prover")
+(homepage "https://github.com/Champitoad/coq-actema")
 
-(bug_reports "https://gitlab.com/prover-ui/prover/issues")
+(bug_reports "https://github.com/Champitoad/coq-actema/issues")
 
 (source
- (uri "git+https://gitlab.com/prover-ui/prover.git"))
+ (uri "git+https://github.com/Champitoad/coq-actema.git"))
 
 (package
  (name prover)

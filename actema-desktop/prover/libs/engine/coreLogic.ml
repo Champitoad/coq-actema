@@ -679,7 +679,6 @@ let print_linkage env (mode : [ `Backward | `Forward ]) ((l, _), (r, _)) =
   let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
   Printf.sprintf "%s %s %s" (Notation.f_tostring env l) op (Notation.f_tostring env r)
 
-
 (** [dlink] stands for _d_eep linking, and implements the deep interaction phase
       à la Chaudhuri for intuitionistic logic. *)
 let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.subst)
@@ -746,14 +745,16 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
     (not inv) || List.is_empty sub
   in
 
-  let backward_core (ctx : fctx) (itrace : itrace) 
-    (s : ((LEnv.lenv * subst) * (LEnv.lenv * subst)) ref)
-    (switch_pol : bool ref)
-    ((((l, lsub) as h), ((r, rsub) as c)) as linkage : (form * int list) * (form * int list))
-    =
+  (* I had to refactor [backward_core] out of [backward] to "fix" a very weird bug
+     involving pattern matching. It might be related to the following compiler bug :
+     https://github.com/ocaml/ocaml/issues/7241 *)
+  let backward_core (ctx : fctx)
+      (s : ((LEnv.lenv * subst) * (LEnv.lenv * subst)) ref) (switch_pol : bool ref)
+      ((((l, lsub) as h), ((r, rsub) as c)) as linkage : (form * int list) * (form * int list)) =
     let ((env1, s1) as es1), ((env2, s2) as es2) = !s in
-    begin match linkage with
-    (* Right rules *)
+    begin
+      match linkage with
+      (* Right rules *)
 
       (* R∧s *)
       | _, (FConn (`And, fs), i :: sub) when no_prio `Left h -> begin
@@ -799,12 +800,12 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
                 (Some (CBind (`Exist, x, ty)), (1, None), (h, (f1, sub)))
             | None -> assert false
           end
-    (* R∀s *)
-    | _, (FBind (`Forall, x, ty, f1), 0 :: sub) ->
-        s := (es1, (LEnv.enter env2 x ty, s2));
-        let h = (f_shift (x, 0) l, lsub) in
-        (Some (CBind (`Forall, x, ty)), (1, None), (h, (f1, sub)))
-    (* Left rules *)
+      (* R∀s *)
+      | _, (FBind (`Forall, x, ty, f1), 0 :: sub) ->
+          s := (es1, (LEnv.enter env2 x ty, s2));
+          let h = (f_shift (x, 0) l, lsub) in
+          (Some (CBind (`Forall, x, ty)), (1, None), (h, (f1, sub)))
+      (* Left rules *)
       (* L∧ *)
       | (FConn (`And, fs), i :: sub), _ when no_prio `Right c -> begin
           try (None, (0, None), ((List.at fs i, sub), c))
@@ -850,15 +851,15 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
                 (Some (CBind (`Exist, x, ty)), (0, None), ((f1, sub), c))
             | None -> assert false
           end
-    | _ ->
-        js_log "No backward rule matched\n";
-        raise TacticNotApplicable
+      | _ ->
+          js_log "No backward rule matched\n";
+          raise TacticNotApplicable
     end
   in
 
   let rec backward (ctx : fctx) (itrace : itrace)
-      ((((env1, s1) as es1), ((env2, s2) as es2)) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
-      ((((l, lsub) as h), ((r, rsub) as c)) as linkage : (form * int list) * (form * int list)) :
+      (s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
+      ((((l, _)), ((r, rsub))) as linkage : (form * int list) * (form * int list)) :
       form * itrace =
     (* js_log (Subst.to_string s1 ^ " ⊢ " ^ Subst.to_string s2); *)
     js_log (print_linkage goal.g_env `Backward linkage);
@@ -894,7 +895,7 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
         let ( (ictx : ifctx option)
             , (choice : choice)
             , (linkage : (form * int list) * (form * int list)) ) =
-          backward_core ctx itrace s switch_pol linkage
+          backward_core ctx s switch_pol linkage
         in
         js_log "Finished matching\n";
         let cont = if !switch_pol then forward ~side:1 else backward in

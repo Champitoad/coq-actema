@@ -4,6 +4,8 @@
  (modules parser)
  (flags --explain --inspection --table --dump))
 
+(include_subdirs unqualified)
+
 (library
  (name engine)
  (public_name prover.engine)
@@ -18,6 +20,4 @@
   base64)
  (preprocess
   (pps tyxml-ppx js_of_ocaml-ppx lwt_ppx))
- (synopsis "Mini-prover (engine library)")
- (flags
-  (:standard -w -26 -w -27)))
+ (synopsis "Mini-prover (engine library)"))
