@@ -19,5 +19,5 @@
  (preprocess
   (pps tyxml-ppx js_of_ocaml-ppx lwt_ppx))
  (synopsis "Mini-prover (engine library)")
- ;  (flags -w -8)
- )
+ (flags
+  (:standard -w -26 -w -27)))

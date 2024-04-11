@@ -5,9 +5,6 @@ Require Import ssreflect.
 Context (Socrates : nat).
 Context (Mortal Human : nat -> Prop).
 
-(*About Coq.Arith.Lt.lt_not_le.
-About Coq.Arith.PeanoNat.Nat.eq_add_0.*)
-
 Lemma Aristoteles (hm : forall x, Human x -> Mortal x) 
   (hh : Human Socrates) : Mortal Socrates.
     actema_force.

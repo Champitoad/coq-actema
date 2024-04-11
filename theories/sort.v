@@ -132,7 +132,7 @@ Lemma cat_nil : forall l, concat l lnil = l.
 Admitted.
 
 Lemma test l1 l2 l3 : concat (concat l1 lnil) (concat l2 l3) = concat (concat l1 l2) l3.
-Proof. actema.
+Proof. actema. Qed.
 
 
 Inductive perm : ll -> ll -> Prop :=
