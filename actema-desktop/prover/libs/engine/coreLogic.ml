@@ -265,73 +265,57 @@ let is_sub_path (p : ipath) (sp : ipath) =
 (* -------------------------------------------------------------------- *)
 (** Polarities *)
 
-(** A subformula can either have a positive polarity [Pos], a negative polarity
-      [Neg], or a superposition [Sup] of both.
+module Polarity = struct
+  type t = Pos | Neg | Sup
 
-      For example in the hypothesis (A ⇒ B) ∧ (C ⇔ D), A is positive, B is
-      negative, and C and D can be either, depending on the way the user chooses
-      to rewrite the equivalence. This coincides with the standard linear logic
-      reading of equivalence as the additive conjunction of both directions of an
-      implication. *)
+  let opp = function Pos -> Neg | Neg -> Pos | Sup -> Sup
 
-type pol = Pos | Neg | Sup
+  let of_direct_subform ((p, f) : t * form) (i : int) =
+    match f with
+    | FConn (c, fs) ->
+        let subp = match (c, i) with `Imp, 0 | `Not, 0 -> opp p | `Equiv, _ -> Sup | _, _ -> p in
+        let subf = try List.at fs i with Invalid_argument _ -> raise (InvalidSubFormPath [ i ]) in
+        (subp, subf)
+    | FBind (_, _, _, subf) -> (p, subf)
+    | _ -> raise (InvalidSubFormPath [ i ])
 
-(** [opp p] returns the opposite polarity of [p] *)
-let opp = function Pos -> Neg | Neg -> Pos | Sup -> Sup
+  let of_direct_subterm ((p, t) : t * term) (i : int) =
+    match (t, direct_subterm t i) with
+    | `F f, `F _ ->
+        let p, f = of_direct_subform (p, f) i in
+        (p, `F f)
+    | _, t -> (p, t)
 
-(** [direct_subform_pol (p, f) i] returns the [i]th direct subformula of [f]
-      together with its polarity, given that [f]'s polarity is [p] *)
-let direct_subform_pol ((p, f) : pol * form) (i : int) =
-  match f with
-  | FConn (c, fs) ->
-      let subp = match (c, i) with `Imp, 0 | `Not, 0 -> opp p | `Equiv, _ -> Sup | _, _ -> p in
-      let subf = try List.at fs i with Invalid_argument _ -> raise (InvalidSubFormPath [ i ]) in
-      (subp, subf)
-  | FBind (_, _, _, subf) -> (p, subf)
-  | _ -> raise (InvalidSubFormPath [ i ])
+  let of_subform (p, f) sub =
+    try List.fold_left of_direct_subform (p, f) sub
+    with InvalidSubFormPath _ -> raise (InvalidSubFormPath sub)
 
-let direct_subterm_pol ((p, t) : pol * term) (i : int) =
-  match (t, direct_subterm t i) with
-  | `F f, `F _ ->
-      let p, f = direct_subform_pol (p, f) i in
-      (p, `F f)
-  | _, t -> (p, t)
+  let neg_count (f : form) (sub : int list) : int =
+    let rec aux (n, f) = function
+      | [] -> n
+      | i :: sub -> begin
+          match f with
+          | FConn (c, fs) ->
+              let n = match (c, i) with `Imp, 0 | `Not, 0 -> n + 1 | _ -> n in
+              let subf =
+                try List.at fs i with Invalid_argument _ -> raise (InvalidSubFormPath sub)
+              in
+              aux (n, subf) sub
+          | FBind (_, _, _, subf) -> aux (n, subf) sub
+          | _ -> n
+        end
+    in
+    aux (0, f) sub
 
-(** [subform_pol (p, f) sub] returns the subformula of [f] at path [sub] together
-      with its polarity, given that [f]'s polarity is [p] *)
-let subform_pol (p, f) sub =
-  try List.fold_left direct_subform_pol (p, f) sub
-  with InvalidSubFormPath _ -> raise (InvalidSubFormPath sub)
+  let of_item = function `H _ -> Neg | `C _ -> Pos | `V _ -> Neg
 
-(** [neg_count f sub] counts the number of negations in [f] along path [sub] *)
-let neg_count (f : form) (sub : int list) : int =
-  let rec aux (n, f) = function
-    | [] -> n
-    | i :: sub -> begin
-        match f with
-        | FConn (c, fs) ->
-            let n = match (c, i) with `Imp, 0 | `Not, 0 -> n + 1 | _ -> n in
-            let subf =
-              try List.at fs i with Invalid_argument _ -> raise (InvalidSubFormPath sub)
-            in
-            aux (n, subf) sub
-        | FBind (_, _, _, subf) -> aux (n, subf) sub
-        | _ -> n
-      end
-  in
-  aux (0, f) sub
-
-(** [pol_of_item it] returns the polarity of the item [it] *)
-let pol_of_item = function `H _ -> Neg | `C _ -> Pos | `V _ -> Neg
-
-(** [pol_of_ipath proof p] returns the polarity of the subformula
-      at path [p] in [proof] *)
-let pol_of_ipath (proof : Proof.proof) (p : ipath) : pol =
-  let _, item, (sub, _) = destr_ipath proof p in
-  let pol, form =
-    match item with
-    | `H (_, { h_form = f; _ }) -> (Neg, f)
-    | `C f -> (Pos, f)
-    | `V _ -> raise (InvalidSubFormPath sub)
-  in
-  subform_pol (pol, form) sub |> fst
+  let of_ipath (proof : Proof.proof) (p : ipath) : t =
+    let _, item, (sub, _) = destr_ipath proof p in
+    let pol, form =
+      match item with
+      | `H (_, { h_form = f; _ }) -> (Neg, f)
+      | `C f -> (Pos, f)
+      | `V _ -> raise (InvalidSubFormPath sub)
+    in
+    of_subform (pol, form) sub |> fst
+end

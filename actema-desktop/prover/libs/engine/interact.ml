@@ -25,7 +25,7 @@ let show_itrace env : itrace -> string =
   Utils.List.to_string (show_choice env) ~left:"" ~right:"" ~sep:" "
 
 (** [elim_units f] eliminates all occurrences of units
-      in formula [f] using algebraic unit laws. *)
+    in formula [f] using algebraic unit laws. *)
 let rec elim_units : form -> form = function
   (* Absorbing elements *)
   | FConn (`And, [ _; FFalse ])
@@ -59,7 +59,8 @@ let rec elim_units : form -> form = function
       let f1' = elim_units f1 in
       if f1 = f1' then f else elim_units (FBind (b, x, ty, f1'))
 
-let print_linkage env (mode : [ `Backward | `Forward ]) ((l, _), (r, _)) =
+(** Compute a debug representation of a linkage between formulas. *)
+let show_linkage env (mode : [ `Backward | `Forward ]) ((l, _), (r, _)) =
   let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
   Printf.sprintf "%s %s %s" (Notation.f_tostring env l) op (Notation.f_tostring env r)
 
@@ -244,7 +245,7 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
   let rec backward (ctx : fctx) (itrace : itrace) (s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       (((l, _), (r, rsub)) as linkage : (form * int list) * (form * int list)) : form * itrace =
     (* js_log (Subst.to_string s1 ^ " ⊢ " ^ Subst.to_string s2); *)
-    js_log (print_linkage goal.g_env `Backward linkage);
+    js_log (show_linkage goal.g_env `Backward linkage);
 
     match linkage with
     (* End rules *)
@@ -287,7 +288,7 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
       ((((env1, _) as es1), ((env2, s2) as es2)) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       ((((l, lsub) as h), (r, rsub)) as linkage : (form * int list) * (form * int list)) :
       form * itrace =
-    js_log (print_linkage goal.g_env `Forward linkage);
+    js_log (show_linkage goal.g_env `Forward linkage);
 
     match linkage with
     (* End rules *)

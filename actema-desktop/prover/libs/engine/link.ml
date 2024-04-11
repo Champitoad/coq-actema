@@ -286,10 +286,10 @@ module PreUnif = struct
 
   module State = Monad.State (Env)
 
-  let traverse (p, t) i : (pol * term) State.t =
+  let traverse (p, t) i : (Polarity.t * term) State.t =
     let open State in
     match (p, t) with
-    | Pos, `F (FBind (`Forall, x, _, f)) | Neg, `F (FBind (`Exist, x, _, f)) ->
+    | Polarity.Pos, `F (FBind (`Forall, x, _, f)) | Neg, `F (FBind (`Exist, x, _, f)) ->
         get >>= fun { deps; rnm; subst } ->
         let z = EVars.fresh () in
         let exs = Subst.fold (fun acc (x, t) -> if t = Sflex then x :: acc else acc) [] subst in
@@ -298,7 +298,7 @@ module PreUnif = struct
         put { deps; rnm; subst } >>= fun _ ->
         let f = Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f in
         return (p, `F f)
-    | Neg, `F (FBind (`Forall, x, _, f)) | Pos, `F (FBind (`Exist, x, _, f)) ->
+    | Polarity.Neg, `F (FBind (`Forall, x, _, f)) | Pos, `F (FBind (`Exist, x, _, f)) ->
         get >>= fun ({ rnm; subst; _ } as st) ->
         let z = EVars.fresh () in
         let rnm = (z, x) :: rnm in
@@ -306,7 +306,7 @@ module PreUnif = struct
         put { st with rnm; subst } >>= fun _ ->
         let f = Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f in
         return (p, `F f)
-    | _ -> return (direct_subterm_pol (p, t) i)
+    | _ -> return (Polarity.of_direct_subterm (p, t) i)
 
   let traverse = State.fold traverse
 end
@@ -330,8 +330,8 @@ let wf_subform_link ?(drewrite = false) : lpred =
     try
       let f1, f2 = pair_map form_of_item (item_src, item_dst) in
 
-      let p1 = pol_of_item item_src in
-      let p2 = pol_of_item item_dst in
+      let p1 = Polarity.of_item item_src in
+      let p2 = Polarity.of_item item_dst in
 
       let sub1 = sub_src in
       let sub2 = sub_dst in
@@ -416,7 +416,7 @@ let intuitionistic_link : lpred =
   let neg_count (p : ipath) =
     let _, it, (sub, _) = destr_ipath proof p in
     let f = form_of_item it in
-    let n = neg_count f sub in
+    let n = Polarity.neg_count f sub in
     match it with
     | `C _ -> n
     | `H _ -> n + 1
@@ -453,7 +453,7 @@ let instantiate_link : hlpred =
       (* Check that the witness contains only free variables *)
       if is_free_expr ctxt_wit sub_wit
       then
-        let pol = pol_of_ipath proof p_form in
+        let pol = Polarity.of_ipath proof p_form in
         let f = term_of_ipath proof p_form in
 
         let wit = expr_of_term wit in

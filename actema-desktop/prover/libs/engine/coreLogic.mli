@@ -17,9 +17,6 @@ type item =
   | `H of Handle.t * Proof.hyp  (** Hypothesis. *)
   | `V of vname * bvar  (** Variable. *) ]
 
-(** A polarity : positive, negative or superposed (i.e. both positive and negative). *)
-type pol = Pos | Neg | Sup
-
 val form_of_item : item -> form
 val expr_of_item : ?where:[< `Body | `Head > `Body ] -> item -> expr
 val term_of_item : ?where:[< `Body | `Head > `Body ] -> item -> term
@@ -39,30 +36,6 @@ val generalize : Handle.t -> tactic
 val move : Handle.t -> Handle.t option -> tactic
 val ivariants : targ -> string list
 val evariants : targ -> Handle.t -> string list
-
-(** [opp p] returns the opposite polarity of [p] *)
-val opp : pol -> pol
-
-(** [direct_subform_pol (p, f) i] returns the [i]th direct subformula of [f]
-      together with its polarity, given that [f]'s polarity is [p] *)
-val direct_subform_pol : pol * form -> int -> pol * form
-
-val direct_subterm_pol : pol * term -> int -> pol * term
-
-(** [subform_pol (p, f) sub] returns the subformula of [f] at path [sub] together
-      with its polarity, given that [f]'s polarity is [p] *)
-val subform_pol : pol * form -> int list -> pol * Fo.form
-
-(** [neg_count f sub] counts the number of negations in [f] along path [sub] *)
-val neg_count : form -> int list -> int
-
-(** [pol_of_item it] returns the polarity of the item [it] *)
-val pol_of_item : item -> pol
-
-(** [pol_of_ipath proof p] returns the polarity of the subformula
-    at path [p] in [proof] *)
-val pol_of_ipath : Proof.proof -> ipath -> pol
-
 val direct_subterm : term -> int -> term
 val subterm : term -> int list -> term
 val modify_direct_subterm : (term -> term) -> term -> int -> term
@@ -82,3 +55,45 @@ val rewrite_subterm : term -> term -> int list -> term
 
 val subform : form -> int list -> form
 val subexpr : term -> int list -> expr
+
+(** A subformula can either have a positive polarity [Pos], a negative polarity
+    [Neg], or a superposition [Sup] of both.
+    The interpretation is that :
+    - [Pos] indicates facts that we need to prove (e.g. the conclusion).
+    - [Neg] indicates facts that we know (e.g. a hypothesis).
+    - [Sup] indicates facts that are both.
+
+    For example in the hypothesis [(A ⇒ B) ∧ (C ⇔ D)], A is positive, B is
+    negative, and C and D can be either, depending on the way the user chooses
+    to rewrite the equivalence. This coincides with the standard linear logic
+    reading of equivalence as the additive conjunction of both directions of an
+    implication. *)
+module Polarity : sig
+  (** A polarity : positive, negative or superposed (i.e. both positive and negative). *)
+  type t = Pos | Neg | Sup
+
+  (** [Polarity.opp p] returns the opposite polarity of [p].
+        [Sup] is mapped to itself. *)
+  val opp : t -> t
+
+  (** [Polarity.direct_subform_pol (p, f) i] returns the [i]th direct subformula of [f]
+          together with its polarity, given that [f]'s polarity is [p] *)
+  val of_direct_subform : t * form -> int -> t * form
+
+  (** Assumes both the term and its subterm are formulas, and calls [Polarity.of_direct_subform]. *)
+  val of_direct_subterm : t * term -> int -> t * term
+
+  (** [Polarity.subform_pol (p, f) sub] returns the subformula of [f] at path [sub] together
+          with its polarity, given that [f]'s polarity is [p] *)
+  val of_subform : t * form -> int list -> t * Fo.form
+
+  (** [Polarity.neg_count f sub] counts the number of negations in [f] along path [sub] *)
+  val neg_count : form -> int list -> int
+
+  (** [Polarity.of_item it] returns the polarity of the item [it] *)
+  val of_item : item -> t
+
+  (** [Polarity.of_ipath proof p] returns the polarity of the subformula
+          at path [p] in [proof] *)
+  val of_ipath : Proof.proof -> ipath -> t
+end
