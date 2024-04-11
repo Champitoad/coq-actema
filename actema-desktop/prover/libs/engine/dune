@@ -4,8 +4,6 @@
  (modules parser)
  (flags --explain --inspection --table --dump))
 
-(include_subdirs qualified)
-
 (library
  (name engine)
  (public_name prover.engine)

@@ -748,8 +748,8 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
   (* I had to refactor [backward_core] out of [backward] to "fix" a very weird bug
      involving pattern matching. It might be related to the following compiler bug :
      https://github.com/ocaml/ocaml/issues/7241 *)
-  let backward_core (ctx : fctx)
-      (s : ((LEnv.lenv * subst) * (LEnv.lenv * subst)) ref) (switch_pol : bool ref)
+  let backward_core (ctx : fctx) (s : ((LEnv.lenv * subst) * (LEnv.lenv * subst)) ref)
+      (switch_pol : bool ref)
       ((((l, lsub) as h), ((r, rsub) as c)) as linkage : (form * int list) * (form * int list)) =
     let ((env1, s1) as es1), ((env2, s2) as es2) = !s in
     begin
@@ -857,10 +857,8 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
     end
   in
 
-  let rec backward (ctx : fctx) (itrace : itrace)
-      (s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
-      ((((l, _)), ((r, rsub))) as linkage : (form * int list) * (form * int list)) :
-      form * itrace =
+  let rec backward (ctx : fctx) (itrace : itrace) (s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
+      (((l, _), (r, rsub)) as linkage : (form * int list) * (form * int list)) : form * itrace =
     (* js_log (Subst.to_string s1 ^ " ⊢ " ^ Subst.to_string s2); *)
     js_log (print_linkage goal.g_env `Backward linkage);
 

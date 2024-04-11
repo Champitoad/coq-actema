@@ -51,7 +51,7 @@ let () =
       | DuplicatedEntry (_, name) -> Some ("duplicated entry \"" ^ name ^ "\" in goal")
       | TypingError -> Some "invalid goal (typing error)"
       | RecheckFailure -> Some "invalid goal (recheck failure)"
-      | Logic.Core.TacticNotApplicable -> Some "tactic not applicable"
+      | CoreLogic.TacticNotApplicable -> Some "tactic not applicable"
       | LemmaDB.LemmaNotFound name -> Some ("lemma \"" ^ name ^ "\" does not exist")
       | _ -> None)
 
@@ -67,11 +67,11 @@ let ( !! ) f x =
     Js.Js_error.(raise_ (of_error (new%js Js.error_constr (Js.string msg))))
 
 module Path : sig
-  val of_obj : 'a Js.t -> Logic.Core.ipath
-  val of_array : 'a Js.t Js.js_array Js.t -> Logic.Core.ipath list
-  val of_opt : 'a Js.t Js.opt -> Logic.Core.ipath option
+  val of_obj : 'a Js.t -> CoreLogic.ipath
+  val of_array : 'a Js.t Js.js_array Js.t -> CoreLogic.ipath list
+  val of_opt : 'a Js.t Js.opt -> CoreLogic.ipath option
 end = struct
-  let of_obj obj = obj |> Js.as_string InvalidASource |> Logic.Core.ipath_of_path
+  let of_obj obj = obj |> Js.as_string InvalidASource |> CoreLogic.ipath_of_path
   let of_array obj = obj |> Js.to_array |> Array.to_list |> List.map of_obj
   let of_opt obj = obj |> Js.Opt.to_option |> Option.map of_obj
 end
@@ -93,7 +93,7 @@ let rec js_proof_engine (proof : Proof.proof) =
 
     (* Return the given action as a binary, base64-encoded string *)
     method getactionb action =
-      action |> !!(Logic.Core.Translate.export_action (Proof.hidmap _self##.proof) _self##.proof)
+      action |> !!(CoreLogic.Translate.export_action (Proof.hidmap _self##.proof) _self##.proof)
       |> fun pr ->
       js_log (pr |> Api.Utils.string_of_action);
       pr |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string
@@ -148,28 +148,28 @@ let rec js_proof_engine (proof : Proof.proof) =
               | "dnd" ->
                   let source = Path.of_obj asource##.source in
                   let destination = Path.of_opt asource##.destination in
-                  [ `DnD Logic.Core.{ source; destination } ]
+                  [ `DnD CoreLogic.{ source; destination } ]
               | "any" ->
                   let path = Path.of_obj asource##.path in
-                  [ `Click path; `DnD Logic.Core.{ source = path; destination = None } ]
+                  [ `Click path; `DnD CoreLogic.{ source = path; destination = None } ]
               | _ -> raise InvalidASource)
           | _ -> raise InvalidASource
         and selection = Path.of_array asource##.selection in
 
-        let asource = List.map (fun kind -> Logic.Core.{ kind; selection }) kinds in
+        let asource = List.map (fun kind -> CoreLogic.{ kind; selection }) kinds in
 
-        List.flatten (List.map !!(Logic.Core.actions _self##.proof) asource)
+        List.flatten (List.map !!(CoreLogic.actions _self##.proof) asource)
       in
 
       Js.array
         (Array.of_list
            (List.map
-              (fun Logic.Core.{ description = p; icon = ic; highlights = ps; kind = aui; action = a } ->
-                let ps = List.map Logic.Core.path_of_ipath ps in
+              (fun CoreLogic.{ description = p; icon = ic; highlights = ps; kind = aui; action = a } ->
+                let ps = List.map CoreLogic.path_of_ipath ps in
                 let ps = Js.array (Array.of_list (List.map Js.string ps)) in
 
                 let aui =
-                  let p2p = Logic.Core.path_of_ipath in
+                  let p2p = CoreLogic.path_of_ipath in
 
                   match aui with
                   | `Click p ->
@@ -258,7 +258,7 @@ let rec js_proof_engine (proof : Proof.proof) =
       let proof =
         match pattern with
         | None -> proof
-        | Some pattern -> Logic.Core.filter_db_by_name pattern proof
+        | Some pattern -> CoreLogic.filter_db_by_name pattern proof
       in
       (* Fiter by selection. *)
       let proof =
@@ -267,8 +267,8 @@ let rec js_proof_engine (proof : Proof.proof) =
             Format.printf "No selection\n";
             proof
         | Some [ selection ] ->
-            Format.printf "Got selection: %s\n" (Logic.Core.path_of_ipath selection);
-            Logic.Core.filter_db_by_selection selection proof
+            Format.printf "Got selection: %s\n" (CoreLogic.path_of_ipath selection);
+            CoreLogic.filter_db_by_selection selection proof
         | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
       in
       js_proof_engine proof
@@ -334,7 +334,7 @@ and js_subgoal parent (handle : Handle.t) =
         returned array is meaningful and can be used as argument to [#intro]
         to select the desired introduction rule. *)
     method ivariants =
-      let aout = !!Logic.Core.ivariants (parent##.proof, handle) in
+      let aout = !!CoreLogic.ivariants (parent##.proof, handle) in
       let aout = Array.of_list (List.map Js.string aout) in
       Js.array aout
 
@@ -375,7 +375,7 @@ and js_subgoal parent (handle : Handle.t) =
         let expr = String.trim (Js.to_string expr) in
         let expr = Io.parse_expr (Io.from_string expr) in
         let expr, ty = Form.echeck goal.g_env expr in
-        Logic.Core.add_local_def (Js.to_string name, ty, expr) (parent##.proof, _self##.handle)
+        CoreLogic.add_local_def (Js.to_string name, ty, expr) (parent##.proof, _self##.handle)
       in
       js_proof_engine (!!doit ())
 
@@ -387,7 +387,7 @@ and js_subgoal parent (handle : Handle.t) =
         let expr = String.trim (Js.to_string expr) in
         let name, expr = Io.parse_nexpr (Io.from_string expr) in
         let expr, ty = Form.echeck goal.g_env expr in
-        Logic.Core.add_local_def (Location.unloc name, ty, expr) (parent##.proof, _self##.handle)
+        CoreLogic.add_local_def (Location.unloc name, ty, expr) (parent##.proof, _self##.handle)
       in
       js_proof_engine (!!doit ())
 
@@ -411,13 +411,13 @@ and js_subgoal parent (handle : Handle.t) =
         must be part of this sub-goal. *)
     method movehyp from before =
       let doit () =
-        Logic.Core.move from (Js.Opt.to_option before) (parent##.proof, _self##.handle)
+        CoreLogic.move from (Js.Opt.to_option before) (parent##.proof, _self##.handle)
       in
       js_proof_engine (!!doit ())
 
     (** [this#generalize (h : handle<js_hyps>)] generalizes the hypothesis [h] *)
     method generalize hid =
-      let doit () = Logic.Core.generalize hid (parent##.proof, _self##.handle) in
+      let doit () = CoreLogic.generalize hid (parent##.proof, _self##.handle) in
       js_proof_engine (!!doit ())
 
     method getmeta = Js.Opt.option (Proof.get_meta parent##.proof _self##.handle)
