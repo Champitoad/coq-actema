@@ -93,7 +93,7 @@ let rec js_proof_engine (proof : Proof.proof) =
 
     (* Return the given action as a binary, base64-encoded string *)
     method getactionb action =
-      action |> !!(CoreLogic.Translate.export_action (Proof.hidmap _self##.proof) _self##.proof)
+      action |> !!(Export.export_action (Proof.hidmap _self##.proof) _self##.proof)
       |> fun pr ->
       js_log (pr |> Api.Utils.string_of_action);
       pr |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string

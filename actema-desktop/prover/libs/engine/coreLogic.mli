@@ -82,10 +82,8 @@ val filter_db_by_selection : ipath -> Proof.proof -> Proof.proof
     This only changes the lemma database.  *)
 val filter_db_by_name : string -> Proof.proof -> Proof.proof
 
-module Translate : sig
-  open Hidmap
+(*********************************************************************************)
+type choice = int * (LEnv.lenv * LEnv.lenv * expr) option
+type itrace = choice list
 
-  exception UnsupportedAction of action_type
-
-  val export_action : hidmap -> Proof.proof -> action -> Api.Logic_t.action
-end
+val dlink : link -> Form.Subst.subst * Form.Subst.subst -> Proof.proof -> Proof.subgoal * itrace
