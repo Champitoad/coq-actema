@@ -1,35 +1,35 @@
 open CoreLogic
 open Fo
 
-type link = ipath * ipath
-type hyperlink = ipath list * ipath list
+type link = IPath.t * IPath.t
+type hyperlink = IPath.t list * IPath.t list
 
 type asource = { kind : asource_kind; selection : selection }
-and asource_kind = [ `Click of ipath | `DnD of adnd | `Ctxt ]
-and adnd = { source : ipath; destination : ipath option }
-and selection = ipath list
+and asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ]
+and adnd = { source : IPath.t; destination : IPath.t option }
+and selection = IPath.t list
 
-type osource = [ `Click of ipath | `DnD of link | `Ctxt ]
+type osource = [ `Click of IPath.t | `DnD of link | `Ctxt ]
 
 type linkaction =
   [ `Nothing
   | `Both of linkaction * linkaction
   | `Subform of Form.Subst.subst * Form.Subst.subst
-  | `Instantiate of expr * ipath
-  | `Rewrite of expr * expr * ipath list
-  | `Fold of vname * ipath list
-  | `Unfold of vname * ipath list ]
+  | `Instantiate of expr * IPath.t
+  | `Rewrite of expr * expr * IPath.t list
+  | `Fold of vname * IPath.t list
+  | `Unfold of vname * IPath.t list ]
 
 type action_type =
   [ `Intro of int
   | `Elim of Handle.t * int
   | `Lemma of name
   | `Ind of Handle.t
-  | `Simpl of ipath
-  | `Red of ipath
-  | `Indt of ipath
-  | `Case of ipath
-  | `Pbp of ipath
+  | `Simpl of IPath.t
+  | `Red of IPath.t
+  | `Indt of IPath.t
+  | `Case of IPath.t
+  | `Pbp of IPath.t
   | `Fold of vname
   | `Unfold of vname
   | `Hyperlink of hyperlink * linkaction list ]
@@ -39,7 +39,7 @@ type action = Handle.t * action_type
 type aoutput =
   { description : string
   ; icon : string option
-  ; highlights : ipath list
+  ; highlights : IPath.t list
   ; kind : osource
   ; action : action
   }
@@ -83,8 +83,8 @@ val hlpred_if_empty : hlpred -> hlpred -> hlpred
     and whose destinations (resp. sources) are subterms of [dst] (resp.
     [src]). *)
 val search_linkactions :
-     ?fixed_srcs:ipath list
-  -> ?fixed_dsts:ipath list
+     ?fixed_srcs:IPath.t list
+  -> ?fixed_dsts:IPath.t list
   -> hlpred
   -> Proof.proof
   -> link
@@ -134,7 +134,7 @@ val fold_link : hlpred
 
 (** Filter the lemma database by keeping only the lemmas that have a dnd interaction with a given selection. 
     This only changes the lemma database. *)
-val filter_db_by_selection : ipath -> Proof.proof -> Proof.proof
+val filter_db_by_selection : IPath.t -> Proof.proof -> Proof.proof
 
 (** Filter the lemma database by keeping only the lemmas whose name matches a given pattern.
         This only changes the lemma database.  *)

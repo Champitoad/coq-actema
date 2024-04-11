@@ -2,9 +2,12 @@ open Fo
 open Utils
 
 exception TacticNotApplicable
+exception InvalidSubFormPath of int list
+exception InvalidSubExprPath of int list
 
 type targ = Proof.proof * Handle.t
 type tactic = targ -> Proof.proof
+
 
 let add_local ((name, ty, body) : string * Fo.type_ * Fo.expr option) (goal : Proof.pregoal) :
     Proof.pregoal =
@@ -98,15 +101,6 @@ let term_of_item ?where it =
 (* -------------------------------------------------------------------- *)
 (** Paths *)
 
-type path = string
-type pkind = [ `Hyp | `Concl | `Var of [ `Head | `Body ] ]
-type ctxt = { kind : pkind; handle : int }
-type ipath = { root : int; ctxt : ctxt; sub : int list }
-
-exception InvalidPath of path
-exception InvalidSubFormPath of int list
-exception InvalidSubExprPath of int list
-
 let direct_subterm (t : term) (i : int) : term =
   let open Form in
   try List.at (direct_subterms t) i
@@ -159,108 +153,120 @@ let subform (f : form) (p : int list) =
 let subexpr (t : term) (p : int list) =
   match subterm t p with `E e -> e | _ -> raise (InvalidSubExprPath p)
 
-let mk_ipath ?(ctxt : ctxt = { kind = `Concl; handle = 0 }) ?(sub : int list = []) (root : int) =
+
+module IPath = struct
+  type pkind = [ `Hyp | `Concl | `Var of [ `Head | `Body ] ]
+  type ctxt = { kind : pkind; handle : int }
+  type t = { root : int; ctxt : ctxt; sub : int list }
+
+  exception InvalidPath of string
+
+  let pkind_codes : (pkind, string) BiMap.t =
+    List.fold_left
+      (fun m (a, b) -> BiMap.add a b m)
+      BiMap.empty
+      [ (`Hyp, "H"); (`Concl, "C"); (`Var `Head, "Vh"); (`Var `Body, "Vb") ]
+  
+  let string_of_pkind : pkind -> string = BiMap.find ^~ pkind_codes
+  let pkind_of_string : string -> pkind = BiMap.find ^~ BiMap.inverse pkind_codes
+
+let make ?(ctxt : ctxt = { kind = `Concl; handle = 0 }) ?(sub : int list = []) (root : int) =
   { root; ctxt; sub }
 
-let item_ipath { root; ctxt; _ } = { root; ctxt; sub = [] }
-let concl_ipath Proof.{ g_id; _ } = mk_ipath (Handle.toint g_id)
+  let to_string (p : t) =
+    let pp_sub =
+      Format.pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt "/") Format.pp_print_int
+    in
+    Format.asprintf "%d/%s#%d:%a" p.root (string_of_pkind p.ctxt.kind) p.ctxt.handle pp_sub p.sub
+  
+  let of_string (str : string) =
+    let root, ({ handle; _ } as ctxt), sub =
+      try
+        Scanf.sscanf str "%d/%s@#%d:%s" (fun x1 x2 x3 x4 ->
+            (x1, { kind = pkind_of_string x2; handle = x3 }, x4))
+      with Scanf.Scan_failure _ | Not_found | End_of_file -> raise (Invalid_argument str)
+    in
+  
+    if root < 0 || handle < 0 then raise (InvalidPath str);
+  
+    let sub =
+      let sub = if sub = "" then [] else String.split_on_char '/' sub in
+  
+      try List.map int_of_string sub with Failure _ -> raise (InvalidPath str)
+    in
+  
+    if List.exists (fun x -> x < 0) sub then raise (InvalidPath str);
+  
+    { root; ctxt; sub }
+  
+  let destr (proof : Proof.proof) (p : t) : Proof.goal * item * (uid list * term) =
+    let exn = InvalidPath (to_string p) in
+  
+    let { root; ctxt; sub } = p in
+  
+    let goal = try Proof.byid proof (Handle.ofint root) with Proof.InvalidGoalId _ -> raise exn in
+  
+    let item, t_item =
+      match (ctxt.kind, ctxt.handle) with
+      | `Concl, 0 ->
+          let f = goal.Proof.g_goal in
+          (`C f, `F f)
+      | `Hyp, hd -> begin
+          try
+            let rp = Handle.ofint hd in
+            let ({ Proof.h_form = hf; _ } as hyd) = Proof.Hyps.byid goal.Proof.g_hyps rp in
+            (`H (rp, hyd), `F hf)
+          with Proof.InvalidHyphId _ -> raise exn
+        end
+      | `Var part, hd ->
+          let ((x, (_, body)) as def) = Option.get_exn (Vars.byid goal.g_env (Handle.ofint hd)) exn in
+          let expr = match part with `Head -> EVar x | `Body -> Option.get_exn body exn in
+          (`V def, `E expr)
+      | _ -> raise exn
+    in
+    let target = subterm t_item sub in
+  
+    let goal = Proof.{ g_id = Handle.ofint root; g_pregoal = goal } in
+    (goal, item, (sub, target))
+  
+  let goal proof p =
+    let g, _, _ = destr proof p in
+    g
+  
+  let gid proof p = (goal proof p).g_id
+  
+  let term proof p =
+    let _, _, (_, t) = destr proof p in
+    t
+  
+  let env proof p =
+    let goal, item, (sub, _) = destr proof p in
+    let env = goal.g_pregoal.g_env in
+    match item with
+    | `V _ -> env
+    | `H (_, Proof.{ h_form = f; _ }) | `C f ->
+        let rec aux env t sub =
+          match sub with
+          | [] -> env
+          | i :: sub -> (
+              match (t, i) with
+              | `E _, _ -> env
+              | `F (FBind (_, x, ty, f)), 0 -> aux (Vars.push env (x, (ty, None))) (`F f) sub
+              | `F _, _ -> aux env (direct_subterm t i) sub)
+        in
+        aux env (`F f) sub
+  
+  let subpath p sp =
+    p.root = sp.root && p.ctxt.handle = sp.ctxt.handle
+    && (p.ctxt.kind = sp.ctxt.kind || (p.ctxt.kind = `Var `Head && sp.ctxt.kind = `Var `Body))
+    && List.is_prefix sp.sub p.sub
+  
 
-let pkind_codes : (pkind, string) BiMap.t =
-  List.fold_left
-    (fun m (a, b) -> BiMap.add a b m)
-    BiMap.empty
-    [ (`Hyp, "H"); (`Concl, "C"); (`Var `Head, "Vh"); (`Var `Body, "Vb") ]
+let erase_sub { root; ctxt; _ } = { root; ctxt; sub = [] }
+let to_concl Proof.{ g_id; _ } = make (Handle.toint g_id)
 
-let string_of_pkind : pkind -> string = BiMap.find ^~ pkind_codes
-let pkind_of_string : string -> pkind = BiMap.find ^~ BiMap.inverse pkind_codes
+end
 
-let path_of_ipath (p : ipath) =
-  let pp_sub =
-    Format.pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt "/") Format.pp_print_int
-  in
-  Format.asprintf "%d/%s#%d:%a" p.root (string_of_pkind p.ctxt.kind) p.ctxt.handle pp_sub p.sub
-
-let ipath_of_path (p : path) =
-  let root, ({ handle; _ } as ctxt), sub =
-    try
-      Scanf.sscanf p "%d/%s@#%d:%s" (fun x1 x2 x3 x4 ->
-          (x1, { kind = pkind_of_string x2; handle = x3 }, x4))
-    with Scanf.Scan_failure _ | Not_found | End_of_file -> raise (Invalid_argument p)
-  in
-
-  if root < 0 || handle < 0 then raise (InvalidPath p);
-
-  let sub =
-    let sub = if sub = "" then [] else String.split_on_char '/' sub in
-
-    try List.map int_of_string sub with Failure _ -> raise (InvalidPath p)
-  in
-
-  if List.exists (fun x -> x < 0) sub then raise (InvalidPath p);
-
-  { root; ctxt; sub }
-
-let destr_ipath (proof : Proof.proof) (p : ipath) : Proof.goal * item * (uid list * term) =
-  let exn = InvalidPath (path_of_ipath p) in
-
-  let { root; ctxt; sub } = p in
-
-  let goal = try Proof.byid proof (Handle.ofint root) with Proof.InvalidGoalId _ -> raise exn in
-
-  let item, t_item =
-    match (ctxt.kind, ctxt.handle) with
-    | `Concl, 0 ->
-        let f = goal.Proof.g_goal in
-        (`C f, `F f)
-    | `Hyp, hd -> begin
-        try
-          let rp = Handle.ofint hd in
-          let ({ Proof.h_form = hf; _ } as hyd) = Proof.Hyps.byid goal.Proof.g_hyps rp in
-          (`H (rp, hyd), `F hf)
-        with Proof.InvalidHyphId _ -> raise exn
-      end
-    | `Var part, hd ->
-        let ((x, (_, body)) as def) = Option.get_exn (Vars.byid goal.g_env (Handle.ofint hd)) exn in
-        let expr = match part with `Head -> EVar x | `Body -> Option.get_exn body exn in
-        (`V def, `E expr)
-    | _ -> raise exn
-  in
-  let target = subterm t_item sub in
-
-  let goal = Proof.{ g_id = Handle.ofint root; g_pregoal = goal } in
-  (goal, item, (sub, target))
-
-let goal_of_ipath (proof : Proof.proof) (p : ipath) : Proof.goal =
-  let g, _, _ = destr_ipath proof p in
-  g
-
-let gid_of_ipath (proof : Proof.proof) (p : ipath) : Handle.t = (goal_of_ipath proof p).g_id
-
-let term_of_ipath (proof : Proof.proof) (p : ipath) : term =
-  let _, _, (_, t) = destr_ipath proof p in
-  t
-
-let env_of_ipath (proof : Proof.proof) (p : ipath) : env =
-  let goal, item, (sub, _) = destr_ipath proof p in
-  let env = goal.g_pregoal.g_env in
-  match item with
-  | `V _ -> env
-  | `H (_, Proof.{ h_form = f; _ }) | `C f ->
-      let rec aux env t sub =
-        match sub with
-        | [] -> env
-        | i :: sub -> (
-            match (t, i) with
-            | `E _, _ -> env
-            | `F (FBind (_, x, ty, f)), 0 -> aux (Vars.push env (x, (ty, None))) (`F f) sub
-            | `F _, _ -> aux env (direct_subterm t i) sub)
-      in
-      aux env (`F f) sub
-
-let is_sub_path (p : ipath) (sp : ipath) =
-  p.root = sp.root && p.ctxt.handle = sp.ctxt.handle
-  && (p.ctxt.kind = sp.ctxt.kind || (p.ctxt.kind = `Var `Head && sp.ctxt.kind = `Var `Body))
-  && List.is_prefix sp.sub p.sub
 
 (* -------------------------------------------------------------------- *)
 (** Polarities *)
@@ -309,8 +315,8 @@ module Polarity = struct
 
   let of_item = function `H _ -> Neg | `C _ -> Pos | `V _ -> Neg
 
-  let of_ipath (proof : Proof.proof) (p : ipath) : t =
-    let _, item, (sub, _) = destr_ipath proof p in
+  let of_ipath (proof : Proof.proof) (p : IPath.t) : t =
+    let _, item, (sub, _) = IPath.destr proof p in
     let pol, form =
       match item with
       | `H (_, { h_form = f; _ }) -> (Neg, f)

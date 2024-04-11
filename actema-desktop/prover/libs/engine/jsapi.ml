@@ -65,15 +65,11 @@ let ( !! ) f x =
     in
     Js.Js_error.(raise_ (of_error (new%js Js.error_constr (Js.string msg))))
 
-module Path : sig
-  val of_obj : 'a Js.t -> CoreLogic.ipath
-  val of_array : 'a Js.t Js.js_array Js.t -> CoreLogic.ipath list
-  val of_opt : 'a Js.t Js.opt -> CoreLogic.ipath option
-end = struct
-  let of_obj obj = obj |> Js.as_string InvalidASource |> CoreLogic.ipath_of_path
-  let of_array obj = obj |> Js.to_array |> Array.to_list |> List.map of_obj
-  let of_opt obj = obj |> Js.Opt.to_option |> Option.map of_obj
-end
+let ipath_of_obj obj = 
+  obj |> Js.as_string InvalidASource |> CoreLogic.IPath.of_string
+let ipath_of_array obj = obj |> Js.to_array |> Array.to_list |> List.map ipath_of_obj
+let ipath_of_opt obj = obj |> Js.Opt.to_option |> Option.map ipath_of_obj
+
 
 (* -------------------------------------------------------------------- *)
 let rec js_proof_engine (proof : Proof.proof) =
@@ -135,24 +131,24 @@ let rec js_proof_engine (proof : Proof.proof) =
       let actions =
         let kinds =
           match Js.to_string (Js.typeof asource) with
-          | "string" -> [ `Click (Path.of_obj asource) ]
+          | "string" -> [ `Click (ipath_of_obj asource) ]
           | "object" -> (
               let asource = Js.Unsafe.coerce asource in
               match Js.as_string InvalidASource asource##.kind with
               | "click" ->
-                  let path = Path.of_obj asource##.path in
+                  let path = ipath_of_obj asource##.path in
                   [ `Click path ]
               | "ctxt" -> [ `Ctxt ]
               | "dnd" ->
-                  let source = Path.of_obj asource##.source in
-                  let destination = Path.of_opt asource##.destination in
+                  let source = ipath_of_obj asource##.source in
+                  let destination = ipath_of_opt asource##.destination in
                   [ `DnD Link.{ source; destination } ]
               | "any" ->
-                  let path = Path.of_obj asource##.path in
+                  let path = ipath_of_obj asource##.path in
                   [ `Click path; `DnD Link.{ source = path; destination = None } ]
               | _ -> raise InvalidASource)
           | _ -> raise InvalidASource
-        and selection = Path.of_array asource##.selection in
+        and selection = ipath_of_array asource##.selection in
 
         let asource = List.map (fun kind -> Link.{ kind; selection }) kinds in
 
@@ -163,23 +159,23 @@ let rec js_proof_engine (proof : Proof.proof) =
         (Array.of_list
            (List.map
               (fun Link.{ description = p; icon = ic; highlights = ps; kind = aui; action = a } ->
-                let ps = List.map CoreLogic.path_of_ipath ps in
+                let ps = List.map CoreLogic.IPath.to_string ps in
                 let ps = Js.array (Array.of_list (List.map Js.string ps)) in
 
                 let aui =
-                  let p2p = CoreLogic.path_of_ipath in
+                  let pp = CoreLogic.IPath.to_string in
 
                   match aui with
                   | `Click p ->
                       Js.Unsafe.obj
                         [| ("kind", Js.Unsafe.inject (Js.string "click"))
-                         ; ("target", Js.Unsafe.inject (Js.string (p2p p)))
+                         ; ("target", Js.Unsafe.inject (Js.string (pp p)))
                         |]
                   | `DnD (src, dst) ->
                       Js.Unsafe.obj
                         [| ("kind", Js.Unsafe.inject (Js.string "dnd"))
-                         ; ("source", Js.Unsafe.inject (Js.string (p2p src)))
-                         ; ("destination", Js.Unsafe.inject (Js.string (p2p dst)))
+                         ; ("source", Js.Unsafe.inject (Js.string (pp src)))
+                         ; ("destination", Js.Unsafe.inject (Js.string (pp dst)))
                         |]
                   | `Ctxt -> Js.Unsafe.obj [| ("kind", Js.Unsafe.inject (Js.string "ctxt")) |]
                 in
@@ -249,7 +245,7 @@ let rec js_proof_engine (proof : Proof.proof) =
       in
       Format.printf "Got pattern: %s\n" (Option.default "[none]" pattern);
       (* Convert the selection from JS to ocaml. *)
-      let selection = selection |> Js.Optdef.to_option |> Option.map Path.of_array in
+      let selection = selection |> Js.Optdef.to_option |> Option.map ipath_of_array in
       (* Get the proof. *)
       let proof = _self##.proof in
       (* Fitler by name. *)
@@ -263,7 +259,7 @@ let rec js_proof_engine (proof : Proof.proof) =
             Format.printf "No selection\n";
             proof
         | Some [ selection ] ->
-            Format.printf "Got selection: %s\n" (CoreLogic.path_of_ipath selection);
+            Format.printf "Got selection: %s\n" (CoreLogic.IPath.to_string selection);
             Link.filter_db_by_selection selection proof
         | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
       in

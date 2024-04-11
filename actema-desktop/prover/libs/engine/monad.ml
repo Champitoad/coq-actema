@@ -96,12 +96,14 @@ end
 module Option : sig
   include Core with type 'a t = 'a option
 
+  val guard : bool -> unit t
   val fold : ('a -> 'b -> 'a) -> 'a -> 'b t -> 'a
   val concat : 'a t t -> 'a t
   val concat_map : ('a -> 'b t) -> 'a t -> 'b t
 end = struct
   type 'a t = 'a option
 
+  let guard b = if b then Some () else None
   let fold f acc = function None -> acc | Some v -> f acc v
   let concat = function Some (Some x) -> Some x | _ -> None
   let concat_map f x = Option.(concat (map f x))

@@ -1,36 +1,59 @@
 open Fo
 
 exception TacticNotApplicable
-exception InvalidPath of string
 exception InvalidSubFormPath of int list
 exception InvalidSubExprPath of int list
 
 type targ = Proof.proof * Handle.t
 type tactic = targ -> Proof.proof
-type path = string
-type pkind = [ `Hyp | `Concl | `Var of [ `Head | `Body ] ]
-type ctxt = { kind : pkind; handle : int }
-type ipath = { root : int; ctxt : ctxt; sub : int list }
 
 type item =
   [ `C of form  (** Conslusion. *)
   | `H of Handle.t * Proof.hyp  (** Hypothesis. *)
   | `V of vname * bvar  (** Variable. *) ]
 
+module IPath : sig 
+  type pkind = [ `Hyp | `Concl | `Var of [ `Head | `Body ] ]
+  type ctxt = { kind : pkind; handle : int }
+  type t = { root : int; ctxt : ctxt; sub : int list }
+  
+  (** The [string] argument contains the path (encoded as text). *)
+  exception InvalidPath of string
+  
+  (** Create a new path. *)
+  val make : ?ctxt:ctxt -> ?sub:int list -> int -> t
+  (** Destruct a path, i.e. get all the information relevant to a path. *)
+  val destr : Proof.proof -> t -> Proof.goal * item * (Utils.uid list * term)
+
+  (** Decode a path encoded as a string. *)
+  val of_string : string -> t
+  (** Encode a path to a string. *)
+  val to_string : t -> string
+ 
+  (** [IPath.subpath p1 p2] checks whether [p1] is a subpath of [p2]. *)
+  val subpath : t -> t -> bool
+
+  (** Set the [sub] parts of a path to the empty list. *)
+  val erase_sub : t -> t
+
+  (** Make a path to the (root of the) conclusion of a goal. *)
+  val to_concl : Proof.goal -> t
+
+  (** Return the goal that contains the path. *)
+  val goal : Proof.proof -> t -> Proof.goal
+  (** Return the identifer of the goal that contains the path. *)
+  val gid : Proof.proof -> t -> Handle.t
+  (** Return the subterm pointed at by the path. *)
+  val term : Proof.proof -> t -> term
+  (** Given that the path points to a subterm [t], return the environment that is valid at [t] 
+      (i.e. contains local variables bound by quantifiers above [t]). *)
+  val env : Proof.proof -> t -> env
+end
+
 val form_of_item : item -> form
 val expr_of_item : ?where:[< `Body | `Head > `Body ] -> item -> expr
 val term_of_item : ?where:[< `Body | `Head > `Body ] -> item -> term
-val ipath_of_path : path -> ipath
-val path_of_ipath : ipath -> path
-val destr_ipath : Proof.proof -> ipath -> Proof.goal * item * (Utils.uid list * term)
-val mk_ipath : ?ctxt:ctxt -> ?sub:int list -> int -> ipath
-val item_ipath : ipath -> ipath
-val concl_ipath : Proof.goal -> ipath
-val goal_of_ipath : Proof.proof -> ipath -> Proof.goal
-val gid_of_ipath : Proof.proof -> ipath -> Handle.t
-val term_of_ipath : Proof.proof -> ipath -> term
-val env_of_ipath : Proof.proof -> ipath -> env
-val is_sub_path : ipath -> ipath -> bool
+
 val add_local_def : string * Fo.type_ * Fo.expr -> tactic
 val generalize : Handle.t -> tactic
 val move : Handle.t -> Handle.t option -> tactic
@@ -95,5 +118,5 @@ module Polarity : sig
 
   (** [Polarity.of_ipath proof p] returns the polarity of the subformula
           at path [p] in [proof] *)
-  val of_ipath : Proof.proof -> ipath -> t
+  val of_ipath : Proof.proof -> IPath.t -> t
 end

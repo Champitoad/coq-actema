@@ -2,35 +2,35 @@ open CoreLogic
 open Fo
 open Utils
 
-type link = ipath * ipath
-type hyperlink = ipath list * ipath list
+type link = IPath.t * IPath.t
+type hyperlink = IPath.t list * IPath.t list
 
 type asource = { kind : asource_kind; selection : selection }
-and asource_kind = [ `Click of ipath | `DnD of adnd | `Ctxt ]
-and adnd = { source : ipath; destination : ipath option }
-and selection = ipath list
+and asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ]
+and adnd = { source : IPath.t; destination : IPath.t option }
+and selection = IPath.t list
 
-type osource = [ `Click of ipath | `DnD of link | `Ctxt ]
+type osource = [ `Click of IPath.t | `DnD of link | `Ctxt ]
 
 type linkaction =
   [ `Nothing
   | `Both of linkaction * linkaction
   | `Subform of Form.Subst.subst * Form.Subst.subst
-  | `Instantiate of expr * ipath
-  | `Rewrite of expr * expr * ipath list
-  | `Fold of vname * ipath list
-  | `Unfold of vname * ipath list ]
+  | `Instantiate of expr * IPath.t
+  | `Rewrite of expr * expr * IPath.t list
+  | `Fold of vname * IPath.t list
+  | `Unfold of vname * IPath.t list ]
 
 type action_type =
   [ `Intro of int
   | `Elim of Handle.t * int
   | `Lemma of name
   | `Ind of Handle.t
-  | `Simpl of ipath
-  | `Red of ipath
-  | `Indt of ipath
-  | `Case of ipath
-  | `Pbp of ipath
+  | `Simpl of IPath.t
+  | `Red of IPath.t
+  | `Indt of IPath.t
+  | `Case of IPath.t
+  | `Pbp of IPath.t
   | `Fold of vname
   | `Unfold of vname
   | `Hyperlink of hyperlink * linkaction list ]
@@ -40,7 +40,7 @@ type action = Handle.t * action_type
 type aoutput =
   { description : string
   ; icon : string option
-  ; highlights : ipath list
+  ; highlights : IPath.t list
   ; kind : osource
   ; action : action
   }
@@ -77,7 +77,7 @@ let all_hyps_ipaths Proof.{ g_id; g_pregoal } =
   |> (* Create a list of paths to each hypothesis *)
   List.map
     begin
-      fun hd -> mk_ipath (Handle.toint g_id) ~ctxt:{ kind = `Hyp; handle = Handle.toint hd }
+      fun hd -> IPath.make (Handle.toint g_id) ~ctxt:{ kind = `Hyp; handle = Handle.toint hd }
     end
 
 let all_vars_ipaths ?(heads = true) Proof.{ g_id; g_pregoal } =
@@ -89,17 +89,18 @@ let all_vars_ipaths ?(heads = true) Proof.{ g_id; g_pregoal } =
     begin
       fun hd ->
         (if heads
-         then [ mk_ipath (Handle.toint g_id) ~ctxt:{ kind = `Var `Head; handle = Handle.toint hd } ]
+         then
+           [ IPath.make (Handle.toint g_id) ~ctxt:{ kind = `Var `Head; handle = Handle.toint hd } ]
          else [])
         @
         match Vars.byid env hd with
         | Some (_, (_, Some _)) ->
-            [ mk_ipath (Handle.toint g_id) ~ctxt:{ kind = `Var `Body; handle = Handle.toint hd } ]
+            [ IPath.make (Handle.toint g_id) ~ctxt:{ kind = `Var `Body; handle = Handle.toint hd } ]
         | _ -> []
     end
 
 let all_items_ipaths ?heads goal =
-  (concl_ipath goal :: all_hyps_ipaths goal) @ all_vars_ipaths ?heads goal
+  (IPath.to_concl goal :: all_hyps_ipaths goal) @ all_vars_ipaths ?heads goal
 
 (** [t_subs f] returns all the paths leading to a subterm in [t]. *)
 let t_subs (t : term) : int list list =
@@ -192,16 +193,16 @@ let string_of_linkaction proof =
         Printf.sprintf "%s[%s ~> %s]"
           (List.to_string ~sep:", " ~left:"{" ~right:"}"
              (fun p ->
-               let Proof.{ g_pregoal; _ }, _, (_, t) = destr_ipath proof p in
+               let Proof.{ g_pregoal; _ }, _, (_, t) = IPath.destr proof p in
                Notation.tostring g_pregoal.g_env t)
              tgts)
           red res
   in
   doit
 
-let search_linkactions ?(fixed_srcs : ipath list option) ?(fixed_dsts : ipath list option)
+let search_linkactions ?(fixed_srcs : IPath.t list option) ?(fixed_dsts : IPath.t list option)
     (hlp : hlpred) proof ((src, dst) : link) : (hyperlink * linkaction list) list =
-  let subpath p sub = { root = p.root; ctxt = p.ctxt; sub = p.sub @ sub } in
+  let subpath p sub = IPath.{ root = p.root; ctxt = p.ctxt; sub = p.sub @ sub } in
 
   let query_actions lnk =
     match hlp proof lnk with _ :: _ as actions -> [ (lnk, actions) ] | [] -> []
@@ -211,14 +212,14 @@ let search_linkactions ?(fixed_srcs : ipath list option) ?(fixed_dsts : ipath li
   match (fixed_srcs, fixed_dsts) with
   | Some srcs, Some dsts -> query_actions (srcs, dsts)
   | Some srcs, None ->
-      let _, _, (_, t_dst) = destr_ipath proof dst in
+      let _, _, (_, t_dst) = IPath.destr proof dst in
       t_subs t_dst >>= fun sub_dst -> query_actions (srcs, [ subpath dst sub_dst ])
   | None, Some dsts ->
-      let _, _, (_, t_src) = destr_ipath proof src in
+      let _, _, (_, t_src) = IPath.destr proof src in
       t_subs t_src >>= fun sub_src -> query_actions ([ subpath src sub_src ], dsts)
   | None, None ->
-      let _, _, (_, t_src) = destr_ipath proof src in
-      let _, _, (_, t_dst) = destr_ipath proof dst in
+      let _, _, (_, t_src) = IPath.destr proof src in
+      let _, _, (_, t_dst) = IPath.destr proof dst in
       t_subs t_src >>= fun sub_src ->
       t_subs t_dst >>= fun sub_dst ->
       query_actions ([ subpath src sub_src ], [ subpath dst sub_dst ])
@@ -314,18 +315,18 @@ end
 let wf_subform_link ?(drewrite = false) : lpred =
   let open Form in
   let open PreUnif in
-  let is_eq_operand proof (p : ipath) =
+  let is_eq_operand proof (p : IPath.t) =
     try
       let eq_sub = List.(remove_at (length p.sub - 1) p.sub) in
       let eq_path = { p with sub = eq_sub } in
-      let _, _, (_, t) = destr_ipath proof eq_path in
+      let _, _, (_, t) = IPath.destr proof eq_path in
       match t with `F (FPred ("_EQ", _)) -> true | _ -> false
     with Invalid_argument _ -> false
   in
 
   fun proof (src, dst) ->
-    let goal, item_src, (sub_src, t_src) = destr_ipath proof src in
-    let _, item_dst, (sub_dst, t_dst) = destr_ipath proof dst in
+    let goal, item_src, (sub_src, t_src) = IPath.destr proof src in
+    let _, item_dst, (sub_dst, t_dst) = IPath.destr proof dst in
 
     try
       let f1, f2 = pair_map form_of_item (item_src, item_dst) in
@@ -369,8 +370,8 @@ let wf_subform_link ?(drewrite = false) : lpred =
             when drewrite
                  &&
                  let env = goal.g_pregoal.g_env in
-                 let ty1 = einfer (env_of_ipath proof src) (expr_of_term t_src) in
-                 let ty2 = einfer (env_of_ipath proof dst) (expr_of_term t_dst) in
+                 let ty1 = einfer (IPath.env proof src) (expr_of_term t_src) in
+                 let ty2 = einfer (IPath.env proof dst) (expr_of_term t_dst) in
                  Form.(t_equal env ty1 ty2) ->
               let eq1, eq2 = pair_map (is_eq_operand proof) (src, dst) in
               begin
@@ -413,8 +414,8 @@ let wf_subform_link ?(drewrite = false) : lpred =
 
 let intuitionistic_link : lpred =
  fun proof (src, dst) ->
-  let neg_count (p : ipath) =
-    let _, it, (sub, _) = destr_ipath proof p in
+  let neg_count (p : IPath.t) =
+    let _, it, (sub, _) = IPath.destr proof p in
     let f = form_of_item it in
     let n = Polarity.neg_count f sub in
     match it with
@@ -445,7 +446,7 @@ let instantiate_link : hlpred =
   fun proof (srcs, dsts) ->
     (* Link to quantified subformula *)
     let to_form p_wit p_form =
-      let Proof.{ g_pregoal = goal; _ }, item_wit, (sub_wit, wit) = destr_ipath proof p_wit in
+      let Proof.{ g_pregoal = goal; _ }, item_wit, (sub_wit, wit) = IPath.destr proof p_wit in
 
       let where = match p_wit.ctxt.kind with `Var w -> w | _ -> `Body in
       let ctxt_wit = term_of_item ~where item_wit in
@@ -454,7 +455,7 @@ let instantiate_link : hlpred =
       if is_free_expr ctxt_wit sub_wit
       then
         let pol = Polarity.of_ipath proof p_form in
-        let f = term_of_ipath proof p_form in
+        let f = IPath.term proof p_form in
 
         let wit = expr_of_term wit in
         let ty_wit = Form.einfer goal.g_env wit in
@@ -472,7 +473,7 @@ let instantiate_link : hlpred =
     (* Link to quantified occurrences *)
     match (srcs, dsts) with
     | [ src ], [ dst ] -> begin
-        match pair_map (term_of_ipath proof) (src, dst) with
+        match pair_map (IPath.term proof) (src, dst) with
         | `E _, `F _ -> to_form src dst
         | `F _, `E _ -> to_form dst src
         | `E _, `E _ -> [] (* TODO *)
@@ -482,10 +483,10 @@ let instantiate_link : hlpred =
 
 let rewrite_link : hlpred =
  fun proof lnk ->
-  let rewrite_data (p : ipath) =
+  let rewrite_data (p : IPath.t) =
     if p.ctxt.kind = `Hyp
     then
-      let _, it, _ = destr_ipath proof p in
+      let _, it, _ = IPath.destr proof p in
       match (p.sub, form_of_item it) with
       | [ 0 ], FPred ("_EQ", [ red; res ]) | [ 1 ], FPred ("_EQ", [ res; red ]) -> Some (red, res)
       | _ -> None
@@ -498,7 +499,7 @@ let rewrite_link : hlpred =
        disambiguate by rewriting into the destination *)
     | ([ _ ], [ dst ]), (Some (red, res), Some _) -> [ `Rewrite (red, res, [ dst ]) ]
     | ([ _ ], tgts), (Some (red, res), _) | (tgts, [ _ ]), (_, Some (red, res)) ->
-        if List.exists (fun p -> p.ctxt.kind = `Var `Head) tgts
+        if List.exists (fun p -> p.IPath.ctxt.kind = `Var `Head) tgts
         then []
         else [ `Rewrite (red, res, tgts) ]
     | _ -> []
@@ -507,8 +508,8 @@ let rewrite_link : hlpred =
 
 let fold_link : hlpred =
  fun proof lnk ->
-  let fold_data (p : ipath) =
-    let _, it, _ = destr_ipath proof p in
+  let fold_data (p : IPath.t) =
+    let _, it, _ = IPath.destr proof p in
     match (it, p.ctxt.kind, p.sub) with
     | `V (x, (_, Some _)), `Var where, [] -> Some (x, where)
     | _ -> None
@@ -520,7 +521,7 @@ let fold_link : hlpred =
        disambiguate by folding in the destination *)
     | ([ _ ], [ dst ]), (Some (x, `Body), Some (_, `Body)) -> [ `Fold (x, [ dst ]) ]
     | ([ p ], tgts), (Some (x, where), _) | (tgts, [ p ]), (_, Some (x, where)) ->
-        let is_head p = p.ctxt.kind = `Var `Head in
+        let is_head p = p.IPath.ctxt.kind = `Var `Head in
         if where = `Head
         then if List.exists is_head tgts then [] else [ `Unfold (x, tgts) ]
         else begin
@@ -550,12 +551,12 @@ let fold_link : hlpred =
       will search for destinations everywhere in the current goal.
  *)
 let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) : aoutput list =
-  let (Proof.{ g_id; _ } as goal) = goal_of_ipath proof dnd.source in
+  let (Proof.{ g_id; _ } as goal) = IPath.goal proof dnd.source in
 
-  let srcsel : selection = List.filter (is_sub_path dnd.source) selection in
+  let srcsel : selection = List.filter (IPath.subpath dnd.source) selection in
 
   let dstsel : selection =
-    List.remove_if (fun p -> p.ctxt.handle = dnd.source.ctxt.handle) selection
+    List.remove_if (fun p -> p.IPath.ctxt.handle = dnd.source.ctxt.handle) selection
   in
 
   let hlpred_only_sel (p : hlpred) : hlpred =
@@ -577,7 +578,7 @@ let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) : ao
     begin
       match srcsel with
       | [] -> ([ dnd.source ], None)
-      | srcs -> ([ mk_ipath (Handle.toint g_id) ], Some srcs)
+      | srcs -> ([ IPath.make (Handle.toint g_id) ], Some srcs)
     end
   in
 
@@ -595,7 +596,7 @@ let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) : ao
             end
           in
           (dsts, None)
-      | dsts -> ([ mk_ipath (Handle.toint g_id) ], Some dsts)
+      | dsts -> ([ IPath.make (Handle.toint g_id) ], Some dsts)
     end
   in
 
@@ -628,7 +629,7 @@ let single_subterm_sel : selpred =
     ; icon = Some "arrow-up-right-dots"
     ; highlights = sel
     ; kind = `Ctxt
-    ; action = (gid_of_ipath proof tgt, `Indt tgt)
+    ; action = (IPath.gid proof tgt, `Indt tgt)
     }
   in
 
@@ -637,7 +638,7 @@ let single_subterm_sel : selpred =
     ; icon = Some "list"
     ; highlights = sel
     ; kind = `Ctxt
-    ; action = (gid_of_ipath proof tgt, `Case tgt)
+    ; action = (IPath.gid proof tgt, `Case tgt)
     }
   in
 
@@ -646,7 +647,7 @@ let single_subterm_sel : selpred =
     ; icon = Some "hand-pointer"
     ; highlights = sel
     ; kind = `Ctxt
-    ; action = (gid_of_ipath proof tgt, `Pbp tgt)
+    ; action = (IPath.gid proof tgt, `Pbp tgt)
     }
   in
 
@@ -659,13 +660,13 @@ let single_subterm_sel : selpred =
             ; icon = Some "wand-magic-sparkles"
             ; highlights = sel
             ; kind = `Ctxt
-            ; action = (gid_of_ipath proof tgt, `Simpl tgt)
+            ; action = (IPath.gid proof tgt, `Simpl tgt)
             }
           ; { description = "Unfold"
             ; icon = Some "magnifying-glass"
             ; highlights = sel
             ; kind = `Ctxt
-            ; action = (gid_of_ipath proof tgt, `Red tgt)
+            ; action = (IPath.gid proof tgt, `Red tgt)
             }
           ; induction tgt
           ; case_eq tgt
@@ -692,7 +693,7 @@ let ctxt_actions (sel : selection) (proof : Proof.proof) : aoutput list =
 let actions (proof : Proof.proof) (p : asource) : aoutput list =
   match p.kind with
   | `Click path -> begin
-      let Proof.{ g_id = hd; g_pregoal = goal }, item, (_, _) = destr_ipath proof path in
+      let Proof.{ g_id = hd; g_pregoal = goal }, item, (_, _) = IPath.destr proof path in
       match item with
       | `C _ -> begin
           let iv = ivariants (proof, hd) in
@@ -700,7 +701,7 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
           List.mapi
             (fun i x ->
               let hg =
-                mk_ipath (Handle.toint hd)
+                IPath.make (Handle.toint hd)
                   ~sub:(if bv then [] else rebuild_pathd (List.length iv) i)
               in
               { description = x
@@ -717,7 +718,7 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
           List.mapi
             (fun i x ->
               let hg =
-                mk_ipath (Handle.toint hd)
+                IPath.make (Handle.toint hd)
                   ~ctxt:{ kind = `Hyp; handle = Handle.toint rp }
                   ~sub:(if bv then [] else rebuild_pathd (List.length ev) i)
               in
@@ -731,7 +732,7 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
       | `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
           let rp = Vars.getid goal.g_env x |> Option.get in
           let hg =
-            mk_ipath (Handle.toint hd) ~ctxt:{ kind = `Var `Head; handle = Handle.toint rp }
+            IPath.make (Handle.toint hd) ~ctxt:{ kind = `Var `Head; handle = Handle.toint rp }
           in
           [ { description = "Induction"
             ; icon = None
@@ -744,10 +745,10 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
           let rp = Vars.getid goal.g_env x |> Option.get in
 
           let hg_unfold =
-            mk_ipath (Handle.toint hd) ~ctxt:{ kind = `Var `Head; handle = Handle.toint rp }
+            IPath.make (Handle.toint hd) ~ctxt:{ kind = `Var `Head; handle = Handle.toint rp }
           in
           let hg_fold =
-            mk_ipath (Handle.toint hd) ~ctxt:{ kind = `Var `Body; handle = Handle.toint rp }
+            IPath.make (Handle.toint hd) ~ctxt:{ kind = `Var `Body; handle = Handle.toint rp }
           in
 
           [ { description = "Unfold"
@@ -803,7 +804,7 @@ let filter_db_by_selection selection proof =
              (* Make a new goal that has :
                 - the lemma as a local hypothesis.
                 - its environment extended with the environment of the lemma database. *)
-             let Proof.{ g_id; g_pregoal = sub } = goal_of_ipath proof selection in
+             let Proof.{ g_id; g_pregoal = sub } = IPath.goal proof selection in
              let hd = Handle.fresh () in
              let sub =
                let hyp = Proof.mk_hyp stmt in
@@ -816,16 +817,18 @@ let filter_db_by_selection selection proof =
              let g_id = List.hd g_ids in
              (* Create a path to the root of the new hypothesis (representing the lemma). *)
              let lemma_path =
-               mk_ipath ~ctxt:{ kind = `Hyp; handle = Handle.toint hd } (Handle.toint g_id)
+               IPath.make ~ctxt:{ kind = `Hyp; handle = Handle.toint hd } (Handle.toint g_id)
              in
              (* Make sure the path to the selection is in the new goal. *)
-             let selection = mk_ipath ~ctxt:selection.ctxt ~sub:selection.sub (Handle.toint g_id) in
+             let selection =
+               IPath.make ~ctxt:selection.ctxt ~sub:selection.sub (Handle.toint g_id)
+             in
              (* Compute all linkactions. *)
              let linkactions =
                (* Here the source of the linkaction is fixed to the selection (no subterms),
                   but the destination is not fixed (we consider all subterms of the lemma). *)
                search_linkactions filter proof ~fixed_srcs:[ selection ]
-                 (mk_ipath (Handle.toint g_id), lemma_path)
+                 (IPath.make (Handle.toint g_id), lemma_path)
              in
              not @@ List.is_empty linkactions
          end

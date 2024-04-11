@@ -9,7 +9,7 @@ open Interact
 
 exception UnsupportedAction of Link.action_type
 
-let of_ctxt (ctxt : ctxt) : Logic_t.ctxt State.t =
+let of_ctxt (ctxt : IPath.ctxt) : Logic_t.ctxt State.t =
   let* uid =
     match ctxt.kind with
     | `Concl -> return "concl"
@@ -17,7 +17,7 @@ let of_ctxt (ctxt : ctxt) : Logic_t.ctxt State.t =
   in
   return Logic_t.{ kind = ctxt.kind; handle = uid }
 
-let of_ipath (p : ipath) : Logic_t.ipath State.t =
+let of_ipath (p : IPath.t) : Logic_t.ipath State.t =
   let* ctxt = of_ctxt p.ctxt in
   return Logic_t.{ ctxt; sub = p.sub }
 

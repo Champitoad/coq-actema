@@ -71,8 +71,8 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
   let open Form in
   let open Subst in
   let open Proof in
-  let { g_pregoal = goal; _ }, item_src, (sub_src, t_src) = destr_ipath proof src in
-  let _, item_dst, (sub_dst, t_dst) = destr_ipath proof dst in
+  let { g_pregoal = goal; _ }, item_src, (sub_src, t_src) = IPath.destr proof src in
+  let _, item_dst, (sub_dst, t_dst) = IPath.destr proof dst in
 
   begin
     match (t_src, t_dst) with `F _, `E _ | `E _, `F _ -> raise TacticNotApplicable | _ -> ()
