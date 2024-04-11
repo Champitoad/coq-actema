@@ -4,7 +4,7 @@
  (modules parser)
  (flags --explain --inspection --table --dump))
 
-(include_subdirs unqualified)
+(include_subdirs qualified)
 
 (library
  (name engine)
