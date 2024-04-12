@@ -64,8 +64,8 @@ let show_linkage env (mode : [ `Backward | `Forward ]) ((l, _), (r, _)) =
   let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
   Printf.sprintf "%s %s %s" (Notation.f_tostring env l) op (Notation.f_tostring env r)
 
-(** [dlink] stands for _d_eep linking, and implements the deep interaction phase
-      à la Chaudhuri for intuitionistic logic. *)
+(** This function is a horrible mess and should be refactored.
+    Some tests would also be a great idea : I encountered weird bugs in here. *)
 let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.subst)
     (proof : Proof.proof) : Proof.subgoal * itrace =
   let open Form in
@@ -208,7 +208,6 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
         end
       (* L⇒₂ *)
       | (FConn (`Imp, [ f1; f2 ]), 1 :: sub), _ when no_prio `Right c ->
-          js_log "L⇒₂\n";
           (Some (CConn (`And, [ f1 ], 1)), (0, None), ((f2, sub), c))
       (* L⇔₁ *)
       | (FConn (`Equiv, [ f1; f2 ]), 0 :: sub), _ when no_prio `Right c ->
@@ -238,9 +237,7 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
                 (Some (CBind (`Exist, x, ty)), (0, None), ((f1, sub), c))
             | None -> assert false
           end
-      | _ ->
-          js_log "No backward rule matched\n";
-          raise Tactics.TacticNotApplicable
+      | _ -> raise Tactics.TacticNotApplicable
     end
   in
 
@@ -282,7 +279,6 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
             , (linkage : (form * int list) * (form * int list)) ) =
           backward_core ctx s switch_pol linkage
         in
-        js_log "Finished matching\n";
         let cont = if !switch_pol then forward ~side:1 else backward in
         let ctx = match ictx with Some i -> i :: ctx | None -> ctx in
         cont ctx (choice :: itrace) !s linkage

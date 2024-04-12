@@ -73,7 +73,7 @@ type pregoal = { g_env : env; g_hyps : Hyps.t; g_goal : form }
 type pregoals = pregoal list
 type goal = { g_id : Handle.t; g_pregoal : pregoal }
 type meta = < > Js_of_ocaml.Js.t
-type lemma_db = { db_env : env ; db_map : (string, Fo.form) Map.t }
+type lemma_db = { db_env : env; db_map : (string, Fo.form) Map.t }
 
 type proof =
   { p_goals : (Handle.t, goal) Map.t
@@ -100,7 +100,7 @@ let init (env : env) (hyps : form list) (goal : form) =
 
   { p_goals = Map.singleton uid goal
   ; p_meta = ref Map.empty
-  ; p_db = { db_env = env ; db_map = Map.empty }
+  ; p_db = { db_env = env; db_map = Map.empty }
   ; p_hm = Hidmap.empty
   }
 
@@ -121,7 +121,7 @@ let ginit (hm : Hidmap.hidmap) (pregoals : pregoal list) : proof =
       Map.empty pregoals
   in
 
-  { p_goals; p_meta = ref Map.empty; p_db = { db_env = Env.empty; db_map = Map.empty } ; p_hm = hm }
+  { p_goals; p_meta = ref Map.empty; p_db = { db_env = Env.empty; db_map = Map.empty }; p_hm = hm }
 
 let get_db (proof : proof) = proof.p_db
 let set_db (proof : proof) (db : lemma_db) = { proof with p_db = db }

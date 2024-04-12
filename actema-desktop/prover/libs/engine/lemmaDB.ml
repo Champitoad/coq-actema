@@ -33,7 +33,7 @@ let filter_by_selection selection proof =
   (* Filter the lemma database. *)
   let db = proof |> Proof.get_db in
   let new_map =
-    db.db_map 
+    db.db_map
     |> Map.filter
          begin
            fun _name stmt ->

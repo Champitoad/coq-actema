@@ -209,9 +209,7 @@ let rec js_proof_engine (proof : Proof.proof) =
       (* Check the lemmas are all well-typed in the database environment. *)
       List.iter (fun (_name, form) -> Fo.Form.recheck env form) lemmas;
       (* Create the lemma database. *)
-      let db =
-        Proof.{ db_env = env ; db_map = Map.of_seq @@ List.to_seq lemmas }
-      in
+      let db = Proof.{ db_env = env; db_map = Map.of_seq @@ List.to_seq lemmas } in
       (* Print debug info. *)
       Format.printf "Received lemmas\n";
       Format.printf "count=%d\n" (List.length lemmas);
@@ -222,12 +220,9 @@ let rec js_proof_engine (proof : Proof.proof) =
         Returns an array of lemmas. Each lemma contains two strings : (full-name, pretty-printed-formula) *)
     method getlemmas =
       let db = _self##.proof |> Proof.get_db in
-      db.db_map 
-      |> Map.bindings
+      db.db_map |> Map.bindings
       |> List.map (fun (name, form) ->
-             let stmt =
-               Notation.f_tostring db.db_env form |> Js.string |> Js.Unsafe.inject
-             in
+             let stmt = Notation.f_tostring db.db_env form |> Js.string |> Js.Unsafe.inject in
              (name, stmt))
       |> Array.of_list |> Js.Unsafe.obj
 
@@ -349,7 +344,8 @@ and js_subgoal parent (handle : Handle.t) =
         (* Check the lemma database contains the lemma name (and raise LemmaNotFound if it doesn't),
            and recheck the lemma's statement (just to make sure). *)
         let db = Proof.get_db parent##.proof in
-        let stmt = Option.get_exn (Map.find_opt name db.db_map) (Failure ("lemma not found " ^ name))
+        let stmt =
+          Option.get_exn (Map.find_opt name db.db_map) (Failure ("lemma not found " ^ name))
         in
         Form.recheck db.db_env stmt;
         Format.printf "recheck ok\n";
