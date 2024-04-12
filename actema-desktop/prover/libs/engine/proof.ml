@@ -73,7 +73,7 @@ type pregoal = { g_env : env; g_hyps : Hyps.t; g_goal : form }
 type pregoals = pregoal list
 type goal = { g_id : Handle.t; g_pregoal : pregoal }
 type meta = < > Js_of_ocaml.Js.t
-type lemma_db = { db_env : env; db_map : (string, Fo.form) Map.t }
+type lemma_db = { db_env : env; db_map : (string, string * Fo.form) Map.t }
 
 type proof =
   { p_goals : (Handle.t, goal) Map.t

@@ -65,9 +65,19 @@ type agoal = {
   a_concl : form;
 }
 
-(* A single lemma *)
-type lemma = (name * form)
+(* A lemma has a "user name" : the name we display to the user,
+   and a "full name" : a potentially not very readable encoding 
+   of its name (but still useful for debug purposes).
 
+   For instance the underlying Coq term might be a constant or an inductive constructor,
+   and this results in a different full name.
+   
+   The prover can think of the full name as an abstract identifier for the lemma. *)
+type lemma = { 
+  l_user: name;
+  l_full: name;
+  l_stmt: form;  
+}
 (* A lemma database. *)
 type lemmadb = (env * lemma list)
 

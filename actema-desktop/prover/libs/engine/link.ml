@@ -157,7 +157,7 @@ module Pred = struct
     let rec doit = function
       | `Nothing -> "⊥"
       | `Both (a, a') -> Printf.sprintf "(%s, %s)" (doit a) (doit a')
-      | `Subform _ -> "SFL"
+      | `Subform _ -> "SubFormulaLinking"
       | `Instantiate _ -> "Instantiate"
       | `Rewrite (red, res, tgts) ->
           Printf.sprintf "%s[%s ~> %s]"
@@ -170,6 +170,7 @@ module Pred = struct
     in
     doit
 
+  (** This module implements unification for subformula linking. *)
   module PreUnif = struct
     open Form
 
@@ -214,7 +215,7 @@ module Pred = struct
              [{deps; rnm; subst}]
             
            where:
- 
+
            - [deps] is a directed graph recording the dependency relation between
              existential and eigenvariables, in the same spirit of the dependency
              relation of expansion trees.
@@ -236,7 +237,8 @@ module Pred = struct
     let traverse (p, t) i : (Polarity.t * term) State.t =
       let open State in
       match (p, t) with
-      | Polarity.Pos, `F (FBind (`Forall, x, _, f)) | Neg, `F (FBind (`Exist, x, _, f)) ->
+      | Polarity.Pos, `F (FBind (`Forall, x, _, f)) 
+      | Polarity.Neg, `F (FBind (`Exist, x, _, f)) ->
           get >>= fun { deps; rnm; subst } ->
           let z = EVars.fresh () in
           let exs = Subst.fold (fun acc (x, t) -> if t = Sflex then x :: acc else acc) [] subst in
@@ -245,7 +247,8 @@ module Pred = struct
           put { deps; rnm; subst } >>= fun _ ->
           let f = Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f in
           return (p, `F f)
-      | Polarity.Neg, `F (FBind (`Forall, x, _, f)) | Pos, `F (FBind (`Exist, x, _, f)) ->
+      | Polarity.Neg, `F (FBind (`Forall, x, _, f)) 
+      | Polarity.Pos, `F (FBind (`Exist, x, _, f)) ->
           get >>= fun ({ rnm; subst; _ } as st) ->
           let z = EVars.fresh () in
           let rnm = (z, x) :: rnm in
@@ -275,8 +278,9 @@ module Pred = struct
       let _, item_dst, (sub_dst, t_dst) = IPath.destr proof dst in
 
       try
-        let f1, f2 = pair_map form_of_item (item_src, item_dst) in
-
+        let f1 = form_of_item item_src in
+        let f2 = form_of_item item_dst in
+        
         let p1 = Polarity.of_item item_src in
         let p2 = Polarity.of_item item_dst in
 
@@ -306,8 +310,10 @@ module Pred = struct
             match (st1, st2) with
             (* Subformula linking *)
             | `F f1, `F f2 when not drewrite -> begin
+                (* Check that the two subformulas have opposite polarities. *)
                 match (sp1, sp2) with
                 | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
+                    (* Unify the two subformulas. *)
                     f_unify goal.g_pregoal.g_env LEnv.empty s [ (f1, f2) ]
                 | _ -> None
               end

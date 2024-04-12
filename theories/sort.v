@@ -131,8 +131,16 @@ Admitted.
 Lemma cat_nil : forall l, concat l lnil = l.
 Admitted.
 
+Definition f : ll -> Prop. Admitted.
+
+Lemma cat_nil_comm : forall l, f (concat l lnil).
+Proof. Admitted.
+
+Lemma dummy : True.
+actema_force.
+
 Lemma test l1 l2 l3 : concat (concat l1 lnil) (concat l2 l3) = concat (concat l1 l2) l3.
-Proof. actema. Qed.
+Proof. actema_force. Qed.
 
 
 Inductive perm : ll -> ll -> Prop :=
@@ -140,12 +148,9 @@ Inductive perm : ll -> ll -> Prop :=
 | perm_app : forall a l1 l2,  perm (lcons a (concat l1 l2)) (concat l1 (lcons a l2))
 | perm_trans : forall l1 l2 l3, perm l1 l2 -> perm l2 l3 -> perm l1 l3.
 
-Definition perm_refl' := perm_refl.
-
-Lemma test : forall l, perm l l.
-Proof. actema.
 
 Lemma addnS : forall n m, n + S m = S (n + m).
+actema.
 Admitted.
 
 Lemma addn0 : forall n, n + 0 = n.

@@ -270,9 +270,28 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
 module Dest = Monads.StateOption(FOSign)
 
 
+let rec print_modpath mpath = 
+  match mpath with 
+  | Names.ModPath.MPdot (mpath, label) -> 
+      print_modpath mpath ^ " DOT " ^ Names.Label.to_string label
+  | Names.ModPath.MPfile dirpath -> 
+      let dirs = List.rev @@ Names.DirPath.repr dirpath in 
+      "MPfile " ^ Extlib.List.to_string ~sep:"." Names.Id.to_string dirs 
+  | Names.ModPath.MPbound bid -> 
+      let (_, id, dirpath) = Names.MBId.repr bid in
+      let dirs = List.rev @@ Names.DirPath.repr dirpath in 
+      "MPbound " ^ Extlib.List.to_string ~sep:"." Names.Id.to_string dirs ^ " " ^ Names.Id.to_string id
+  
 let test_tac : unit tactic =
   Goal.enter begin fun coq_goal ->
-    let (env, evd) = Goal.env coq_goal, Goal.sigma coq_goal in
-    Export.test_global_env coq_goal;
+    let globals = Environ.Globals.view (Goal.env coq_goal).env_globals in
+    List.iter begin fun (cname, _) -> 
+      let mpath = cname |> Names.Constant.canonical |> Names.KerName.modpath in 
+      let label = cname |> Names.Constant.canonical |> Names.KerName.label in 
+      if Names.Label.to_string label = "target424242" then
+        Log.str @@ Format.sprintf "%s --> %s" 
+          (print_modpath mpath) 
+          (Names.Label.to_string label)
+    end (Names.Cmap_env.bindings globals.constants);
     PVMonad.return ()
   end 

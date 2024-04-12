@@ -316,16 +316,9 @@ export default {
             console.log("Updating lemma dropdown.");
             let lemmas = Object.entries(this.$parent.proofState.getlemmas());
 
-            // Get the short version of a lemma name.
-            // Example : "Coq.ZArith.BinInt.Z.Private_Div.NZQuot.add_mod"
-            // gets shortened to "add_mod".
-            let shorten = function (name) {
-                let parts = name.split('.');
-                return parts[parts.length - 1];
-            };
-
             this.lemmaList = _.map(lemmas, l => {
-                return { shortName: shorten(l[0]), name: l[0], stmt: l[1] }
+                //console.log(l);
+                return { name: l[1][0], shortName: l[1][1], stmt: l[1][2] }
             });
 
             // Force a re-render of the lemma list.

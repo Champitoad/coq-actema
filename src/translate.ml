@@ -655,6 +655,29 @@ module Export = struct
     | `FConn (conn, forms) -> List.exists form_contains_dummy forms
     | `FBind (kind, x, ty, f) -> form_contains_dummy f
 
+  (** Encode the full name of a lemma. *)
+  let encode_lemma_name (name : Names.Constant.t) : string option =
+    (* Split a module path into a directory path and the rest. *)
+    let rec split_mpath mpath = 
+      match mpath with 
+      | Names.ModPath.MPfile dirpath -> List.rev_map Names.Id.to_string (Names.DirPath.repr dirpath), []
+      | Names.ModPath.MPdot (mpath, label) -> 
+          let dirpath, rest = split_mpath mpath in 
+          dirpath, rest @ [Names.Label.to_string label]
+      | Names.ModPath.MPbound _ -> 
+          (* Functor arguments are not supported (yet). *)
+          raise @@ Invalid_argument "split_mpath"
+    in
+    try 
+      let dirpath, modpath = split_mpath @@ Names.Constant.modpath name in
+      let res = 
+        Format.sprintf "%s/%s:%s" 
+          (List.to_string ~sep:"." ~left:"" ~right:"" Fun.id dirpath) 
+          (List.to_string ~sep:"." ~left:"" ~right:"" Fun.id modpath)
+          (Names.Label.to_string @@ Names.Constant.label name)
+      in Some res
+    with Invalid_argument _ -> None
+
   (** Collect all the lemmas we can translate to Actema. *)
   let collect_lemmas ({ env = coq_env; evd } as e : destenv) : Logic_t.lemma list State.t =
     let g_consts = 
@@ -668,14 +691,21 @@ module Export = struct
     in
     State.fold begin fun lemmas (id, (ckey, _)) ->
       let open State in
-      let name = id |> Names.Constant.to_string in
-      let ty = ckey.Declarations.const_type |> EConstr.of_constr in
-      
-      let* form = dest_form (e, ty) in
-      if not (form_contains_dummy form) then
-        return @@ (name, form) :: lemmas
-      else 
-        return lemmas
+      (* First check whether we can encode the lemma name. *)
+      begin match encode_lemma_name id with 
+      | None -> return lemmas 
+      | Some l_full ->
+          let l_user = id |> Names.Constant.label |> Names.Label.to_string in
+          let ty = ckey.Declarations.const_type |> EConstr.of_constr in
+          let* l_stmt = dest_form (e, ty) in
+
+          (** Check we did indeed manage to translate the lemma. 
+              Discard the lemma if it is not the case. *)
+          if not (form_contains_dummy l_stmt) then
+            return @@ Logic_t.{ l_user; l_full; l_stmt } :: lemmas
+          else 
+            return lemmas
+      end
     end [] g_consts
 
   let hyps ({ env = coq_env; evd } as e : destenv) : Logic_t.hyp list State.t =
@@ -728,18 +758,6 @@ module Export = struct
     State.run 
       (collect_lemmas { env = Goal.env goal; evd = Goal.sigma goal }) 
       init_sign
-  
-
-  let test_global_env (goal : Goal.t) : unit =
-    let open State in
-    let lemmas = collect_lemmas { env = Goal.env goal; evd = Goal.sigma goal} in 
-    let lemmas, sign = run lemmas peano in
-    
-    Log.str @@ Format.sprintf "Length of lemmas = %d\n" (List.length lemmas);
-    List.iter begin fun (name, form) -> 
-      Log.str @@ Format.sprintf "LEMMA %s\n%s" name (Utils.string_of_form form)
-    end lemmas;
-    Log.str @@ Utils.string_of_env @@ env_of_varsign (NameMap.empty, sign)
 end
 
 (* -------------------------------------------------------------------- *)
@@ -997,36 +1015,30 @@ module Import = struct
       (mpath_to_string mpath) 
       (Names.Label.to_string label)
 
-  (** Find a lemma by name in the coq environment.
-      The difficuly here is that the name is a string, 
-      i.e. we lost the information about which part is the MPfile/MPdot. *)
-  let find_lemma (name : string) (coq_env : Environ.env) 
-    : Names.Constant.t list =
-    (* Split a module path into a list of strings. *)
-    let rec split_mpath mpath = 
-      match mpath with 
-      | Names.ModPath.MPdot (mpath, label) -> 
-          split_mpath mpath @ [Names.Label.to_string label]
-      | Names.ModPath.MPfile dirpath -> 
-          List.rev_map Names.Id.to_string @@ Names.DirPath.repr dirpath
-      | Names.ModPath.MPbound bid -> 
-          let (_, id, dirpath) = Names.MBId.repr bid in
-          (List.rev_map Names.Id.to_string @@ Names.DirPath.repr dirpath) @ [Names.Id.to_string id]
+  (** Decode a lemma name, as encoded by Export.encode_lemma_name. *)
+  let decode_lemma_name (name : string) : Names.Constant.t =
+    let parse dirpath modpath label =
+      let dirpath = 
+        String.split_on_char '.' dirpath
+        |> List.rev_map Names.Id.of_string
+        |> Names.DirPath.make
+      in
+      let modpath = 
+        String.split_on_char '.' modpath 
+        |> List.map Names.Label.make
+      in 
+      let modpath = 
+        List.fold_left begin fun acc label -> 
+          Names.ModPath.MPdot (acc, label) 
+        end (Names.ModPath.MPfile dirpath) modpath
+      in
+      let label = Names.Label.make label in
+      Names.Constant.make2 modpath label
     in
-    (* Filter the constant map. *)
-    let split = String.split_on_char '.' name in
-    (Environ.Globals.view coq_env.env_globals).constants
-    |> Names.Cmap_env.bindings
-    |> List.filter_map 
-        begin fun (cname, _) ->
-          let mpath = Names.KerName.modpath @@ Names.Constant.canonical cname in
-          let label = Names.KerName.label @@ Names.Constant.canonical cname in
-          if split = split_mpath mpath @ [Names.Label.to_string label] then 
-            Some cname 
-          else 
-            None
-        end
+    try Scanf.sscanf name "%s@/%s@:%s" parse
+    with _ -> raise @@ InvalidLemma (name, "Could not decode the lemma name.")
 
+  
   let action (sign : FOSign.t) (goal : Logic_t.goal) (coq_goal : Goal.t)
              (a : Logic_t.action) : unit tactic =
     let open PVMonad in
@@ -1035,16 +1047,13 @@ module Import = struct
         Tacticals.tclIDTAC
 
     | `ALemma full_name ->
-        (* Check the lemma exists in the environment,
-           and retrieve its coq name. *)
-        let cname = 
-          match find_lemma full_name (Goal.env coq_goal) with 
-          | [] -> raise @@ InvalidLemma (full_name, "Name matches no lemma the COQ environment.")
-          | [ cname ] -> cname
-          | _ -> raise @@ InvalidLemma (full_name, "Name matches multiples lemmas in the COQ environment.")
-        in 
+        (* Decode the lemma name (this can raise InvalidLemma). *)
+        let cname = decode_lemma_name full_name in
+        (* Check the lemma exists in the environment. *)
+        if not @@ Environ.mem_constant cname (Goal.env coq_goal) then 
+          raise @@ InvalidLemma (full_name, "Name matches no lemma in the COQ environment.");
         (* Choose a name for the hypothesis. *)
-        let basename = Extlib.List.last @@ String.split_on_char '.' full_name in
+        let basename = Names.Label.to_string @@ Names.Constant.label cname in
         let hyp_name = Names.Name.mk_name @@ Goal.fresh_name ~basename coq_goal () in
         (* Create a term containing the lemma. *)
         let ((_, inst), _) = UnivGen.fresh_constant_instance (Goal.env coq_goal) cname in 

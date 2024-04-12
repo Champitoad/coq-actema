@@ -52,7 +52,7 @@ type linkaction =
   | `Both of linkaction * linkaction
   | `Subform of Form.Subst.subst * Form.Subst.subst  (** Subformula linking. *)
   | `Instantiate of expr * IPath.t
-  | `Rewrite of expr * expr * IPath.t list  (** Deep rewrite. *)
+  | `Rewrite of expr * expr * IPath.t list  (** Rewrite expression [e1] into [e2] at several paths. *)
   | `Fold of vname * IPath.t list
   | `Unfold of vname * IPath.t list ]
 
@@ -135,7 +135,9 @@ module Pred : sig
              
       If the check succeeds, it returns a [`Rewrite (red, res, tgts)] link
       action, where [red] and [res] are respectively the reduced ([e]) and
-      residual expressions, and [tgts] are the targeted subterms. *)
+      residual expressions, and [tgts] are the targeted subterms. 
+      
+      This does NOT allow deep rewriting (i.e. the equality must be at the root of a hypothesis). *)
   val rewrite : hlpred
 
   (** [Pred.fold lnk] checks if [lnk] is a fold hyperlink. That is, one

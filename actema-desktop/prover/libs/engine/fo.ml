@@ -1717,14 +1717,13 @@ end = struct
     | EFun (_, ts) -> List.fold_left (fun b t -> b || occurs_under x t) false ts
     | _ -> false
 
+  exception Invalid_constant
+
   (** [e_unify env s eqns] implements a variant of Martelli and Montanari's
       unification algorithm on a list of term equations [eqns], with additional
       handling of a substitution [s] holding the list of bindings and unifiable (or
       "flex") variables, and a local environment [lenv] holding a context of locally
       bound variables. *)
-
-  exception Invalid_constant
-
   let rec e_unify (venv : env) (lenv : LEnv.lenv) (s : Subst.subst) = function
     (* success *)
     | [] -> Some (Subst.close s)

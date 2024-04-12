@@ -8,13 +8,13 @@ let filter_by_name pattern proof =
     db.db_map
     |> Map.filter
          begin
-           fun name _stmt ->
+           fun _full_name (user_name, _stmt) ->
              (* Check that the pattern is an exact substring of the lemma's name.
                 The test is case-insensitive. *)
-             let name = String.lowercase_ascii name in
+             let user_name = String.lowercase_ascii user_name in
              let pattern = String.lowercase_ascii pattern in
              try
-               ignore (String.find name pattern);
+               ignore (String.find user_name pattern);
                true
              with Not_found -> false
          end
@@ -36,7 +36,7 @@ let filter_by_selection selection proof =
     db.db_map
     |> Map.filter
          begin
-           fun _name stmt ->
+           fun _full_name (_user_name, stmt) ->
              (* Make a new goal that has :
                 - the lemma as a local hypothesis.
                 - its environment extended with the environment of the lemma database. *)

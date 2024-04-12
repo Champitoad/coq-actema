@@ -204,27 +204,38 @@ let rec js_proof_engine (proof : Proof.proof) =
         datab |> Js.to_string |> Base64.decode_exn |> Api.Logic_b.lemmadb_of_string
       in
       (* Translate the lemmas and env to the actema format. *)
-      let lemmas = List.map (fun (name, form) -> (name, Fo.Translate.to_form form)) lemmas in
+      let lemmas = 
+        List.map begin fun Api.Logic_t.{ l_user; l_full; l_stmt } -> 
+          l_full, (l_user, Fo.Translate.to_form l_stmt)
+        end lemmas
+      in
       let env = Hidmap.State.run (Fo.Translate.to_env env) Hidmap.empty in
       (* Check the lemmas are all well-typed in the database environment. *)
-      List.iter (fun (_name, form) -> Fo.Form.recheck env form) lemmas;
+      List.iter (fun (_, (_, form)) -> Fo.Form.recheck env form) lemmas;
       (* Create the lemma database. *)
       let db = Proof.{ db_env = env; db_map = Map.of_seq @@ List.to_seq lemmas } in
       (* Print debug info. *)
-      Format.printf "Received lemmas\n";
-      Format.printf "count=%d\n" (List.length lemmas);
+      js_log "Received lemmas\n";
+      js_log @@ Format.sprintf "count=%d\n" (List.length lemmas);
+      List.iter (fun (name, _) -> js_log name) lemmas;
+      (* Load the lemmas in the database. *)
       let new_proof = Proof.set_db _self##.proof db in
       js_proof_engine new_proof
 
-    (** Serialize the current lemma database into a JS object. 
-        Returns an array of lemmas. Each lemma contains two strings : (full-name, pretty-printed-formula) *)
+    (** Serialize the current lemma database into a JS array. 
+        Returns an array of lemmas. Each lemma contains three strings : (full-name, user-name, pretty-printed-formula) *)
     method getlemmas =
       let db = _self##.proof |> Proof.get_db in
-      db.db_map |> Map.bindings
-      |> List.map (fun (name, form) ->
-             let stmt = Notation.f_tostring db.db_env form |> Js.string |> Js.Unsafe.inject in
-             (name, stmt))
-      |> Array.of_list |> Js.Unsafe.obj
+      db.db_map 
+      |> Map.bindings
+      |> List.map begin fun (full_name, (user_name, form)) ->
+          let full_name = full_name |> Js.string in
+          let user_name = user_name |> Js.string in
+          let stmt = Notation.f_tostring db.db_env form |> Js.string in
+             Js.array [| full_name; user_name; stmt |]
+         end
+      |> Array.of_list 
+      |> Js.array
 
     (** Filter the lemma database according to :
         - the current selection.
@@ -236,7 +247,7 @@ let rec js_proof_engine (proof : Proof.proof) =
         pattern |> Js.Optdef.to_option
         |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
       in
-      Format.printf "Got pattern: %s\n" (Option.default "[none]" pattern);
+      js_log @@ Format.sprintf "Got pattern: %s\n" (Option.default "[none]" pattern);
       (* Convert the selection from JS to ocaml. *)
       let selection = selection |> Js.Optdef.to_option |> Option.map ipath_of_array in
       (* Get the proof. *)
@@ -249,10 +260,8 @@ let rec js_proof_engine (proof : Proof.proof) =
       let proof =
         match selection with
         | None | Some [] ->
-            Format.printf "No selection\n";
             proof
         | Some [ selection ] ->
-            Format.printf "Got selection: %s\n" (CoreLogic.IPath.to_string selection);
             LemmaDB.filter_by_selection selection proof
         | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
       in
@@ -336,21 +345,21 @@ and js_subgoal parent (handle : Handle.t) =
       in
       !!doit ()
 
-    (** [this#addlemmab (name : string)] return the base64-encoded string of the corresponding ALemma action. *)
-    method addlemmab name =
+    (** [this#addlemmab (full_name : string)] return the base64-encoded string of the corresponding ALemma action. *)
+    method addlemmab full_name =
       let doit () =
-        let name = Js.to_string name in
-        Format.printf "addlemmab %s\n" name;
+        let full_name = Js.to_string full_name in
+        js_log @@ Format.sprintf "addlemmab %s\n" full_name;
         (* Check the lemma database contains the lemma name (and raise LemmaNotFound if it doesn't),
            and recheck the lemma's statement (just to make sure). *)
         let db = Proof.get_db parent##.proof in
-        let stmt =
-          Option.get_exn (Map.find_opt name db.db_map) (Failure ("lemma not found " ^ name))
+        let (_, stmt) =
+          Option.get_exn (Map.find_opt full_name db.db_map) (Failure ("lemma not found " ^ full_name))
         in
         Form.recheck db.db_env stmt;
-        Format.printf "recheck ok\n";
+        js_log "recheck ok\n";
         (* Construct the action and encode it. *)
-        `ALemma name |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string
+        `ALemma full_name |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string
       in
       !!doit ()
 

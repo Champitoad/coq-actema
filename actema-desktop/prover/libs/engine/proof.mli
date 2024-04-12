@@ -38,9 +38,9 @@ type pregoals = pregoal list
 type goal = { g_id : Handle.t; g_pregoal : pregoal }
 type subgoal = (Handle.t option * form list) list * form
 
-(** The lemma database. It consists in a map from lemma names to statements, 
+(** The lemma database. It consists in a map from lemma (full) name to statements and user name, 
     and an environment to type the lemmas. *)
-type lemma_db = { db_env : env; db_map : (string, Fo.form) Map.t }
+type lemma_db = { db_env : env; db_map : (string, string * Fo.form) Map.t }
 
 (** Metadata associated to a goal. *)
 type meta = < > Js_of_ocaml.Js.t
