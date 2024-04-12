@@ -6,7 +6,6 @@ exception InvalidGoalId of Handle.t
 exception InvalidHyphId of Handle.t
 exception SubgoalNotOpened of Handle.t
 
-
 (** The type of a single hypothesis. *)
 type hyp =
   { h_src : Handle.t option  (** A unique identifier for the hypothesis. *)
@@ -73,17 +72,16 @@ end
 type pregoal = { g_env : env; g_hyps : Hyps.t; g_goal : form }
 type pregoals = pregoal list
 type goal = { g_id : Handle.t; g_pregoal : pregoal }
-
 type meta = < > Js_of_ocaml.Js.t
+type lemma_db = { db_env : env ; db_map : (string, Fo.form) Map.t }
 
 type proof =
   { p_goals : (Handle.t, goal) Map.t
         (** A map from goal handles to goals. Contains only the opened (i.e. currently active) goals. *)
   ; p_meta : (Handle.t, < > Js.t) Map.t ref  (** Metadata associated to each goal. *)
-  ; p_db : LemmaDB.t  (** The lemma database. *)
+  ; p_db : lemma_db  (** The lemma database. *)
   ; p_hm : Hidmap.hidmap
   }
-
 
 let mk_hyp ?(src : Handle.t option) ?(gen : int = 0) form =
   { h_src = src; h_gen = gen; h_form = form }
@@ -102,7 +100,7 @@ let init (env : env) (hyps : form list) (goal : form) =
 
   { p_goals = Map.singleton uid goal
   ; p_meta = ref Map.empty
-  ; p_db = LemmaDB.empty env
+  ; p_db = { db_env = env ; db_map = Map.empty }
   ; p_hm = Hidmap.empty
   }
 
@@ -123,10 +121,10 @@ let ginit (hm : Hidmap.hidmap) (pregoals : pregoal list) : proof =
       Map.empty pregoals
   in
 
-  { p_goals; p_meta = ref Map.empty; p_db = LemmaDB.empty Env.empty; p_hm = hm }
+  { p_goals; p_meta = ref Map.empty; p_db = { db_env = Env.empty; db_map = Map.empty } ; p_hm = hm }
 
 let get_db (proof : proof) = proof.p_db
-let set_db (proof : proof) (db : LemmaDB.t) = { proof with p_db = db }
+let set_db (proof : proof) (db : lemma_db) = { proof with p_db = db }
 
 let set_meta (proof : proof) (id : Handle.t) (meta : meta option) : unit =
   match meta with
@@ -193,61 +191,58 @@ module Translate = struct
 end
 
 module Tactics = struct
-
   exception TacticNotApplicable
 
-
-let xprogress (pr : proof) (id : Handle.t) (subs : pregoals) =
-  (* Promote the pregoals to actual goals. *)
-  let subs =
-    let for1 sub =
-      let hyps = Hyps.bump sub.g_hyps in
-      let sub = { sub with g_hyps = hyps } in
-      { g_id = Handle.fresh (); g_pregoal = sub }
+  let xprogress (pr : proof) (id : Handle.t) (subs : pregoals) =
+    (* Promote the pregoals to actual goals. *)
+    let subs =
+      let for1 sub =
+        let hyps = Hyps.bump sub.g_hyps in
+        let sub = { sub with g_hyps = hyps } in
+        { g_id = Handle.fresh (); g_pregoal = sub }
+      in
+      List.map for1 subs
     in
+
+    (* The handles of the new goals. *)
+    let g_new = List.map (fun x -> x.g_id) subs in
+
+    (* The new goals get the same metadata as the old goal. *)
+    let meta =
+      match Map.Exceptionless.find id !(pr.p_meta) with
+      | None -> !(pr.p_meta)
+      | Some meta -> List.fold_left (fun map id -> Map.add id meta map) !(pr.p_meta) g_new
+    in
+
+    (* Remove the old goal and add the new goals. *)
+    let p_goals =
+      pr.p_goals |> Map.remove id |> List.fold_right (fun sub map -> Map.add sub.g_id sub map) subs
+    in
+    (* Don't forget to return the handles of the new goals. *)
+    (g_new, { pr with p_goals; p_meta = ref meta })
+
+  let sgprogress (goal : pregoal) ?(clear = false) (subs : subgoal list) =
+    let for1 (newlc, concl) =
+      let subfor1 hyps (hid, newlc) =
+        let hyps =
+          Option.fold (fun hyps hid -> if clear then Hyps.remove hyps hid else hyps) hyps hid
+        in
+        let hsrc = if clear then None else hid in
+
+        let hyps =
+          List.fold_left
+            (fun hyps newh -> Hyps.add hyps (Handle.fresh ()) (mk_hyp ?src:hsrc newh))
+            hyps newlc
+        in
+
+        hyps
+      in
+
+      let hyps = List.fold_left subfor1 goal.g_hyps newlc in
+      { g_env = goal.g_env; g_hyps = hyps; g_goal = concl }
+    in
+
     List.map for1 subs
-  in
-
-  (* The handles of the new goals. *)
-  let g_new = List.map (fun x -> x.g_id) subs in
-
-  (* The new goals get the same metadata as the old goal. *)
-  let meta =
-    match Map.Exceptionless.find id !(pr.p_meta) with
-    | None -> !(pr.p_meta)
-    | Some meta -> List.fold_left (fun map id -> Map.add id meta map) !(pr.p_meta) g_new
-  in
-
-  (* Remove the old goal and add the new goals. *)
-  let p_goals =
-    pr.p_goals |> Map.remove id |> List.fold_right (fun sub map -> Map.add sub.g_id sub map) subs
-  in
-  (* Don't forget to return the handles of the new goals. *)
-  (g_new, { pr with p_goals; p_meta = ref meta })
-
-let sgprogress (goal : pregoal) ?(clear = false) (subs : subgoal list) =
-  let for1 (newlc, concl) =
-    let subfor1 hyps (hid, newlc) =
-      let hyps =
-        Option.fold (fun hyps hid -> if clear then Hyps.remove hyps hid else hyps) hyps hid
-      in
-      let hsrc = if clear then None else hid in
-
-      let hyps =
-        List.fold_left
-          (fun hyps newh -> Hyps.add hyps (Handle.fresh ()) (mk_hyp ?src:hsrc newh))
-          hyps newlc
-      in
-
-      hyps
-    in
-
-    let hyps = List.fold_left subfor1 goal.g_hyps newlc in
-    { g_env = goal.g_env; g_hyps = hyps; g_goal = concl }
-  in
-
-  List.map for1 subs
-
 
   let add_local (goal : pregoal) ((name, ty, body) : string * Fo.type_ * Fo.expr option) : pregoal =
     Option.map_default (Fo.Form.erecheck goal.g_env ty) () body;

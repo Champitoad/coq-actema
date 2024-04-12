@@ -51,7 +51,6 @@ let () =
       | TypingError -> Some "invalid goal (typing error)"
       | RecheckFailure -> Some "invalid goal (recheck failure)"
       | Proof.Tactics.TacticNotApplicable -> Some "tactic not applicable"
-      | LemmaDB.LemmaNotFound name -> Some ("lemma \"" ^ name ^ "\" does not exist")
       | _ -> None)
 
 (* -------------------------------------------------------------------- *)
@@ -211,7 +210,7 @@ let rec js_proof_engine (proof : Proof.proof) =
       List.iter (fun (_name, form) -> Fo.Form.recheck env form) lemmas;
       (* Create the lemma database. *)
       let db =
-        List.fold (fun db (name, form) -> LemmaDB.add db name form) (LemmaDB.empty env) lemmas
+        Proof.{ db_env = env ; db_map = Map.of_seq @@ List.to_seq lemmas }
       in
       (* Print debug info. *)
       Format.printf "Received lemmas\n";
@@ -223,10 +222,11 @@ let rec js_proof_engine (proof : Proof.proof) =
         Returns an array of lemmas. Each lemma contains two strings : (full-name, pretty-printed-formula) *)
     method getlemmas =
       let db = _self##.proof |> Proof.get_db in
-      db |> LemmaDB.all_lemmas
+      db.db_map 
+      |> Map.bindings
       |> List.map (fun (name, form) ->
              let stmt =
-               Notation.f_tostring (LemmaDB.env db) form |> Js.string |> Js.Unsafe.inject
+               Notation.f_tostring db.db_env form |> Js.string |> Js.Unsafe.inject
              in
              (name, stmt))
       |> Array.of_list |> Js.Unsafe.obj
@@ -248,7 +248,7 @@ let rec js_proof_engine (proof : Proof.proof) =
       let proof = _self##.proof in
       (* Fitler by name. *)
       let proof =
-        match pattern with None -> proof | Some pattern -> Link.filter_db_by_name pattern proof
+        match pattern with None -> proof | Some pattern -> LemmaDB.filter_by_name pattern proof
       in
       (* Fiter by selection. *)
       let proof =
@@ -258,7 +258,7 @@ let rec js_proof_engine (proof : Proof.proof) =
             proof
         | Some [ selection ] ->
             Format.printf "Got selection: %s\n" (CoreLogic.IPath.to_string selection);
-            Link.filter_db_by_selection selection proof
+            LemmaDB.filter_by_selection selection proof
         | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
       in
       js_proof_engine proof
@@ -349,8 +349,9 @@ and js_subgoal parent (handle : Handle.t) =
         (* Check the lemma database contains the lemma name (and raise LemmaNotFound if it doesn't),
            and recheck the lemma's statement (just to make sure). *)
         let db = Proof.get_db parent##.proof in
-        let stmt = LemmaDB.get db name in
-        Form.recheck (LemmaDB.env db) stmt;
+        let stmt = Option.get_exn (Map.find_opt name db.db_map) (Failure ("lemma not found " ^ name))
+        in
+        Form.recheck db.db_env stmt;
         Format.printf "recheck ok\n";
         (* Construct the action and encode it. *)
         `ALemma name |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string
@@ -365,7 +366,8 @@ and js_subgoal parent (handle : Handle.t) =
         let expr = String.trim (Js.to_string expr) in
         let expr = Io.parse_expr (Io.from_string expr) in
         let expr, ty = Form.echeck goal.g_env expr in
-        Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle (Js.to_string name, ty, expr)
+        Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle
+          (Js.to_string name, ty, expr)
       in
       js_proof_engine (!!doit ())
 
@@ -377,7 +379,8 @@ and js_subgoal parent (handle : Handle.t) =
         let expr = String.trim (Js.to_string expr) in
         let name, expr = Io.parse_nexpr (Io.from_string expr) in
         let expr, ty = Form.echeck goal.g_env expr in
-        Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle (Location.unloc name, ty, expr)
+        Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle
+          (Location.unloc name, ty, expr)
       in
       js_proof_engine (!!doit ())
 
@@ -401,7 +404,8 @@ and js_subgoal parent (handle : Handle.t) =
         must be part of this sub-goal. *)
     method movehyp from before =
       let doit () =
-        Proof.Tactics.move parent##.proof ~goal_id:_self##.handle ~hyp_id:from ~dest_id:(Js.Opt.to_option before) 
+        Proof.Tactics.move parent##.proof ~goal_id:_self##.handle ~hyp_id:from
+          ~dest_id:(Js.Opt.to_option before)
       in
       js_proof_engine (!!doit ())
 

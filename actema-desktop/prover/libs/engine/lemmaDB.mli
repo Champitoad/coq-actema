@@ -1,27 +1,13 @@
-(** This module defines the lemma database. The database consists of :
-    - A list of lemmas (name and formula). 
-    - An environment containing the predicates & functions used in the lemmas. *)
+(** This module defines functions to manipulate the lemma database. *)
 
-(** The abstract type of a lemma database. *)
-type t
+open CoreLogic
 
-exception LemmaNotFound of string
 
-(** Returns the environment of the database. *)
-val env : t -> Fo.env
+(** Filter the lemma database by keeping only the lemmas that have a dnd interaction with a given selection. 
+    This only changes the lemma database. *)
+val filter_by_selection : IPath.t -> Proof.proof -> Proof.proof
 
-(** Returns all the lemmas contained in the database. *)
-val all_lemmas : t -> (string * Fo.form) list
-
-(** Create an empty database, with a given environment. *)
-val empty : Fo.env -> t
-
-(** Get a lemma by name. Raises [LemmaNotFound] if the lemma does not exist in the database. *)
-val get : t -> string -> Fo.form
-
-(** Add a lemma to the database. 
-    We assume that the symbols of the lemma are contained in the database env. *)
-val add : t -> string -> Fo.form -> t
-
-(** Filter the database. The predicate takes as input the lemma name and body. *)
-val filter : (string -> Fo.form -> bool) -> t -> t
+(** Filter the lemma database by keeping only the lemmas whose name matches a given pattern.
+    This only changes the lemma database.  *)
+val filter_by_name : string -> Proof.proof -> Proof.proof
+    

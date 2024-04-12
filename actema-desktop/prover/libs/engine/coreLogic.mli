@@ -1,3 +1,10 @@
+(** This module defines some core utilities to manipulate proofs 
+    and perform formula linking & interaction. It includes :
+    - The notion of path (module [IPath]) in a term. 
+    - The notion of polarity (module [Polarity]) of a (sub)formula. 
+    - Some term manipulation functions. These could probably moved to a
+      more appropriate place, such as fo.ml probably. *)
+
 open Fo
 
 exception InvalidSubFormPath of int list
@@ -9,20 +16,34 @@ type item =
   | `H of Handle.t * Proof.hyp  (** Hypothesis. *)
   | `V of vname * bvar  (** Variable. *) ]
 
-(** This module defines paths to items in a goal. 
+(** This module defines paths to items. 
     A path can point to : 
     - A subterm of the conclusion. 
     - A subterm of a hypothesis. 
     - A variable definition : either to the head (variable name) or a subterm of the definition's body. 
     A path points to an item in a specific goal. *)
 module IPath : sig
-  (** What kind of object does the path point to ? *)
+  (** What kind of object does a path point to ? *)
   type pkind = [ `Hyp | `Concl | `Var of [ `Head | `Body ] ]
 
-  (** What object does a path point to ? *)
+  (** What object does a path point to ?
+      Depending on the [kind], the [handle] is :
+      - For [`Concl], it is always [0].
+      - For [`Hyp], it is the index of the corresponding hypothesis in the goal.
+      - For [`Var], it is the index of the corresponding variable binding in the goal's environment. *)
   type ctxt = { kind : pkind; handle : int }
 
-  (** A path to a subterm of an item. *)
+  (** A path to a subterm of an item. 
+      As an example, consider the goal : 
+        [x := 4, y := 3 * x + 2, x + 3 * y = 0 |- x = 0]    
+      Assuming this is the goal with index 0, possible paths include :
+      - [{ root = 0 ; ctxt = { kind = `Concl ; handle = 0 } ; sub = [0] }] 
+        which points to the variable [x] in the conclusion.
+      - [{ root = 0 ; ctxt = { kind = `Var `Body ; handle = 1 } ; sub = [0] }] 
+        which points to the expression [3 * x] in the definition of [y].
+      - [{ root = 0 ; ctxt = { kind = `Var `Head ; handle = 0 } ; sub = [] }] 
+        which points to the variable name [x] in the definition of [x].
+  *)
   type t =
     { root : int  (** The index of the goal we point to. *)
     ; ctxt : ctxt  (** The object we point to. *)
@@ -107,18 +128,18 @@ module Polarity : sig
   type t = Pos | Neg | Sup
 
   (** [Polarity.opp p] returns the opposite polarity of [p].
-        [Sup] is mapped to itself. *)
+      [Sup] is mapped to itself. *)
   val opp : t -> t
 
   (** [Polarity.direct_subform_pol (p, f) i] returns the [i]th direct subformula of [f]
-          together with its polarity, given that [f]'s polarity is [p] *)
+      together with its polarity, given that [f]'s polarity is [p] *)
   val of_direct_subform : t * form -> int -> t * form
 
   (** Assumes both the term and its subterm are formulas, and calls [Polarity.of_direct_subform]. *)
   val of_direct_subterm : t * term -> int -> t * term
 
   (** [Polarity.subform_pol (p, f) sub] returns the subformula of [f] at path [sub] together
-          with its polarity, given that [f]'s polarity is [p] *)
+      with its polarity, given that [f]'s polarity is [p] *)
   val of_subform : t * form -> int list -> t * Fo.form
 
   (** [Polarity.neg_count f sub] counts the number of negations in [f] along path [sub] *)
@@ -128,6 +149,6 @@ module Polarity : sig
   val of_item : item -> t
 
   (** [Polarity.of_ipath proof p] returns the polarity of the subformula
-          at path [p] in [proof] *)
+      at path [p] in [proof] *)
   val of_ipath : Proof.proof -> IPath.t -> t
 end

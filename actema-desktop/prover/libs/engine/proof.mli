@@ -3,6 +3,7 @@
    and some additional bookkeeping information. *)
 
 open Fo
+open Utils
 
 exception InvalidGoalId of Handle.t
 exception InvalidHyphId of Handle.t
@@ -37,6 +38,10 @@ type pregoals = pregoal list
 type goal = { g_id : Handle.t; g_pregoal : pregoal }
 type subgoal = (Handle.t option * form list) list * form
 
+(** The lemma database. It consists in a map from lemma names to statements, 
+    and an environment to type the lemmas. *)
+type lemma_db = { db_env : env ; db_map : (string, Fo.form) Map.t }
+
 (** Metadata associated to a goal. *)
 type meta = < > Js_of_ocaml.Js.t
 
@@ -60,10 +65,10 @@ val opened : proof -> Handle.t list
 val byid : proof -> Handle.t -> pregoal
 
 (** Get the lemma database. *)
-val get_db : proof -> LemmaDB.t
+val get_db : proof -> lemma_db
 
 (** Set the lemma database. *)
-val set_db : proof -> LemmaDB.t -> proof
+val set_db : proof -> lemma_db -> proof
 
 (** Attach metadata to a goal. *)
 val set_meta : proof -> Handle.t -> meta option -> unit

@@ -75,7 +75,9 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
   let _, item_dst, (sub_dst, t_dst) = IPath.destr proof dst in
 
   begin
-    match (t_src, t_dst) with `F _, `E _ | `E _, `F _ -> raise Tactics.TacticNotApplicable | _ -> ()
+    match (t_src, t_dst) with
+    | `F _, `E _ | `E _, `F _ -> raise Tactics.TacticNotApplicable
+    | _ -> ()
   end;
 
   (* [well_scoped lenv e] returns [true] if all variables in the
