@@ -283,14 +283,20 @@ let rec print_modpath mpath =
   
 let test_tac : unit tactic =
   Goal.enter begin fun coq_goal ->
-    let globals = Environ.Globals.view (Goal.env coq_goal).env_globals in
-    List.iter begin fun (cname, _) -> 
-      let mpath = cname |> Names.Constant.canonical |> Names.KerName.modpath in 
-      let label = cname |> Names.Constant.canonical |> Names.KerName.label in 
-      if Names.Label.to_string label = "target424242" then
-        Log.str @@ Format.sprintf "%s --> %s" 
-          (print_modpath mpath) 
-          (Names.Label.to_string label)
-    end (Names.Cmap_env.bindings globals.constants);
-    PVMonad.return ()
+    let i = 0 in 
+    let j = 0 in 
+    let dirpath = Names.DirPath.make [ Names.Id.of_string "Test"; Names.Id.of_string "Actema" ] in
+    let label = Names.Label.make "dummy_ind" in 
+
+    let mind_name = Names.MutInd.make2 (MPfile dirpath) label in
+    if not @@ Environ.mem_mind mind_name (Goal.env coq_goal) then 
+      failwith "Invalid mind name.";
+    Log.str "Valid mind name";
+
+    (*let ((_, inst), _) = UnivGen.fresh_constructor_instance (Goal.env coq_goal) ((mind_name, i), j) in
+    let stmt = EConstr.mkConstructU (((mind_name, i), j), EConstr.EInstance.make inst) in*)
+    let stmt = EConstr.mkConstruct ((mind_name, i), j+1) in
+    
+    let hyp_name = Names.Name.mk_name @@ Goal.fresh_name ~basename:"my_hyp" coq_goal () in
+    Tactics.pose_proof hyp_name stmt
   end 

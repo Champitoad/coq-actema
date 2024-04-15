@@ -136,7 +136,6 @@ Definition f : ll -> Prop. Admitted.
 Lemma cat_nil_comm : forall l, f (concat l lnil).
 Proof. Admitted.
 
-
 (*Lemma test l1 l2 l3 : concat (concat l1 lnil) (concat l2 l3) = concat (concat l1 l2) l3.
 Proof. actema_force. Qed.*)
 
@@ -146,12 +145,7 @@ Inductive perm : ll -> ll -> Prop :=
 | perm_app : forall a l1 l2,  perm (lcons a (concat l1 l2)) (concat l1 (lcons a l2))
 | perm_trans : forall l1 l2 l3, perm l1 l2 -> perm l2 l3 -> perm l1 l3.
 
-Lemma perm_test l : perm l l.
-Proof. 
-actema_force.
-
 Lemma addnS : forall n m, n + S m = S (n + m).
-actema.
 Admitted.
 
 Lemma addn0 : forall n, n + 0 = n.
@@ -164,19 +158,9 @@ Admitted.
 Lemma perm_length : forall l1 l2,
          perm l1 l2 -> length l1 = length l2.
 Proof.
-  actema.
-  move: concat_length => h.
-  move: addnS => h1.
-  move: addn0 => h0.
-  actema. 
-Qed.s
-
-(*Lemma test (x y z : nat) : x + (0 + y) = y + x.
-Proof. actema.
-
-Lemma test l1 l2 l3 : concat (concat l1 lnil) (concat l2 l3) = concat (concat l1 l2) l3.
-Proof. actema. *)
-
+  actema_force.
+Qed.
+ 
 (* The insertion function *)
 Fixpoint insert n l :=
   match l with
@@ -188,17 +172,17 @@ Fixpoint insert n l :=
   end.
 
 Lemma insert_length : forall n l, length (insert n l) = S (length l).
-  actema.
-Qed.
+Admitted.
 
 (* The specification with the good invariant *)
 Lemma insert_sort : forall n l, sorted l ->
                                 sorted (insert n l) /\
                                   forall m, le m n /\ low m l -> low m (insert n l).
- generalize leb_le; intro h1.
+(* generalize leb_le; intro h1.
  generalize leb_lt; intro h2.
  actema.
-Qed.
+Qed.*)
+Admitted.
 
 Fixpoint insertion_sort l :=
   match l with
@@ -209,14 +193,12 @@ Fixpoint insertion_sort l :=
 Lemma sorted_insertion : forall l,
     sorted (insertion_sort l).
   pose proof insert_sort.
-  actema.
-Qed.
+Admitted.
 
 (* easy and not really useful *)
 Lemma sorting_length : forall l, length l = length (insertion_sort l).
   move: insert_length => h.
-  actema.
-Qed.
+Admitted.
 
 
 
@@ -229,7 +211,7 @@ Fixpoint member n l :=
       n=m \/ member n l
   end.
 
-Lemma member1 : forall n l1 l2, member n l1 -> member n (concat l1 l2).
+(*Lemma member1 : forall n l1 l2, member n l1 -> member n (concat l1 l2).
   actema.
 Qed.
 
@@ -239,7 +221,7 @@ Qed.
 
 Lemma member3 : forall n l1 l2, member n (concat l1 l2) ->  member n l1 \/ member n l2.
 actema.
-Qed.
+Qed.*)
 
 (* One possble way to sow the result of sorting has the same content as the input *)
 (* Counting the elements as done later is easier *)
@@ -254,8 +236,7 @@ Lemma app_cons :
   forall l1 n l2,
     concat l1 (lcons n l2) = concat (concat l1 (lcons n lnil)) l2.
 Proof.
-  actema.
-Qed.
+Admitted.
 
 (* These lemmas are for putting the propositions in a form which allows the DnDs *)
 Lemma reww : forall a l1 l2, (lcons a (concat l1 l2)) = concat (lcons a l1) l2.
@@ -270,13 +251,11 @@ Qed.
 
 Lemma p_cons : forall a l1 l2,
     perm l1 l2 -> perm (lcons a l1) (lcons a l2).
-  move: perm_trans => h.
-  move: perm_app => h1.
-  move: perm_refl => h0.
-  move: reww => h3.
-  move: reww1 => h2.
   actema.
 Qed.
+
+Lemma test x : x + 0 = 0 + x.
+Proof. actema.
 
   
 (*  
@@ -285,7 +264,7 @@ induction 1.
 - apply perm_trans with (lcons a0 (lcons a (concat l1 l2))).
     apply (perm_app a (lcons a0 lnil) (concat l1 l2)).
   apply (perm_app a0 (lcons a l1) l2).
--  by apply perm_trans with (lcons a l2).
+- by apply perm_trans with (lcons a l2).
 Qed.
 *)
 

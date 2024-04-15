@@ -2,14 +2,6 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 
-Lemma test (x : nat) : (exists x, x + 0 <= 1) -> forall y, y = x.
-Proof.
-   Admitted.
-
-Lemma dummy (x y : nat) (H : x <= y) : True.
-Proof. 
-  actema_force.
-
 Parameter f : nat -> nat -> nat.
 
 Inductive color := red | blue.

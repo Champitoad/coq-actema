@@ -728,16 +728,18 @@ module Export = struct
       (* Get the list of all mutual inductives. *)
       (Environ.Globals.view coq_env.env_globals).inductives
       |> Names.Mindmap_env.bindings
-      (* Get the list of all inductives. *)
+      (* Get the list of all inductives. 
+         Inductives in a block are indexed starting at 0. *)
       |> List.concat_map begin fun (mind_name, (mind_body, _)) ->
           List.init (mind_body.Declarations.mind_ntypes) @@ fun i -> 
             (mind_name, i), mind_body.Declarations.mind_packets.(i)
          end
-      (* Get the list of all inductive constructors (with their type). *)
+      (* Get the list of all inductive constructors (with their type).
+         Constructors in an inductive are indexed starting at 1. *)
       |> List.concat_map begin fun (ind_name, ind_body) ->
           ind_body.Declarations.mind_user_lc 
           |> Array.to_list
-          |> List.mapi (fun j ty -> ind_body, (ind_name, j), ty)
+          |> List.mapi (fun j ty -> ind_body, (ind_name, j + 1), ty)
          end
       (*|> List.take 100*)
     in
@@ -748,7 +750,7 @@ module Export = struct
       | None -> return lemmas 
       | Some l_full ->
           let _, j = constr_name in 
-          let l_user = ind_body.Declarations.mind_consnames.(j) |> Names.Id.to_string in
+          let l_user = ind_body.Declarations.mind_consnames.(j-1) |> Names.Id.to_string in
           let ty = constr_type |> EConstr.of_constr in
           let* l_stmt = dest_form (e, ty) in
 
@@ -1161,18 +1163,16 @@ module Import = struct
                     raise @@ InvalidLemma (full_name, "Name matches no mutual inductive in the COQ environment.");
                   let mind_body = Environ.lookup_mind mind_name (Goal.env coq_goal) in
                   (* Check the inductive exists. *)
-                  if i >= mind_body.Declarations.mind_ntypes then 
+                  if i < 0 || i >= mind_body.Declarations.mind_ntypes then 
                     raise @@ InvalidLemma (full_name, Format.sprintf "Inductive index %d is out of bounds." i);
                   let ind_body = mind_body.Declarations.mind_packets.(i) in
                   (* Check the constructor exists. *)
-                  if j >= Array.length ind_body.Declarations.mind_consnames then
+                  if j < 1 || j > Array.length ind_body.Declarations.mind_consnames then
                     raise @@ InvalidLemma (full_name, Format.sprintf "Constructor index %d is out of bounds." j);
-                  let constr_name = ind_body.Declarations.mind_consnames.(j) in
+                  let constr_name = ind_body.Declarations.mind_consnames.(j-1) in
                   (* Create a term containing the lemma. *)
                   let ((_, inst), _) = UnivGen.fresh_constructor_instance (Goal.env coq_goal) ((mind_name, i), j) in
-                  Log.str "Got instance.";
                   let stmt = EConstr.mkConstructU (((mind_name, i), j), EConstr.EInstance.make inst) in
-                  Log.str "Made statement.";
                   (* Choose a base name for the hypothesis. *)
                   let basename = Names.Id.to_string constr_name in
                   stmt, basename
@@ -1181,9 +1181,6 @@ module Import = struct
         in
         (* Choose a name for the hypothesis. *)
         let hyp_name = Names.Name.mk_name @@ Goal.fresh_name ~basename coq_goal () in
-        Log.str "Made hyp name.";
-        Log.str @@ Pp.string_of_ppcmds @@ Names.Name.print hyp_name;
-        Log.econstr_debug (Goal.sigma coq_goal) stmt;
         (* Add the lemma as a hypothesis. *)
         Tactics.pose_proof hyp_name stmt
 
