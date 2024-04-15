@@ -49,3 +49,6 @@ module List : sig
 end
 
 val ssystime : unit -> string
+
+(** Execute a function and return the execution time in seconds. *)
+val time : (unit -> 'a) -> unit -> 'a * float

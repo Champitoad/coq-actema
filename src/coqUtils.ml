@@ -6,7 +6,7 @@ module PVMonad = struct
 end
 
 module Log = struct
-  let str str =
+  let str (str : string) =
     Feedback.msg_notice (Pp.str str)
 
   let error msg =

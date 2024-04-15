@@ -217,11 +217,11 @@
       "locked": {
         "lastModified": 1,
         "narHash": "sha256-Nwo/5oEWHQzc3FRaQtLZn1ONJlG119qpZ0A1B4VOyUw=",
-        "path": "/nix/store/6dqp91h1lr6jf6wggxhbg6vhnkdn6nx1-source/actema-desktop/prover",
+        "path": "/nix/store/0fjq8dda2q8rpx3w52n0mifgbywfva8g-source/actema-desktop/prover",
         "type": "path"
       },
       "original": {
-        "path": "/nix/store/6dqp91h1lr6jf6wggxhbg6vhnkdn6nx1-source/actema-desktop/prover",
+        "path": "/nix/store/0fjq8dda2q8rpx3w52n0mifgbywfva8g-source/actema-desktop/prover",
         "type": "path"
       }
     },

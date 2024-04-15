@@ -201,22 +201,26 @@ let rec js_proof_engine (proof : Proof.proof) =
     method loadlemmas datab =
       (* Decode the data. *)
       let env, lemmas =
-        datab |> Js.to_string |> Base64.decode_exn |> Api.Logic_b.lemmadb_of_string
+        Utils.time "decode-lemmas" @@ fun () ->
+          datab |> Js.to_string |> Base64.decode_exn |> Api.Logic_b.lemmadb_of_string
       in
       (* Translate the lemmas and env to the actema format. *)
       let lemmas = 
-        List.map begin fun Api.Logic_t.{ l_user; l_full; l_stmt } -> 
-          l_full, (l_user, Fo.Translate.to_form l_stmt)
+        Utils.time "translate-lemmas" @@ fun () ->
+          List.map begin fun Api.Logic_t.{ l_user; l_full; l_stmt } -> 
+            l_full, (l_user, Fo.Translate.to_form l_stmt)
         end lemmas
       in
-      let env = Hidmap.State.run (Fo.Translate.to_env env) Hidmap.empty in
+      let env = 
+        Utils.time "translate-env" @@ fun () ->
+          Hidmap.State.run (Fo.Translate.to_env env) Hidmap.empty in
       (* Check the lemmas are all well-typed in the database environment. *)
-      List.iter (fun (_, (_, form)) -> Fo.Form.recheck env form) lemmas;
+      Utils.time "type-check-lemmas" @@ fun () -> 
+        List.iter (fun (_, (_, form)) -> Fo.Form.recheck env form) lemmas;
       (* Create the lemma database. *)
       let db = Proof.{ db_env = env; db_map = Map.of_seq @@ List.to_seq lemmas } in
       (* Print debug info. *)
-      js_log "Received lemmas\n";
-      js_log @@ Format.sprintf "count=%d\n" (List.length lemmas);
+      js_log @@ Format.sprintf "Received lemmas (count=%d)\n" (List.length lemmas);
       (*List.iter (fun (name, _) -> js_log name) lemmas;*)
       (* Load the lemmas in the database. *)
       let new_proof = Proof.set_db _self##.proof db in

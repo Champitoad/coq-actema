@@ -818,9 +818,15 @@ module Export = struct
       begin 
         let open State in
         let destenv = { env = Goal.env goal; evd = Goal.sigma goal } in
+        let start = Sys.time () in
         let* l1 = constant_lemmas destenv in
+        let middle = Sys.time () in 
         let* l2 = constructor_lemmas destenv in
-        Log.str @@ Format.sprintf "const lemmas: %d | constructor lemmas : %d" 
+        let stop = Sys.time () in
+        Log.str @@ Format.sprintf "Time to export lemmas: %.2fs (constants) and %.2fs (inductives)" 
+          (middle -. start) 
+          (stop -. middle);
+        Log.str @@ Format.sprintf "Succesfully exported lemmas: %d (constants) and %d (inductives)" 
           (List.length l1) 
           (List.length l2);
         return (l1 @ l2)

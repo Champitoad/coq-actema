@@ -108,3 +108,9 @@ end
 
 let ssystime () =
   Printf.sprintf "%f" (Sys.time ())
+
+let time f () = 
+  let start = Sys.time () in 
+  let res = f () in
+  let stop = Sys.time () in
+  res, stop -. start

@@ -182,8 +182,8 @@ let interactive_proof () : proof tactic =
   (* At the start of the proof, translate the lemmas to the API format.
      TODO : cache this in a file so that only new/changed lemmas (since the last actema command) 
      are translated. *)
-  let* lemmas, lemmas_env = export_lemmas () in 
-  
+  let* (lemmas, lemmas_env) = export_lemmas () in 
+
   (* This is the main loop of the plugin, where we handle all actions 
      given by the frontend. *)
   let rec aux () =
