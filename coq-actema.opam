@@ -21,6 +21,7 @@ depends: [
   "coq-mathcomp-ssreflect" {= "1.16.0"}
   "cohttp-lwt-unix" { = "5.0.0"}
   "sha" { = "1.15.2"}
+  "qcheck-core" { >= "0.21.3"}
 ]
 
 tags: [

@@ -217,7 +217,7 @@ let rec js_proof_engine (proof : Proof.proof) =
       (* Print debug info. *)
       js_log "Received lemmas\n";
       js_log @@ Format.sprintf "count=%d\n" (List.length lemmas);
-      List.iter (fun (name, _) -> js_log name) lemmas;
+      (*List.iter (fun (name, _) -> js_log name) lemmas;*)
       (* Load the lemmas in the database. *)
       let new_proof = Proof.set_db _self##.proof db in
       js_proof_engine new_proof

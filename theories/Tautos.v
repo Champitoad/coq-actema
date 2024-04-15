@@ -5,10 +5,6 @@ Require Import ssreflect.
 Context (Socrates : nat).
 Context (Mortal Human : nat -> Prop).
 
-Module A.
-Module B.
-Lemma target42 : 42 = 42. Admitted.
-
 Lemma Aristoteles (hm : forall x, Human x -> Mortal x) 
   (hh : Human Socrates) : Mortal Socrates.
     actema_force.
