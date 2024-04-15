@@ -183,8 +183,7 @@ let interactive_proof () : proof tactic =
      TODO : cache this in a file so that only new/changed lemmas (since the last actema command) 
      are translated. *)
   let* lemmas, lemmas_env = export_lemmas () in 
-  Log.str (Format.sprintf "Total lemma count = %d\n" (Stdlib.List.length lemmas));
-    
+  
   (* This is the main loop of the plugin, where we handle all actions 
      given by the frontend. *)
   let rec aux () =

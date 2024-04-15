@@ -692,7 +692,7 @@ module Export = struct
       in Some res
     with Invalid_argument _ -> None
 
-  (** Collect all the lemmas we can translate to Actema. *)
+  (** Collect all the lemmas from coq_env.env_globals.constants we can translate to Actema. *)
   let constant_lemmas ({ env = coq_env; evd } as e : destenv) : Logic_t.lemma list State.t =
     let g_consts = 
       (Environ.Globals.view coq_env.env_globals).constants
@@ -722,34 +722,42 @@ module Export = struct
       end
     end [] g_consts
 
+  (** Collect all the lemmas from coq_env.env_globals.inductives we can translate to Actema. *)
   let constructor_lemmas ({ env = coq_env; evd } as e : destenv) : Logic_t.lemma list State.t =
     let g_constructs = 
+      (* Get the list of all mutual inductives. *)
       (Environ.Globals.view coq_env.env_globals).inductives
       |> Names.Mindmap_env.bindings
+      (* Get the list of all inductives. *)
       |> List.concat_map begin fun (mind_name, (mind_body, _)) ->
           List.init (mind_body.Declarations.mind_ntypes) @@ fun i -> 
-            ((mind_name, i), mind_body.Declarations.mind_packets.(i))
+            (mind_name, i), mind_body.Declarations.mind_packets.(i)
          end
+      (* Get the list of all inductive constructors (with their type). *)
       |> List.concat_map begin fun (ind_name, ind_body) ->
           ind_body.Declarations.mind_user_lc 
           |> Array.to_list
-          |> List.mapi (fun j ty -> ((ind_name, j), ty))
+          |> List.mapi (fun j ty -> ind_body, (ind_name, j), ty)
          end
       (*|> List.take 100*)
     in
-    State.fold begin fun lemmas (constr_name, constr_type) ->
+    State.fold begin fun lemmas (ind_body, constr_name, constr_type) ->
       let open State in
       (* First check whether we can encode the constructor name. *)
       begin match encode_constructor_name constr_name with 
       | None -> return lemmas 
       | Some l_full ->
-          let l_user = constr_name |> fst |> fst |> Names.MutInd.label |> Names.Label.to_string in
+          let _, j = constr_name in 
+          let l_user = ind_body.Declarations.mind_consnames.(j) |> Names.Id.to_string in
           let ty = constr_type |> EConstr.of_constr in
           let* l_stmt = dest_form (e, ty) in
 
           (** Check we did indeed manage to translate the constructor's type. 
               Discard the lemma if it is not the case. *)
           if not (form_contains_dummy l_stmt) then
+            (*(Log.str @@ Format.sprintf "Translated constructor : %s --> %s" 
+              l_full 
+              (Utils.string_of_form l_stmt);*)
             return @@ Logic_t.{ l_user; l_full; l_stmt } :: lemmas
           else 
             return lemmas
@@ -810,6 +818,9 @@ module Export = struct
         let destenv = { env = Goal.env goal; evd = Goal.sigma goal } in
         let* l1 = constant_lemmas destenv in
         let* l2 = constructor_lemmas destenv in
+        Log.str @@ Format.sprintf "const lemmas: %d | constructor lemmas : %d" 
+          (List.length l1) 
+          (List.length l2);
         return (l1 @ l2)
       end
       init_sign
@@ -1099,12 +1110,12 @@ module Import = struct
   let decode_constructor_name (name : string) : Names.Construct.t option =
     let parse dirpath modpath label i j =
       let dirpath = 
-        String.split_on_char '.' dirpath
+        (if dirpath = "" then [] else String.split_on_char '.' dirpath)
         |> List.rev_map Names.Id.of_string
         |> Names.DirPath.make
       in
       let modpath = 
-        String.split_on_char '.' modpath 
+        (if modpath = "" then [] else String.split_on_char '.' modpath)
         |> List.map Names.Label.make
       in 
       let modpath = 
@@ -1130,20 +1141,49 @@ module Import = struct
         (* Decode the lemma name. *)
         let stmt, basename = 
           match decode_lemma_name full_name with 
-          | Some cname ->
+          (* Case of a lemma that comes from a constant. *)
+          | Some const_name ->
             (* Check the lemma exists in the environment. *)
-            if not @@ Environ.mem_constant cname (Goal.env coq_goal) then 
+            if not @@ Environ.mem_constant const_name (Goal.env coq_goal) then 
               raise @@ InvalidLemma (full_name, "Name matches no lemma in the COQ environment.");
             (* Create a term containing the lemma. *)
-            let ((_, inst), _) = UnivGen.fresh_constant_instance (Goal.env coq_goal) cname in 
-            let stmt = EConstr.mkConstU (cname, EConstr.EInstance.make inst) in 
+            let ((_, inst), _) = UnivGen.fresh_constant_instance (Goal.env coq_goal) const_name in 
+            let stmt = EConstr.mkConstU (const_name, EConstr.EInstance.make inst) in 
             (* Choose a base name for the hypothesis. *)
-            let basename = Names.Constant.label cname |> Names.Label.to_string in
+            let basename = Names.Constant.label const_name |> Names.Label.to_string in
             stmt, basename
-          | None -> raise @@ InvalidLemma (full_name, "Could not decode lemma name.")
+          | None -> 
+              begin match decode_constructor_name full_name with 
+              (* Case of a lemma that comes from an inductive constructor. *)
+              | Some ((mind_name, i), j) ->
+                  (* Check the mutual inductive block exists in the environment. *)
+                  if not @@ Environ.mem_mind mind_name (Goal.env coq_goal) then 
+                    raise @@ InvalidLemma (full_name, "Name matches no mutual inductive in the COQ environment.");
+                  let mind_body = Environ.lookup_mind mind_name (Goal.env coq_goal) in
+                  (* Check the inductive exists. *)
+                  if i >= mind_body.Declarations.mind_ntypes then 
+                    raise @@ InvalidLemma (full_name, Format.sprintf "Inductive index %d is out of bounds." i);
+                  let ind_body = mind_body.Declarations.mind_packets.(i) in
+                  (* Check the constructor exists. *)
+                  if j >= Array.length ind_body.Declarations.mind_consnames then
+                    raise @@ InvalidLemma (full_name, Format.sprintf "Constructor index %d is out of bounds." j);
+                  let constr_name = ind_body.Declarations.mind_consnames.(j) in
+                  (* Create a term containing the lemma. *)
+                  let ((_, inst), _) = UnivGen.fresh_constructor_instance (Goal.env coq_goal) ((mind_name, i), j) in
+                  Log.str "Got instance.";
+                  let stmt = EConstr.mkConstructU (((mind_name, i), j), EConstr.EInstance.make inst) in
+                  Log.str "Made statement.";
+                  (* Choose a base name for the hypothesis. *)
+                  let basename = Names.Id.to_string constr_name in
+                  stmt, basename
+              | None -> raise @@ InvalidLemma (full_name, "Could not decode lemma name.")
+              end 
         in
         (* Choose a name for the hypothesis. *)
         let hyp_name = Names.Name.mk_name @@ Goal.fresh_name ~basename coq_goal () in
+        Log.str "Made hyp name.";
+        Log.str @@ Pp.string_of_ppcmds @@ Names.Name.print hyp_name;
+        Log.econstr_debug (Goal.sigma coq_goal) stmt;
         (* Add the lemma as a hypothesis. *)
         Tactics.pose_proof hyp_name stmt
 
