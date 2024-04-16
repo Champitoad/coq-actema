@@ -108,155 +108,160 @@ let calltac (tacname : Names.KerName.t) (args : EConstr.constr list) : unit tact
     let _ = Log.error (Printf.sprintf "Could not find tactic \"%s\"" name) in
     PVMonad.return ()
 
+(** Utilities to construct common Coq terms. *)
 module Trm = struct
-  open EConstr
+  let mkVar name = EConstr.mkVar (Names.Id.of_string name)
 
-  let var name = EConstr.mkVar (Names.Id.of_string name)
+  (** Utility to make a constant, taking care to instantiate universes. *)
+  let mkConst env path name =
+    let name = Names.Constant.make1 (kername path name) in
+    let (_, inst), _ = UnivGen.fresh_constant_instance env name in
+    EConstr.mkConstU (name, EConstr.EInstance.make inst)
 
-  let lambda _x _ty _body =
-    (*let x = Context.annotR (Names.Id.of_string x) in
-      mkNamedLambda x ty body*)
-    failwith "todo"
+  (** Utility to make an inductive, taking care to instantiate universes.
+      The integer parameter is the index of the inductive in the mutual inductive block
+      (it starts at 0). *)
+  let mkInd ?(index = 0) env path name =
+    let name = (Names.MutInd.make1 (kername path name), index) in
+    let (_, inst), _ = UnivGen.fresh_inductive_instance env name in
+    EConstr.mkIndU (name, EConstr.EInstance.make inst)
+
+  (** Utility to make an inductive constructor, taking care to instantiate universes.
+      The integer parameters are the index of the inductive in the mutual inductive block
+      (it starts at 0) and the index of the constructor (it starts at 1). *)
+  let mkConstruct ?(index = 0) ~constructor env path name =
+    let name = ((Names.MutInd.make1 (kername path name), index), constructor) in
+    let (_, inst), _ = UnivGen.fresh_constructor_instance env name in
+    EConstr.mkConstructU (name, EConstr.EInstance.make inst)
+
+  let lambda sigma x ty body =
+    let x = Context.annotR (Names.Id.of_string x) in
+    EConstr.mkNamedLambda sigma x ty body
 
   let dprod x ty body =
     let x = Context.nameR (Names.Id.of_string x) in
-    mkProd (x, ty, body)
+    EConstr.mkProd (x, ty, body)
 
   module Logic = struct
-    let kname = kername [ "Coq"; "Init"; "Logic" ]
-    let eq_ind (mind, i) name = Names.(KerName.equal (MutInd.canonical mind) (kname name)) && i = 0
-    let true_ = UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "True"), 0)
-    let false_ = UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "True"), 0)
+    let path = [ "Coq"; "Init"; "Logic" ]
 
-    let and_ f1 f2 =
-      let and_ = UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "and"), 0) in
-      mkApp (and_, [| f1; f2 |])
+    let eq_ind (mind, i) name =
+      Names.(KerName.equal (MutInd.canonical mind) (kername path name)) && i = 0
 
-    let or_ f1 f2 =
-      let or_ = UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "or"), 0) in
-      mkApp (or_, [| f1; f2 |])
-
+    let true_ env = mkInd env path "True"
+    let false_ env = mkInd env path "False"
+    let and_ env f1 f2 = EConstr.mkApp (mkInd env path "and", [| f1; f2 |])
+    let or_ env f1 f2 = EConstr.mkApp (mkInd env path "or", [| f1; f2 |])
     let imp f1 f2 = dprod "dummy" f1 f2
+    let not env f = EConstr.mkApp (mkConst env path "not", [| f |])
+    let iff env f1 f2 = EConstr.mkApp (mkConst env path "iff", [| f1; f2 |])
 
-    let not f =
-      let not = UnsafeMonomorphic.mkConst (Names.Constant.make1 (kname "not")) in
-      mkApp (not, [| f |])
-
-    let iff f1 f2 =
-      let iff = UnsafeMonomorphic.mkConst (Names.Constant.make1 (kname "iff")) in
-      mkApp (iff, [| f1; f2 |])
-
-    let ex x ty body =
-      let ex = UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "ex"), 0) in
-      let p = lambda x ty body in
-      mkApp (ex, [| ty; p |])
+    let ex env sigma x ty body =
+      EConstr.mkApp (mkInd env path "ex", [| ty; lambda sigma x ty body |])
 
     let fa x ty body = dprod x ty body
-
-    let eq ty =
-      let eq = UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "eq"), 0) in
-      mkApp (eq, [| ty |])
+    let eq env ty = EConstr.mkApp (mkInd env path "eq", [| ty |])
   end
 
-  let type_ = EConstr.mkSort ESorts.type1
-  let list_kname = kername [ "Coq"; "Init"; "Datatypes" ] "list"
-  let nat_kname = kername [ "Coq"; "Init"; "Datatypes" ] "nat"
-  let bool_kname = kername [ "Coq"; "Init"; "Datatypes" ] "bool"
-  let unit_kname = kername [ "Coq"; "Init"; "Datatypes" ] "unit"
-  let prod_kname = kername [ "Coq"; "Init"; "Datatypes" ] "prod"
-  let option_kname = kername [ "Coq"; "Init"; "Datatypes" ] "option"
-  let zero_kname = kername [ "Coq"; "Init"; "Datatypes" ] "O"
-  let succ_kname = kername [ "Coq"; "Init"; "Datatypes" ] "S"
-  let add_modpaths = [ [ "Coq"; "Arith"; "PeanoNat"; "Nat" ]; [ "Coq"; "Init"; "Nat" ] ]
-  let add_knames = List.map (fun mp -> kername mp "add") add_modpaths
-  let mul_modpaths = add_modpaths
-  let mul_knames = List.map (fun mp -> kername mp "mul") mul_modpaths
-  let app_kname = kername [ "Coq"; "Init"; "Datatypes" ] "app"
-  let sigT_kname = kername [ "Coq"; "Init"; "Specif" ] "sigT"
-  let nat_name : Names.inductive = (Names.MutInd.make1 nat_kname, 0)
-  let nat = UnsafeMonomorphic.mkInd nat_name
-  let bool_name = (Names.MutInd.make1 bool_kname, 0)
-  let bool = UnsafeMonomorphic.mkInd bool_name
-  let unit = UnsafeMonomorphic.mkInd (Names.MutInd.make1 unit_kname, 0)
-  let prod_name : Names.inductive = (Names.MutInd.make1 prod_kname, 0)
+  module Datatypes = struct
+    let path = [ "Coq"; "Init"; "Datatypes" ]
 
-  let prod t1 t2 =
-    let prod = UnsafeMonomorphic.mkInd prod_name in
-    mkApp (prod, [| t1; t2 |])
+    (* Names. *)
 
-  let sigT_name : Names.inductive = (Names.MutInd.make1 sigT_kname, 0)
+    let nat_name : Names.inductive = (Names.MutInd.make1 (kername path "nat"), 0)
+    let zero_name : Names.constructor = (nat_name, 1)
+    let succ_name : Names.constructor = (nat_name, 2)
 
-  let sigT x ty p =
-    let sigT = UnsafeMonomorphic.mkInd sigT_name in
-    mkApp (sigT, [| ty; lambda x ty p |])
+    (* Inductives. *)
 
-  let option_name : Names.inductive = (Names.MutInd.make1 option_kname, 0)
+    let nat env = mkInd env path "nat"
+    let bool env = mkInd env path "bool"
+    let unit env = mkInd env path "unit"
+    let prod env t1 t2 = EConstr.mkApp (mkInd env path "prod", [| t1; t2 |])
+    let option env ty = EConstr.mkApp (mkInd env path "option", [| ty |])
+    let list env ty = EConstr.mkApp (mkInd env path "list", [| ty |])
 
-  let option ty =
-    let option = UnsafeMonomorphic.mkInd option_name in
-    mkApp (option, [| ty |])
+    (* Constructors. *)
 
-  let list_name : Names.inductive = (Names.MutInd.make1 list_kname, 0)
+    let nil env ty = EConstr.mkApp (mkConstruct env path "list" ~constructor:1, [| ty |])
+    let cons env ty x l = EConstr.mkApp (mkConstruct env path "list" ~constructor:2, [| ty; x; l |])
 
-  let list ty =
-    let list = UnsafeMonomorphic.mkInd list_name in
-    mkApp (list, [| ty |])
+    let pair env ty1 ty2 t1 t2 =
+      EConstr.mkApp (mkConstruct env path "prod" ~constructor:1, [| ty1; ty2; t1; t2 |])
 
-  let nil ty =
-    let nil = UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 list_kname, 0), 1) in
-    mkApp (nil, [| ty |])
+    let some env ty t = EConstr.mkApp (mkConstruct env path "option" ~constructor:1, [| ty; t |])
+    let none env ty = EConstr.mkApp (mkConstruct env path "option" ~constructor:2, [| ty |])
+    let zero env = mkConstruct env path "nat" ~constructor:1
+    let succ env n = EConstr.mkApp (mkConstruct env path "nat" ~constructor:2, [| n |])
+    let tt env = mkConstruct env path "unit" ~constructor:1
 
-  let cons ty x l =
-    let cons = UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 list_kname, 0), 2) in
-    mkApp (cons, [| ty; x; l |])
+    (* Constructors that depend on ocaml arguments. *)
 
-  let pair_name : Names.constructor = (prod_name, 1)
+    let of_bool env b =
+      match b with
+      | true -> mkConstruct env path "bool" ~constructor:1
+      | false -> mkConstruct env path "bool" ~constructor:2
 
-  let pair ty1 ty2 t1 t2 =
-    let pair = UnsafeMonomorphic.mkConstruct pair_name in
-    mkApp (pair, [| ty1; ty2; t1; t2 |])
+    let rec of_nat env n =
+      if n < 0
+      then raise @@ Invalid_argument "Trm.Datatypes.of_nat"
+      else if n = 0
+      then zero env
+      else succ env (of_nat env (n - 1))
 
-  let existT_name : Names.constructor = (sigT_name, 1)
+    let of_list env ty cast l = List.fold_right (fun x t -> cons env ty (cast x) t) l (nil env ty)
+    let natlist env = of_list env (nat env) (of_nat env)
+    let boollist env = of_list env (bool env) (of_bool env)
 
-  let existT x ty p w t =
-    let existT = UnsafeMonomorphic.mkConstruct existT_name in
-    mkApp (existT, [| ty; lambda x ty p; w; t |])
+    let of_option env ty cast opt =
+      match opt with None -> none env ty | Some x -> some env ty (cast x)
+  end
 
-  let none_name : Names.constructor = (option_name, 2)
+  module Specif = struct
+    let path = [ "Coq"; "Init"; "Specif" ]
+    let sigT env sigma x ty p = EConstr.mkApp (mkInd env path "sigT", [| ty; lambda sigma x ty p |])
 
-  let none ty =
-    let none = UnsafeMonomorphic.mkConstruct none_name in
-    mkApp (none, [| ty |])
+    let existT env sigma x ty p w t =
+      EConstr.mkApp (mkConstruct env path "sigT" ~constructor:1, [| ty; lambda sigma x ty p; w; t |])
+  end
 
-  let some_name : Names.constructor = (option_name, 1)
+  let add_knames =
+    let modpaths = [ [ "Coq"; "Arith"; "PeanoNat"; "Nat" ]; [ "Coq"; "Init"; "Nat" ] ] in
+    List.map (fun mp -> kername mp "add") modpaths
 
-  let some ty t =
-    let some = UnsafeMonomorphic.mkConstruct some_name in
-    mkApp (some, [| ty; t |])
-
-  let zero_name : Names.constructor = ((Names.MutInd.make1 nat_kname, 0), 1)
-  let zero = UnsafeMonomorphic.mkConstruct zero_name
-  let succ_name : Names.constructor = ((Names.MutInd.make1 nat_kname, 0), 2)
-
-  let succ n =
-    let succ = UnsafeMonomorphic.mkConstruct succ_name in
-    mkApp (succ, [| n |])
+  let mul_knames =
+    let modpaths = [ [ "Coq"; "Arith"; "PeanoNat"; "Nat" ]; [ "Coq"; "Init"; "Nat" ] ] in
+    List.map (fun mp -> kername mp "mul") modpaths
 
   let add_names : Names.Constant.t list = List.map Names.Constant.make1 add_knames
   let mul_names : Names.Constant.t list = List.map Names.Constant.make1 mul_knames
-  let app_name : Names.Constant.t = Names.Constant.make1 app_kname
-  let tt = UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 unit_kname, 0), 1)
-  let rec nat_of_int n = match n with 0 -> zero | _ -> succ (nat_of_int (n - 1))
 
-  let bool_of_bool b =
-    match b with
-    | true -> UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 bool_kname, 0), 1)
-    | false -> UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 bool_kname, 0), 2)
+  (*let type_ = EConstr.mkSort EConstr.ESorts.type1
+    let list_kname = kername [ "Coq"; "Init"; "Datatypes" ] "list"
+    let bool_kname = kername [ "Coq"; "Init"; "Datatypes" ] "bool"
+    let unit_kname = kername [ "Coq"; "Init"; "Datatypes" ] "unit"
+    let prod_kname = kername [ "Coq"; "Init"; "Datatypes" ] "prod"
+    let option_kname = kername [ "Coq"; "Init"; "Datatypes" ] "option"
+    let app_kname = kername [ "Coq"; "Init"; "Datatypes" ] "app"
+    let sigT_kname = kername [ "Coq"; "Init"; "Specif" ] "sigT"
+    let nat_name : Names.inductive = (Names.MutInd.make1 nat_kname, 0)
+    let bool_name = (Names.MutInd.make1 bool_kname, 0)
+    let prod_name : Names.inductive = (Names.MutInd.make1 prod_kname, 0)
+    let sigT_name : Names.inductive = (Names.MutInd.make1 sigT_kname, 0)
 
-  let of_list ty cast l = List.fold_right (fun x t -> cons ty (cast x) t) l (nil ty)
-  let natlist = of_list nat nat_of_int
-  let boollist = of_list bool bool_of_bool
-  let of_option ty cast o = match o with None -> none ty | Some x -> some ty (cast x)
+    let option_name : Names.inductive = (Names.MutInd.make1 option_kname, 0)
+    let list_name : Names.inductive = (Names.MutInd.make1 list_kname, 0)
+    let pair_name : Names.constructor = (prod_name, 1)
+    let existT_name : Names.constructor = (sigT_name, 1)
+
+    let none_name : Names.constructor = (option_name, 2)
+    let some_name : Names.constructor = (option_name, 1)
+    let zero_name : Names.constructor = ((Names.MutInd.make1 nat_kname, 0), 1)
+    let succ_name : Names.constructor = ((Names.MutInd.make1 nat_kname, 0), 2)
+    let add_names : Names.Constant.t list = List.map Names.Constant.make1 add_knames
+    let mul_names : Names.Constant.t list = List.map Names.Constant.make1 mul_knames
+    let app_name : Names.Constant.t = Names.Constant.make1 app_kname
+  *)
 end
 
 module Goal = struct

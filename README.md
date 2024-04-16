@@ -6,7 +6,7 @@
 - prover/
   Contains the logic for the GUI, written in Ocaml. It communicates to the plugin via http.
 
-- jsprover/
+- prover/js/
   Thin wrapper around the prover to ease compilation to javascript.
 
 - plugin/ 

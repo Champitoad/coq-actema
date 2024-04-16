@@ -82,10 +82,12 @@ let peano : FOSign.t =
   let nat : Fo_t.type_ = `TVar "nat" in
   let symbols =
     let open SymbolNames in
-    empty |> add (Ind nat_name) "nat" |> add (Ctr zero_name) "Z" |> add (Ctr succ_name) "S"
+    empty
+    |> add (Ind Datatypes.nat_name) "nat"
+    |> add (Ctr Datatypes.zero_name) "Z" |> add (Ctr Datatypes.succ_name) "S"
     |> fun m ->
-    List.fold_left (fun m name -> add (Cst name) "add" m) m Trm.add_names |> fun m ->
-    List.fold_left (fun m name -> add (Cst name) "mult" m) m Trm.mul_names
+    List.fold_left (fun m name -> add (Cst name) "add" m) m add_names |> fun m ->
+    List.fold_left (fun m name -> add (Cst name) "mult" m) m mul_names
   in
   let typing =
     let open NameMap in
@@ -470,7 +472,7 @@ module Export = struct
     let* sy = dest_sconst (e, head) in
     match sy with
     | Cst cst ->
-        let not_cst = Names.Constant.make1 (Trm.Logic.kname "iff") in
+        let not_cst = Names.Constant.make1 (kername Trm.Logic.path "iff") in
         begin
           match (Names.eq_constant_key cst not_cst, args) with
           | true, [| t1; t2 |] ->
@@ -487,7 +489,7 @@ module Export = struct
     let* sy = dest_sconst (e, head) in
     match sy with
     | Cst cst ->
-        let not_cst = Names.Constant.make1 (Trm.Logic.kname "not") in
+        let not_cst = Names.Constant.make1 (kername Trm.Logic.path "not") in
         begin
           match (Names.eq_constant_key cst not_cst, args) with
           | true, [| t1 |] ->
@@ -858,10 +860,10 @@ module Import = struct
     let tdyn = UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 (kname "TDYN"), 0), 1) in
     mkApp (tdyn, [| sort |])
 
-  let sorts (sign : FOSign.t) : EConstr.t =
+  let sorts env (sign : FOSign.t) : EConstr.t =
     FOSign.sort_symbols sign |> FOSign.SymbolNames.keys
     |> List.map (fun sort_sy -> tdyn (symbol sort_sy))
-    |> Trm.of_list (tdyn_ty ()) identity
+    |> Trm.Datatypes.of_list env (tdyn_ty ()) identity
 
   let sort_ty ts (s : EConstr.t) : EConstr.t =
     let name = Names.Constant.make1 (kname "sort") in
@@ -875,7 +877,7 @@ module Import = struct
 
   let clos_ty ts () : EConstr.t =
     let open EConstr in
-    let sort_s = sort_ty ts (Trm.var "s") in
+    let sort_s = sort_ty ts (Trm.mkVar "s") in
     mkArrowR (env_ty ts ()) (mkArrowR (env_ty ts ()) sort_s)
 
   let inst1_ty ts () : EConstr.t =
@@ -894,14 +896,14 @@ module Import = struct
           let index : int = List.(lenv |> split |> fst |> nth_index 0 x) in
           EConstr.mkRel (index + 1)
         end
-        else Trm.var x
+        else Trm.mkVar x
     | `EFun (f, args) ->
         let head = symbol (FOSign.SymbolNames.dnif f sign.symbols) in
         let args = List.map (expr sign lenv) args in
         EConstr.mkApp (head, Array.of_list args)
 
-  let rec expr_itrace (sign : FOSign.t) (env : Logic_t.env) (lenv : Logic_t.lenv) (side : int)
-      (e : Fo_t.expr) : EConstr.t =
+  let rec expr_itrace coq_env (sign : FOSign.t) (env : Logic_t.env) (lenv : Logic_t.lenv)
+      (side : int) (e : Fo_t.expr) : EConstr.t =
     match e with
     | `EVar x ->
         if LEnv.exists lenv x
@@ -909,34 +911,35 @@ module Import = struct
           let s = sort_index sign (infer_sort (Utils.Vars.push_lenv env lenv) e) in
           let index : int = List.(lenv |> split |> fst |> nth_index 0 x) in
           let env_index = if side = 0 then 2 else 1 in
-          EConstr.(mkApp (mkRel env_index, Trm.[| nat_of_int s; nat_of_int index |]))
+          EConstr.(
+            mkApp (mkRel env_index, Trm.Datatypes.[| of_nat coq_env s; of_nat coq_env index |]))
         end
-        else Trm.var x
+        else Trm.mkVar x
     | `EFun (f, args) ->
         let head = symbol (FOSign.SymbolNames.dnif f sign.symbols) in
-        let args = List.map (expr_itrace sign env lenv side) args in
+        let args = List.map (expr_itrace coq_env sign env lenv side) args in
         EConstr.mkApp (head, Array.of_list args)
 
-  let rec form (sign : FOSign.t) (env : Logic_t.env) (lenv : Logic_t.lenv) (f : Fo_t.form) :
-      EConstr.t =
-    let form = form sign env in
+  let rec form coq_env sigma (sign : FOSign.t) (env : Logic_t.env) (lenv : Logic_t.lenv)
+      (f : Fo_t.form) : EConstr.t =
+    let form = form coq_env sigma sign env in
     match f with
     | `FPred ("_EQ", [ t1; t2 ]) ->
         let ty = einfer (Vars.push_lenv env lenv) t1 |> type_ sign in
         let t1 = expr sign lenv t1 in
         let t2 = expr sign lenv t2 in
-        EConstr.mkApp (Trm.Logic.eq ty, [| t1; t2 |])
+        EConstr.mkApp (Trm.Logic.eq coq_env ty, [| t1; t2 |])
     | `FPred (p, args) ->
         let head = symbol (FOSign.SymbolNames.dnif p sign.symbols) in
         let args = List.map (expr sign lenv) args in
         EConstr.mkApp (head, Array.of_list args)
-    | `FTrue -> Trm.Logic.true_
-    | `FFalse -> Trm.Logic.false_
-    | `FConn (`And, [ f1; f2 ]) -> Trm.Logic.and_ (form lenv f1) (form lenv f2)
-    | `FConn (`Or, [ f1; f2 ]) -> Trm.Logic.or_ (form lenv f1) (form lenv f2)
+    | `FTrue -> Trm.Logic.true_ coq_env
+    | `FFalse -> Trm.Logic.false_ coq_env
+    | `FConn (`And, [ f1; f2 ]) -> Trm.Logic.and_ coq_env (form lenv f1) (form lenv f2)
+    | `FConn (`Or, [ f1; f2 ]) -> Trm.Logic.or_ coq_env (form lenv f1) (form lenv f2)
     | `FConn (`Imp, [ f1; f2 ]) -> Trm.Logic.imp (form lenv f1) (form lenv f2)
-    | `FConn (`Equiv, [ f1; f2 ]) -> Trm.Logic.iff (form lenv f1) (form lenv f2)
-    | `FConn (`Not, [ f1 ]) -> Trm.Logic.not (form lenv f1)
+    | `FConn (`Equiv, [ f1; f2 ]) -> Trm.Logic.iff coq_env (form lenv f1) (form lenv f2)
+    | `FConn (`Not, [ f1 ]) -> Trm.Logic.not coq_env (form lenv f1)
     | `FBind (`Forall, x, typ, body) ->
         let ty = type_ sign typ in
         let lenv = LEnv.enter lenv x typ in
@@ -944,18 +947,17 @@ module Import = struct
     | `FBind (`Exist, x, typ, body) ->
         let ty = type_ sign typ in
         let lenv = LEnv.enter lenv x typ in
-        Trm.Logic.ex x ty (form lenv body)
+        Trm.Logic.ex coq_env sigma x ty (form lenv body)
     | _ -> failwith "Unsupported formula"
 
   let boollist_of_intlist = Stdlib.List.map (fun n -> if n = 0 then false else true)
 
-  let itrace ts (sign : FOSign.t) (env : Fo_t.env) (mode : [ `Back | `Forw ]) (lp : int list)
-      (rp : int list) (lf : Logic_t.form) (rf : Logic_t.form) (itr : Logic_t.itrace) :
-      bool list * EConstr.t =
+  let itrace coq_env sigma ts (sign : FOSign.t) (env : Fo_t.env) (mode : [ `Back | `Forw ])
+      (lp : int list) (rp : int list) (lf : Logic_t.form) (rf : Logic_t.form) (itr : Logic_t.itrace)
+      : bool list * EConstr.t =
     let focus, inst = Stdlib.List.split itr in
     let t = focus |> boollist_of_intlist in
     let i =
-      let open Trm in
       let rec filtered_quant acc mode itr lp lf rp rf =
         begin
           match itr with
@@ -1006,17 +1008,22 @@ module Import = struct
                      fun (le1, le2, e) ->
                        let lenv = if side = 0 then le2 else le1 in
                        let ty = infer_sort (Utils.Vars.push_lenv env lenv) e in
-                       let s = nat_of_int (sort_index sign ty) in
+                       let s = Trm.Datatypes.of_nat coq_env (sort_index sign ty) in
                        let e =
-                         let body = expr_itrace sign env lenv (1 - side) e in
-                         lambda "env1" (env_ty ts ()) (lambda "env2" (env_ty ts ()) body)
+                         let body = expr_itrace coq_env sign env lenv (1 - side) e in
+                         Trm.lambda sigma "env1" (env_ty ts ())
+                           (Trm.lambda sigma "env2" (env_ty ts ()) body)
                        in
-                       existT "s" nat (clos_ty ts ()) s e
+                       Trm.Specif.existT coq_env sigma "s" (Trm.Datatypes.nat coq_env)
+                         (clos_ty ts ()) s e
                    end
                    w
              end
       in
-      of_list (option (inst1_ty ts ())) (of_option (inst1_ty ts ()) identity) i
+      Trm.Datatypes.of_list coq_env
+        (Trm.Datatypes.option coq_env (inst1_ty ts ()))
+        (Trm.Datatypes.of_option coq_env (inst1_ty ts ()) identity)
+        i
     in
     (t, i)
 
@@ -1040,9 +1047,9 @@ module Import = struct
     let open Tactypes in
     List.map (fun name -> CAst.make (IntroNaming (Namegen.IntroIdentifier name))) names
 
-  let bool_path (sub : int list) : EConstr.t =
+  let bool_path coq_env (sub : int list) : EConstr.t =
     let boollist_of_intlist = Stdlib.List.map (fun n -> if n = 0 then false else true) in
-    sub |> boollist_of_intlist |> Trm.boollist
+    sub |> boollist_of_intlist |> Trm.Datatypes.boollist coq_env
 
   let fix_sub_eq (t : Logic_t.term) (sub : int list) : int list =
     let rec aux acc t sub =
@@ -1084,7 +1091,6 @@ module Import = struct
   (** Decode a lemma name, as encoded by Export.encode_lemma_name. *)
   let decode_lemma_name (name : string) : Names.Constant.t option =
     let parse dirpath modpath label =
-      Log.str @@ Format.sprintf "Got dirpath=%s modpath=%s lobal=%s" dirpath modpath label;
       let dirpath =
         (if dirpath = "" then [] else String.split_on_char '.' dirpath)
         |> List.rev_map Names.Id.of_string |> Names.DirPath.make
@@ -1199,7 +1205,7 @@ module Import = struct
         Tactics.pose_tac name body
     | `ACut f ->
         let id = Goal.fresh_name coq_goal () |> Names.Name.mk_name in
-        let form = form sign goal.g_env [] f in
+        let form = form (Goal.env coq_goal) (Goal.sigma coq_goal) sign goal.g_env [] f in
         Tactics.assert_before id form
     | `AIntro (iv, wit) -> begin
         match goal.g_concl with
@@ -1341,7 +1347,7 @@ module Import = struct
           end
         in
 
-        let ts = sorts sign in
+        let ts = sorts (Goal.env coq_goal) sign in
 
         begin
           match ((src, src.ctxt.kind), (dst, dst.ctxt.kind)) with
@@ -1352,7 +1358,8 @@ module Import = struct
                 let rp = dst.sub in
                 let lf = (Utils.get_hyp goal src.ctxt.handle).h_form in
                 let rf = (Utils.get_hyp goal dst.ctxt.handle).h_form in
-                itrace ts sign goal.g_env `Forw lp rp lf rf itr
+                itrace (Goal.env coq_goal) (Goal.sigma coq_goal) ts sign goal.g_env `Forw lp rp lf
+                  rf itr
               in
 
               begin
@@ -1360,7 +1367,7 @@ module Import = struct
                 (* Rewrite *)
                 | Some (eqside, hsub, side, fsub, esub) ->
                     let eq_hyp, dst_hyp = if eqside then (dst, src) else (src, dst) in
-                    let fl = Trm.bool_of_bool eqside in
+                    let fl = Trm.Datatypes.of_bool (Goal.env coq_goal) eqside in
                     let h1 =
                       let id = Names.Id.of_string eq_hyp.ctxt.handle in
                       EConstr.mkVar id
@@ -1372,11 +1379,11 @@ module Import = struct
                       EConstr.mkVar id
                     in
 
-                    let t = Trm.boollist (t @ [ side ]) in
+                    let t = Trm.Datatypes.boollist (Goal.env coq_goal) (t @ [ side ]) in
 
-                    let hp1 = Trm.boollist hsub in
-                    let hp2 = Trm.boollist fsub in
-                    let hp2' = Trm.natlist esub in
+                    let hp1 = Trm.Datatypes.boollist (Goal.env coq_goal) hsub in
+                    let hp2 = Trm.Datatypes.boollist (Goal.env coq_goal) fsub in
+                    let hp2' = Trm.Datatypes.natlist (Goal.env coq_goal) esub in
 
                     let log t =
                       Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t;
@@ -1409,10 +1416,10 @@ module Import = struct
                       EConstr.mkVar id
                     in
 
-                    let t = Trm.boollist t in
+                    let t = Trm.Datatypes.boollist (Goal.env coq_goal) t in
 
-                    let hp1 = bool_path src.sub in
-                    let hp2 = bool_path dst.sub in
+                    let hp1 = bool_path (Goal.env coq_goal) src.sub in
+                    let hp2 = bool_path (Goal.env coq_goal) dst.sub in
 
                     let log t =
                       Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t;
@@ -1444,17 +1451,18 @@ module Import = struct
                 let rp = concl.sub in
                 let lf = (Utils.get_hyp goal hyp.ctxt.handle).h_form in
                 let rf = goal.g_concl in
-                itrace ts sign goal.g_env `Back lp rp lf rf itr
+                itrace (Goal.env coq_goal) (Goal.sigma coq_goal) ts sign goal.g_env `Back lp rp lf
+                  rf itr
               in
 
               begin
                 match rewrite_data with
                 | Some (_, hsub, side, fsub, esub) ->
-                    let t = Trm.boollist (t @ [ side ]) in
+                    let t = Trm.Datatypes.boollist (Goal.env coq_goal) (t @ [ side ]) in
 
-                    let hp = Trm.boollist hsub in
-                    let gp = Trm.boollist fsub in
-                    let gp' = Trm.natlist esub in
+                    let hp = Trm.Datatypes.boollist (Goal.env coq_goal) hsub in
+                    let gp = Trm.Datatypes.boollist (Goal.env coq_goal) fsub in
+                    let gp' = Trm.Datatypes.natlist (Goal.env coq_goal) esub in
 
                     let log t =
                       Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t;
@@ -1473,10 +1481,10 @@ module Import = struct
                     let back = kname "rew_dnd" in
                     calltac back [ ts; h; hp; gp'; gp; t; i ]
                 | None ->
-                    let t = Trm.boollist t in
+                    let t = Trm.Datatypes.boollist (Goal.env coq_goal) t in
 
-                    let hp = bool_path hyp.sub in
-                    let gp = bool_path concl.sub in
+                    let hp = bool_path (Goal.env coq_goal) hyp.sub in
+                    let gp = bool_path (Goal.env coq_goal) concl.sub in
 
                     let log t =
                       Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) t;
@@ -1497,10 +1505,12 @@ module Import = struct
           | _ -> raise UnexpectedDnD
         end
     | `AInstantiate (wit, tgt) ->
-        let l = bool_path (tgt.sub @ [ 0 ]) in
-        let s = infer_sort goal.g_env wit |> sort_index sign |> Trm.nat_of_int in
+        let l = bool_path (Goal.env coq_goal) (tgt.sub @ [ 0 ]) in
+        let s =
+          infer_sort goal.g_env wit |> sort_index sign |> Trm.Datatypes.of_nat (Goal.env coq_goal)
+        in
         let o = expr sign [] wit in
-        let ts = sorts sign in
+        let ts = sorts (Goal.env coq_goal) sign in
 
         let tac, args =
           begin
@@ -1546,13 +1556,13 @@ module Import = struct
             match tgt.ctxt.kind with
             | `Hyp ->
                 (* let p = tgt.sub |> fix_sub_eq (`F hyp.h_form) |> Trm.natlist in *)
-                let p = tgt.sub |> Trm.natlist in
+                let p = tgt.sub |> Trm.Datatypes.natlist (Goal.env coq_goal) in
                 let id = Names.Id.of_string tgt.ctxt.handle in
                 let h = EConstr.mkVar id in
                 (tac_name ^ "_hyp", [ h; p ])
             | `Concl ->
                 (* let p = tgt.sub |> fix_sub_eq (`F goal.g_concl) |> Trm.natlist in *)
-                let p = tgt.sub |> Trm.natlist in
+                let p = tgt.sub |> Trm.Datatypes.natlist (Goal.env coq_goal) in
                 (tac_name, [ p ])
             | _ -> raise (InvalidPath tgt)
           end
