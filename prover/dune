@@ -1,0 +1,21 @@
+(ocamllex lexer)
+
+(menhir
+ (modules parser)
+ (flags --explain --inspection --table --dump))
+
+(library
+ (name prover)
+ (public_name coq-actema.prover)
+ (libraries
+  coq-actema.api
+  lwt
+  menhirLib
+  batteries
+  tyxml
+  js_of_ocaml
+  ocamlgraph
+  base64)
+ (preprocess
+  (pps tyxml-ppx js_of_ocaml-ppx lwt_ppx))
+ (synopsis "Mini-prover (backend for the GUI)"))
