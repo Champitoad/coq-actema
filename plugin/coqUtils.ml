@@ -1,11 +1,14 @@
 open Proofview
 
+(** A thin wrapper around Proofview.Monad.
+    Introduces some standard monad notations.*)
 module PVMonad = struct
   include Proofview.Monad
 
   let ( let* ) = ( >>= )
 end
 
+(** Use this module when logging in the plugin. *)
 module Log = struct
   let str (str : string) = Feedback.msg_notice (Pp.str str)
   let error msg = CErrors.user_err (Pp.str msg)
@@ -235,33 +238,6 @@ module Trm = struct
 
   let add_names : Names.Constant.t list = List.map Names.Constant.make1 add_knames
   let mul_names : Names.Constant.t list = List.map Names.Constant.make1 mul_knames
-
-  (*let type_ = EConstr.mkSort EConstr.ESorts.type1
-    let list_kname = kername [ "Coq"; "Init"; "Datatypes" ] "list"
-    let bool_kname = kername [ "Coq"; "Init"; "Datatypes" ] "bool"
-    let unit_kname = kername [ "Coq"; "Init"; "Datatypes" ] "unit"
-    let prod_kname = kername [ "Coq"; "Init"; "Datatypes" ] "prod"
-    let option_kname = kername [ "Coq"; "Init"; "Datatypes" ] "option"
-    let app_kname = kername [ "Coq"; "Init"; "Datatypes" ] "app"
-    let sigT_kname = kername [ "Coq"; "Init"; "Specif" ] "sigT"
-    let nat_name : Names.inductive = (Names.MutInd.make1 nat_kname, 0)
-    let bool_name = (Names.MutInd.make1 bool_kname, 0)
-    let prod_name : Names.inductive = (Names.MutInd.make1 prod_kname, 0)
-    let sigT_name : Names.inductive = (Names.MutInd.make1 sigT_kname, 0)
-
-    let option_name : Names.inductive = (Names.MutInd.make1 option_kname, 0)
-    let list_name : Names.inductive = (Names.MutInd.make1 list_kname, 0)
-    let pair_name : Names.constructor = (prod_name, 1)
-    let existT_name : Names.constructor = (sigT_name, 1)
-
-    let none_name : Names.constructor = (option_name, 2)
-    let some_name : Names.constructor = (option_name, 1)
-    let zero_name : Names.constructor = ((Names.MutInd.make1 nat_kname, 0), 1)
-    let succ_name : Names.constructor = ((Names.MutInd.make1 nat_kname, 0), 2)
-    let add_names : Names.Constant.t list = List.map Names.Constant.make1 add_knames
-    let mul_names : Names.Constant.t list = List.map Names.Constant.make1 mul_knames
-    let app_name : Names.Constant.t = Names.Constant.make1 app_kname
-  *)
 end
 
 module Goal = struct
