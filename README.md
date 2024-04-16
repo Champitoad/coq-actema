@@ -28,7 +28,7 @@
 # Troubleshooting 
 
 - If you get an error :
-  Dynlink error: execution of module initializers in the shared library failed: ...
+    Dynlink error: execution of module initializers in the shared library failed: ...
 
   Where ... is the name of an ocaml exception (for instance "Not_found"),
   look in file plugin/actema_main.ml, and check that there are no top-level definitions that 
@@ -37,4 +37,3 @@
   The explanation is that when loading the plugin from theories/ with dune, the top-level definitions in 
   the plugin seem to be executed (or at least the definitions in plugin/actema_main.ml). 
   I think this is similar to what would happen in an executable, not in a library. Not sure it is intended or not.
-  
