@@ -1,0 +1,5 @@
+# This file is used by VScode when launching coqtop.
+# It is not used by dune.
+
+-R theories/ Actema
+-I plugin

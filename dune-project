@@ -4,22 +4,33 @@
 
 (name coq-actema)
 
+; The .opam file is regenerated each time you call dune build.
+; To manually regenerate the .opam file, run :
+; $ dune build actema.opam
+
+(generate_opam_files true)
+
 (package
  (name coq-actema)
- (authors
-  "Benjamin Werner & Pablo Donato & Pierre-Yves Strub & Mathis Bouverot-Dupuis")
  (maintainers "Mathis Bouverot-Dupuis (mathis.bouverot@ens.psl.eu)")
- (synopsis "Integrating the Actema GUI as a tactic")
+ (authors
+  "Benjamin Werner, Pierre-Yves Strub, Pablo Donato, Mathis Bouverot-Dupuis")
+ (homepage "https://github.com/Champitoad/coq-actema")
+ (bug_reports "https://github.com/Champitoad/coq-actema/issues")
+ (synopsis "Integrating the Actema GUI as a Coq tactic")
  (depends
+  (atdgen
+   (>= 2.0))
   (coq
-   (>= 8.19.1))
+   (= 8.19.1))
+  (coq-mathcomp-ssreflect
+   (= 2.2.0))
   (cohttp-lwt-unix
    (>= 5.0.0))
   (sha
    (>= 1.15.2))
-  (atdgen
-   (>= 2.0))
-  (coq-mathcomp-ssreflect
-   (>= 2.2.0))))
-
-(generate_opam_files)
+  (ocaml-lsp-server :with-test)
+  (ocamlformat
+   (and
+    (>= 0.26.1)
+    :with-test))))

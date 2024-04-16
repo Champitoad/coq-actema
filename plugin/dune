@@ -1,11 +1,28 @@
 (library
  (name actema_plugin)
  (public_name coq-actema.plugin)
- (synopsis "Actema plugin.")
+ (synopsis "Thin wrapper around the plugin")
  (flags :standard -rectypes -w -27) ; Coq requires the `-rectypes`
- (libraries coq-core.plugins.ltac sha cohttp-lwt-unix atdgen))
+ (libraries
+  coq-core.plugins.ltac
+  coq-core.tactics
+  atdgen
+  cohttp-lwt-unix
+  sha))
 
-; Atdgen type definitions
+; Atdgen rules
+
+(rule
+ (targets logic_t.ml logic_t.mli)
+ (deps logic.atd)
+ (action
+  (run atdgen -t %{deps})))
+
+(rule
+ (targets logic_b.ml logic_b.mli)
+ (deps logic.atd)
+ (action
+  (run atdgen -b %{deps})))
 
 (rule
  (targets fo_t.ml fo_t.mli)
@@ -14,22 +31,8 @@
   (run atdgen -t %{deps})))
 
 (rule
- (targets logic_t.ml logic_t.mli)
- (deps logic.atd)
- (action
-  (run atdgen -t %{deps})))
-
-; Atdgen biniou encoding/decoding
-
-(rule
  (targets fo_b.ml fo_b.mli)
  (deps fo.atd)
- (action
-  (run atdgen -b %{deps})))
-
-(rule
- (targets logic_b.ml logic_b.mli)
- (deps logic.atd)
  (action
   (run atdgen -b %{deps})))
 

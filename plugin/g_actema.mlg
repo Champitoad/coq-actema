@@ -23,5 +23,10 @@ END
 
 TACTIC EXTEND test_tactic
 | [ "test_tac" ] ->
-  { Actema_main.test_tac }
+  { Actema_main.test_tac () }
+END
+
+TACTIC EXTEND hello_tactic
+| [ "hello_tac" ] ->
+  { Actema_main.hello_tac () }
 END

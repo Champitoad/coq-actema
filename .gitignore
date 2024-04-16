@@ -1,3 +1,7 @@
+# Created by https://www.toptal.com/developers/gitignore/api/ocaml,coq
+# Edit at https://www.toptal.com/developers/gitignore?templates=ocaml,coq
+
+### Coq ###
 .*.aux
 .*.d
 *.a
@@ -33,7 +37,6 @@ nia.cache
 nlia.cache
 nra.cache
 native_compute_profile_*.data
-.fuse_hidden*
 
 # generated timing files
 *.timing.diff
@@ -45,28 +48,26 @@ time-of-build-before.log
 time-of-build-both.log
 time-of-build-pretty.log
 
-_build
-_opam
-Makefile.coq
-Makefile.coq.conf
+### OCaml ###
+*.annot
 
-src/g_actema.ml
-src/fo_t.ml*
-src/fo_b.ml*
-src/logic_t.ml*
-src/logic_b.ml*
-src/utils.ml*
+# ocamlbuild working directory
+_build/
 
-actema.proofs
-theories/fundamental-arithmetics
-theories/flowers
-theories/thesis
-theories/dndinv.v
-/flake.alectryon.nix
+# ocamlbuild targets
+*.byte
 
-.direnv
-.nix
-.vscode
+# oasis generated files
+setup.data
+setup.log
 
-/default.nix
-result
+# Merlin configuring file for Vim and Emacs
+.merlin
+
+# Dune generated files
+*.install
+
+# Local OPAM switch
+_opam/
+
+# End of https://www.toptal.com/developers/gitignore/api/ocaml,coq

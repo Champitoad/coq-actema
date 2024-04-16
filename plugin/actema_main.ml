@@ -56,23 +56,23 @@ let hash_of_lgoal g =
 let hash_of_aident (id : aident) : string =
   id |> Logic_b.string_of_aident |> hash_of
 
-let proofs_path : string =
+let proofs_path () : string =
   let root_path = Loadpath.find_load_path "." |> Loadpath.physical in
   root_path ^ "/actema.proofs"
 
 let path_of_proof (id : aident) : string =
-  Printf.sprintf "%s/%s" proofs_path (hash_of_aident id)
+  Format.sprintf "%s/%s" (proofs_path ()) (hash_of_aident id)
 
 let save_proof (id : aident) (prf : proof) : unit =
   let path = path_of_proof id in
 
-  if not (CUnix.file_readable_p proofs_path) then begin
-    let status = CUnix.sys_command "mkdir" [proofs_path] in
+  if not (CUnix.file_readable_p (proofs_path ())) then begin
+    let status = CUnix.sys_command "mkdir" [proofs_path ()] in
     match status with
     | WEXITED 0 -> ()
     | _ ->
         let err_msg = Printf.sprintf
-          "Could not create directory %s" proofs_path in
+          "Could not create directory %s" (proofs_path ()) in
         raise (Sys_error err_msg)
   end;
   let oc = open_out path in
@@ -264,10 +264,7 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
         interactive ()
   end
 
-module Dest = Monads.StateOption(FOSign)
-
-
-(*let rec print_modpath mpath = 
+let rec print_modpath mpath = 
   match mpath with 
   | Names.ModPath.MPdot (mpath, label) -> 
       print_modpath mpath ^ " DOT " ^ Names.Label.to_string label
@@ -278,23 +275,21 @@ module Dest = Monads.StateOption(FOSign)
       let (_, id, dirpath) = Names.MBId.repr bid in
       let dirs = List.rev @@ Names.DirPath.repr dirpath in 
       "MPbound " ^ Extlib.List.to_string ~sep:"." Names.Id.to_string dirs ^ " " ^ Names.Id.to_string id
- *) 
-let test_tac : unit tactic =
+
+let test_tac () : unit tactic =
+  Log.str @@ proofs_path ();
+
   Goal.enter begin fun coq_goal ->
-    let i = 0 in 
-    let j = 0 in 
-    let dirpath = Names.DirPath.make [ Names.Id.of_string "Test"; Names.Id.of_string "Actema" ] in
-    let label = Names.Label.make "dummy_ind" in 
+    let () = Environ.fold_constants (fun cname cbody acc -> 
+        if Names.Label.to_string (Names.Constant.label cname) = "target424242" then
+          (Log.str @@ print_modpath (Names.Constant.modpath cname);
+          acc)
+        else acc
+    ) (Goal.env coq_goal) () in
+    Tacticals.tclIDTAC
+  end
 
-    let mind_name = Names.MutInd.make2 (MPfile dirpath) label in
-    if not @@ Environ.mem_mind mind_name (Goal.env coq_goal) then 
-      failwith "Invalid mind name.";
-    Log.str "Valid mind name";
-
-    (*let ((_, inst), _) = UnivGen.fresh_constructor_instance (Goal.env coq_goal) ((mind_name, i), j) in
-    let stmt = EConstr.mkConstructU (((mind_name, i), j), EConstr.EInstance.make inst) in*)
-    let stmt = EConstr.UnsafeMonomorphic.mkConstruct ((mind_name, i), j+1) in
-    
-    let hyp_name = Names.Name.mk_name @@ Goal.fresh_name ~basename:"my_hyp" coq_goal () in
-    Tactics.pose_proof hyp_name stmt
-  end 
+let hello_tac () : unit Proofview.tactic = 
+  let lem = Logic_t.{ l_user = "l_user" ; l_full = "l_full" ; l_stmt = `FTrue } in 
+  Feedback.msg_notice @@ Pp.str @@ Logic_b.string_of_lemma lem;
+  Tacticals.tclIDTAC

@@ -2,4 +2,9 @@
  (name Actema)
  (package coq-actema)
  (plugins coq-actema.plugin)
- (theories coq-mathcomp-ssreflect))
+ (modules Loader DnD HOL)
+ ; We only need mathcomp.ssreflect, but for some reason 
+ ; we have to explicitly list some dependencies of mathcomp.ssreflect.
+ ; This is a dune issue : it does not happen when stepping through files
+ ; with VScode/coqtop. 
+ (theories mathcomp.ssreflect elpi HB))
