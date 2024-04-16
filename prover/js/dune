@@ -1,5 +1,7 @@
-; This dune file was a nightmare to get working. 
-; Edit at your own risk !
+; This was a nightmare to get working. Edit at your own risk !
+
+; This dune file handles the generation of prover.js,
+; which will later be copied to frontend/public (see the Makefile at the root).
 
 ; I notably had errors with the caml/threads library, which doesn't seem to work 
 ; in combination with js_of_ocaml. I thus had to use batteries.unthreaded instead of batteries.
@@ -11,7 +13,7 @@
  (package coq-actema)
  (modes js byte))
 
-; The next two rules seem to be quite fragile (w.r.t dune versions for example).
+; The next two rules seem to be quite fragile w.r.t dune's file naming conventions.
 
 (rule
  (target jsprover.js.bc)
@@ -27,9 +29,9 @@
    -package
    menhirLib,batteries.unthreaded,tyxml,lwt,ocamlgraph,js_of_ocaml,atdgen,base64
    -linkpkg
-   ../api/api.cma
+   ../../api/api.cma
    -linkpkg
-   ../prover/prover.cma
+   ../../prover/prover.cma
    .jsprover.eobjs/byte/dune__exe__Jsprover.cmo)))
 
 (rule
