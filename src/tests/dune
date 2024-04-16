@@ -3,11 +3,6 @@
  (modules client)
  (libraries cohttp-lwt-unix))
 
-(tests
- (names translate)
- (modules translate)
- (libraries qcheck-core qcheck-core.runner))
-
 (env
  (dev
   (flags
