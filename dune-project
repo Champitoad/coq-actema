@@ -16,6 +16,8 @@
   (cohttp-lwt-unix
    (>= 5.0.0))
   (sha
-   (>= 1.15.2))))
+   (>= 1.15.2))
+  (atdgen
+   (>= 2.0))))
 
 (generate_opam_files)

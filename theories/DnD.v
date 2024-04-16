@@ -1,4 +1,4 @@
-From mathcomp Require Import ssreflect ssreflect.seq.
+Require Import ssreflect ssreflect.seq.
 
 
 Definition ls := seq Type.

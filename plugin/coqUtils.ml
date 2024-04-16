@@ -41,7 +41,7 @@ end
 
 let name_of_const evd t =
   EConstr.destConst evd t |> fst |>
-  Names.Constant.repr2 |> snd |> Names.Label.to_string
+  Names.Constant.label |> Names.Label.to_string
 
 let name_of_inductive env evd t =
   let name, _ = EConstr.destInd evd t in
