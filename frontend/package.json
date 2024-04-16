@@ -9,8 +9,7 @@
     "electron:build": "vue-cli-service electron:build",
     "electron:serve": "vue-cli-service electron:serve",
     "postinstall": "electron-builder install-app-deps",
-    "postuninstall": "electron-builder install-app-deps",
-    "build-prover": "dune build ; cp -f ../_build/default/jsprover/jsprover.js public/prover.js"
+    "postuninstall": "electron-builder install-app-deps"
   },
   "dependencies": {
     "core-js": "^3.8.3",
