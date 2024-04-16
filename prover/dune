@@ -11,7 +11,7 @@
   coq-actema.api
   lwt
   menhirLib
-  batteries
+  batteries.unthreaded
   tyxml
   js_of_ocaml
   ocamlgraph

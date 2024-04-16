@@ -1,4 +1,26 @@
-# Setting up a development environment
+## Project structure 
+
+- frontend/
+  Contains the GUI, written in javascript and using Vue and electron. 
+
+- prover/
+  Contains the logic for the GUI, written in Ocaml. It communicates to the plugin via http.
+
+- jsprover/
+  Thin wrapper around the prover to ease compilation to javascript.
+
+- plugin/ 
+  Contains the Coq plugin, written in Ocaml. It communicates to the prover via http. 
+
+- api/
+  Contains the data format used to communicate between the prover and the plugin.
+  It uses atdgen to generate Ocaml code.
+
+- theories/
+  Coq tactics that are invoked from the plugin.
+
+
+## Setting up a development environment
 
 - Install opam (e.g. on ubuntu : $ sudo apt install opam). 
 
@@ -13,7 +35,11 @@
 - If using VScode : set the coqtop path. 
   Go to File > Preferences > Settings, type "coqtop" and set the coqtop bin path to _opam/bin
 
-# Build instructions 
+  You'll probably also want to enable formatting on save (formatting uses ocamlformat).
+  Go to File > Preferences > Settings, type "format" and check the option to format on save.
+
+
+## Build instructions 
 
 - To build :
   $ dune build && dune install
@@ -22,6 +48,7 @@
   
 - When changing the dependencies (in dune-project) run :
   $ opam install . --deps-only --with-test --with-doc
+
 
 # Troubleshooting 
 

@@ -1,0 +1,51 @@
+; This dune file was a nightmare to get working. 
+; Edit at your own risk !
+
+; I notably had errors with the caml/threads library, which doesn't seem to work 
+; in combination with js_of_ocaml. I thus had to use batteries.unthreaded instead of batteries.
+
+(executables
+ (names jsprover)
+ (public_names -)
+ (libraries coq-actema.prover coq-actema.api)
+ (package coq-actema)
+ (modes js byte))
+
+; The next two rules seem to be quite fragile (w.r.t dune versions for example).
+
+(rule
+ (target jsprover.js.bc)
+ (deps
+  (file jsprover.bc))
+ (action
+  (run
+   ocamlfind
+   ocamlc
+   -g
+   -o
+   jsprover.js.bc
+   -package
+   menhirLib,batteries.unthreaded,tyxml,lwt,ocamlgraph,js_of_ocaml,atdgen,base64
+   -linkpkg
+   ../api/api.cma
+   -linkpkg
+   ../prover/prover.cma
+   .jsprover.eobjs/byte/dune__exe__Jsprover.cmo)))
+
+(rule
+ (target jsprover.js)
+ (deps
+  (file jsprover.js.bc))
+ (action
+  (run
+   %{bin:js_of_ocaml}
+   --disable
+   genprim
+   --pretty
+   --debug-info
+   --source-map
+   --source-map-inline
+   --no-inline
+   -o
+   %{target}
+   %{deps})))
