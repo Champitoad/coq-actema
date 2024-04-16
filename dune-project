@@ -18,6 +18,8 @@
   (sha
    (>= 1.15.2))
   (atdgen
-   (>= 2.0))))
+   (>= 2.0))
+  (coq-mathcomp-ssreflect
+   (>= 2.2.0))))
 
 (generate_opam_files)

@@ -562,8 +562,6 @@ module Export = struct
 
   (** ** Translating Coq's global and local environments to an Actema environment *)
 
-  open FOSign
-
   (* Local environment of Actema definitions *)
   type varenv = Logic_t.bvar NameMap.t
   type varsign = varenv * FOSign.t
@@ -755,8 +753,8 @@ module Export = struct
           let ty = constr_type |> EConstr.of_constr in
           let* l_stmt = dest_form (e, ty) in
 
-          (** Check we did indeed manage to translate the constructor's type. 
-              Discard the lemma if it is not the case. *)
+          (* Check we did indeed manage to translate the constructor's type. 
+             Discard the lemma if it is not the case. *)
           if not (form_contains_dummy l_stmt) then
             (*(Log.str @@ Format.sprintf "Translated constructor : %s --> %s" 
               l_full 
@@ -844,9 +842,9 @@ module Import = struct
 
   let symbol (sy : symbol) : EConstr.t =
     match sy with
-    | Cst c -> EConstr.mkConst c
-    | Ctr c -> EConstr.mkConstruct c
-    | Ind i -> EConstr.mkInd i
+    | Cst c -> EConstr.UnsafeMonomorphic.mkConst c
+    | Ctr c -> EConstr.UnsafeMonomorphic.mkConstruct c
+    | Ind i -> EConstr.UnsafeMonomorphic.mkInd i
     | Var x -> EConstr.mkVar x
   
   let sort_index (sign : FOSign.t) (s : string) : int =
@@ -858,11 +856,11 @@ module Import = struct
     | `TVar name -> name
 
   let tdyn_ty () : EConstr.t =
-    EConstr.mkInd (Names.MutInd.make1 (kname "TDYN"), 0)
+    EConstr.UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "TDYN"), 0)
   
   let tdyn sort =
     let open EConstr in
-    let tdyn = mkConstruct ((Names.MutInd.make1 (kname "TDYN"), 0), 1) in
+    let tdyn = UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 (kname "TDYN"), 0), 1) in
     mkApp (tdyn, [| sort |])
   
   let sorts (sign : FOSign.t) : EConstr.t =
@@ -872,12 +870,12 @@ module Import = struct
 
   let sort_ty ts (s : EConstr.t) : EConstr.t =
     let name = Names.Constant.make1 (kname "sort") in
-    let ty = EConstr.mkConst name in
+    let ty = EConstr.UnsafeMonomorphic.mkConst name in
     EConstr.mkApp (ty, [| ts; s |])
 
   let env_ty ts () : EConstr.t =
     let name = Names.Constant.make1 (kname "env") in
-    let ty = EConstr.mkConst name in
+    let ty = EConstr.UnsafeMonomorphic.mkConst name in
     EConstr.mkApp (ty, [| ts |])
   
   let clos_ty ts () : EConstr.t =
@@ -887,7 +885,7 @@ module Import = struct
   
   let inst1_ty ts () : EConstr.t =
     let name = Names.Constant.make1 (kname "inst1") in
-    let ty = EConstr.mkConst name in
+    let ty = EConstr.UnsafeMonomorphic.mkConst name in
     EConstr.mkApp (ty, [| ts |])
   
   let type_ (sign : FOSign.t)
@@ -980,7 +978,6 @@ module Import = struct
     let focus, inst = Stdlib.List.split itr in
     let t = focus |> boollist_of_intlist in
     let i =
-      let open EConstr in
       let open Trm in
       let rec filtered_quant acc mode itr lp lf rp rf =
         begin match itr with
@@ -1274,7 +1271,8 @@ module Import = struct
         in
         begin match hyp.h_form with
         | `FTrue | `FFalse ->
-            Tactics.destruct false None (EConstr.mkVar id) None None
+            (*Tactics.destruct false None (EConstr.mkVar id) None None*)
+            failwith "TODO"
         | `FConn (`Not, _) ->
             Tactics.simplest_case (EConstr.mkVar id)
         | `FConn (`Imp, _) ->

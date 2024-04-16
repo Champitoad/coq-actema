@@ -26,32 +26,32 @@ type aident = Logic_t.aident
 
 type proof = (int * Logic_t.action) list
 
-let string_of_aident (name, (hyps, concl) : aident) : string =
+(*let string_of_aident (name, (hyps, concl) : aident) : string =
   let hyps = hyps |>
     Extlib.List.to_string begin fun Logic_t.{ h_form; _ } ->
       Utils.string_of_form h_form
     end in
   let concl = concl |> Utils.string_of_form in
-  Printf.sprintf "#%s%s%s" name hyps concl
+  Printf.sprintf "#%s%s%s" name hyps concl*)
 
-let string_of_proof (prf : proof) : string =
+(*let string_of_proof (prf : proof) : string =
   Extlib.List.to_string ~sep:"\n" ~left:"PROOF\n" ~right:"\nQED"
   begin fun (idx, action) ->
     Printf.sprintf "%d: %s" idx (Utils.string_of_action action)
-  end prf
+  end prf*)
 
 let hash_of (s : string) : string =
   s |> Sha512.string |> Sha512.to_bin |>
   Base64.encode_string ~alphabet:Base64.uri_safe_alphabet
 
-let hash_of_hyp (hyp : Logic_t.hyp) : string =
+(*let hash_of_hyp (hyp : Logic_t.hyp) : string =
   hyp |> Logic_b.string_of_hyp |> hash_of
 
 let hash_of_form (form : Logic_t.form) : string =
   form |> Logic_b.string_of_form |> hash_of
 
 let hash_of_lgoal g =
-  g |> Logic_b.string_of_lgoal |> hash_of
+  g |> Logic_b.string_of_lgoal |> hash_of*)
 
 let hash_of_aident (id : aident) : string =
   id |> Logic_b.string_of_aident |> hash_of
@@ -112,10 +112,9 @@ let load_proof (id : aident) : proof option =
     Some prf
   end
 
-let sign = Translate.peano
+(*let sign = Translate.peano*)
 
 let compile_action ((idx, a) : int * Logic_t.action) : unit tactic =
-  let open PVMonad in
   Goal.enter begin fun coq_goal ->
     let goal, sign = Export.goal coq_goal peano in
     Import.action sign goal coq_goal a
@@ -162,7 +161,6 @@ let export_goals () : Logic_t.goals tactic =
   end coq_goals_tacs (return [])
 
 let get_user_action (goals : Logic_t.goals) : Client.action =
-  let open PVMonad in
   if goals = [] then begin
     Lwt_main.run (Client.send_qed ());
     Client.Done
@@ -189,7 +187,7 @@ let interactive_proof () : proof tactic =
   let rec aux () =
     let open Client in
 
-    (** Handle Undo/Redo. *)
+    (* Handle Undo/Redo. *)
     let continue idx a =
       let cont =
         let* _ = compile_action (idx, a) in
@@ -207,7 +205,7 @@ let interactive_proof () : proof tactic =
             aux ()
       end in
 
-    (** Get the next action that is NOT a lemma request. *)
+    (* Get the next action that is NOT a lemma request. *)
     let rec handle_lemmas (act : action) : action = 
       match act with
       (* We received a lemma request : send the lemmas and get the next action again. *)
@@ -269,7 +267,7 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
 module Dest = Monads.StateOption(FOSign)
 
 
-let rec print_modpath mpath = 
+(*let rec print_modpath mpath = 
   match mpath with 
   | Names.ModPath.MPdot (mpath, label) -> 
       print_modpath mpath ^ " DOT " ^ Names.Label.to_string label
@@ -280,7 +278,7 @@ let rec print_modpath mpath =
       let (_, id, dirpath) = Names.MBId.repr bid in
       let dirs = List.rev @@ Names.DirPath.repr dirpath in 
       "MPbound " ^ Extlib.List.to_string ~sep:"." Names.Id.to_string dirs ^ " " ^ Names.Id.to_string id
-  
+ *) 
 let test_tac : unit tactic =
   Goal.enter begin fun coq_goal ->
     let i = 0 in 
@@ -295,7 +293,7 @@ let test_tac : unit tactic =
 
     (*let ((_, inst), _) = UnivGen.fresh_constructor_instance (Goal.env coq_goal) ((mind_name, i), j) in
     let stmt = EConstr.mkConstructU (((mind_name, i), j), EConstr.EInstance.make inst) in*)
-    let stmt = EConstr.mkConstruct ((mind_name, i), j+1) in
+    let stmt = EConstr.UnsafeMonomorphic.mkConstruct ((mind_name, i), j+1) in
     
     let hyp_name = Names.Name.mk_name @@ Goal.fresh_name ~basename:"my_hyp" coq_goal () in
     Tactics.pose_proof hyp_name stmt

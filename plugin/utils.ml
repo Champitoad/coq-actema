@@ -48,7 +48,7 @@ module LEnv = struct
 end
 
 module Vars = struct
-  let fresh = Uid.fresh ()
+  (*let fresh = Uid.fresh ()*)
   let get (env : env) name = List.assoc_opt name env.env_var
 
   let push (env : env) ((name, bvar) : name * bvar) =
