@@ -22,13 +22,15 @@
  (synopsis "Integrating the Actema GUI as a Coq tactic")
  (depends
   (atdgen
-   (>= 2.0))
+   (>= 2.15.0))
   (coq
    (= 8.19.1))
   (coq-mathcomp-ssreflect
    (= 2.2.0))
   (cohttp-lwt-unix
-   (>= 5.0.0))
+   (>= 5.3.0))
+  (lwt_ppx
+   (>= 2.1.0))
   (sha
    (>= 1.15.2))
   (tyxml
