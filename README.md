@@ -23,9 +23,14 @@
 - When changing the dependencies (in dune-project) run :
   $ opam install . --deps-only --with-test --with-doc
 
-  If this doesn't do anything, try commiting (git commit) your local changes first.
-
 # Troubleshooting 
+
+- If you get opam errors when creating the switch,
+  try commiting (git commit) your changes, then run :
+  $ opam clean
+  $ opam install .
+
+
 
 - If you get an error :
     Dynlink error: execution of module initializers in the shared library failed: ...

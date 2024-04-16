@@ -11,11 +11,11 @@ depends: [
   "dune" {>= "3.13"}
   "atdgen" {>= "2.0"}
   "coq" {= "8.19.1"}
+  "coq-mathcomp-ssreflect" {= "2.2.0"}
   "cohttp-lwt-unix" {>= "5.0.0"}
   "sha" {>= "1.15.2"}
   "ocaml-lsp-server" {with-test}
   "ocamlformat" {>= "0.26.1" & with-test}
-  "coq-mathcomp-ssreflect" {>= "2.2.0"}
   "odoc" {with-doc}
 ]
 build: [
