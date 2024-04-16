@@ -2,7 +2,6 @@
  (name actema_plugin)
  (public_name coq-actema.plugin)
  (synopsis "Thin wrapper around the plugin")
- (flags :standard -rectypes -w -27) ; Coq requires the `-rectypes`
  (libraries
   coq-core.plugins.ltac
   coq-core.tactics

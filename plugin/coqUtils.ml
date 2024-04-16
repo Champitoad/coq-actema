@@ -124,7 +124,7 @@ module Trm = struct
   let var name =
     EConstr.mkVar (Names.Id.of_string name)
   
-  let lambda x ty body =
+  let lambda _x _ty _body =
     (*let x = Context.annotR (Names.Id.of_string x) in
     mkNamedLambda x ty body*)
     failwith "todo"
