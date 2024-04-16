@@ -19,6 +19,19 @@
 - theories/
   Coq tactics that are invoked from the plugin.
 
+## Development workflow
+
+- Build the ocaml code. From the root :
+  $ make
+
+- Launch the frontend. From frontend/, and in another terminal :
+  $ npm run electron:serve
+
+- Step through a coq file until you reach an actema tactic.
+
+There is no need to re-launch the frontend every time ! 
+The frontend will automatically reload (hot-reload) when changing files in frontend/src
+or when running make.
 
 ## Setting up a development environment
 
@@ -38,6 +51,7 @@
   You'll probably also want to enable formatting on save (formatting uses ocamlformat).
   Go to File > Preferences > Settings, type "format" and check the option to format on save.
 
+- Follow the instructions in frontend/README.md to setup the javascript stuff.
 
 ## Build instructions 
 

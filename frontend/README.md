@@ -11,12 +11,6 @@
 - Install the project dependencies :
   $ yarn install
 
-## Compiles and hot-reloads for development
+## Launch the application
+
 $ yarn run electron:serve
-
-## Compiles and minifies for production
-$ yarn run electron:build
-
-
-## Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
