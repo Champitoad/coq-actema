@@ -120,8 +120,9 @@ module Export = struct
     `FPred ("_dummy", [])
 
   let is_prop env evd term =
-    let sort = Retyping.get_sort_of env evd term in
-    Sorts.is_prop sort
+    (*let sort = Retyping.get_sort_of env evd term in
+    Sorts.is_prop sort*)
+    failwith "TODO"
 
   let is_imp (env, evd) x t1 t2 : bool = 
     is_prop env evd t1
@@ -713,8 +714,8 @@ module Export = struct
           let ty = ckey.Declarations.const_type |> EConstr.of_constr in
           let* l_stmt = dest_form (e, ty) in
 
-          (** Check we did indeed manage to translate the lemma. 
-              Discard the lemma if it is not the case. *)
+          (* Check we did indeed manage to translate the lemma. 
+             Discard the lemma if it is not the case. *)
           if not (form_contains_dummy l_stmt) then
             return @@ Logic_t.{ l_user; l_full; l_stmt } :: lemmas
           else 
@@ -889,7 +890,7 @@ module Import = struct
     let ty = EConstr.mkConst name in
     EConstr.mkApp (ty, [| ts |])
   
-  let rec type_ (sign : FOSign.t)
+  let type_ (sign : FOSign.t)
       (ty : Fo_t.type_) : EConstr.t =
     match ty with
     | `TVar x ->
@@ -1071,6 +1072,7 @@ module Import = struct
   exception UnsupportedAction of Logic_t.action
   exception UnexpectedDnD
   exception InvalidPath of Logic_t.ipath
+
   (** Contains the lemma name and an error message. *)
   exception InvalidLemma of string * string 
   
@@ -1250,9 +1252,10 @@ module Import = struct
             (mk_pat : Names.variable list -> Names.variable list list)
             : unit tactic =
           (* Apply destruct *)
-          let h = EConstr.mkVar id in
+          (*let h = EConstr.mkVar id in
           let pat = mk_or_and_intro_pattern (mk_pat ids) in
-          Tactics.destruct false None h (Some pat) None
+          Tactics.destruct false None h (Some pat) None*)
+          failwith "todo"
         in
         let destruct_and =
           let hyps_ids = Goal.hyps_names coq_goal in

@@ -157,11 +157,11 @@ module Trm = struct
       dprod "dummy" f1 f2
     
     let not f =
-      let not = mkConst (Names.Constant.make1 (kname "not")) in
+      let not = UnsafeMonomorphic.mkConst (Names.Constant.make1 (kname "not")) in
       mkApp (not, [|f|])
 
     let iff f1 f2 =
-      let iff = mkConst (Names.Constant.make1 (kname "iff")) in
+      let iff = UnsafeMonomorphic.mkConst (Names.Constant.make1 (kname "iff")) in
       mkApp (iff, [|f1; f2|])
     
     let ex x ty body =
