@@ -1,4 +1,4 @@
-From mathcomp Require Import ssreflect ssreflect.seq.
+From Coq Require Import ssreflect ssreflect.seq.
 
 
 Inductive DYN :=

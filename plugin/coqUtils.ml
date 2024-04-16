@@ -70,7 +70,7 @@ let arity_of_inductive env (ind : Names.inductive) : EConstr.t =
   let body = ind_body env ind in
   match body.Declarations.mind_arity with
   | RegularArity ar -> EConstr.of_constr ar.mind_user_arity
-  | TemplateArity ar -> EConstr.mkType ar.template_level
+  | TemplateArity ar -> (*EConstr.mkType ar.template_level*) failwith "TODO"
 
 let kname_of_constructor env (c : Names.Construct.t) : Names.KerName.t =
   let ind = Names.inductive_of_constructor c in
@@ -126,7 +126,8 @@ module Trm = struct
   
   let lambda x ty body =
     let x = Context.annotR (Names.Id.of_string x) in
-    mkNamedLambda x ty body
+    (*mkNamedLambda x ty body*)
+    failwith "todo"
   
   let dprod x ty body =
     let x = Context.nameR (Names.Id.of_string x) in
@@ -139,17 +140,17 @@ module Trm = struct
       Names.(KerName.equal (MutInd.canonical mind) (kname name)) && i = 0
 
     let true_ =
-      mkInd (Names.MutInd.make1 (kname "True"), 0)
+      UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "True"), 0)
 
     let false_ =
-      mkInd (Names.MutInd.make1 (kname "True"), 0)
+      UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "True"), 0)
 
     let and_ f1 f2 =
-      let and_ = mkInd (Names.MutInd.make1 (kname "and"), 0) in
+      let and_ = UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "and"), 0) in
       mkApp (and_, [|f1; f2|])
 
     let or_ f1 f2 =
-      let or_ = mkInd (Names.MutInd.make1 (kname "or"), 0) in
+      let or_ = UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "or"), 0) in
       mkApp (or_, [|f1; f2|])
     
     let imp f1 f2 =
@@ -164,7 +165,7 @@ module Trm = struct
       mkApp (iff, [|f1; f2|])
     
     let ex x ty body =
-      let ex = mkInd (Names.MutInd.make1 (kname "ex"), 0) in
+      let ex = UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "ex"), 0) in
       let p = lambda x ty body in
       mkApp (ex, [|ty; p|])
     
@@ -172,12 +173,12 @@ module Trm = struct
       dprod x ty body
 
     let eq ty =
-      let eq = mkInd (Names.MutInd.make1 (kname "eq"), 0) in
+      let eq = UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "eq"), 0) in
       mkApp (eq, [|ty|])
   end
 
   let type_ =
-    EConstr.mkSort (Sorts.type1)
+    EConstr.mkSort (ESorts.type1)
 
   let list_kname =
     kername ["Coq"; "Init"; "Datatypes"] "list"
@@ -223,38 +224,38 @@ module Trm = struct
   let nat_name : Names.inductive =
     Names.MutInd.make1 nat_kname, 0
   let nat =
-    mkInd nat_name
+    UnsafeMonomorphic.mkInd nat_name
 
   let bool_name =
     (Names.MutInd.make1 bool_kname, 0)
   let bool =
-    mkInd bool_name
+    UnsafeMonomorphic.mkInd bool_name
 
   let unit =
-    mkInd (Names.MutInd.make1 unit_kname, 0)
+    UnsafeMonomorphic.mkInd (Names.MutInd.make1 unit_kname, 0)
   
   let prod_name : Names.inductive =
     Names.MutInd.make1 prod_kname, 0
   let prod t1 t2 =
-    let prod = mkInd prod_name in
+    let prod = UnsafeMonomorphic.mkInd prod_name in
     mkApp (prod, [| t1; t2 |])
   
   let sigT_name : Names.inductive =
     Names.MutInd.make1 sigT_kname, 0
   let sigT x ty p =
-    let sigT = mkInd sigT_name in
+    let sigT = UnsafeMonomorphic.mkInd sigT_name in
     mkApp (sigT, [| ty; lambda x ty p |])
   
   let option_name : Names.inductive =
     Names.MutInd.make1 option_kname, 0
   let option ty =
-    let option = mkInd option_name in
+    let option = UnsafeMonomorphic.mkInd option_name in
     mkApp (option, [| ty |])
   
   let list_name : Names.inductive =
     Names.MutInd.make1 list_kname, 0
   let list ty =
-    let list = mkInd list_name in
+    let list = UnsafeMonomorphic.mkInd list_name in
     mkApp (list, [| ty |])
   
   let nil ty =

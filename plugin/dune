@@ -25,7 +25,7 @@
  (targets fo_b.ml fo_b.mli)
  (deps fo.atd)
  (action
-  (run atdgen -t %{deps})))
+  (run atdgen -b %{deps})))
 
 (rule
  (targets logic_b.ml logic_b.mli)

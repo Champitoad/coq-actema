@@ -1,4 +1,4 @@
 (coq.theory
  (name Actema)
  (package coq-actema)
- (plugins coq-actema.plugin))
+ (plugins coq-actema.plugin coq-mathcomp-ssreflect))
