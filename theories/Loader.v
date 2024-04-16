@@ -1,2 +1,5 @@
-Declare ML Module "actema_plugin".
-From Actema Require Export HOL.
+Declare ML Module "coq-actema.plugin".
+(*From Actema Require Export HOL.*)
+
+Lemma test : True.
+Proof. test_tac. Admitted.

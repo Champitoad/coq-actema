@@ -1,0 +1,18 @@
+;(library
+; (name actema_plugin)
+; (public_name coq-actema.plugin)
+; (synopsis "Integrating the Actema GUI as a tactic.")
+; (flags :standard -rectypes -w -27) ; Coq requires the `-rectypes`
+; (libraries coq-core.plugins.ltac atdgen cohttp-lwt-unix sha))
+
+(library
+ (name actema_plugin)
+ (public_name coq-actema.plugin)
+ (synopsis "Actema plugin.")
+ (flags :standard -rectypes -w -27) ; Coq requires the `-rectypes`
+ (libraries coq-core.plugins.ltac sha cohttp-lwt-unix))
+
+; This will let Dune know about Coq's .mlg grammar files.
+
+(coq.pp
+ (modules g_actema))

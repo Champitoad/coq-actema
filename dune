@@ -1,7 +1,0 @@
-(dirs :standard \ actema-desktop)
-
-(rule
- (alias update_api)
- (deps src/logic_b.ml src/logic_b.mli src/logic_t.ml src/logic_t.mli)
- (action
-  (run cp %{deps} ../../actema-desktop/prover/libs/api/)))

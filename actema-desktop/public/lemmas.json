@@ -1,5 +1,0 @@
-{
-    "one_one_two": "add(S(Z()), S(Z())) = S(S(Z()))",
-    "add_comm": "forall x : nat. forall y : nat. add(x, y) = add(y, x)",
-    "mult_one": "forall x : nat. mult(S(Z()), x) = x"
-}

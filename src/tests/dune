@@ -1,9 +1,0 @@
-(tests
- (names client)
- (modules client)
- (libraries cohttp-lwt-unix))
-
-(env
- (dev
-  (flags
-   (:standard -warn-error -A))))

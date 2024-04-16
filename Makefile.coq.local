@@ -1,6 +1,0 @@
-CAMLFLAGS = -rectypes -w -26 -warn-error -A -thread -g
-CAMLPKGS = -package atdgen -package cohttp-lwt-unix -package sha
-
-cleanall::
-	rm -f theories/.*.aux
-	rm -f Makefile.coq Makefile.coq.conf

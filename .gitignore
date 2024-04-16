@@ -46,6 +46,7 @@ time-of-build-both.log
 time-of-build-pretty.log
 
 _build
+_opam
 Makefile.coq
 Makefile.coq.conf
 

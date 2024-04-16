@@ -1,8 +1,4 @@
 (coq.theory
  (name Actema)
- (package coq-actema)             ; Adding this line will make your
-                                  ; library installable in the opam package
- (libraries coq-actema.plugin))
-
-; Other important fields are `modules` and `flags`, see Dune
-; documentation for more details.
+ (package coq-actema)
+ (plugins coq-actema.plugin))
