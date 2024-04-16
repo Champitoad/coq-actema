@@ -1,6 +1,6 @@
 val identity : 'a -> 'a
-val (|>>) : ('a -> 'b) -> ('b -> 'c) -> 'a -> 'c
-val (<<|) : ('b -> 'c) -> ('a -> 'b) -> 'a -> 'c
+val ( |>> ) : ('a -> 'b) -> ('b -> 'c) -> 'a -> 'c
+val ( <<| ) : ('b -> 'c) -> ('a -> 'b) -> 'a -> 'c
 
 module BiMap (K : Map.OrderedType) (V : Map.OrderedType) : sig
   type t
@@ -10,13 +10,11 @@ module BiMap (K : Map.OrderedType) (V : Map.OrderedType) : sig
   val keys : t -> K.t list
   val values : t -> V.t list
   val size : t -> int
-
   val empty : t
   val union : t -> t -> t
   val add : K.t -> V.t -> t -> t
   val replace : K.t -> V.t -> t -> t
   val remove : K.t -> t -> t
-
   val mem : K.t -> t -> bool
   val find : K.t -> t -> V.t
   val find_opt : K.t -> t -> V.t option
@@ -29,10 +27,7 @@ module List : sig
   include module type of Stdlib.List
 
   val nth_index : int -> 'a -> 'a t -> int
-
-  val to_string :
-    ?sep : string -> ?left : string -> ?right : string ->
-    ('a -> string) -> 'a t -> string
+  val to_string : ?sep:string -> ?left:string -> ?right:string -> ('a -> string) -> 'a t -> string
 
   (** Returns the first [n] elements of a list [l]. 
       If [l] has less than [n] elements, returns [l]. *)
@@ -40,7 +35,7 @@ module List : sig
 
   (** Like [cons], but in reverse. *)
   val snoc : 'a list -> 'a -> 'a list
-  
+
   (** The opposite of [snoc] : seperate a list into its last element and the initial portion. *)
   val unsnoc : 'a list -> ('a list * 'a) option
 

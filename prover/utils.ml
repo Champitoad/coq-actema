@@ -10,13 +10,14 @@ module String = BatString
 include BatPervasives
 
 (* -------------------------------------------------------------------- *)
+
 (** You should use this instead of Format.printf or Printf.printf to log
     messages from the prover (or else the messages might not get displayed). *)
 let js_log s = Js_of_ocaml.(Firebug.console##log (Js.string s))
 
 (** Time the execution of a function and print the measured duration. *)
 let time (label : string) (f : unit -> 'a) : 'a =
-  let start = Sys.time () in 
+  let start = Sys.time () in
   let res = f () in
   let stop = Sys.time () in
   js_log @@ Format.sprintf "Time [%s]: %.2f seconds\n" label (stop -. start);

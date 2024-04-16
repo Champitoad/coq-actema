@@ -52,7 +52,8 @@ type linkaction =
   | `Both of linkaction * linkaction
   | `Subform of Form.Subst.subst * Form.Subst.subst  (** Subformula linking. *)
   | `Instantiate of expr * IPath.t
-  | `Rewrite of expr * expr * IPath.t list  (** Rewrite expression [e1] into [e2] at several paths. *)
+  | `Rewrite of expr * expr * IPath.t list
+    (** Rewrite expression [e1] into [e2] at several paths. *)
   | `Fold of vname * IPath.t list
   | `Unfold of vname * IPath.t list ]
 

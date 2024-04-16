@@ -58,8 +58,7 @@ module Vars = struct
   let push_lenv (env : env) (lenv : lenv) : env =
     List.fold_left (fun env (x, ty) -> push env (x, (ty, None))) env lenv
 
-  let byid env id =
-    List.assoc_opt id env.env_var
+  let byid env id = List.assoc_opt id env.env_var
 end
 
 module Funs = struct

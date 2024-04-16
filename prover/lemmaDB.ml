@@ -3,7 +3,7 @@ open CoreLogic
 open Utils
 
 let filter_by_name pattern proof =
-  let filter _full_name (user_name, _stmt) = 
+  let filter _full_name (user_name, _stmt) =
     (* Check that the pattern is an exact substring of the lemma's name.
        The test is case-insensitive. *)
     let user_name = String.lowercase_ascii user_name in
@@ -14,10 +14,7 @@ let filter_by_name pattern proof =
     with Not_found -> false
   in
   let db = proof |> Proof.get_db in
-  let new_map =
-    Utils.time "filter-by-name" @@ fun () -> 
-      Map.filter filter db.db_map
-  in
+  let new_map = Utils.time "filter-by-name" @@ fun () -> Map.filter filter db.db_map in
   Proof.set_db proof { db with db_map = new_map }
 
 let filter_by_selection selection proof =
@@ -29,10 +26,10 @@ let filter_by_selection selection proof =
       ; Pred.lift @@ Pred.wf_subform ~drewrite:true
       ]
   in
-  let filter _full_name (_user_name, stmt) = 
+  let filter _full_name (_user_name, stmt) =
     (* Make a new goal that has :
-    - the lemma as a local hypothesis.
-    - its environment extended with the environment of the lemma database. *)
+       - the lemma as a local hypothesis.
+       - its environment extended with the environment of the lemma database. *)
     let Proof.{ g_id; g_pregoal = sub } = IPath.goal proof selection in
     let hd = Handle.fresh () in
     let sub =
@@ -49,9 +46,7 @@ let filter_by_selection selection proof =
       IPath.make ~ctxt:{ kind = `Hyp; handle = Handle.toint hd } (Handle.toint g_id)
     in
     (* Make sure the path to the selection is in the new goal. *)
-    let selection =
-      IPath.make ~ctxt:selection.ctxt ~sub:selection.sub (Handle.toint g_id)
-    in
+    let selection = IPath.make ~ctxt:selection.ctxt ~sub:selection.sub (Handle.toint g_id) in
     (* Compute all linkactions. *)
     let linkactions =
       (* Here the source of the linkaction is fixed to the selection (no subterms),
@@ -63,7 +58,7 @@ let filter_by_selection selection proof =
   in
   (* Filter the lemma database. *)
   let db = proof |> Proof.get_db in
-  let new_map = 
+  let new_map =
     Utils.time "filter-by-selection" @@ fun () -> Map.filter filter db.db_map
     (* Note that the proof is modified in [filter] (we add a new hypothesis),
        but since it is an immutable structure the changes are not reflected here. *)

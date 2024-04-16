@@ -202,21 +202,25 @@ let rec js_proof_engine (proof : Proof.proof) =
       (* Decode the data. *)
       let env, lemmas =
         Utils.time "decode-lemmas" @@ fun () ->
-          datab |> Js.to_string |> Base64.decode_exn |> Api.Logic_b.lemmadb_of_string
+        datab |> Js.to_string |> Base64.decode_exn |> Api.Logic_b.lemmadb_of_string
       in
       (* Translate the lemmas and env to the actema format. *)
-      let lemmas = 
+      let lemmas =
         Utils.time "translate-lemmas" @@ fun () ->
-          List.map begin fun Api.Logic_t.{ l_user; l_full; l_stmt } -> 
-            l_full, (l_user, Fo.Translate.to_form l_stmt)
-        end lemmas
+        List.map
+          begin
+            fun Api.Logic_t.{ l_user; l_full; l_stmt } ->
+              (l_full, (l_user, Fo.Translate.to_form l_stmt))
+          end
+          lemmas
       in
-      let env = 
+      let env =
         Utils.time "translate-env" @@ fun () ->
-          Hidmap.State.run (Fo.Translate.to_env env) Hidmap.empty in
+        Hidmap.State.run (Fo.Translate.to_env env) Hidmap.empty
+      in
       (* Check the lemmas are all well-typed in the database environment. *)
-      Utils.time "type-check-lemmas" @@ fun () -> 
-        List.iter (fun (_, (_, form)) -> Fo.Form.recheck env form) lemmas;
+      Utils.time "type-check-lemmas" @@ fun () ->
+      List.iter (fun (_, (_, form)) -> Fo.Form.recheck env form) lemmas;
       (* Create the lemma database. *)
       let db = Proof.{ db_env = env; db_map = Map.of_seq @@ List.to_seq lemmas } in
       (* Print debug info. *)
@@ -230,16 +234,16 @@ let rec js_proof_engine (proof : Proof.proof) =
         Returns an array of lemmas. Each lemma contains three strings : (full-name, user-name, pretty-printed-formula) *)
     method getlemmas =
       let db = _self##.proof |> Proof.get_db in
-      db.db_map 
-      |> Map.bindings
-      |> List.map begin fun (full_name, (user_name, form)) ->
-          let full_name = full_name |> Js.string in
-          let user_name = user_name |> Js.string in
-          let stmt = Notation.f_tostring db.db_env form |> Js.string in
-             Js.array [| full_name; user_name; stmt |]
-         end
-      |> Array.of_list 
-      |> Js.array
+      db.db_map |> Map.bindings
+      |> List.map
+           begin
+             fun (full_name, (user_name, form)) ->
+               let full_name = full_name |> Js.string in
+               let user_name = user_name |> Js.string in
+               let stmt = Notation.f_tostring db.db_env form |> Js.string in
+               Js.array [| full_name; user_name; stmt |]
+           end
+      |> Array.of_list |> Js.array
 
     (** Filter the lemma database according to :
         - the current selection.
@@ -263,10 +267,8 @@ let rec js_proof_engine (proof : Proof.proof) =
       (* Fiter by selection. *)
       let proof =
         match selection with
-        | None | Some [] ->
-            proof
-        | Some [ selection ] ->
-            LemmaDB.filter_by_selection selection proof
+        | None | Some [] -> proof
+        | Some [ selection ] -> LemmaDB.filter_by_selection selection proof
         | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
       in
       js_proof_engine proof
@@ -357,8 +359,10 @@ and js_subgoal parent (handle : Handle.t) =
         (* Check the lemma database contains the lemma name (and raise LemmaNotFound if it doesn't),
            and recheck the lemma's statement (just to make sure). *)
         let db = Proof.get_db parent##.proof in
-        let (_, stmt) =
-          Option.get_exn (Map.find_opt full_name db.db_map) (Failure ("lemma not found " ^ full_name))
+        let _, stmt =
+          Option.get_exn
+            (Map.find_opt full_name db.db_map)
+            (Failure ("lemma not found " ^ full_name))
         in
         Form.recheck db.db_env stmt;
         js_log "recheck ok\n";
