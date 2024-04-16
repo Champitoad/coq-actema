@@ -1,16 +1,19 @@
 ## Project structure 
 
 - frontend/
-  Contains the GUI, written in javascript and using Vue and electron. 
+  Contains the GUI, written in Vue and packaged as a desktop application with Electron. 
+  It communicates to the plugin via http, by implementing directly an http server with Node.js.
 
 - prover/
-  Contains the logic for the GUI, written in Ocaml. It communicates to the plugin via http.
+  Contains the logic for the GUI, written in Ocaml.
+  It is transpiled to JavaScript with js_of_ocaml, so that it can be run in the browser engine of Electron.
 
 - prover/js/
-  Thin wrapper around the prover to ease compilation to javascript.
+  Thin wrapper around the prover to ease transpilation to JavaScript.
 
 - plugin/ 
-  Contains the Coq plugin, written in Ocaml. It communicates to the prover via http. 
+  Contains a Coq plugin, written in Ocaml. 
+  It exposes new tactics actema and actema_force that send Coq goals to the frontend (via http), and compiles the actions performed by the user in the frontend back to Coq tactics.
 
 - api/
   Contains the data format used to communicate between the prover and the plugin.
@@ -39,6 +42,7 @@ or when running make.
 
 - Create a local opam switch. In the root of the project :
   $ opam switch create . 5.1.1 --repos default,coq-released=https://coq.inria.fr/opam/released --with-test --with-doc
+  And follow the instructions given by ocaml.
 
   This will create a switch with ocaml (version 5.1.1) and add a remote repository (needed to fetch mathcomp),
   and install all opam dependencies (including development-only dependencies such as ocaml-lsp-server).
@@ -53,14 +57,7 @@ or when running make.
 
 - Follow the instructions in frontend/README.md to setup the javascript stuff.
 
-## Build instructions 
-
-- To build :
-  $ dune build && dune install
-
-  To step through coq files in VScode, it is important to run "dune install" first !
-  
-- When changing the dependencies (in dune-project) run :
+- When changing the dependencies (in dune-project), commit the changes (git commit) and then run :
   $ opam install . --deps-only --with-test --with-doc
 
 
@@ -71,7 +68,7 @@ or when running make.
   $ opam clean
   $ opam install .
 
-- If you get an error when running dune build :
+- If you get an error when running make/dune build :
     Dynlink error: execution of module initializers in the shared library failed: ...
 
   Where ... is the name of an ocaml exception (for instance "Not_found"),

@@ -308,8 +308,3 @@ let test_tac () : unit tactic =
         in
         Tacticals.tclIDTAC
     end
-
-let hello_tac () : unit Proofview.tactic =
-  let lem = Logic_t.{ l_user = "l_user"; l_full = "l_full"; l_stmt = `FTrue } in
-  Feedback.msg_notice @@ Pp.str @@ Logic_b.string_of_lemma lem;
-  Tacticals.tclIDTAC
