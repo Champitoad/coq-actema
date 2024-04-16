@@ -125,8 +125,8 @@ module Trm = struct
     EConstr.mkVar (Names.Id.of_string name)
   
   let lambda x ty body =
-    let x = Context.annotR (Names.Id.of_string x) in
-    (*mkNamedLambda x ty body*)
+    (*let x = Context.annotR (Names.Id.of_string x) in
+    mkNamedLambda x ty body*)
     failwith "todo"
   
   let dprod x ty body =
@@ -259,46 +259,46 @@ module Trm = struct
     mkApp (list, [| ty |])
   
   let nil ty =
-    let nil = mkConstruct ((Names.MutInd.make1 list_kname, 0), 1) in
+    let nil = UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 list_kname, 0), 1) in
     mkApp (nil, [|ty|])
 
   let cons ty x l =
-    let cons = mkConstruct ((Names.MutInd.make1 list_kname, 0), 2) in
+    let cons = UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 list_kname, 0), 2) in
     mkApp (cons, [|ty; x; l|])
 
   let pair_name : Names.constructor =
     prod_name, 1
   let pair ty1 ty2 t1 t2 =
-    let pair = mkConstruct pair_name in
+    let pair = UnsafeMonomorphic.mkConstruct pair_name in
     mkApp (pair, [| ty1; ty2; t1; t2 |])
   
   let existT_name : Names.constructor =
     sigT_name, 1
   let existT x ty p w t =
-    let existT = mkConstruct existT_name in
+    let existT = UnsafeMonomorphic.mkConstruct existT_name in
     mkApp (existT, [| ty; lambda x ty p; w; t |])
   
   let none_name : Names.constructor =
     option_name, 2
   let none ty =
-    let none = mkConstruct none_name in
+    let none = UnsafeMonomorphic.mkConstruct none_name in
     mkApp (none, [| ty |])
 
   let some_name : Names.constructor =
     option_name, 1
   let some ty t =
-    let some = mkConstruct some_name in
+    let some = UnsafeMonomorphic.mkConstruct some_name in
     mkApp (some, [|ty; t|])
   
   let zero_name : Names.constructor =
     (Names.MutInd.make1 nat_kname, 0), 1
   let zero =
-    mkConstruct zero_name
+    UnsafeMonomorphic.mkConstruct zero_name
 
   let succ_name : Names.constructor =
     (Names.MutInd.make1 nat_kname, 0), 2
   let succ n =
-    let succ = mkConstruct succ_name in
+    let succ = UnsafeMonomorphic.mkConstruct succ_name in
     mkApp (succ, [|n|])
   
   let add_names : Names.Constant.t list =
@@ -312,7 +312,7 @@ module Trm = struct
   
   
   let tt =
-    mkConstruct ((Names.MutInd.make1 unit_kname, 0), 1)
+    UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 unit_kname, 0), 1)
   
   let rec nat_of_int n =
     match n with
@@ -321,8 +321,8 @@ module Trm = struct
   
   let bool_of_bool b =
     match b with
-    | true -> mkConstruct ((Names.MutInd.make1 bool_kname, 0), 1)
-    | false -> mkConstruct ((Names.MutInd.make1 bool_kname, 0), 2)
+    | true -> UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 bool_kname, 0), 1)
+    | false -> UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 bool_kname, 0), 2)
   
   let of_list ty cast l =
     List.fold_right (fun x t -> cons ty (cast x) t) l (nil ty)
