@@ -1,0 +1,30 @@
+(library
+ (name api)
+ (public_name coq-actema.api)
+ (libraries atdgen))
+
+; Atdgen rules
+
+(rule
+ (targets logic_t.ml logic_t.mli)
+ (deps logic.atd)
+ (action
+  (run atdgen -t %{deps})))
+
+(rule
+ (targets logic_b.ml logic_b.mli)
+ (deps logic.atd)
+ (action
+  (run atdgen -b %{deps})))
+
+(rule
+ (targets fo_t.ml fo_t.mli)
+ (deps fo.atd)
+ (action
+  (run atdgen -t %{deps})))
+
+(rule
+ (targets fo_b.ml fo_b.mli)
+ (deps fo.atd)
+ (action
+  (run atdgen -b %{deps})))

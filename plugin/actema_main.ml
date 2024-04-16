@@ -1,6 +1,7 @@
 open Proofview
 open Translate
 open CoqUtils
+open Api
 
 (* -------------------------------------------------------------------- *)
 (** The actema tactic *)

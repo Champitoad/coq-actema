@@ -1,4 +1,4 @@
-open Api.Logic_t
+open Logic_t
 
 val biniou_unhash_dict : int -> string option
 

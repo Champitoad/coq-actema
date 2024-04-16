@@ -2,6 +2,7 @@ open Proofview
 open CoqUtils
 open Utils
 open Extlib
+open Api
 
 (* -------------------------------------------------------------------- *)
 (** * Configuration flags *)

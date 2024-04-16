@@ -2,6 +2,7 @@ open Cohttp
 open Cohttp_lwt_unix
 open Lwt.Syntax
 open CoqUtils
+open Api
 
 (* This file defines the HTTP protocol used to communicate between
    the plugin (http client) and the frontend (http server). *)

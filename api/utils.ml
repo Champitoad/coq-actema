@@ -1,6 +1,5 @@
-open Api
-open Logic_t
 open Fo_t
+open Logic_t
 
 module Uid : sig
   include Map.OrderedType
@@ -21,7 +20,7 @@ end
 
 module Env = struct
   let empty =
-    Api.Fo_t.
+    Fo_t.
       { env_sort = []
       ; env_prp = []
       ; env_fun = []
@@ -32,7 +31,7 @@ module Env = struct
       }
 
   let concat e1 e2 =
-    Api.Fo_t.
+    Fo_t.
       { env_sort = e1.env_sort @ e2.env_sort
       ; env_prp = e1.env_prp @ e2.env_prp
       ; env_fun = e1.env_fun @ e2.env_fun
@@ -60,9 +59,7 @@ module Vars = struct
     List.fold_left (fun env (x, ty) -> push env (x, (ty, None))) env lenv
 
   let byid env id =
-    let open Monads.Option in
-    let* body = List.assoc_opt id env.env_var in
-    return body
+    List.assoc_opt id env.env_var
 end
 
 module Funs = struct
