@@ -70,7 +70,7 @@ let arity_of_inductive env (ind : Names.inductive) : EConstr.t =
   let body = ind_body env ind in
   match body.Declarations.mind_arity with
   | RegularArity ar -> EConstr.of_constr ar.mind_user_arity
-  | TemplateArity ar -> (*EConstr.mkType ar.template_level*) failwith "TODO"
+  | TemplateArity ar -> EConstr.mkSort @@ EConstr.ESorts.make ar.template_level
 
 let kname_of_constructor env (c : Names.Construct.t) : Names.KerName.t =
   let ind = Names.inductive_of_constructor c in

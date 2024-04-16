@@ -1563,7 +1563,7 @@ Ltac exarg n t :=
   let r := (tnth l ((S n))) in
    r.
 
-Check  ltac:(let r := tnth (1::2::3::nil) (S O) in exact r).
+(*Check  ltac:(let r := tnth (1::2::3::nil) (S O) in exact r).*)
 
 
 Ltac exargp p t :=

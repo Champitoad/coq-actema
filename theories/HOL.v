@@ -1274,8 +1274,6 @@ rewrite -e1.
 move => s1 s2; rewrite !trs_corr convert_corr.
 by move => -> ->. *)
 
-Check bf3_corr.
-
 Definition trl3 := nosimpl tr3.
 
 
@@ -2932,7 +2930,6 @@ Definition cct :=
                     (@nil DYN)
                     (forall z x, x = 2 /\ z = true)  in exact r).
 
-Print cct.
 
 
 Ltac find_comp l1o l2o :=
@@ -3030,10 +3027,9 @@ Ltac fetch_def T' l' :=
         fetch_def T l''
   end.
 
-Print test.
 
-Check ltac:(let r := fetch_def Prop constr:(test)
-            in exact r).
+(*Check ltac:(let r := fetch_def Prop constr:(test)
+            in exact r).*)
 (* TODO : blinder pour éviter les confusions forall implication *)
 Ltac mkSign l p t :=
   match p with
@@ -4289,8 +4285,8 @@ Ltac ttest t :=
   | _ => constr:(0)
   end.
 
-Check ltac:(let r := ttest    (forall x : nat, forall y, x = y)
-in exact r).
+(*Check ltac:(let r := ttest    (forall x : nat, forall y, x = y)
+in exact r).*)
 
               
 Ltac build_context_r t p l :=

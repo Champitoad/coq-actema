@@ -120,10 +120,9 @@ module Export = struct
     `FPred ("_dummy", [])
 
   let is_prop env evd term =
-    (*let sort = Retyping.get_sort_of env evd term in
-    Sorts.is_prop sort*)
-    failwith "TODO"
-
+    let sort = Retyping.get_sort_of env evd term in
+    Sorts.is_prop @@ EConstr.ESorts.kind evd sort
+    
   let is_imp (env, evd) x t1 t2 : bool = 
     is_prop env evd t1
     && is_prop
@@ -1272,7 +1271,7 @@ module Import = struct
         begin match hyp.h_form with
         | `FTrue | `FFalse ->
             (*Tactics.destruct false None (EConstr.mkVar id) None None*)
-            failwith "TODO"
+            failwith "TODO: `AElim true/false"
         | `FConn (`Not, _) ->
             Tactics.simplest_case (EConstr.mkVar id)
         | `FConn (`Imp, _) ->

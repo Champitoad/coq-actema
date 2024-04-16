@@ -25,14 +25,12 @@
 
 # Troubleshooting 
 
-- If you get opam errors when creating the switch,
-  try commiting (git commit) your changes, then run :
+- If you get an opam error when creating the switch, don't cleanup the switch and try the following :
+  Commit (git commit) your changes, then run :
   $ opam clean
   $ opam install .
 
-
-
-- If you get an error :
+- If you get an error when running dune build :
     Dynlink error: execution of module initializers in the shared library failed: ...
 
   Where ... is the name of an ocaml exception (for instance "Not_found"),
