@@ -48,4 +48,6 @@
   (qcheck-core
    (>= 0.21.3))
   (ppx_deriving
-   (>= 5.2.1))))
+   (>= 5.2.1))
+  (ppx_yojson_conv
+   (>= 0.16.0))))
