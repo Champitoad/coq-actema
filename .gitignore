@@ -73,3 +73,5 @@ _opam/
 # End of https://www.toptal.com/developers/gitignore/api/ocaml,coq
 
 actema.proofs/
+
+.vscode/
