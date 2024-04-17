@@ -21,8 +21,6 @@
  (bug_reports "https://github.com/Champitoad/coq-actema/issues")
  (synopsis "Integrating the Actema GUI as a Coq tactic")
  (depends
-  (atdgen
-   (>= 2.15.0))
   (coq
    (= 8.19.1))
   (coq-mathcomp-ssreflect

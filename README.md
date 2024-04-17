@@ -16,8 +16,7 @@
   It exposes new tactics actema and actema_force that send Coq goals to the frontend (via http), and compile the actions performed by the user in the frontend back to Coq tactics.
 
 - api/
-  Contains the data format used to communicate between the prover and the plugin.
-  It uses atdgen to generate Ocaml code.
+  Contains the data format used to communicate between the prover and the plugin. The data is (de)serialized using Marshal.
 
 - theories/
   Coq tactics that are invoked from the plugin.

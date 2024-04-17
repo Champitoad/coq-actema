@@ -12,7 +12,7 @@ open Api
 (** Set to true to log the arguments given to the DnD tactics *)
 let log_dnd_trace = false
 
-(** Set to true to print the atdgen-formatted goals exported to Actema *)
+(** Set to true to print the goals exported to Actema *)
 let log_goals = false
 
 (** Set to true to print a the terms that fail to get exported to Actema. *)
