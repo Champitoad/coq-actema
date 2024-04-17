@@ -62,8 +62,11 @@ let proofs_path () : string =
 let path_of_proof (id : aident) : string =
   Format.sprintf "%s/%s" (proofs_path ()) (hash_of_aident id)
 
-let save_proof (id : aident) (prf : proof) : unit = failwith "todo : save proof"
-(*let path = path_of_proof id in
+(* I was a bit lazy here in using Marshal to save proofs.
+   A better solution would probably be to use a text format such as
+   JSON or Biniou. *)
+let save_proof (id : aident) (prf : proof) : unit =
+  let path = path_of_proof id in
 
   if not (CUnix.file_readable_p (proofs_path ()))
   then begin
@@ -76,17 +79,16 @@ let save_proof (id : aident) (prf : proof) : unit = failwith "todo : save proof"
   end;
   let oc = open_out path in
   prf
-    |> List.iter
-         begin
-           fun (idx, action) ->
-             let actionb = action |> Logic_b.string_of_action |> Base64.encode_exn in
-             Printf.fprintf oc "%d\n%s\n" idx actionb
-         end;
-  close_out oc*)
+  |> List.iter
+       begin
+         fun (idx, action) ->
+           let actionb = action |> Fun.flip Marshal.to_string [] |> Base64.encode_exn in
+           Printf.fprintf oc "%d\n%s\n" idx actionb
+       end;
+  close_out oc
 
-let load_proof (id : aident) : proof option = None
-(* todo : load_proof *)
-(*let path = path_of_proof id in
+let load_proof (id : aident) : proof option =
+  let path = path_of_proof id in
   if not (CUnix.file_readable_p path)
   then None
   else begin
@@ -99,7 +101,7 @@ let load_proof (id : aident) : proof option = None
           let idx = line |> int_of_string in
 
           let line = input_line ic in
-          let action = line |> Base64.decode_exn |> Logic_b.action_of_string in
+          let action : Logic.action = line |> Base64.decode_exn |> Fun.flip Marshal.from_string 0 in
 
           prf := (idx, action) :: !prf
         done
@@ -109,7 +111,7 @@ let load_proof (id : aident) : proof option = None
     (* Log.str (string_of_aident id);
        Log.str (string_of_proof prf); *)
     Some prf
-  end*)
+  end
 
 (*let sign = Translate.peano*)
 

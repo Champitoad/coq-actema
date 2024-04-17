@@ -2,4 +2,4 @@
  (name api)
  (public_name coq-actema.api)
  (preprocess
-  (pps ppx_deriving.show ppx_yojson_conv)))
+  (pps ppx_deriving.show)))
