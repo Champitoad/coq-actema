@@ -13,4 +13,4 @@
 
 ## Launch the application
 
-$ yarn run electron:serve
+$ npm run electron:serve

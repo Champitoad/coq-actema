@@ -46,9 +46,4 @@
   (js_of_ocaml-ppx
    (>= 5.7.2))
   (batteries
-   (>= 3.8.0))
-  (ocaml-lsp-server :with-test)
-  (ocamlformat
-   (and
-    (>= 0.26.1)
-    :with-test))))
+   (>= 3.8.0))))
