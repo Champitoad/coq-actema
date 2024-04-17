@@ -149,11 +149,11 @@ module Translate = struct
   open Hidmap
   open State
 
-  let of_hyp ((hd, { h_form; _ }) : Handle.t * hyp) : Logic_t.hyp State.t =
+  let of_hyp ((hd, { h_form; _ }) : Handle.t * hyp) : Logic.hyp State.t =
     let* h_id = find hd in
-    return Logic_t.{ h_id; h_form = of_form h_form }
+    return Logic.{ h_id; h_form = of_form h_form }
 
-  let of_hyps (hyps : Hyps.t) : Logic_t.hyp list State.t =
+  let of_hyps (hyps : Hyps.t) : Logic.hyp list State.t =
     hyps |> Hyps.to_list
     |> fold
          (fun hyps hyp ->
@@ -161,11 +161,11 @@ module Translate = struct
            return (hyps @ [ h ]))
          []
 
-  let to_hyp (Logic_t.{ h_id; h_form } : Logic_t.hyp) : (Handle.t * hyp) State.t =
+  let to_hyp (Logic.{ h_id; h_form } : Logic.hyp) : (Handle.t * hyp) State.t =
     let* hd = push h_id in
     return (hd, mk_hyp (to_form h_form))
 
-  let to_hyps (hyps : Logic_t.hyp list) : Hyps.t State.t =
+  let to_hyps (hyps : Logic.hyp list) : Hyps.t State.t =
     let* hyps =
       fold
         (fun hyps hyp ->
@@ -175,10 +175,10 @@ module Translate = struct
     in
     hyps |> Hyps.of_list |> return
 
-  let export_goal (({ g_env; g_hyps; g_goal }, hm) : pregoal * hidmap) : Logic_t.goal =
-    Logic_t.{ g_env = of_env g_env; g_hyps = run (of_hyps g_hyps) hm; g_concl = of_form g_goal }
+  let export_goal (({ g_env; g_hyps; g_goal }, hm) : pregoal * hidmap) : Logic.goal =
+    Logic.{ g_env = of_env g_env; g_hyps = run (of_hyps g_hyps) hm; g_concl = of_form g_goal }
 
-  let import_goal (Logic_t.{ g_env; g_hyps; g_concl } : Logic_t.goal) : pregoal * hidmap =
+  let import_goal (Logic.{ g_env; g_hyps; g_concl } : Logic.goal) : pregoal * hidmap =
     let g_env, g_hyps, hm =
       HandleMap.empty
       |> run

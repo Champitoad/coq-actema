@@ -23,6 +23,7 @@ depends: [
   "js_of_ocaml-ppx" {>= "5.7.2"}
   "batteries" {>= "3.8.0"}
   "qcheck-core" {>= "0.21.3"}
+  "ppx_deriving" {>= "5.2.1"}
   "odoc" {with-doc}
 ]
 build: [

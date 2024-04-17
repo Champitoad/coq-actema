@@ -43,7 +43,7 @@ module Hidmap = struct
   open Api
   module HandleMap = Map.Make (Handle)
 
-  type hidmap = Logic_t.uid HandleMap.t
+  type hidmap = Logic.uid HandleMap.t
 
   module Env = struct
     type t = hidmap
@@ -54,11 +54,11 @@ module Hidmap = struct
 
   let empty = HandleMap.empty
 
-  let find (hd : Handle.t) : Logic_t.uid State.t =
+  let find (hd : Handle.t) : Logic.uid State.t =
     let* hm = get in
     return (HandleMap.find hd hm)
 
-  let push (id : Logic_t.uid) : Handle.t State.t =
+  let push (id : Logic.uid) : Handle.t State.t =
     let hd = Handle.fresh () in
     let* hm = get in
     let* _ = put (HandleMap.add hd id hm) in
@@ -1837,26 +1837,39 @@ module Translate = struct
   (* -------------------------------------------------------------------- *)
   (** From engine to API *)
 
-  let rec of_expr (e : expr) : Logic_t.expr =
-    match e with EVar (x, _) -> `EVar x | EFun (f, es) -> `EFun (f, List.map of_expr es)
+  let rec of_expr (e : expr) : Logic.expr =
+    match e with EVar (x, _) -> Logic.EVar x | EFun (f, es) -> Logic.EFun (f, List.map of_expr es)
 
-  let of_type_ (t : type_) : Logic_t.type_ =
-    match t with TVar (x, _) -> `TVar x | _ -> failwith "Unsupported type"
+  let of_type_ (t : type_) : Logic.type_ =
+    match t with
+    | TVar (x, _) -> Logic.TVar x
+    | _ -> failwith "Fo.Translate.of_type_: unsupported type"
 
-  let of_arity (ar : arity) : Logic_t.arity = List.map of_type_ ar
-  let of_sig_ ((ar, ret) : sig_) : Logic_t.sig_ = (of_arity ar, of_type_ ret)
+  let of_arity (ar : arity) : Logic.arity = List.map of_type_ ar
+  let of_sig_ ((ar, ret) : sig_) : Logic.sig_ = (of_arity ar, of_type_ ret)
 
-  let rec of_form (f : form) : Logic_t.form =
+  let of_logcon (c : logcon) : Logic.logcon =
+    match c with
+    | `And -> Logic.And
+    | `Or -> Logic.Or
+    | `Not -> Logic.Not
+    | `Equiv -> Logic.Equiv
+    | `Imp -> Logic.Imp
+
+  let of_bkind (b : bkind) : Logic.bkind =
+    match b with `Exist -> Logic.Exist | `Forall -> Logic.Forall
+
+  let rec of_form (f : form) : Logic.form =
     match f with
-    | FTrue -> `FTrue
-    | FFalse -> `FFalse
-    | FPred (p, args) -> `FPred (p, List.map of_expr args)
-    | FConn (c, fs) -> `FConn (c, List.map of_form fs)
-    | FBind (b, x, ty, f) -> `FBind (b, x, of_type_ ty, of_form f)
+    | FTrue -> Logic.FTrue
+    | FFalse -> Logic.FFalse
+    | FPred (p, args) -> Logic.FPred (p, List.map of_expr args)
+    | FConn (c, fs) -> Logic.FConn (of_logcon c, List.map of_form fs)
+    | FBind (b, x, ty, f) -> Logic.FBind (of_bkind b, x, of_type_ ty, of_form f)
 
-  let of_bvar ((ty, body) : bvar) : Logic_t.bvar = (of_type_ ty, Option.map of_expr body)
+  let of_bvar ((ty, body) : bvar) : Logic.bvar = (of_type_ ty, Option.map of_expr body)
 
-  let of_env (env : env) : Logic_t.env =
+  let of_env (env : env) : Logic.env =
     let map_to_assoc m f = Map.bindings m |> List.map f in
 
     let env_sort = map_to_assoc env.env_tvar (fun (x, _) -> x) in
@@ -1878,23 +1891,34 @@ module Translate = struct
   (* -------------------------------------------------------------------- *)
   (** From API to engine *)
 
-  let rec to_expr (e : Logic_t.expr) : expr =
-    match e with `EVar x -> EVar (x, 0) | `EFun (f, es) -> EFun (f, List.map to_expr es)
+  let rec to_expr (e : Logic.expr) : expr =
+    match e with Logic.EVar x -> EVar (x, 0) | Logic.EFun (f, es) -> EFun (f, List.map to_expr es)
 
-  let to_type_ (t : Logic_t.type_) : type_ = match t with `TVar x -> TVar (x, 0)
-  let to_arity (ar : Logic_t.arity) : arity = List.map to_type_ ar
-  let to_sig_ ((ar, ret) : Logic_t.sig_) : sig_ = (to_arity ar, to_type_ ret)
-  let to_bvar ((ty, body) : Logic_t.bvar) : bvar = (to_type_ ty, Option.map to_expr body)
+  let to_type_ (t : Logic.type_) : type_ = match t with Logic.TVar x -> TVar (x, 0)
+  let to_arity (ar : Logic.arity) : arity = List.map to_type_ ar
+  let to_sig_ ((ar, ret) : Logic.sig_) : sig_ = (to_arity ar, to_type_ ret)
+  let to_bvar ((ty, body) : Logic.bvar) : bvar = (to_type_ ty, Option.map to_expr body)
 
-  let rec to_form (f : Logic_t.form) : form =
+  let to_logcon (c : Logic.logcon) : logcon =
+    match c with
+    | Logic.And -> `And
+    | Logic.Or -> `Or
+    | Logic.Not -> `Not
+    | Logic.Equiv -> `Equiv
+    | Logic.Imp -> `Imp
+
+  let to_bkind (b : Logic.bkind) : bkind =
+    match b with Logic.Exist -> `Exist | Logic.Forall -> `Forall
+
+  let rec to_form (f : Logic.form) : form =
     match f with
-    | `FTrue -> FTrue
-    | `FFalse -> FFalse
-    | `FPred (p, args) -> FPred (p, List.map to_expr args)
-    | `FConn (c, fs) -> FConn (c, List.map to_form fs)
-    | `FBind (b, x, ty, f) -> FBind (b, x, to_type_ ty, to_form f)
+    | Logic.FTrue -> FTrue
+    | Logic.FFalse -> FFalse
+    | Logic.FPred (p, args) -> FPred (p, List.map to_expr args)
+    | Logic.FConn (c, fs) -> FConn (to_logcon c, List.map to_form fs)
+    | Logic.FBind (b, x, ty, f) -> FBind (to_bkind b, x, to_type_ ty, to_form f)
 
-  let to_env (env : Logic_t.env) : env Hidmap.State.t =
+  let to_env (env : Logic.env) : env Hidmap.State.t =
     let assoc_to_map l f = l |> List.map f |> List.enum |> Map.of_enum in
 
     let env_prp = assoc_to_map env.env_prp (fun (p, ar) -> (p, to_arity ar)) in

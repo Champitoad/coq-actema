@@ -9,66 +9,73 @@ open Interact
 
 exception UnsupportedAction of Link.action_type
 
-let of_ctxt (ctxt : IPath.ctxt) : Logic_t.ctxt State.t =
-  let* uid =
+let of_ctxt (ctxt : IPath.ctxt) : Logic.ctxt State.t =
+  let* handle =
     match ctxt.kind with
     | `Concl -> return "concl"
     | `Hyp | `Var _ -> find (Handle.ofint ctxt.handle)
   in
-  return Logic_t.{ kind = ctxt.kind; handle = uid }
+  let kind =
+    match ctxt.kind with
+    | `Hyp -> Logic.Hyp
+    | `Concl -> Logic.Concl
+    | `Var `Head -> Logic.Var Logic.Head
+    | `Var `Body -> Logic.Var Logic.Body
+  in
+  return Logic.{ kind; handle }
 
-let of_ipath (p : IPath.t) : Logic_t.ipath State.t =
+let of_ipath (p : IPath.t) : Logic.ipath State.t =
   let* ctxt = of_ctxt p.ctxt in
-  return Logic_t.{ ctxt; sub = p.sub }
+  return Logic.{ ctxt; sub = p.sub }
 
-let of_lenv (lenv : LEnv.lenv) : Fo_t.lenv =
+let of_lenv (lenv : LEnv.lenv) : Logic.lenv =
   LEnv.bindings lenv |> List.map (fun (x, ty) -> (x, of_type_ ty))
 
-let of_itrace (itrace : itrace) : Logic_t.itrace =
+let of_itrace (itrace : itrace) : Logic.itrace =
   List.map
     begin
       fun (i, w) -> (i, Option.map (fun (le1, le2, e) -> (of_lenv le1, of_lenv le2, of_expr e)) w)
     end
     itrace
 
-let of_action (proof : Proof.proof) ((hd, a) : Link.action) : Logic_t.action State.t =
+let of_action (proof : Proof.proof) ((hd, a) : Link.action) : Logic.action State.t =
   match a with
-  | `Intro variant -> return (`AIntro (variant, None))
+  | `Intro variant -> return (Logic.AIntro (variant, None))
   | `Elim (subhd, i) ->
       let goal = Proof.byid proof hd in
       let hyp = (Proof.Hyps.byid goal.g_hyps subhd).h_form in
       let exact = Form.f_equal goal.g_env hyp goal.g_goal in
       let* uid = find subhd in
-      return (if exact then `AExact uid else `AElim (uid, i))
-  | `Lemma name -> return (`ALemma name)
+      return (if exact then Logic.AExact uid else Logic.AElim (uid, i))
+  | `Lemma name -> return (Logic.ALemma name)
   | `Ind subhd ->
       let* uid = find subhd in
-      return (`AInd uid)
+      return (Logic.AInd uid)
   | `Simpl tgt ->
       let* tgt = of_ipath tgt in
-      return (`ASimpl tgt)
+      return (Logic.ASimpl tgt)
   | `Red tgt ->
       let* tgt = of_ipath tgt in
-      return (`ARed tgt)
+      return (Logic.ARed tgt)
   | `Indt tgt ->
       let* tgt = of_ipath tgt in
-      return (`AIndt tgt)
+      return (Logic.AIndt tgt)
   | `Case tgt ->
       let* tgt = of_ipath tgt in
-      return (`ACase tgt)
+      return (Logic.ACase tgt)
   | `Pbp tgt ->
       let* tgt = of_ipath tgt in
-      return (`APbp tgt)
+      return (Logic.APbp tgt)
   | `Hyperlink (lnk, actions) -> begin
       match (lnk, actions) with
       | ([ src ], [ dst ]), [ `Subform substs ] ->
           let _, itrace = dlink (src, dst) substs proof in
           let* src = of_ipath src in
           let* dst = of_ipath dst in
-          return (`ALink (src, dst, of_itrace itrace))
+          return (Logic.ALink (src, dst, of_itrace itrace))
       | _, [ `Instantiate (wit, tgt) ] ->
           let* tgt = of_ipath tgt in
-          return (`AInstantiate (of_expr wit, tgt))
+          return (Logic.AInstantiate (of_expr wit, tgt))
       | _, _ :: _ :: _ -> failwith "Cannot handle multiple link actions yet"
       | _, _ -> raise @@ UnsupportedAction a
     end

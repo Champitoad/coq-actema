@@ -1,6 +1,4 @@
-open Logic_t
-
-val biniou_unhash_dict : int -> string option
+open Logic
 
 module Uid : sig
   include Map.OrderedType
@@ -55,12 +53,4 @@ type pol = Pos | Neg | Sup
 
 val term_of_ipath : goal -> ipath -> term
 val pol_of_ipath : goal -> ipath -> pol
-val string_of_expr : expr -> string
-val string_of_form : form -> string
-val string_of_term : term -> string
-val string_of_env : env -> string
-val string_of_goal : goal -> string
-val string_of_goals : goals -> string
-val string_of_itrace : itrace -> string
-val string_of_action : action -> string
 val get_hyp : goal -> uid -> hyp

@@ -23,13 +23,13 @@ open Api
     but for now we dispense from such complexity (maybe experience will prove
     that it is necessary in the future).
     *)
-type aident = Logic_t.aident
+type aident = Logic.aident
 
-type proof = (int * Logic_t.action) list
+type proof = (int * Logic.action) list
 
 (*let string_of_aident (name, (hyps, concl) : aident) : string =
   let hyps = hyps |>
-    Extlib.List.to_string begin fun Logic_t.{ h_form; _ } ->
+    Extlib.List.to_string begin fun Logic.{ h_form; _ } ->
       Utils.string_of_form h_form
     end in
   let concl = concl |> Utils.string_of_form in
@@ -44,16 +44,16 @@ type proof = (int * Logic_t.action) list
 let hash_of (s : string) : string =
   s |> Sha512.string |> Sha512.to_bin |> Base64.encode_string ~alphabet:Base64.uri_safe_alphabet
 
-(*let hash_of_hyp (hyp : Logic_t.hyp) : string =
+(*let hash_of_hyp (hyp : Logic.hyp) : string =
     hyp |> Logic_b.string_of_hyp |> hash_of
 
-  let hash_of_form (form : Logic_t.form) : string =
+  let hash_of_form (form : Logic.form) : string =
     form |> Logic_b.string_of_form |> hash_of
 
   let hash_of_lgoal g =
     g |> Logic_b.string_of_lgoal |> hash_of*)
 
-let hash_of_aident (id : aident) : string = id |> Logic_b.string_of_aident |> hash_of
+let hash_of_aident (id : aident) : string = id |> Logic.show_aident |> hash_of
 
 let proofs_path () : string =
   let root_path = Loadpath.find_load_path "." |> Loadpath.physical in
@@ -62,8 +62,8 @@ let proofs_path () : string =
 let path_of_proof (id : aident) : string =
   Format.sprintf "%s/%s" (proofs_path ()) (hash_of_aident id)
 
-let save_proof (id : aident) (prf : proof) : unit =
-  let path = path_of_proof id in
+let save_proof (id : aident) (prf : proof) : unit = failwith "todo : save proof"
+(*let path = path_of_proof id in
 
   if not (CUnix.file_readable_p (proofs_path ()))
   then begin
@@ -76,16 +76,17 @@ let save_proof (id : aident) (prf : proof) : unit =
   end;
   let oc = open_out path in
   prf
-  |> List.iter
-       begin
-         fun (idx, action) ->
-           let actionb = action |> Logic_b.string_of_action |> Base64.encode_exn in
-           Printf.fprintf oc "%d\n%s\n" idx actionb
-       end;
-  close_out oc
+    |> List.iter
+         begin
+           fun (idx, action) ->
+             let actionb = action |> Logic_b.string_of_action |> Base64.encode_exn in
+             Printf.fprintf oc "%d\n%s\n" idx actionb
+         end;
+  close_out oc*)
 
-let load_proof (id : aident) : proof option =
-  let path = path_of_proof id in
+let load_proof (id : aident) : proof option = None
+(* todo : load_proof *)
+(*let path = path_of_proof id in
   if not (CUnix.file_readable_p path)
   then None
   else begin
@@ -108,11 +109,11 @@ let load_proof (id : aident) : proof option =
     (* Log.str (string_of_aident id);
        Log.str (string_of_proof prf); *)
     Some prf
-  end
+  end*)
 
 (*let sign = Translate.peano*)
 
-let compile_action ((idx, a) : int * Logic_t.action) : unit tactic =
+let compile_action ((idx, a) : int * Logic.action) : unit tactic =
   Goal.enter
     begin
       fun coq_goal ->
@@ -138,7 +139,7 @@ let compile_proof (prf : proof) : unit tactic =
 
 (** Export all the lemmas we can translate to actema, 
     along with their environment. *)
-let export_lemmas () : (Logic_t.lemma list * Fo_t.env) tactic =
+let export_lemmas () : (Logic.lemma list * Logic.env) tactic =
   let open PVMonad in
   let* coq_goals_tacs = Goal.goals in
   let* lemmas, sign =
@@ -157,7 +158,7 @@ let export_lemmas () : (Logic_t.lemma list * Fo_t.env) tactic =
   return (lemmas, env)
 
 (** Export each coq goal to Actema. *)
-let export_goals () : Logic_t.goals tactic =
+let export_goals () : Logic.goals tactic =
   let open PVMonad in
   let* coq_goals_tacs = Goal.goals in
   Stdlib.List.fold_right
@@ -170,7 +171,7 @@ let export_goals () : Logic_t.goals tactic =
     end
     coq_goals_tacs (return [])
 
-let get_user_action (goals : Logic_t.goals) : Client.action =
+let get_user_action (goals : Logic.goals) : Client.action =
   if goals = []
   then begin
     Lwt_main.run (Client.send_qed ());

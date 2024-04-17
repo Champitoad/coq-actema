@@ -96,5 +96,5 @@ or when running make.
 - If you can run "make" without any errors but can't step through Coq files, 
   you might need to set the coqtop path in your editor. 
 
-  If using VScode :
+  If using the VScode extension VSCoq Legacy :
   Go to File > Preferences > Settings, type "coqtop" and set the coqtop bin path to _opam/bin

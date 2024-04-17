@@ -25,7 +25,7 @@ exception UnsupportedHttpResponseCode of int
 (** The plugin sends the goals (in API format) to the frontend, 
     which sends back an action. *)
 type action =
-  | Do of int * Logic_t.action
+  | Do of int * Logic.action
   | Done
   | Undo
   | Redo
@@ -50,7 +50,9 @@ let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t
            function
            | [ subgoal_idx; actionb ] ->
                let idx = int_of_string subgoal_idx in
-               let action = actionb |> Base64.decode_exn |> Logic_b.action_of_string in
+               let action : Logic.action =
+                 actionb |> Base64.decode_exn |> Fun.flip Marshal.from_string 0
+               in
                Lwt.return @@ Do (idx, action)
            | _ -> failwith "Unexpected response body for 'action' request"
          end
@@ -66,10 +68,10 @@ let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t
   | _ -> raise (UnsupportedHttpResponseCode code)
 
 (** Send a set of lemmas to the frontend, and receive an action as response. *)
-let send_lemmas (lemmas : Logic_t.lemma list) (env : Logic_t.env) : action Lwt.t =
+let send_lemmas (lemmas : Logic.lemma list) (env : Logic.env) : action Lwt.t =
   (* Send request with lemmas and environment. *)
   let start = Sys.time () in
-  let datab = (env, lemmas) |> Logic_b.string_of_lemmadb |> Base64.encode_string in
+  let datab = (env, lemmas) |> Fun.flip Marshal.to_string [] |> Base64.encode_string in
   let stop = Sys.time () in
   Log.str @@ Format.sprintf "Time to serialize lemmas: %.2f" (stop -. start);
   let* resp, body = make_req "lemmas" datab in
@@ -77,9 +79,9 @@ let send_lemmas (lemmas : Logic_t.lemma list) (env : Logic_t.env) : action Lwt.t
   receive_action resp body
 
 (** Send the goals to the frontend, and receive an action as response. *)
-let send_goals (goals : Logic_t.goals) : action Lwt.t =
+let send_goals (goals : Logic.goals) : action Lwt.t =
   (* Send request with goals. *)
-  let goalsb = goals |> Logic_b.string_of_goals |> Base64.encode_string in
+  let goalsb = goals |> Fun.flip Marshal.to_string [] |> Base64.encode_string in
   let req = make_req "action" goalsb in
   (* Receive response with action. *)
   let* resp, body = req in

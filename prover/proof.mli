@@ -109,6 +109,6 @@ end
 module Translate : sig
   open Hidmap
 
-  val import_goal : Api.Logic_t.goal -> pregoal * hidmap
-  val export_goal : pregoal * hidmap -> Api.Logic_t.goal
+  val import_goal : Api.Logic.goal -> pregoal * hidmap
+  val export_goal : pregoal * hidmap -> Api.Logic.goal
 end

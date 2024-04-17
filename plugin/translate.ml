@@ -1,6 +1,6 @@
 open Proofview
 open CoqUtils
-open Utils
+open Api.Utils
 open Extlib
 open Api
 
@@ -51,7 +51,7 @@ module FOSign = struct
   module SymbolMap = Map.Make (Symbol)
 
   type symbols = SymbolNames.t
-  type typing = { t_funcs : Fo_t.sig_ NameMap.t; t_preds : Fo_t.arity NameMap.t }
+  type typing = { t_funcs : Logic.sig_ NameMap.t; t_preds : Logic.arity NameMap.t }
   type t = { symbols : symbols; typing : typing }
 
   let empty : t =
@@ -78,16 +78,16 @@ end
 
 let peano : FOSign.t =
   let open FOSign in
-  let open Trm in
-  let nat : Fo_t.type_ = `TVar "nat" in
+  let nat : Logic.type_ = Logic.TVar "nat" in
   let symbols =
     let open SymbolNames in
     empty
-    |> add (Ind Datatypes.nat_name) "nat"
-    |> add (Ctr Datatypes.zero_name) "Z" |> add (Ctr Datatypes.succ_name) "S"
+    |> add (Ind Trm.Datatypes.nat_name) "nat"
+    |> add (Ctr Trm.Datatypes.zero_name) "Z"
+    |> add (Ctr Trm.Datatypes.succ_name) "S"
     |> fun m ->
-    List.fold_left (fun m name -> add (Cst name) "add" m) m add_names |> fun m ->
-    List.fold_left (fun m name -> add (Cst name) "mult" m) m mul_names
+    List.fold_left (fun m name -> add (Cst name) "add" m) m Trm.add_names |> fun m ->
+    List.fold_left (fun m name -> add (Cst name) "mult" m) m Trm.mul_names
   in
   let typing =
     let open NameMap in
@@ -109,8 +109,8 @@ let peano : FOSign.t =
 module Export = struct
   (** ** Translating Coq terms to Actema expressions and formulas *)
 
-  let dummy_expr : Logic_t.expr = `EFun ("_dummy", [])
-  let dummy_form : Logic_t.form = `FPred ("_dummy", [])
+  let dummy_expr : Logic.expr = Logic.EFun ("_dummy", [])
+  let dummy_form : Logic.form = Logic.FPred ("_dummy", [])
 
   let is_prop env evd term =
     let sort = Retyping.get_sort_of env evd term in
@@ -168,26 +168,26 @@ module Export = struct
     let sort = EConstr.ESorts.kind evd sort in
     if sort = Sorts.prop then destKO else return ()
 
-  and dest_functy ((({ evd; _ } as e), t) : destarg) : Fo_t.sig_ Dest.t =
+  and dest_functy ((({ evd; _ } as e), t) : destarg) : Logic.sig_ Dest.t =
     let rec aux arity t =
       if EConstr.isProd evd t
       then
         let* _, t1, t2 = destwrap (EConstr.destProd evd) t in
         let* sort = find_sort (e, t1) in
-        aux (arity @ [ `TVar sort ]) t2
+        aux (arity @ [ Logic.TVar sort ]) t2
       else
         let* sort = find_sort (e, t) in
-        return (arity, `TVar sort)
+        return (arity, Logic.TVar sort)
     in
     aux [] t
 
-  and dest_predty ((({ evd; _ } as e), t) : destarg) : Fo_t.arity Dest.t =
+  and dest_predty ((({ evd; _ } as e), t) : destarg) : Logic.arity Dest.t =
     let rec aux arity t =
       if EConstr.isProd evd t
       then
         let* _, t1, t2 = destwrap (EConstr.destProd evd) t in
         let* sort = find_sort (e, t1) in
-        aux (arity @ [ `TVar sort ]) t2
+        aux (arity @ [ Logic.TVar sort ]) t2
       else
         let* sort = t |> EConstr.to_constr evd |> destwrap Constr.destSort in
         if Sorts.is_prop sort then return arity else destKO
@@ -241,7 +241,7 @@ module Export = struct
     | Some name -> return name
     | None -> destKO
 
-  and find_func (d : destarg) : (Fo_t.name * Fo_t.sig_) Dest.t =
+  and find_func (d : destarg) : (Logic.name * Logic.sig_) Dest.t =
     let* sy = dest_symbol d in
     let* sign = get in
     match SymbolNames.find_opt sy sign.symbols with
@@ -252,7 +252,7 @@ module Export = struct
       end
     | None -> destKO
 
-  and find_pred (d : destarg) : (Fo_t.name * Fo_t.arity) Dest.t =
+  and find_pred (d : destarg) : (Logic.name * Logic.arity) Dest.t =
     let* sy = dest_symbol d in
     let* sign = get in
     match SymbolNames.find_opt sy sign.symbols with
@@ -329,18 +329,18 @@ module Export = struct
     end
       et
 
-  type edest = Logic_t.expr sdest
+  type edest = Logic.expr sdest
 
   let rec dest_econst : edest =
    fun (e, t) ->
     let* name, sig_ = find_func (e, t) in
-    match sig_ with [], _ -> return (`EFun (name, [])) | _ -> destKO
+    match sig_ with [], _ -> return (Logic.EFun (name, [])) | _ -> destKO
 
   and dest_evar : edest =
    fun ({ env; evd; _ }, t) ->
     let* id = destwrap (EConstr.destVar evd) t in
     let name = Names.Id.to_string id in
-    return (`EVar name)
+    return (Logic.EVar name)
 
   and dest_erel : edest =
    fun ({ env; evd; _ }, t) ->
@@ -348,16 +348,16 @@ module Export = struct
     let name =
       EConstr.lookup_rel n env |> EConstr.to_rel_decl evd |> Context.Rel.Declaration.get_name
     in
-    match name with Name id -> return (`EVar (Names.Id.to_string id)) | _ -> destKO
+    match name with Name id -> return (Logic.EVar (Names.Id.to_string id)) | _ -> destKO
 
   and dest_eapp : edest =
    fun (({ evd; _ } as e), t) ->
     let* head, args = destwrap (EConstr.destApp evd) t in
     let* name, _ = find_func (e, head) in
     let* targs = args |> Array.to_list |> State.map (fun u -> dest_expr (e, u)) |> state_to_dest in
-    return (`EFun (name, targs))
+    return (Logic.EFun (name, targs))
 
-  and dest_edummy : destarg -> Logic_t.expr State.t =
+  and dest_edummy : destarg -> Logic.expr State.t =
    fun ({ env; evd; _ }, t) ->
     if log_dummy
     then
@@ -365,14 +365,14 @@ module Export = struct
       @@ Format.sprintf "Failed to translate expression:\n%s" (Log.string_of_econstr env evd t);
     State.return dummy_expr
 
-  and dest_expr : destarg -> Logic_t.expr State.t =
+  and dest_expr : destarg -> Logic.expr State.t =
    fun et ->
     begin
       dest_econst @>? dest_evar @>? dest_erel @>? dest_eapp @>? dest_edummy
     end
       et
 
-  type fdest = Logic_t.form sdest
+  type fdest = Logic.form sdest
 
   let rec dest_pconst : fdest =
    fun (({ env; evd; _ } as e), t) ->
@@ -380,7 +380,7 @@ module Export = struct
     then destKO
     else
       let* name, _ = find_pred (e, t) in
-      return (`FPred (name, []))
+      return (Logic.FPred (name, []))
 
   and dest_pvar : fdest =
    fun ({ env; evd; _ }, t) ->
@@ -389,7 +389,7 @@ module Export = struct
     else
       let* id = destwrap (EConstr.destVar evd) t in
       let name = Names.Id.to_string id in
-      return (`FPred (name, []))
+      return (Logic.FPred (name, []))
 
   and dest_papp : fdest =
    fun (({ env; evd; _ } as e), t) ->
@@ -401,7 +401,7 @@ module Export = struct
       let* targs =
         args |> Array.to_list |> State.map (fun u -> dest_expr (e, u)) |> state_to_dest
       in
-      Dest.return (`FPred (name, targs))
+      Dest.return (Logic.FPred (name, targs))
 
   and dest_eq : fdest =
    fun (({ env; evd; _ } as e), t) ->
@@ -420,18 +420,18 @@ module Export = struct
         (* Destruct the two sides of the equality. *)
         let* e1 = dest_expr (e, t1) |> state_to_dest in
         let* e2 = dest_expr (e, t2) |> state_to_dest in
-        return (`FPred ("_EQ", [ e1; e2 ]))
+        return (Logic.FPred ("_EQ", [ e1; e2 ]))
     | _ -> destKO
 
   and dest_true : fdest =
    fun ({ env; evd; _ }, t) ->
     let* ind, _ = destwrap (EConstr.destInd evd) t in
-    if Trm.Logic.eq_ind ind "True" then return `FTrue else destKO
+    if Trm.Logic.eq_ind ind "True" then return Logic.FTrue else destKO
 
   and dest_false : fdest =
    fun ({ env; evd; _ }, t) ->
     let* ind, _ = destwrap (EConstr.destInd evd) t in
-    if Trm.Logic.eq_ind ind "False" then return `FFalse else destKO
+    if Trm.Logic.eq_ind ind "False" then return Logic.FFalse else destKO
 
   and dest_imp : fdest =
    fun (({ env; evd; _ } as e), t) ->
@@ -442,7 +442,7 @@ module Export = struct
       let env = EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env in
       let* f1 = dest_form (e, t1) |> state_to_dest in
       let* f2 = dest_form ({ e with env }, t2) |> state_to_dest in
-      return (`FConn (`Imp, [ f1; f2 ]))
+      return (Logic.FConn (Logic.Imp, [ f1; f2 ]))
 
   and dest_and : fdest =
    fun (({ env; evd; _ } as e), t) ->
@@ -452,7 +452,7 @@ module Export = struct
     | true, [| t1; t2 |] ->
         let* f1 = dest_form (e, t1) |> state_to_dest in
         let* f2 = dest_form (e, t2) |> state_to_dest in
-        return (`FConn (`And, [ f1; f2 ]))
+        return (Logic.FConn (Logic.And, [ f1; f2 ]))
     | _ -> destKO
 
   and dest_or : fdest =
@@ -463,7 +463,7 @@ module Export = struct
     | true, [| t1; t2 |] ->
         let* f1 = dest_form (e, t1) |> state_to_dest in
         let* f2 = dest_form (e, t2) |> state_to_dest in
-        return (`FConn (`Or, [ f1; f2 ]))
+        return (Logic.FConn (Logic.Or, [ f1; f2 ]))
     | _ -> destKO
 
   and dest_iff : fdest =
@@ -478,7 +478,7 @@ module Export = struct
           | true, [| t1; t2 |] ->
               let* f1 = dest_form (e, t1) |> state_to_dest in
               let* f2 = dest_form (e, t2) |> state_to_dest in
-              return (`FConn (`Equiv, [ f1; f2 ]))
+              return (Logic.FConn (Logic.Equiv, [ f1; f2 ]))
           | _ -> destKO
         end
     | _ -> destKO
@@ -494,7 +494,7 @@ module Export = struct
           match (Names.eq_constant_key cst not_cst, args) with
           | true, [| t1 |] ->
               let* f1 = dest_form (e, t1) |> state_to_dest in
-              return (`FConn (`Not, [ f1 ]))
+              return (Logic.FConn (Logic.Not, [ f1 ]))
           | _ -> destKO
         end
     | _ -> destKO
@@ -506,10 +506,10 @@ module Export = struct
     match Context.binder_name x with
     | Name id ->
         let name = Names.Id.to_string id in
-        let ty = `TVar sort in
+        let ty = Logic.TVar sort in
         let env = EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env in
         let* body = dest_form ({ e with env }, t2) |> state_to_dest in
-        return (`FBind (`Forall, name, ty, body))
+        return (Logic.FBind (Logic.Forall, name, ty, body))
     | _ -> destKO
 
   and dest_exists : fdest =
@@ -524,22 +524,22 @@ module Export = struct
           match Context.binder_name x with
           | Name id ->
               let name = Names.Id.to_string id in
-              let ty = `TVar sort in
+              let ty = Logic.TVar sort in
               let env = EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env in
               let* body = dest_form ({ e with env }, t2) |> state_to_dest in
-              return (`FBind (`Exist, name, ty, body))
+              return (Logic.FBind (Logic.Exist, name, ty, body))
           | _ -> destKO
         end
     | _ -> destKO
 
-  and dest_dummy : destarg -> Logic_t.form State.t =
+  and dest_dummy : destarg -> Logic.form State.t =
    fun ({ env; evd; _ }, t) ->
     if log_dummy
     then
       Log.str @@ Format.sprintf "Failed to translate formula:\n%s" (Log.string_of_econstr env evd t);
     State.return dummy_form
 
-  and dest_form : destarg -> Logic_t.form State.t =
+  and dest_form : destarg -> Logic.form State.t =
    fun et ->
     begin
       dest_imp @>? dest_forall @>? dest_eq @>? dest_exists @>? dest_and @>? dest_or @>? dest_iff
@@ -551,20 +551,20 @@ module Export = struct
   (** ** Translating Coq's global and local environments to an Actema environment *)
 
   (* Local environment of Actema definitions *)
-  type varenv = Logic_t.bvar NameMap.t
+  type varenv = Logic.bvar NameMap.t
   type varsign = varenv * FOSign.t
 
   let shortname (fullname : string) : string =
     fullname |> String.split_on_char '.' |> List.rev |> List.hd
 
-  let env_of_varsign ((venv, sign) : varsign) : Logic_t.env =
+  let env_of_varsign ((venv, sign) : varsign) : Logic.env =
     let open FOSign in
     let env_sort = "_dummy" :: sort_names sign in
     let env_sort_name = List.(combine env_sort (map shortname env_sort)) in
 
     let func_names = sign.typing.t_funcs |> NameMap.bindings |> List.split |> fst in
     let env_fun =
-      ("_dummy", ([], `TVar "_dummy"))
+      ("_dummy", ([], Logic.TVar "_dummy"))
       :: List.map (fun f -> (f, NameMap.find f sign.typing.t_funcs)) func_names
     in
     let env_fun_name = List.(combine func_names (map shortname func_names)) in
@@ -588,7 +588,7 @@ module Export = struct
           let* body = dest_expr (e, EConstr.of_constr v) |> state_to_dest in
           return (Some body)
     in
-    return (NameMap.add name (`TVar sort, body) venv)
+    return (NameMap.add name (Logic.TVar sort, body) venv)
 
   let local_env ({ env = coq_env; _ } as e : destenv) : varenv State.t =
     (* Add sorts, default elements, functions, predicates and variables defined
@@ -626,18 +626,18 @@ module Export = struct
   (** Does an expression contain [_dummy] as a sub-expression ? *)
   let rec expr_contains_dummy expr : bool =
     match expr with
-    | `EVar name -> false
-    | `EFun (f, exprs) ->
+    | Logic.EVar name -> false
+    | Logic.EFun (f, exprs) ->
         (f = "_dummy" && List.length exprs = 0) || List.exists expr_contains_dummy exprs
 
   (** Does a formula contain [_dummy] as a sub-formula or sub-expression ? *)
   let rec form_contains_dummy form : bool =
     match form with
-    | `FTrue | `FFalse -> false
-    | `FPred (name, exprs) ->
+    | Logic.FTrue | Logic.FFalse -> false
+    | Logic.FPred (name, exprs) ->
         (name = "_dummy" && List.length exprs = 0) || List.exists expr_contains_dummy exprs
-    | `FConn (conn, forms) -> List.exists form_contains_dummy forms
-    | `FBind (kind, x, ty, f) -> form_contains_dummy f
+    | Logic.FConn (conn, forms) -> List.exists form_contains_dummy forms
+    | Logic.FBind (kind, x, ty, f) -> form_contains_dummy f
 
   (** Split a module path into a directory path and the rest. *)
   let rec split_mpath mpath =
@@ -680,7 +680,7 @@ module Export = struct
     with Invalid_argument _ -> None
 
   (** Collect all the lemmas from coq_env.env_globals.constants we can translate to Actema. *)
-  let constant_lemmas ({ env = coq_env; evd } as e : destenv) : Logic_t.lemma list State.t =
+  let constant_lemmas ({ env = coq_env; evd } as e : destenv) : Logic.lemma list State.t =
     let g_consts =
       (Environ.Globals.view coq_env.env_globals).constants |> Names.Cmap_env.bindings
       (*|> List.filter begin fun (cname, _) ->
@@ -705,14 +705,14 @@ module Export = struct
                 (* Check we did indeed manage to translate the lemma.
                    Discard the lemma if it is not the case. *)
                 if not (form_contains_dummy l_stmt)
-                then return @@ (Logic_t.{ l_user; l_full; l_stmt } :: lemmas)
+                then return @@ (Logic.{ l_user; l_full; l_stmt } :: lemmas)
                 else return lemmas
           end
       end
       [] g_consts
 
   (** Collect all the lemmas from coq_env.env_globals.inductives we can translate to Actema. *)
-  let constructor_lemmas ({ env = coq_env; evd } as e : destenv) : Logic_t.lemma list State.t =
+  let constructor_lemmas ({ env = coq_env; evd } as e : destenv) : Logic.lemma list State.t =
     let g_constructs =
       (* Get the list of all mutual inductives. *)
       (Environ.Globals.view coq_env.env_globals).inductives |> Names.Mindmap_env.bindings
@@ -755,13 +755,13 @@ module Export = struct
                   (*(Log.str @@ Format.sprintf "Translated constructor : %s --> %s"
                     l_full
                     (Utils.string_of_form l_stmt);*)
-                  return @@ (Logic_t.{ l_user; l_full; l_stmt } :: lemmas)
+                  return @@ (Logic.{ l_user; l_full; l_stmt } :: lemmas)
                 else return lemmas
           end
       end
       [] g_constructs
 
-  let hyps ({ env = coq_env; evd } as e : destenv) : Logic_t.hyp list State.t =
+  let hyps ({ env = coq_env; evd } as e : destenv) : Logic.hyp list State.t =
     State.fold
       begin
         fun hyps decl ->
@@ -774,7 +774,7 @@ module Export = struct
               then
                 let h_id = Names.Id.to_string name in
                 let* h_form = dest_form (e, ty) |> state_to_dest in
-                let hyp = Logic_t.{ h_id; h_form } in
+                let hyp = Logic.{ h_id; h_form } in
                 return (hyps @ [ hyp ])
               else return hyps
             end
@@ -783,7 +783,7 @@ module Export = struct
 
   (** [goal env sign gl] exports the Coq goal [gl] into an Actema goal and a
      mapping from Actema uids to Coq identifiers *)
-  let goal (goal : Goal.t) (init_sign : FOSign.t) : Logic_t.goal * FOSign.t =
+  let goal (goal : Goal.t) (init_sign : FOSign.t) : Logic.goal * FOSign.t =
     let coq_env = Goal.env goal in
     let evd = Goal.sigma goal in
     let concl = Goal.concl goal in
@@ -799,7 +799,7 @@ module Export = struct
       let* sign = get in
       let g_env = env_of_varsign (varenv, sign) in
 
-      return Logic_t.{ g_env; g_hyps; g_concl }
+      return Logic.{ g_env; g_hyps; g_concl }
     in
 
     let goal, sign = run goal init_sign in
@@ -807,12 +807,12 @@ module Export = struct
     then begin
       (*Log.str (List.to_string (fun (f, _) -> f) goal.g_env.env_fun);
         Log.str ( Utils.string_of_form goal.g_concl);*)
-      Log.str (Utils.string_of_goal goal)
+      Log.str (Logic.show_goal goal)
     end;
     (goal, sign)
 
   (** Get the list of all lemmas we can export to actema. *)
-  let lemmas (goal : Goal.t) (init_sign : FOSign.t) : Logic_t.lemma list * FOSign.t =
+  let lemmas (goal : Goal.t) (init_sign : FOSign.t) : Logic.lemma list * FOSign.t =
     State.run
       begin
         let open State in
@@ -850,8 +850,8 @@ module Import = struct
   let sort_index (sign : FOSign.t) (s : string) : int =
     FOSign.sort_symbols sign |> FOSign.SymbolNames.values |> List.nth_index 0 s
 
-  let infer_sort (env : Logic_t.env) (e : Logic_t.expr) : string =
-    match einfer env e with `TVar name -> name
+  let infer_sort (env : Logic.env) (e : Logic.expr) : string =
+    match einfer env e with Logic.TVar name -> name
 
   let tdyn_ty () : EConstr.t = EConstr.UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "TDYN"), 0)
 
@@ -885,27 +885,27 @@ module Import = struct
     let ty = EConstr.UnsafeMonomorphic.mkConst name in
     EConstr.mkApp (ty, [| ts |])
 
-  let type_ (sign : FOSign.t) (ty : Fo_t.type_) : EConstr.t =
-    match ty with `TVar x -> symbol (FOSign.SymbolNames.dnif x sign.symbols)
+  let type_ (sign : FOSign.t) (ty : Logic.type_) : EConstr.t =
+    match ty with Logic.TVar x -> symbol (FOSign.SymbolNames.dnif x sign.symbols)
 
-  let rec expr (sign : FOSign.t) (lenv : Logic_t.lenv) (e : Fo_t.expr) : EConstr.t =
+  let rec expr (sign : FOSign.t) (lenv : Logic.lenv) (e : Logic.expr) : EConstr.t =
     match e with
-    | `EVar x ->
+    | Logic.EVar x ->
         if LEnv.exists lenv x
         then begin
           let index : int = List.(lenv |> split |> fst |> nth_index 0 x) in
           EConstr.mkRel (index + 1)
         end
         else Trm.mkVar x
-    | `EFun (f, args) ->
+    | Logic.EFun (f, args) ->
         let head = symbol (FOSign.SymbolNames.dnif f sign.symbols) in
         let args = List.map (expr sign lenv) args in
         EConstr.mkApp (head, Array.of_list args)
 
-  let rec expr_itrace coq_env (sign : FOSign.t) (env : Logic_t.env) (lenv : Logic_t.lenv)
-      (side : int) (e : Fo_t.expr) : EConstr.t =
+  let rec expr_itrace coq_env (sign : FOSign.t) (env : Logic.env) (lenv : Logic.lenv) (side : int)
+      (e : Logic.expr) : EConstr.t =
     match e with
-    | `EVar x ->
+    | Logic.EVar x ->
         if LEnv.exists lenv x
         then begin
           let s = sort_index sign (infer_sort (Utils.Vars.push_lenv env lenv) e) in
@@ -915,36 +915,36 @@ module Import = struct
             mkApp (mkRel env_index, Trm.Datatypes.[| of_nat coq_env s; of_nat coq_env index |]))
         end
         else Trm.mkVar x
-    | `EFun (f, args) ->
+    | Logic.EFun (f, args) ->
         let head = symbol (FOSign.SymbolNames.dnif f sign.symbols) in
         let args = List.map (expr_itrace coq_env sign env lenv side) args in
         EConstr.mkApp (head, Array.of_list args)
 
-  let rec form coq_env sigma (sign : FOSign.t) (env : Logic_t.env) (lenv : Logic_t.lenv)
-      (f : Fo_t.form) : EConstr.t =
+  let rec form coq_env sigma (sign : FOSign.t) (env : Logic.env) (lenv : Logic.lenv)
+      (f : Logic.form) : EConstr.t =
     let form = form coq_env sigma sign env in
     match f with
-    | `FPred ("_EQ", [ t1; t2 ]) ->
+    | Logic.FPred ("_EQ", [ t1; t2 ]) ->
         let ty = einfer (Vars.push_lenv env lenv) t1 |> type_ sign in
         let t1 = expr sign lenv t1 in
         let t2 = expr sign lenv t2 in
         EConstr.mkApp (Trm.Logic.eq coq_env ty, [| t1; t2 |])
-    | `FPred (p, args) ->
+    | Logic.FPred (p, args) ->
         let head = symbol (FOSign.SymbolNames.dnif p sign.symbols) in
         let args = List.map (expr sign lenv) args in
         EConstr.mkApp (head, Array.of_list args)
-    | `FTrue -> Trm.Logic.true_ coq_env
-    | `FFalse -> Trm.Logic.false_ coq_env
-    | `FConn (`And, [ f1; f2 ]) -> Trm.Logic.and_ coq_env (form lenv f1) (form lenv f2)
-    | `FConn (`Or, [ f1; f2 ]) -> Trm.Logic.or_ coq_env (form lenv f1) (form lenv f2)
-    | `FConn (`Imp, [ f1; f2 ]) -> Trm.Logic.imp (form lenv f1) (form lenv f2)
-    | `FConn (`Equiv, [ f1; f2 ]) -> Trm.Logic.iff coq_env (form lenv f1) (form lenv f2)
-    | `FConn (`Not, [ f1 ]) -> Trm.Logic.not coq_env (form lenv f1)
-    | `FBind (`Forall, x, typ, body) ->
+    | Logic.FTrue -> Trm.Logic.true_ coq_env
+    | Logic.FFalse -> Trm.Logic.false_ coq_env
+    | Logic.FConn (Logic.And, [ f1; f2 ]) -> Trm.Logic.and_ coq_env (form lenv f1) (form lenv f2)
+    | Logic.FConn (Logic.Or, [ f1; f2 ]) -> Trm.Logic.or_ coq_env (form lenv f1) (form lenv f2)
+    | Logic.FConn (Logic.Imp, [ f1; f2 ]) -> Trm.Logic.imp (form lenv f1) (form lenv f2)
+    | Logic.FConn (Logic.Equiv, [ f1; f2 ]) -> Trm.Logic.iff coq_env (form lenv f1) (form lenv f2)
+    | Logic.FConn (Logic.Not, [ f1 ]) -> Trm.Logic.not coq_env (form lenv f1)
+    | Logic.FBind (Logic.Forall, x, typ, body) ->
         let ty = type_ sign typ in
         let lenv = LEnv.enter lenv x typ in
         Trm.Logic.fa x ty (form lenv body)
-    | `FBind (`Exist, x, typ, body) ->
+    | Logic.FBind (Logic.Exist, x, typ, body) ->
         let ty = type_ sign typ in
         let lenv = LEnv.enter lenv x typ in
         Trm.Logic.ex coq_env sigma x ty (form lenv body)
@@ -952,9 +952,9 @@ module Import = struct
 
   let boollist_of_intlist = Stdlib.List.map (fun n -> if n = 0 then false else true)
 
-  let itrace coq_env sigma ts (sign : FOSign.t) (env : Fo_t.env) (mode : [ `Back | `Forw ])
-      (lp : int list) (rp : int list) (lf : Logic_t.form) (rf : Logic_t.form) (itr : Logic_t.itrace)
-      : bool list * EConstr.t =
+  let itrace coq_env sigma ts (sign : FOSign.t) (env : Logic.env) (mode : [ `Back | `Forw ])
+      (lp : int list) (rp : int list) (lf : Logic.form) (rf : Logic.form) (itr : Logic.itrace) :
+      bool list * EConstr.t =
     let focus, inst = Stdlib.List.split itr in
     let t = focus |> boollist_of_intlist in
     let i =
@@ -973,18 +973,21 @@ module Import = struct
                   in
                   begin
                     match (f, (mode, side, i)) with
-                    | `FBind (q, _, _, _), _ ->
+                    | Logic.FBind (q, _, _, _), _ ->
                         let instantiable =
                           begin
                             match (mode, side, q) with
-                            | `Back, 0, `Forall | `Back, 1, `Exist | `Forw, _, `Forall -> true
+                            | `Back, 0, Logic.Forall
+                            | `Back, 1, Logic.Exist
+                            | `Forw, _, Logic.Forall ->
+                                true
                             | _ -> false
                           end
                         in
                         if instantiable
                         then filtered_quant (acc @ [ step ]) mode subitr lp lf rp rf
                         else filtered_quant acc mode subitr lp lf rp rf
-                    | `FConn ((`Not | `Imp), _), (`Forw, _, 0 | `Back, 1, 0) ->
+                    | Logic.FConn ((Logic.Not | Logic.Imp), _), (`Forw, _, 0 | `Back, 1, 0) ->
                         let mode, (lp, lf, rp, rf) =
                           begin
                             match mode with
@@ -1051,7 +1054,7 @@ module Import = struct
     let boollist_of_intlist = Stdlib.List.map (fun n -> if n = 0 then false else true) in
     sub |> boollist_of_intlist |> Trm.Datatypes.boollist coq_env
 
-  let fix_sub_eq (t : Logic_t.term) (sub : int list) : int list =
+  let fix_sub_eq (t : Logic.term) (sub : int list) : int list =
     let rec aux acc t sub =
       begin
         match sub with
@@ -1059,7 +1062,7 @@ module Import = struct
         | i :: sub ->
             let j =
               begin
-                match t with `F (`FPred ("_EQ", _)) -> i + 1 | _ -> i
+                match t with Logic.F (Logic.FPred ("_EQ", _)) -> i + 1 | _ -> i
               end
             in
             aux (j :: acc) (Utils.direct_subterm t i) sub
@@ -1067,9 +1070,9 @@ module Import = struct
     in
     aux [] t sub
 
-  exception UnsupportedAction of Logic_t.action
+  exception UnsupportedAction of Logic.action
   exception UnexpectedDnD
-  exception InvalidPath of Logic_t.ipath
+  exception InvalidPath of Logic.ipath
 
   (** Contains the lemma name and an error message. *)
   exception InvalidLemma of string * string
@@ -1133,12 +1136,12 @@ module Import = struct
     in
     try Some (Scanf.sscanf name "I%s@/%s@/%s@/%d/%d" parse) with _ -> None
 
-  let action (sign : FOSign.t) (goal : Logic_t.goal) (coq_goal : Goal.t) (a : Logic_t.action) :
+  let action (sign : FOSign.t) (goal : Logic.goal) (coq_goal : Goal.t) (a : Logic.action) :
       unit tactic =
     let open PVMonad in
     match a with
-    | `AId -> Tacticals.tclIDTAC
-    | `ALemma full_name ->
+    | Logic.AId -> Tacticals.tclIDTAC
+    | Logic.ALemma full_name ->
         (* Decode the lemma name. *)
         let stmt, basename =
           match decode_lemma_name full_name with
@@ -1195,31 +1198,32 @@ module Import = struct
         let hyp_name = Names.Name.mk_name @@ Goal.fresh_name ~basename coq_goal () in
         (* Add the lemma as a hypothesis. *)
         Tactics.pose_proof hyp_name stmt
-    | `AExact id ->
+    | Logic.AExact id ->
         let name = Names.Id.of_string id in
         Tactics.exact_check (EConstr.mkVar name)
-    | `ADef (x, _, e) ->
+    | Logic.ADef (x, _, e) ->
         let id = Names.Id.of_string x in
         let name = Names.Name.Name id in
         let body = expr sign [] e in
         Tactics.pose_tac name body
-    | `ACut f ->
+    | Logic.ACut f ->
         let id = Goal.fresh_name coq_goal () |> Names.Name.mk_name in
         let form = form (Goal.env coq_goal) (Goal.sigma coq_goal) sign goal.g_env [] f in
         Tactics.assert_before id form
-    | `AIntro (iv, wit) -> begin
+    | Logic.AIntro (iv, wit) -> begin
         match goal.g_concl with
-        | `FTrue -> Tactics.one_constructor 1 Tactypes.NoBindings
-        | `FConn (`Imp, _) | `FConn (`Not, _) ->
+        | Logic.FTrue -> Tactics.one_constructor 1 Tactypes.NoBindings
+        | Logic.FConn (Logic.Imp, _) | Logic.FConn (Logic.Not, _) ->
             (* Generate fresh Coq identifier for intro *)
             let id = Goal.fresh_name coq_goal () in
             (* Apply intro *)
             let pat = mk_intro_patterns [ id ] in
             Tactics.intro_patterns false pat
-        | `FConn (`And, _) | `FConn (`Equiv, _) -> Tactics.split Tactypes.NoBindings
-        | `FConn (`Or, _) as f ->
+        | Logic.FConn (Logic.And, _) | Logic.FConn (Logic.Equiv, _) ->
+            Tactics.split Tactypes.NoBindings
+        | Logic.FConn (Logic.Or, _) as f ->
             let rec arity acc f =
-              match f with `FConn (`Or, [ f1; f2 ]) -> arity (acc + 1) f1 | _ -> acc + 1
+              match f with Logic.FConn (Logic.Or, [ f1; f2 ]) -> arity (acc + 1) f1 | _ -> acc + 1
             in
             let rec aux zero i =
               match i with
@@ -1230,14 +1234,14 @@ module Import = struct
                   aux zero (n - 1)
             in
             aux (iv = 0) (arity 0 f - iv - 1)
-        | `FBind (`Forall, x, _, _) ->
+        | Logic.FBind (Logic.Forall, x, _, _) ->
             let id = Goal.fresh_name ~basename:x coq_goal () in
             let pat = mk_intro_patterns [ id ] in
             Tactics.intro_patterns false pat
-        | `FPred ("_EQ", _) -> Tactics.reflexivity
+        | Logic.FPred ("_EQ", _) -> Tactics.reflexivity
         | _ -> raise (UnsupportedAction a)
       end
-    | `AElim (uid, i) ->
+    | Logic.AElim (uid, i) ->
         let id = Names.Id.of_string uid in
         let hyp = Utils.get_hyp goal uid in
         let mk_destruct (ids : Names.variable list)
@@ -1266,15 +1270,15 @@ module Import = struct
         in
         begin
           match hyp.h_form with
-          | `FTrue | `FFalse ->
+          | Logic.FTrue | Logic.FFalse ->
               (*Tactics.destruct false None (EConstr.mkVar id) None None*)
               failwith "TODO: `AElim true/false"
-          | `FConn (`Not, _) -> Tactics.simplest_case (EConstr.mkVar id)
-          | `FConn (`Imp, _) -> Tactics.apply (EConstr.mkVar id)
-          | `FConn (`And, _) | `FConn (`Equiv, _) -> destruct_and
-          | `FConn (`Or, _) -> destruct_or
-          | `FBind (`Exist, x, _, _) -> destruct_ex x
-          | `FPred ("_EQ", _) -> begin
+          | Logic.FConn (Logic.Not, _) -> Tactics.simplest_case (EConstr.mkVar id)
+          | Logic.FConn (Logic.Imp, _) -> Tactics.apply (EConstr.mkVar id)
+          | Logic.FConn (Logic.And, _) | Logic.FConn (Logic.Equiv, _) -> destruct_and
+          | Logic.FConn (Logic.Or, _) -> destruct_or
+          | Logic.FBind (Logic.Exist, x, _, _) -> destruct_ex x
+          | Logic.FPred ("_EQ", _) -> begin
               match i with
               | 0 -> calltac (kname "rew_all_left") [ EConstr.mkVar id ]
               | 1 -> calltac (kname "rew_all_right") [ EConstr.mkVar id ]
@@ -1282,8 +1286,8 @@ module Import = struct
             end
           | _ -> raise (UnsupportedAction a)
         end
-    | `ALink (src, dst, itr) ->
-        let get_eq (p : Logic_t.ipath) : (bool list * bool) option =
+    | Logic.ALink (src, dst, itr) ->
+        let get_eq (p : Logic.ipath) : (bool list * bool) option =
           match Stdlib.List.rev p.sub with
           | side :: rsub -> begin
               let p = { p with sub = Stdlib.List.rev rsub } in
@@ -1292,7 +1296,7 @@ module Import = struct
                 let pol = pol_of_ipath goal p in
                 begin
                   match (pol, t |> form_of_term) with
-                  | Neg, `FPred ("_EQ", [ _; _ ]) ->
+                  | Neg, Logic.FPred ("_EQ", [ _; _ ]) ->
                       let hp = p.sub |> boollist_of_intlist in
                       let bside = match side with 0 -> false | _ -> true in
                       Some (hp, bside)
@@ -1306,7 +1310,7 @@ module Import = struct
           | _ -> None
         in
 
-        let get_term (p : Logic_t.ipath) : (bool list * int list) option =
+        let get_term (p : Logic.ipath) : (bool list * int list) option =
           let rec aux fsub esub t sub =
             match sub with
             | [] -> Some (fsub, esub)
@@ -1316,11 +1320,11 @@ module Import = struct
                   let fsub, esub =
                     begin
                       match subt with
-                      | `F _ -> (fsub @ [ i ], esub)
-                      | `E _ ->
+                      | Logic.F _ -> (fsub @ [ i ], esub)
+                      | Logic.E _ ->
                           (* let i =
                              begin match t with
-                             | `F (`FPred ("_EQ", _)) -> i + 1
+                             | `F (Logic.FPred ("_EQ", _)) -> i + 1
                              | _ -> i
                              end in *)
                           (fsub, esub @ [ i ])
@@ -1352,7 +1356,7 @@ module Import = struct
         begin
           match ((src, src.ctxt.kind), (dst, dst.ctxt.kind)) with
           (* Forward DnD *)
-          | (src, `Hyp), (dst, `Hyp) ->
+          | (src, Logic.Hyp), (dst, Logic.Hyp) ->
               let t, i =
                 let lp = src.sub in
                 let rp = dst.sub in
@@ -1440,7 +1444,7 @@ module Import = struct
                     calltac forw [ ts; h1; h2; h3; hp1; hp2; t; i ]
               end
           (* Backward DnD *)
-          | (hyp, `Hyp), (concl, `Concl) | (concl, `Concl), (hyp, `Hyp) ->
+          | (hyp, Logic.Hyp), (concl, Logic.Concl) | (concl, Logic.Concl), (hyp, Logic.Hyp) ->
               let h =
                 let id = Names.Id.of_string hyp.ctxt.handle in
                 EConstr.mkVar id
@@ -1504,7 +1508,7 @@ module Import = struct
               end
           | _ -> raise UnexpectedDnD
         end
-    | `AInstantiate (wit, tgt) ->
+    | Logic.AInstantiate (wit, tgt) ->
         let l = bool_path (Goal.env coq_goal) (tgt.sub @ [ 0 ]) in
         let s =
           infer_sort goal.g_env wit |> sort_index sign |> Trm.Datatypes.of_nat (Goal.env coq_goal)
@@ -1516,20 +1520,20 @@ module Import = struct
           begin
             match tgt.ctxt.kind with
             (* Forward instantiate *)
-            | `Hyp ->
+            | Logic.Hyp ->
                 let id = Names.Id.of_string tgt.ctxt.handle in
                 let h = EConstr.mkVar id in
                 let id' = Goal.fresh_name ~basename:(Names.Id.to_string id) coq_goal () in
                 let h' = EConstr.mkVar id' in
                 (kname "inst_hyp", [ ts; l; h; h'; s; o ])
             (* Backward instantiate *)
-            | `Concl -> (kname "inst_goal", [ ts; l; s; o ])
+            | Logic.Concl -> (kname "inst_goal", [ ts; l; s; o ])
             | _ -> raise (InvalidPath tgt)
           end
         in
 
         calltac tac args
-    | `ADuplicate uid ->
+    | Logic.ADuplicate uid ->
         let id = Names.Id.of_string uid in
         let name =
           let name = Goal.fresh_name ~basename:(Names.Id.to_string id) coq_goal () in
@@ -1538,15 +1542,15 @@ module Import = struct
         let prf = EConstr.mkVar id in
 
         Tactics.pose_proof name prf
-    | `ASimpl tgt | `ARed tgt | `AIndt tgt | `ACase tgt | `APbp tgt ->
+    | Logic.ASimpl tgt | Logic.ARed tgt | Logic.AIndt tgt | Logic.ACase tgt | Logic.APbp tgt ->
         let tac_name =
           begin
             match a with
-            | `ASimpl _ -> "simpl_path"
-            | `ARed _ -> "unfold_path"
-            | `AIndt _ -> "myinduction"
-            | `APbp _ -> "pbp"
-            | `ACase _ -> "mycase"
+            | Logic.ASimpl _ -> "simpl_path"
+            | Logic.ARed _ -> "unfold_path"
+            | Logic.AIndt _ -> "myinduction"
+            | Logic.APbp _ -> "pbp"
+            | Logic.ACase _ -> "mycase"
             | _ -> assert false
           end
         in
@@ -1554,13 +1558,13 @@ module Import = struct
         let tac_name, args =
           begin
             match tgt.ctxt.kind with
-            | `Hyp ->
+            | Logic.Hyp ->
                 (* let p = tgt.sub |> fix_sub_eq (`F hyp.h_form) |> Trm.natlist in *)
                 let p = tgt.sub |> Trm.Datatypes.natlist (Goal.env coq_goal) in
                 let id = Names.Id.of_string tgt.ctxt.handle in
                 let h = EConstr.mkVar id in
                 (tac_name ^ "_hyp", [ h; p ])
-            | `Concl ->
+            | Logic.Concl ->
                 (* let p = tgt.sub |> fix_sub_eq (`F goal.g_concl) |> Trm.natlist in *)
                 let p = tgt.sub |> Trm.Datatypes.natlist (Goal.env coq_goal) in
                 (tac_name, [ p ])

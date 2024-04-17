@@ -1,6 +1,9 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
+Lemma test : True.
+actema_force.
+
 
 Parameter f : nat -> nat -> nat.
 

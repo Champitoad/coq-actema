@@ -86,8 +86,8 @@ let rec js_proof_engine (proof : Proof.proof) =
     (* Return the given action as a binary, base64-encoded string *)
     method getactionb action =
       action |> !!(Export.export_action (Proof.hidmap _self##.proof) _self##.proof) |> fun pr ->
-      js_log (pr |> Api.Utils.string_of_action);
-      pr |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string
+      js_log (pr |> Api.Logic.show_action);
+      pr |> Fun.flip Marshal.to_string [] |> Base64.encode_string |> Js.string
 
     (* Get the meta-data attached to this proof engine *)
     method getmeta = Js.Opt.option (Proof.get_meta proof _self##.handle)
@@ -199,17 +199,18 @@ let rec js_proof_engine (proof : Proof.proof) =
 
     (** Load the lemma database specified by the [data] object into the prover. *)
     method loadlemmas datab =
-      (* Decode the data. *)
-      let env, lemmas =
+      (* Decode the data.
+         The type annotation here is very important for unmarshaling to work. *)
+      let (env, lemmas) : Api.Logic.lemmadb =
         Utils.time "decode-lemmas" @@ fun () ->
-        datab |> Js.to_string |> Base64.decode_exn |> Api.Logic_b.lemmadb_of_string
+        datab |> Js.to_string |> Base64.decode_exn |> Fun.flip Marshal.from_string 0
       in
       (* Translate the lemmas and env to the actema format. *)
       let lemmas =
         Utils.time "translate-lemmas" @@ fun () ->
         List.map
           begin
-            fun Api.Logic_t.{ l_user; l_full; l_stmt } ->
+            fun Api.Logic.{ l_user; l_full; l_stmt } ->
               (l_full, (l_user, Fo.Translate.to_form l_stmt))
           end
           lemmas
@@ -347,7 +348,7 @@ and js_subgoal parent (handle : Handle.t) =
           form |> Js.to_string |> String.trim |> Io.from_string |> Io.parse_form
           |> Form.check goal.g_env |> Fo.Translate.of_form
         in
-        `ACut form |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string
+        Api.Logic.ACut form |> Fun.flip Marshal.to_string [] |> Base64.encode_string |> Js.string
       in
       !!doit ()
 
@@ -367,7 +368,8 @@ and js_subgoal parent (handle : Handle.t) =
         Form.recheck db.db_env stmt;
         js_log "recheck ok\n";
         (* Construct the action and encode it. *)
-        `ALemma full_name |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string
+        Api.Logic.ALemma full_name |> Fun.flip Marshal.to_string [] |> Base64.encode_string
+        |> Js.string
       in
       !!doit ()
 
@@ -408,7 +410,8 @@ and js_subgoal parent (handle : Handle.t) =
         let expr, ty = Form.echeck goal.g_env expr in
         let name = Location.unloc name in
         let expr, ty = Fo.Translate.(of_expr expr, of_type_ ty) in
-        `ADef (name, ty, expr) |> Api.Logic_b.string_of_action |> Base64.encode_string |> Js.string
+        Api.Logic.ADef (name, ty, expr)
+        |> Fun.flip Marshal.to_string [] |> Base64.encode_string |> Js.string
       in
       !!doit ()
 
@@ -764,7 +767,9 @@ let export (name : string) : unit =
 
        (* Return a new proof engine whose goals are the base64, binary decoding of [goalsb]  *)
        method setgoalsb goalsb =
-         let goals = goalsb |> Js.to_string |> Base64.decode_exn |> Api.Logic_b.goals_of_string in
+         let goals : Api.Logic.goals =
+           goalsb |> Js.to_string |> Base64.decode_exn |> Fun.flip Marshal.from_string 0
+         in
          let gls, hms = goals |> !!(List.map Proof.Translate.import_goal) |> List.split in
          let hm = List.fold_left Hidmap.union Hidmap.empty hms in
          js_proof_engine (!!(Proof.ginit hm) gls)
