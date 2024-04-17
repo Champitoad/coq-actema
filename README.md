@@ -38,19 +38,23 @@ or when running make.
 
 ## Setting up a development environment
 
-- Install opam (e.g. on ubuntu : $ sudo apt install opam). 
+- Install opam (e.g. on ubuntu : $ sudo apt install opam).
+  Check it is correctly installed by running : $ opam --version
 
-- Update opam : 
-  $ opam update
+- Update opam : $ opam update
 
 - Create a local opam switch. In the root of the project :
   $ opam switch create . 5.1.1 --repos default,coq-released=https://coq.inria.fr/opam/released
-  And follow the instructions given by ocaml.
 
   This will create a switch with ocaml (version 5.1.1) and add a remote repository (needed to fetch mathcomp),
   and install all opam dependencies (but not development-only dependencies such as ocaml-lsp-server).
 
-  This is a "local switch": it will become active automatically each time you enter the project directory.
+  Then follow the instructions given by opam. Notably you will have to restart your terminal or run : 
+  $ eval $(opam env)
+
+  This creates a "local switch": it will become active automatically each time you enter the project directory.
+
+  Check the switch is setup correctly by running : $ make
 
 - Optionally, install development packages into the switch. 
   On VScode : 
@@ -61,10 +65,8 @@ or when running make.
   $ opam install ocamlformat merlin tuareg ocp-indent user-setup 
   $ opam user-setup install
 
-- If using VScode : set the coqtop path. 
-  Go to File > Preferences > Settings, type "coqtop" and set the coqtop bin path to _opam/bin
-
-  You'll probably also want to enable formatting on save (formatting uses ocamlformat).
+- You'll probably also want to enable formatting on save (formatting uses ocamlformat).
+  For VScode : 
   Go to File > Preferences > Settings, type "format" and check the option to format on save.
 
 - Follow the instructions in frontend/README.md to setup the javascript stuff.
@@ -90,3 +92,9 @@ or when running make.
   The explanation is that when loading the plugin from theories/ with dune, the top-level definitions in 
   the plugin seem to be executed (or at least the definitions in plugin/actema_main.ml). 
   I think this is similar to what would happen in an executable, not in a library. Not sure it is intended or not.
+
+- If you can run "make" without any errors but can't step through Coq files, 
+  you might need to set the coqtop path in your editor. 
+
+  If using VScode :
+  Go to File > Preferences > Settings, type "coqtop" and set the coqtop bin path to _opam/bin
