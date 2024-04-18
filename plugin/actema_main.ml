@@ -6,115 +6,9 @@ open Api
 (* -------------------------------------------------------------------- *)
 (** The actema tactic *)
 
-(** Every Actema action must be associated to an identifier, so that it can be
-    stored and later retrieved by the proof script for recompilation. It could
-    be a simple string, but then this would require an intractable amount of
-    name management from the user.
-
-    The simple solution that we choose is to add in the identifier the local
-    proof context, that is (a hash of) the hypotheses and conclusion at the
-    point where the action is performed. Adding the global environment would be
-    too much, since the identifier would break as soon as a new constant is
-    added/removed earlier in the development (whether or not it is involved in
-    the action).
-
-    One could imagine a more elaborate system where actions in the same local
-    context but in different modules/sections/proofs have different identifiers,
-    but for now we dispense from such complexity (maybe experience will prove
-    that it is necessary in the future).
-    *)
-type aident = Logic.aident
-
 type proof = (int * Logic.action) list
 
-(*let string_of_aident (name, (hyps, concl) : aident) : string =
-  let hyps = hyps |>
-    Extlib.List.to_string begin fun Logic.{ h_form; _ } ->
-      Utils.string_of_form h_form
-    end in
-  let concl = concl |> Utils.string_of_form in
-  Printf.sprintf "#%s%s%s" name hyps concl*)
-
-(*let string_of_proof (prf : proof) : string =
-  Extlib.List.to_string ~sep:"\n" ~left:"PROOF\n" ~right:"\nQED"
-  begin fun (idx, action) ->
-    Printf.sprintf "%d: %s" idx (Utils.string_of_action action)
-  end prf*)
-
-let hash_of (s : string) : string =
-  s |> Sha512.string |> Sha512.to_bin |> Base64.encode_string ~alphabet:Base64.uri_safe_alphabet
-
-(*let hash_of_hyp (hyp : Logic.hyp) : string =
-    hyp |> Logic_b.string_of_hyp |> hash_of
-
-  let hash_of_form (form : Logic.form) : string =
-    form |> Logic_b.string_of_form |> hash_of
-
-  let hash_of_lgoal g =
-    g |> Logic_b.string_of_lgoal |> hash_of*)
-
-let hash_of_aident (id : aident) : string = id |> Logic.show_aident |> hash_of
-
-let proofs_path () : string =
-  let root_path = Loadpath.find_load_path "." |> Loadpath.physical in
-  root_path ^ "/actema.proofs"
-
-let path_of_proof (id : aident) : string =
-  Format.sprintf "%s/%s" (proofs_path ()) (hash_of_aident id)
-
-(* I was a bit lazy here in using Marshal to save proofs.
-   A better solution would probably be to use a text format such as
-   JSON or Biniou. *)
-let save_proof (id : aident) (prf : proof) : unit =
-  let path = path_of_proof id in
-
-  if not (CUnix.file_readable_p (proofs_path ()))
-  then begin
-    let status = CUnix.sys_command "mkdir" [ proofs_path () ] in
-    match status with
-    | WEXITED 0 -> ()
-    | _ ->
-        let err_msg = Printf.sprintf "Could not create directory %s" (proofs_path ()) in
-        raise (Sys_error err_msg)
-  end;
-  let oc = open_out path in
-  prf
-  |> List.iter
-       begin
-         fun (idx, action) ->
-           let actionb = action |> Fun.flip Marshal.to_string [] |> Base64.encode_exn in
-           Printf.fprintf oc "%d\n%s\n" idx actionb
-       end;
-  close_out oc
-
-let load_proof (id : aident) : proof option =
-  let path = path_of_proof id in
-  if not (CUnix.file_readable_p path)
-  then None
-  else begin
-    let ic = open_in path in
-    let prf : proof ref = ref [] in
-    begin
-      try
-        while true do
-          let line = input_line ic in
-          let idx = line |> int_of_string in
-
-          let line = input_line ic in
-          let action : Logic.action = line |> Base64.decode_exn |> Fun.flip Marshal.from_string 0 in
-
-          prf := (idx, action) :: !prf
-        done
-      with End_of_file -> close_in ic
-    end;
-    let prf = List.rev !prf in
-    (* Log.str (string_of_aident id);
-       Log.str (string_of_proof prf); *)
-    Some prf
-  end
-
-(*let sign = Translate.peano*)
-
+(** Carry out the effects of an action in Coq. *)
 let compile_action ((idx, a) : int * Logic.action) : unit tactic =
   Goal.enter
     begin
@@ -306,12 +200,12 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
         let id = (action_name, (goal.g_hyps, goal.g_concl)) in
         let interactive () =
           let* prf = interactive_proof () in
-          save_proof id prf;
+          Storage.save_proof id prf;
           return ()
         in
         if force
         then interactive ()
-        else match load_proof id with Some prf -> compile_proof prf | _ -> interactive ()
+        else match Storage.load_proof id with Some prf -> compile_proof prf | _ -> interactive ()
     end
 
 let rec print_modpath mpath =
@@ -329,8 +223,6 @@ let rec print_modpath mpath =
       ^ " " ^ Names.Id.to_string id
 
 let test_tac () : unit tactic =
-  Log.str @@ proofs_path ();
-
   Goal.enter
     begin
       fun coq_goal ->
