@@ -15,8 +15,7 @@ type action =
   | Done
   | Undo
   | Redo
-  (* The frontend asks the plugin for a list of lemmas. *)
-  | Lemmas
+  | Lemmas of string option * Logic.form option
 
 (** The IP address of the frontend (server). *)
 let addr =
@@ -39,24 +38,26 @@ let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t
   let* body = body |> Cohttp_lwt.Body.to_string in
   let code = resp |> Response.status |> Code.code_of_status in
   match code with
-  (* The frontend gave a proof action. *)
-  | 200 ->
-      body |> String.split_on_char '\n'
-      |> begin
-           function
-           | [ subgoal_idx; actionb ] ->
-               let idx = int_of_string subgoal_idx in
-               let action : Logic.action =
-                 actionb |> Base64.decode_exn |> Fun.flip Marshal.from_string 0
-               in
-               Lwt.return @@ Do (idx, action)
-           | _ -> failwith "Unexpected response body for 'action' request"
-         end
-  | 201 -> Lwt.return Done
-  | 202 -> Lwt.return Undo
-  | 203 -> Lwt.return Redo
-  (* The frontend requested a list of lemmas. *)
-  | 204 -> Lwt.return Lemmas
+  | 200 -> begin
+      (* The frontend gave a proof action. *)
+      match String.split_on_char '\n' body with
+      | [ subgoal_idx; actionb ] ->
+          let idx = int_of_string subgoal_idx in
+          let action : Logic.action =
+            actionb |> Base64.decode_exn |> Fun.flip Marshal.from_string 0
+          in
+          Lwt.return @@ Do (idx, action)
+      | _ -> failwith "Unexpected response body for 'action' request"
+    end
+  | 251 -> Lwt.return Done
+  | 252 -> Lwt.return Undo
+  | 253 -> Lwt.return Redo
+  | 254 ->
+      (* The frontend requested a list of lemmas. *)
+      let (pattern, selection) : string option * Logic.form option =
+        body |> Base64.decode_exn |> Fun.flip Marshal.from_string 0
+      in
+      Lwt.return @@ Lemmas (pattern, selection)
   | 501 -> raise (UnsupportedRequestMethod body)
   | 550 -> raise (ActemaError body)
   | _ -> raise (UnsupportedHttpResponseCode code)

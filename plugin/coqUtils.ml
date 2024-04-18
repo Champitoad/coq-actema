@@ -11,6 +11,7 @@ end
 (** Use this module when logging in the plugin. *)
 module Log = struct
   let str (str : string) = Feedback.msg_notice (Pp.str str)
+  let printf fmt = Format.ksprintf str fmt
   let error msg = CErrors.user_err (Pp.str msg)
 
   let string_of_econstr env evd (t : EConstr.t) : string =

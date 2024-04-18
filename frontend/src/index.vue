@@ -192,7 +192,10 @@ export default {
         applyLemma() {
             try {
                 console.log("Requesting lemmas\n");
-                window.ipcRenderer.send('request_lemmas');
+
+                let proofState = this.$refs.proofCanvas.getProofState();
+                let msg = proofState.lemmareqb(null, null);
+                window.ipcRenderer.send('request_lemmas', msg);
             } catch (e) {
                 this.$refs.proofCanvas.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);

@@ -85,8 +85,8 @@ let rec js_proof_engine (proof : Proof.proof) =
 
     (* Return the given action as a binary, base64-encoded string *)
     method getactionb action =
-      action |> !!(Export.export_action (Proof.hidmap _self##.proof) _self##.proof) |> fun pr ->
-      js_log (pr |> Api.Logic.show_action);
+      let pr = action |> !!(Export.export_action (Proof.hidmap _self##.proof) _self##.proof) in
+      js_log (Api.Logic.show_action pr);
       pr |> Fun.flip Marshal.to_string [] |> Base64.encode_string |> Js.string
 
     (* Get the meta-data attached to this proof engine *)
@@ -196,6 +196,17 @@ let rec js_proof_engine (proof : Proof.proof) =
     method pactions path =
       let%lwt _ = Lwt.return () in
       Lwt.return (_self##actions path)
+
+    (** [this#lemmareqb (pattern : string) (selection : )] returns the base64-encoded string corresponding to the parameters of
+        a lemma request, where [pattern] is the text entered in the lemma search bar and [selection] is the currently selected subformula. *)
+    method lemmareqb _pattern _selection =
+      let doit () =
+        let pattern = Some "PATTERN_TEST" in
+        let form = Some (Api.Logic.FPred ("FORM_TEST", [])) in
+        ((pattern, form) : string option * Api.Logic.form option)
+        |> Fun.flip Marshal.to_string [] |> Base64.encode_string |> Js.string
+      in
+      !!doit ()
 
     (** Load the lemma database specified by the [data] object into the prover. *)
     method loadlemmas datab =

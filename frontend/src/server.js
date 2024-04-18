@@ -8,7 +8,7 @@ function parseQueryString(req) {
 
 export default {
   launch: function (win) {
-    // Create a local server to receive data from
+    // Create a local server that receives requests from the plugin.
     const server = http.createServer((req, res) => {
       ipcMain.removeAllListeners('request_lemmas');
       ipcMain.removeAllListeners('action');
@@ -23,25 +23,25 @@ export default {
         res.end(action.subgoalIndex.toString() + "\n" + action.repr);
       });
       ipcMain.once('done', _ => {
-        let rcode = 201;
+        let rcode = 251;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end('');
       });
       ipcMain.once('undo', _ => {
-        let rcode = 202;
+        let rcode = 252;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end('');
       });
       ipcMain.once('redo', _ => {
-        let rcode = 203;
+        let rcode = 253;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
         res.end('');
       });
       // Request lemmas to the backend.
-      ipcMain.once('request_lemmas', _ => {
-        let rcode = 204;
+      ipcMain.once('request_lemmas', (_, msg) => {
+        let rcode = 254;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
-        res.end('');
+        res.end(msg);
       });
 
       ipcMain.once('error', (_, msg) => {

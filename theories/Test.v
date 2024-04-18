@@ -1,7 +1,7 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
-Lemma test : True.
+Lemma test x y : x + y = 0.
 actema_force.
 
 

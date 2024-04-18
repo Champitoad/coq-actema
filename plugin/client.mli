@@ -13,8 +13,11 @@ type action =
   | Done
   | Undo
   | Redo
-  (* The frontend asks the plugin for a list of lemmas. *)
-  | Lemmas
+  | Lemmas of string option * Logic.form option
+      (** The frontend asks the plugin for a list of lemmas.
+          The parameters are used to perform a pre-selection of lemmas : 
+          - The string is a pattern to match against the lemma name.
+          - The formula is the selected formula. It can have free variables. *)
 
 (** Tell the frontend that the proof is complete, and receive an (empty) response. *)
 val send_qed : unit -> unit Lwt.t
