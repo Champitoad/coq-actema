@@ -15,7 +15,7 @@ type action =
   | Done
   | Undo
   | Redo
-  | Lemmas of string option * Logic.form option
+  | Lemmas of string option * Logic.term option
 
 (** The IP address of the frontend (server). *)
 let addr =
@@ -54,7 +54,7 @@ let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t
   | 253 -> Lwt.return Redo
   | 254 ->
       (* The frontend requested a list of lemmas. *)
-      let (pattern, selection) : string option * Logic.form option =
+      let (pattern, selection) : string option * Logic.term option =
         body |> Base64.decode_exn |> Fun.flip Marshal.from_string 0
       in
       Lwt.return @@ Lemmas (pattern, selection)

@@ -223,7 +223,7 @@ let interactive_proof () : proof tactic =
     let rec handle_lemmas (act : action) : action =
       match act with
       (* We received a lemma request : send the lemmas and get the next action again. *)
-      | Lemmas (pattern, form) ->
+      | Lemmas (pattern, term) ->
           begin
             match pattern with
             | None -> Log.printf "pattern = None"
@@ -231,9 +231,9 @@ let interactive_proof () : proof tactic =
           end;
 
           begin
-            match form with
-            | None -> Log.printf "form = None"
-            | Some form -> Log.printf "form = Some %s" (Api.Logic.show_form form)
+            match term with
+            | None -> Log.printf "term = None"
+            | Some term -> Log.printf "term = Some %s" (Api.Logic.show_term term)
           end;
           let act = Lwt_main.run @@ Client.send_lemmas lemmas lemmas_env in
           handle_lemmas act

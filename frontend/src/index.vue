@@ -194,7 +194,13 @@ export default {
                 console.log("Requesting lemmas\n");
 
                 let proofState = this.$refs.proofCanvas.getProofState();
-                let msg = proofState.lemmareqb(null, null);
+                let subgoal_idx = this.$refs.proofCanvas.getActiveSubgoal();
+                let propList = this.$refs.proofCanvas.$refs.plist[subgoal_idx];
+
+                let pattern = propList.getLemmaSearchText();
+                let selection = this.$refs.proofCanvas.getActiveSelection();
+                let msg = proofState.lemmareqb(selection, pattern);
+
                 window.ipcRenderer.send('request_lemmas', msg);
             } catch (e) {
                 this.$refs.proofCanvas.showErrorMessage(e);

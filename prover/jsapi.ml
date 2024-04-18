@@ -197,13 +197,36 @@ let rec js_proof_engine (proof : Proof.proof) =
       let%lwt _ = Lwt.return () in
       Lwt.return (_self##actions path)
 
-    (** [this#lemmareqb (pattern : string) (selection : )] returns the base64-encoded string corresponding to the parameters of
+    (** [this#lemmareqb (selection : CoreLogic.IPath.t list) (pattern : string)] returns the base64-encoded string corresponding to the parameters of
         a lemma request, where [pattern] is the text entered in the lemma search bar and [selection] is the currently selected subformula. *)
-    method lemmareqb _pattern _selection =
+    method lemmareqb selection pattern =
       let doit () =
-        let pattern = Some "PATTERN_TEST" in
-        let form = Some (Api.Logic.FPred ("FORM_TEST", [])) in
-        ((pattern, form) : string option * Api.Logic.form option)
+        (* Convert the pattern from JS to ocaml. *)
+        let pattern =
+          pattern |> Js.Optdef.to_option
+          |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
+          |> begin
+               function Some "" -> None | x -> x
+             end
+        in
+        (* Convert the selection from JS to ocaml. *)
+        let selection =
+          match selection |> Js.Optdef.to_option |> Option.map ipath_of_array with
+          | None -> None
+          | Some [] -> None
+          | Some [ selection ] -> Some selection
+          | Some _ ->
+              js_log "Jsapi.lemmareqb : limited to one selection. Setting selection to None.";
+              None
+        in
+        (* Get the sub-formula pointed at by the selection. *)
+        let term =
+          selection
+          |> Option.map (CoreLogic.IPath.term _self##.proof)
+          |> Option.map Fo.Translate.of_term
+        in
+        (* Encode the pattern and formula. *)
+        ((pattern, term) : string option * Api.Logic.term option)
         |> Fun.flip Marshal.to_string [] |> Base64.encode_string |> Js.string
       in
       !!doit ()
@@ -267,7 +290,6 @@ let rec js_proof_engine (proof : Proof.proof) =
         pattern |> Js.Optdef.to_option
         |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
       in
-      js_log @@ Format.sprintf "Got pattern: %s\n" (Option.default "[none]" pattern);
       (* Convert the selection from JS to ocaml. *)
       let selection = selection |> Js.Optdef.to_option |> Option.map ipath_of_array in
       (* Get the proof. *)

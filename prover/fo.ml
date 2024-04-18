@@ -1867,6 +1867,9 @@ module Translate = struct
     | FConn (c, fs) -> Logic.FConn (of_logcon c, List.map of_form fs)
     | FBind (b, x, ty, f) -> Logic.FBind (of_bkind b, x, of_type_ ty, of_form f)
 
+  let of_term (t : term) : Logic.term =
+    match t with `E expr -> Logic.E (of_expr expr) | `F form -> Logic.F (of_form form)
+
   let of_bvar ((ty, body) : bvar) : Logic.bvar = (of_type_ ty, Option.map of_expr body)
 
   let of_env (env : env) : Logic.env =
