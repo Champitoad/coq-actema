@@ -33,26 +33,6 @@ let compile_proof (prf : proof) : unit tactic =
   in
   aux prf
 
-(** Export all the lemmas we can translate to actema, 
-    along with their environment. *)
-let export_lemmas () : (Logic.lemma list * Logic.env) tactic =
-  let open PVMonad in
-  let* coq_goals_tacs = Goal.goals in
-  let* lemmas, sign =
-    Stdlib.List.fold_right
-      begin
-        fun coq_goal_tac acc ->
-          let* coq_goal = coq_goal_tac in
-          let* lemmas, sign = acc in
-          let new_lemmas, new_sign = Export.lemmas coq_goal sign in
-          return (new_lemmas @ lemmas, new_sign)
-      end
-      coq_goals_tacs
-      (return ([], peano))
-  in
-  let env = Export.env_of_varsign (NameMap.empty, sign) in
-  return (lemmas, env)
-
 (** Export each coq goal to Actema. *)
 let export_goals () : Logic.goals tactic =
   let open PVMonad in
@@ -77,23 +57,6 @@ let get_user_action (goals : Logic.goals) : Client.action =
 
 type history = { mutable before : proof; mutable after : proof }
 
-(** Do a pre-selection of lemmas, according to a name pattern. *)
-let preselect_lemmas_name pattern lemmas =
-  let filter lem =
-    (* Check that the pattern is an exact substring of the lemma's name.
-       The test is case-insensitive. *)
-    let user_name = String.lowercase_ascii lem.Logic.l_user in
-    let pattern = String.lowercase_ascii pattern in
-    try
-      ignore (BatString.find user_name pattern);
-      true
-    with Not_found -> false
-  in
-  List.filter filter lemmas
-
-(** Do a pre-selection of lemmas, according to a selected subterm. *)
-let preselect_lemmas_selection selection lemmas = lemmas
-
 exception ApplyUndo
 
 (** The control flow here is a mess. *)
@@ -105,7 +68,7 @@ let interactive_proof () : proof tactic =
   (* At the start of the proof, translate the lemmas to the API format.
      TODO : cache this in a file so that only new/changed lemmas (since the last actema command)
      are translated. *)
-  let* lemmas, lemmas_env = export_lemmas () in
+  let* lemmas, lemmas_env = LemmaDB.export_lemmas () in
 
   (* This is the main loop of the plugin, where we handle all actions
      given by the frontend. *)
@@ -148,8 +111,8 @@ let interactive_proof () : proof tactic =
           (* Pre-select the lemmas. *)
           let lemmas =
             lemmas
-            |> Option.default Fun.id (Option.map preselect_lemmas_name pattern)
-            |> Option.default Fun.id (Option.map preselect_lemmas_selection term)
+            |> Option.default Fun.id (Option.map LemmaDB.preselect_lemmas_name pattern)
+            |> Option.default Fun.id (Option.map LemmaDB.preselect_lemmas_selection term)
           in
           (* Send the lemmas to the server. *)
           let act = Lwt_main.run @@ Client.send_lemmas lemmas lemmas_env in
