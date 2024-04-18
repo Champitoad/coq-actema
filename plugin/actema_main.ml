@@ -183,6 +183,23 @@ let get_user_action (goals : Logic.goals) : Client.action =
 
 type history = { mutable before : proof; mutable after : proof }
 
+(** Do a pre-selection of lemmas, according to a name pattern. *)
+let preselect_lemmas_name pattern lemmas =
+  let filter lem =
+    (* Check that the pattern is an exact substring of the lemma's name.
+       The test is case-insensitive. *)
+    let user_name = String.lowercase_ascii lem.Logic.l_user in
+    let pattern = String.lowercase_ascii pattern in
+    try
+      ignore (BatString.find user_name pattern);
+      true
+    with Not_found -> false
+  in
+  List.filter filter lemmas
+
+(** Do a pre-selection of lemmas, according to a selected subterm. *)
+let preselect_lemmas_selection selection lemmas = lemmas
+
 exception ApplyUndo
 
 (** The control flow here is a mess. *)
@@ -224,18 +241,25 @@ let interactive_proof () : proof tactic =
       match act with
       (* We received a lemma request : send the lemmas and get the next action again. *)
       | Lemmas (pattern, term) ->
-          begin
-            match pattern with
-            | None -> Log.printf "pattern = None"
-            | Some pattern -> Log.printf "pattern = Some %s" pattern
-          end;
-
-          begin
-            match term with
-            | None -> Log.printf "term = None"
-            | Some term -> Log.printf "term = Some %s" (Api.Logic.show_term term)
-          end;
+          (*begin
+              match pattern with
+              | None -> Log.printf "pattern = None"
+              | Some pattern -> Log.printf "pattern = Some %s" pattern
+            end;
+            begin
+              match term with
+              | None -> Log.printf "term = None"
+              | Some term -> Log.printf "term = Some %s" (Api.Logic.show_term term)
+            end;*)
+          (* Pre-select the lemmas. *)
+          let lemmas =
+            lemmas
+            |> Option.default Fun.id (Option.map preselect_lemmas_name pattern)
+            |> Option.default Fun.id (Option.map preselect_lemmas_selection term)
+          in
+          (* Send the lemmas to the server. *)
           let act = Lwt_main.run @@ Client.send_lemmas lemmas lemmas_env in
+          (* Handle the next action. *)
           handle_lemmas act
       (* Otherwise we are done here. *)
       | _ -> act
