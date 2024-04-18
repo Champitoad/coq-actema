@@ -1,0 +1,30 @@
+(* This file defines the HTTP protocol used to communicate between
+   the plugin (http client) and the frontend (http server). *)
+open Api
+
+exception ActemaError of string
+exception UnsupportedRequestMethod of string
+exception UnsupportedHttpResponseCode of int
+
+(** The plugin sends the goals (in API format) to the frontend, 
+    which sends back an action. *)
+type action =
+  | Do of int * Logic.action
+  | Done
+  | Undo
+  | Redo
+  (* The frontend asks the plugin for a list of lemmas. *)
+  | Lemmas
+
+(** Tell the frontend that the proof is complete, and receive an (empty) response. *)
+val send_qed : unit -> unit Lwt.t
+
+(** Send the goals to the frontend, and receive an action as response. *)
+val send_goals : Logic.goals -> action Lwt.t
+
+(** Send a set of lemmas to the frontend, and receive an action as response. *)
+val send_lemmas : Logic.lemma list -> Logic.env -> action Lwt.t
+
+(** Tell the frontend that an error occured in the plugin,
+    and receive an (empty) response. *)
+val send_error : string -> unit Lwt.t
