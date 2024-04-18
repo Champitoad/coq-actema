@@ -1,8 +1,9 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
-Lemma test x y : x + y = 0.
-actema_force.
+
+Lemma evenSSS n : PeanoNat.Nat.Even (S (S (S n))).
+actema_force.   
 
 
 Parameter f : nat -> nat -> nat.

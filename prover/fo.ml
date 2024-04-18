@@ -1962,3 +1962,64 @@ module Translate = struct
       ; env_handles
       }
 end
+
+(** [t_subs f] returns all the paths leading to a subterm in [t]. *)
+let t_subs (t : term) : int list list =
+  let rec aux sub = function
+    | `E (EFun (_, es)) | `F (FPred (_, es)) ->
+        es
+        |> List.mapi (fun i e ->
+               let sub = sub @ [ i ] in
+               sub :: aux sub (`E e))
+        |> List.concat
+    | `F (FConn (_, fs)) ->
+        fs
+        |> List.mapi (fun i f ->
+               let sub = sub @ [ i ] in
+               sub :: aux sub (`F f))
+        |> List.concat
+    | `F (FBind (_, _, _, f)) ->
+        let sub = sub @ [ 0 ] in
+        sub :: aux sub (`F f)
+    | _ -> []
+  in
+  [] :: aux [] t
+
+(** [f_subs f] returns all the paths leading to a subformula in [f]. *)
+let f_subs (f : form) : int list list =
+  let rec aux sub = function
+    | FConn (_, fs) ->
+        fs
+        |> List.mapi (fun i f ->
+               let sub = sub @ [ i ] in
+               sub :: aux sub f)
+        |> List.concat
+    | FBind (_, _, _, f) ->
+        let sub = sub @ [ 0 ] in
+        sub :: aux sub f
+    | _ -> []
+  in
+  [] :: aux [] f
+
+(** [e_subs f] returns all the paths leading to a subexpression in [f]. *)
+let e_subs (f : form) : int list list =
+  let rec f_aux sub = function
+    | FPred (_, es) ->
+        es
+        |> List.mapi (fun i e ->
+               let sub = sub @ [ i ] in
+               sub :: e_aux sub e)
+        |> List.concat
+    | FConn (_, fs) -> fs |> List.mapi (fun i f -> f_aux (sub @ [ i ]) f) |> List.concat
+    | FBind (_, _, _, f) -> f_aux (sub @ [ 0 ]) f
+    | _ -> []
+  and e_aux sub = function
+    | EVar _ -> []
+    | EFun (_, es) ->
+        es
+        |> List.mapi (fun i e ->
+               let sub = sub @ [ i ] in
+               sub :: e_aux sub e)
+        |> List.concat
+  in
+  f_aux [] f

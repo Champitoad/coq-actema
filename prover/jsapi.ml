@@ -285,6 +285,7 @@ let rec js_proof_engine (proof : Proof.proof) =
         - a text pattern (usually the text in the lemma search-bar's input-box). 
         Both arguments are optional (in javascript-land, they can be undefined). *)
     method filterlemmas selection pattern =
+      let open Lemmas in
       (* Convert the pattern from JS to ocaml. *)
       let pattern =
         pattern |> Js.Optdef.to_option
@@ -292,19 +293,24 @@ let rec js_proof_engine (proof : Proof.proof) =
       in
       (* Convert the selection from JS to ocaml. *)
       let selection = selection |> Js.Optdef.to_option |> Option.map ipath_of_array in
-      (* Get the proof. *)
-      let proof = _self##.proof in
-      (* Fitler by name. *)
-      let proof =
-        match pattern with None -> proof | Some pattern -> LemmaDB.filter_by_name pattern proof
+      (* Construct the filtering predicate. *)
+      let pred =
+        Pred.and_
+          begin
+            match pattern with
+            | None | Some "" -> Pred.true_
+            | Some pattern -> Pred.match_name pattern
+          end
+          begin
+            match selection with
+            | None | Some [] -> Pred.true_
+            | Some [ selection ] ->
+                Pred.or_ (Pred.link_sfl selection) (Pred.link_drewrite selection)
+            | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
+          end
       in
-      (* Fiter by selection. *)
-      let proof =
-        match selection with
-        | None | Some [] -> proof
-        | Some [ selection ] -> LemmaDB.filter_by_selection selection proof
-        | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
-      in
+      (* Filter the lemma database. *)
+      let proof = Utils.time "filter-lemmas" @@ fun () -> Lemmas.filter pred _self##.proof in
       js_proof_engine proof
   end
 
