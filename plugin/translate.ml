@@ -1244,40 +1244,39 @@ module Import = struct
     | Logic.AElim (uid, i) ->
         let id = Names.Id.of_string uid in
         let hyp = Utils.get_hyp goal uid in
-        let mk_destruct (ids : Names.variable list)
-            (mk_pat : Names.variable list -> Names.variable list list) : unit tactic =
-          (* Apply destruct *)
-          (*let h = EConstr.mkVar id in
-            let pat = mk_or_and_intro_pattern (mk_pat ids) in
-            Tactics.destruct false None h (Some pat) None*)
-          failwith "todo"
-        in
-        let destruct_and =
-          let hyps_ids = Goal.hyps_names coq_goal in
-          let id1 = Namegen.next_ident_away id hyps_ids in
-          let id2 = Namegen.next_ident_away id (Names.Id.Set.add id1 hyps_ids) in
-          let mk_ipat = function [ x; y ] -> [ [ x; y ] ] | _ -> assert false in
-          mk_destruct [ id1; id2 ] mk_ipat
-        in
-        let destruct_ex x =
-          let idx = Goal.fresh_name ~basename:x coq_goal () in
-          let mk_ipat = function [ x; y ] -> [ [ x; y ] ] | _ -> assert false in
-          mk_destruct [ idx; id ] mk_ipat
-        in
-        let destruct_or =
-          let mk_ipat = function [ x; y ] -> [ [ x ]; [ y ] ] | _ -> assert false in
-          mk_destruct [ id; id ] mk_ipat
-        in
+        (*let mk_destruct (ids : Names.variable list)
+              (mk_pat : Names.variable list -> Names.variable list list) : unit tactic =
+            (* Apply destruct *)
+            (*let h = EConstr.mkVar id in
+              let pat = mk_or_and_intro_pattern (mk_pat ids) in
+              Tactics.destruct false None h (Some pat) None*)
+            failwith "TODO: `AElim mk_destruct"
+          in
+          let destruct_and =
+            let hyps_ids = Goal.hyps_names coq_goal in
+            let id1 = Namegen.next_ident_away id hyps_ids in
+            let id2 = Namegen.next_ident_away id (Names.Id.Set.add id1 hyps_ids) in
+            let mk_ipat = function [ x; y ] -> [ [ x; y ] ] | _ -> assert false in
+            mk_destruct [ id1; id2 ] mk_ipat
+          in
+          let destruct_ex x =
+            let idx = Goal.fresh_name ~basename:x coq_goal () in
+            let mk_ipat = function [ x; y ] -> [ [ x; y ] ] | _ -> assert false in
+            mk_destruct [ idx; id ] mk_ipat
+          in
+          let destruct_or =
+            let mk_ipat = function [ x; y ] -> [ [ x ]; [ y ] ] | _ -> assert false in
+            mk_destruct [ id; id ] mk_ipat
+          in*)
         begin
           match hyp.h_form with
-          | Logic.FTrue | Logic.FFalse ->
-              (*Tactics.destruct false None (EConstr.mkVar id) None None*)
-              failwith "TODO: `AElim true/false"
-          | Logic.FConn (Logic.Not, _) -> Tactics.simplest_case (EConstr.mkVar id)
+          | Logic.FTrue | Logic.FFalse -> Tactics.simplest_elim (EConstr.mkVar id)
+          | Logic.FConn (Logic.Not, _) -> Tactics.simplest_elim (EConstr.mkVar id)
           | Logic.FConn (Logic.Imp, _) -> Tactics.apply (EConstr.mkVar id)
-          | Logic.FConn (Logic.And, _) | Logic.FConn (Logic.Equiv, _) -> destruct_and
-          | Logic.FConn (Logic.Or, _) -> destruct_or
-          | Logic.FBind (Logic.Exist, x, _, _) -> destruct_ex x
+          | Logic.FConn (Logic.And, _) | Logic.FConn (Logic.Equiv, _) ->
+              failwith "Logic.AElim : And/Equiv"
+          | Logic.FConn (Logic.Or, _) -> (*destruct_or*) failwith "Logic.AElim : Or"
+          | Logic.FBind (Logic.Exist, x, _, _) -> failwith "Logic.AElim : Exist"
           | Logic.FPred ("_EQ", _) -> begin
               match i with
               | 0 -> calltac (kname "rew_all_left") [ EConstr.mkVar id ]

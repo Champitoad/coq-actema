@@ -2,6 +2,10 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 
+Lemma test n (h : ~n = 42) (h1 : True) (h2 : False) : False.
+Proof.   actema_force. destruct h.
+
+
 Lemma evenSSS n : PeanoNat.Nat.Even (S (S (S n))).
 actema_force.   
 
