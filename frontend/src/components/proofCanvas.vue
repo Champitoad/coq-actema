@@ -801,24 +801,7 @@ export default {
         // If we are in select mode, deselect all selected sub-expressions
         deselect() {
             if (this.selectMode) {
-                _.each(this.$refs["plist"], sublist => {
-                    _.each(sublist.$refs, arr => {
-                        _.each(arr, button => {
-                            if (button && button.removeAllSelectedPaths) {
-                                button.removeAllSelectedPaths();
-                            }
-                        });
-                    });
-                });
-
-                _.each(this.$refs, arr => {
-                    _.each(arr, button => {
-                        if (button && button.removeAllSelectedPaths) {
-                            button.removeAllSelectedPaths();
-                        }
-                    });
-                });
-
+                this.resetSelection();
                 this.forceUpdate();
             }
         },
@@ -897,7 +880,9 @@ export default {
 
         resetSelection() {
             _.each(this.pathButtonMap, (button, path) => {
-                button.removeAllSelectedPaths();
+                if (button && button.removeAllSelectedPaths) {
+                    button.removeAllSelectedPaths();
+                }
             });
             this.pathButtonMap = {};
         },

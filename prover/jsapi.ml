@@ -266,10 +266,11 @@ let rec js_proof_engine (proof : Proof.proof) =
       js_proof_engine new_proof
 
     (** Serialize the current lemma database into a JS array. 
-        Returns an array of lemmas. Each lemma contains three strings : (full-name, user-name, pretty-printed-formula) *)
+        Returns an array of lemmas. Each lemma contains three strings : (full-name, user-name, pretty-printed-formula).
+        For performance reasons, we only return a limited amount of lemmas. *)
     method getlemmas =
       let db = _self##.proof |> Proof.get_db in
-      db.db_map |> Map.bindings
+      db.db_map |> Map.bindings |> List.take 100
       |> List.map
            begin
              fun (full_name, (user_name, form)) ->
