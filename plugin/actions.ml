@@ -686,14 +686,7 @@ let execute_ainstantiate coq_goal sign goal (witness : Logic.expr) (target : Log
 
   calltac tac args
 
-(** Duplicate a hypothesis. *)
-let execute_aduplicate coq_goal hyp_name =
-  let hyp_id = Names.Id.of_string hyp_name in
-  let name =
-    Goal.fresh_name ~basename:(Names.Id.to_string hyp_id) coq_goal () |> Names.Name.mk_name
-  in
-  let prf = EConstr.mkVar hyp_id in
-  Tactics.pose_proof name prf
+let execute_aclear coq_goal hyp_name = Tactics.clear [ Names.Id.of_string hyp_name ]
 
 let execute_helper (a : Logic.action) (coq_goal : Goal.t) : unit tactic =
   let goal, sign = Export.goal coq_goal peano in
@@ -716,7 +709,11 @@ let execute_helper (a : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.AElim (hyp_name, i) -> execute_aelim goal hyp_name i
   | Logic.ALink (src, dst, itr) -> execute_alink coq_goal sign goal src dst itr
   | Logic.AInstantiate (witness, target) -> execute_ainstantiate coq_goal sign goal witness target
-  | Logic.ADuplicate hyp_name -> execute_aduplicate coq_goal hyp_name
+  | Logic.ADuplicate hyp_name ->
+      let new_name = Goal.fresh_name ~basename:hyp_name coq_goal () |> Names.Name.mk_name in
+      let hyp = EConstr.mkVar @@ Names.Id.of_string hyp_name in
+      Tactics.pose_proof new_name hyp
+  | Logic.AClear hyp_name -> Tactics.clear [ Names.Id.of_string hyp_name ]
   | Logic.ASimpl tgt | Logic.ARed tgt | Logic.AIndt tgt | Logic.ACase tgt | Logic.APbp tgt ->
       let tac_name =
         match a with
