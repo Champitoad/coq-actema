@@ -1991,15 +1991,15 @@ let f_subs (f : form) : int list list =
     | FConn (_, fs) ->
         fs
         |> List.mapi (fun i f ->
-               let sub = sub @ [ i ] in
+               let sub = i :: sub in
                sub :: aux sub f)
         |> List.concat
     | FBind (_, _, _, f) ->
-        let sub = sub @ [ 0 ] in
+        let sub = 0 :: sub in
         sub :: aux sub f
     | _ -> []
   in
-  [] :: aux [] f
+  List.map List.rev @@ ([] :: aux [] f)
 
 (** [e_subs f] returns all the paths leading to a subexpression in [f]. *)
 let e_subs (f : form) : int list list =
