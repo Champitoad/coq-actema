@@ -1222,7 +1222,14 @@ module Import = struct
         | Logic.FBind (Logic.Forall, x, _, _) ->
             let pat = mk_intro_patterns [ x ] in
             Tactics.intro_patterns false pat
-        | Logic.FPred ("_EQ", _) -> Tactics.reflexivity
+        | Logic.FPred ("_EQ", _) ->
+            (* Here we are not sure that the two sides of the equality are indeed equal.
+
+               The frontend can only handle syntactic equality : it delegates to the plugin
+               the responsability of dealing with non-equal terms.
+
+               We choose to simply ignore an intro action on an equality that is not provable by computation. *)
+            Tacticals.tclTRY Tactics.reflexivity
         | _ -> raise (UnsupportedAction a)
       end
     | Logic.AElim (uid, i) ->

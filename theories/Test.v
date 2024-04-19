@@ -2,7 +2,7 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 
-Lemma test n (h : exists n, n = 42) : n = 3 <-> True -> False.
+Lemma test n (h : exists n, n = 42) : n = 42.
 Proof. actema_force. elim h. intros x h1. actema_force. done.
 
 

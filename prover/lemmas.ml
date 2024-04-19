@@ -91,7 +91,9 @@ module Pred = struct
     in
     (* Prepare the goal. *)
     let proof, lemma_path, selection = prepare_goal proof stmt selection in
-    (* Test against relevant links. *)
+    (* Test against relevant links.  As we are testing for deep rewrites,
+       we only select subpaths of the lemma that lead to the left or right of an equality.
+       This looses a bit of generality as we may miss some links that allow the selection to rewrite in the lemma. *)
     List.exists
       begin
         fun sub -> not @@ List.is_empty @@ hlpred proof ([ subpath lemma_path sub ], [ selection ])
