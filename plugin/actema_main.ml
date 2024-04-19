@@ -178,16 +178,5 @@ let rec print_modpath mpath =
 let test_tac () : unit tactic =
   Goal.enter
     begin
-      fun coq_goal ->
-        let () =
-          Environ.fold_constants
-            (fun cname cbody acc ->
-              if Names.Label.to_string (Names.Constant.label cname) = "target424242"
-              then (
-                Log.str @@ print_modpath (Names.Constant.modpath cname);
-                acc)
-              else acc)
-            (Goal.env coq_goal) ()
-        in
-        Tacticals.tclIDTAC
+      fun coq_goal -> Tacticals.tclIDTAC
     end

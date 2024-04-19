@@ -1030,25 +1030,13 @@ module Import = struct
     in
     (t, i)
 
-  let mk_or_and_intro_pattern (pat : Names.variable list list) : Tactypes.or_and_intro_pattern =
+  (** Make an introduction pattern to introduce named variables.
+      If any of the given names is already bound, this will create a fresh name instead. *)
+  let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
     let open Tactypes in
-    let disj_conj =
-      pat
-      |> List.map
-           begin
-             fun conj ->
-               conj
-               |> List.map
-                    begin
-                      fun name -> CAst.make (IntroNaming (Namegen.IntroIdentifier name))
-                    end
-           end
-    in
-    CAst.make (IntroOrPattern disj_conj)
-
-  let mk_intro_patterns (names : Names.variable list) : Tactypes.intro_patterns =
-    let open Tactypes in
-    List.map (fun name -> CAst.make (IntroNaming (Namegen.IntroIdentifier name))) names
+    List.map
+      (fun name -> CAst.make (IntroNaming (Namegen.IntroFresh (Names.Id.of_string name))))
+      names
 
   let bool_path coq_env (sub : int list) : EConstr.t =
     let boollist_of_intlist = Stdlib.List.map (fun n -> if n = 0 then false else true) in
@@ -1214,10 +1202,7 @@ module Import = struct
         match goal.g_concl with
         | Logic.FTrue -> Tactics.one_constructor 1 Tactypes.NoBindings
         | Logic.FConn (Logic.Imp, _) | Logic.FConn (Logic.Not, _) ->
-            (* Generate fresh Coq identifier for intro *)
-            let id = Goal.fresh_name coq_goal () in
-            (* Apply intro *)
-            let pat = mk_intro_patterns [ id ] in
+            let pat = mk_intro_patterns [ "imp_left" ] in
             Tactics.intro_patterns false pat
         | Logic.FConn (Logic.And, _) | Logic.FConn (Logic.Equiv, _) ->
             Tactics.split Tactypes.NoBindings
@@ -1235,48 +1220,43 @@ module Import = struct
             in
             aux (iv = 0) (arity 0 f - iv - 1)
         | Logic.FBind (Logic.Forall, x, _, _) ->
-            let id = Goal.fresh_name ~basename:x coq_goal () in
-            let pat = mk_intro_patterns [ id ] in
+            let pat = mk_intro_patterns [ x ] in
             Tactics.intro_patterns false pat
         | Logic.FPred ("_EQ", _) -> Tactics.reflexivity
         | _ -> raise (UnsupportedAction a)
       end
     | Logic.AElim (uid, i) ->
+        (* This action eliminates the hypothesis named [uid]. The hypothesis is cleared and replaced
+           by (possibly several goals) which contain derived hypotheses. The integer index is used when
+           eliminating an equality, to decide which way (left/right) to rewrite. *)
         let id = Names.Id.of_string uid in
         let hyp = Utils.get_hyp goal uid in
-        (*let mk_destruct (ids : Names.variable list)
-              (mk_pat : Names.variable list -> Names.variable list list) : unit tactic =
-            (* Apply destruct *)
-            (*let h = EConstr.mkVar id in
-              let pat = mk_or_and_intro_pattern (mk_pat ids) in
-              Tactics.destruct false None h (Some pat) None*)
-            failwith "TODO: `AElim mk_destruct"
-          in
-          let destruct_and =
-            let hyps_ids = Goal.hyps_names coq_goal in
-            let id1 = Namegen.next_ident_away id hyps_ids in
-            let id2 = Namegen.next_ident_away id (Names.Id.Set.add id1 hyps_ids) in
-            let mk_ipat = function [ x; y ] -> [ [ x; y ] ] | _ -> assert false in
-            mk_destruct [ id1; id2 ] mk_ipat
-          in
-          let destruct_ex x =
-            let idx = Goal.fresh_name ~basename:x coq_goal () in
-            let mk_ipat = function [ x; y ] -> [ [ x; y ] ] | _ -> assert false in
-            mk_destruct [ idx; id ] mk_ipat
-          in
-          let destruct_or =
-            let mk_ipat = function [ x; y ] -> [ [ x ]; [ y ] ] | _ -> assert false in
-            mk_destruct [ id; id ] mk_ipat
-          in*)
         begin
           match hyp.h_form with
-          | Logic.FTrue | Logic.FFalse -> Tactics.simplest_elim (EConstr.mkVar id)
-          | Logic.FConn (Logic.Not, _) -> Tactics.simplest_elim (EConstr.mkVar id)
+          | Logic.FTrue | Logic.FFalse | Logic.FConn (Logic.Not, _) ->
+              let bindings = (EConstr.mkVar id, Tactypes.NoBindings) in
+              Tactics.default_elim false (Some true) bindings
           | Logic.FConn (Logic.Imp, _) -> Tactics.apply (EConstr.mkVar id)
           | Logic.FConn (Logic.And, _) | Logic.FConn (Logic.Equiv, _) ->
-              failwith "Logic.AElim : And/Equiv"
-          | Logic.FConn (Logic.Or, _) -> (*destruct_or*) failwith "Logic.AElim : Or"
-          | Logic.FBind (Logic.Exist, x, _, _) -> failwith "Logic.AElim : Exist"
+              (* First eliminate the hypothesis, then introduce the hypotheses we created. *)
+              let bindings = (EConstr.mkVar id, Tactypes.NoBindings) in
+              Tacticals.tclTHENS
+                (Tactics.default_elim false (Some true) bindings)
+                [ Tactics.intro_patterns false @@ mk_intro_patterns [ uid; uid ] ]
+          | Logic.FConn (Logic.Or, _) ->
+              (* First eliminate the hypothesis, then introduce the hypotheses we created. *)
+              let bindings = (EConstr.mkVar id, Tactypes.NoBindings) in
+              Tacticals.tclTHENS
+                (Tactics.default_elim false (Some true) bindings)
+                [ Tactics.intro_patterns false @@ mk_intro_patterns [ uid ]
+                ; Tactics.intro_patterns false @@ mk_intro_patterns [ uid ]
+                ]
+          | Logic.FBind (Logic.Exist, x, _, _) ->
+              (* First eliminate the hypothesis, then introduce the variable and hypothesis we created. *)
+              let bindings = (EConstr.mkVar id, Tactypes.NoBindings) in
+              Tacticals.tclTHENS
+                (Tactics.default_elim false (Some true) bindings)
+                [ Tactics.intro_patterns false @@ mk_intro_patterns [ x; uid ] ]
           | Logic.FPred ("_EQ", _) -> begin
               match i with
               | 0 -> calltac (kname "rew_all_left") [ EConstr.mkVar id ]

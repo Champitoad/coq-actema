@@ -2,8 +2,8 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 
-Lemma test n (h : ~n = 42) (h1 : True) (h2 : False) : False.
-Proof.   actema_force. destruct h.
+Lemma test n (h : exists n, n = 42) : n = 3 <-> True -> False.
+Proof. actema_force. elim h. intros x h1. actema_force. done.
 
 
 Lemma evenSSS n : PeanoNat.Nat.Even (S (S (S n))).
