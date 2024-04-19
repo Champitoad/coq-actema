@@ -1,4 +1,0 @@
-(executable
- (name main)
- (libraries coq-actema.api qcheck-core)
- (modes js byte))
