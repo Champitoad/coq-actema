@@ -7,9 +7,13 @@ let hash_of (s : string) : string =
 
 let hash_of_aident (id : Logic.aident) : string = id |> Logic.show_aident |> hash_of
 
+let remove_trailing c str =
+  let n = String.length str in
+  if n > 0 && str.[n - 1] = c then String.sub str 0 (n - 1) else str
+
 let proofs_folder () : string =
   let root_path = Loadpath.find_load_path "." |> Loadpath.physical in
-  root_path ^ "/actema.proofs"
+  remove_trailing '/' root_path ^ "/actema.proofs"
 
 let path_of_proof (id : Logic.aident) : string =
   Format.sprintf "%s/%s" (proofs_folder ()) (hash_of_aident id)

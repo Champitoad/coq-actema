@@ -176,7 +176,5 @@ let rec print_modpath mpath =
       ^ " " ^ Names.Id.to_string id
 
 let test_tac () : unit tactic =
-  Goal.enter
-    begin
-      fun coq_goal -> Tacticals.tclIDTAC
-    end
+  Log.str @@ Storage.proofs_folder ();
+  Tacticals.tclIDTAC

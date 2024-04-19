@@ -3,8 +3,7 @@ Require Import ssreflect.
 
 
 Lemma test n (h : exists n, n = 42) : n = 42.
-Proof. actema_force. elim h. intros x h1. actema_force. done.
-
+Proof. test_tac.
 
 Lemma evenSSS n : PeanoNat.Nat.Even (S (S (S n))).
 actema_force.   
