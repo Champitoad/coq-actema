@@ -6,12 +6,11 @@
 open Api
 open Proofview
 
-exception UnsupportedAction of Logic.action
+(** Contains the unsupported action and a short error message. *)
+exception UnsupportedAction of Logic.action * string
+
 exception UnexpectedDnD
 exception InvalidPath of Logic.ipath
-
-(** Contains the lemma name and an error message. *)
-exception InvalidLemma of string * string
 
 (** Execute a single action. The integer is the index of the subgoal the action takes place in. *)
 val execute : int * Logic.action -> unit tactic
