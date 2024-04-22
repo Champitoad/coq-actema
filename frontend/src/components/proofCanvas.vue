@@ -75,27 +75,6 @@
     border: none;
 }
 
-/* .pi-btn.pi-predicate.dragged:after, .pi-btn.pi-expression.dragged:after  {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 8px;
-    height: 100%;
-    background-color: black;
-}
-
-.pi-btn.pi-predicate.dragged:before, .pi-btn.pi-expression.dragged:before,
-.pi-btn.pi-goal.dragged:before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 8px;
-    height: 100%;
-    background-color: black;
-} */
-
 .prover-msg {
     position: fixed;
     bottom: 20px;
@@ -118,18 +97,20 @@
     position: relative;
 }
 
+
 .work-zone {
-    height: 100%;
-    padding-left: 0px;
-    position: relative;
     padding-left: 15px;
     padding-right: 15px;
 }
 
 .hypothesis-zone {
-    position: static;
-    padding-right: 0px;
     padding-left: 15px;
+    padding-right: 15px;
+}
+
+.lemmas-zone {
+    padding-left: 15px;
+    padding-right: 15px;
 }
 
 .nav-tabs {
@@ -154,13 +135,6 @@
     cursor: col-resize;
 }
 
-.work-zone {
-    width: calc(75% - 5px);
-}
-
-.hypothesis-zone {
-    width: 25%;
-}
 
 .pi-btn:focus,
 .pi-btn:active {
@@ -198,16 +172,21 @@
                                 class="tab-pane fade" :class="{ show: isActiveSubgoal(i), active: isActiveSubgoal(i) }"
                                 :id="getSubgoalId(subgoal)" :aria-labelledby="getSubgoalId(subgoal) + '-tab'">
                                 <div class="canvas row" style="height: 100%; position: relative;">
-                                    <div class="hypothesis-zone" style=" width: 25%;" @click="deselect"
-                                        :style="{ width: hypsZoneWidth + 'px', 'border-right': '1px solid rgba(0,0,0,0.1)', 'overflow-y': 'auto', 'height': 'calc(100vh - 120px)' }">
+                                    <div class="lemmas-zone" :style="{ width: (hypsZoneStart * docWidth) + 'px' }">
+                                        <lemma-search :goal="subgoal" :context="subgoal.context()"
+                                            :vars="subgoal.tvars()" :selectMode="selectMode" :displayMode="displayMode"
+                                            ref="lsearch"></lemma-search>
+                                    </div>
+                                    <div class=" dragbar" ref="dragbar-left" @mousedown="startDragLeft"></div>
+                                    <div class="hypothesis-zone" @click="deselect"
+                                        :style="{ width: ((hypsZoneEnd - hypsZoneStart) * docWidth) + 'px' }">
                                         <proposition-list :goal="subgoal" :context="subgoal.context()"
                                             :vars="subgoal.tvars()" :selectMode="selectMode" :displayMode="displayMode"
                                             ref="plist"></proposition-list>
                                     </div>
-                                    <div class="dragbar"></div>
+                                    <div class="dragbar" ref="dragbar-right" @mousedown="startDragRight"></div>
                                     <div class="work-zone" droppable="true" @drop="onDropPredicate"
-                                        @dragover="onDragOverPredicate" @click="deselect"
-                                        :style="{ width: workZoneWidth + 'px' }">
+                                        @dragover="onDragOverPredicate" @click="deselect">
                                         <goal :subgoal="subgoal" :key="getGoalKey(i)" :selectMode="selectMode"
                                             :displayMode="displayMode" :ref="subgoal.handle"></goal>
                                         <predicate v-for="(predicate, j) in getPredicatesInWorkZone(subgoal)"
@@ -243,6 +222,7 @@
 import _ from "lodash";
 
 import PropositionListVue from "./propositionList.vue";
+import LemmaSearchVue from "./lemmaSearch.vue";
 import ExpressionVue from "./expression.vue";
 import PredicateVue from "./predicate.vue";
 import GoalVue from "./goal.vue";
@@ -252,6 +232,7 @@ import RadialMenu from "./RadialMenu/RadialMenu.vue"
 export default {
     components: {
         "proposition-list": PropositionListVue,
+        "lemma-search": LemmaSearchVue,
         predicate: PredicateVue,
         expression: ExpressionVue,
         goal: GoalVue,
@@ -265,7 +246,8 @@ export default {
             errorMsg: null,
             warningMsg: null,
 
-            hypsZoneWidth_: 0,
+            hypsZoneStart_: 0.30,
+            hypsZoneEnd_: 0.70,
             docWidth: null,
 
             renderIndex: 0,
@@ -283,23 +265,38 @@ export default {
         };
     },
     computed: {
-        hypsZoneWidth: {
+        // The start of the hypotheses zone, as a percentage (between 0.0 and 1.0).
+        hypsZoneStart: {
             get: function () {
-                return this.hypsZoneWidth_;
+                return this.hypsZoneStart_;
             },
-            set: function (newWidth) {
-                let hypsWidths = $(".pi-btn.in-hypothesis-zone")
-                    .map(function () { return $(this).outerWidth(); })
-                    .toArray();
-                let maxHypWidth = _.max(hypsWidths) + 80;
-                if (hypsWidths.length === 0 || newWidth >= maxHypWidth) {
-                    this.hypsZoneWidth_ = newWidth;
+            set: function (newStart) {
+                //let hypsWidths = $(".pi-btn.in-hypothesis-zone")
+                //    .map(function () { return $(this).outerWidth(); })
+                //    .toArray();
+                //let maxHypWidth = _.max(hypsWidths) + 80;
+                //if (hypsWidths.length === 0 || newWidth >= maxHypWidth) {
+                if (0.05 <= newStart && newStart <= this.hypsZoneEnd - 0.05) {
+                    this.hypsZoneStart_ = newStart;
                 }
+                //}
             }
         },
-        workZoneWidth: {
+        // The start of the hypotheses zone, as a percentage (between 0.0 and 1.0).
+        hypsZoneEnd: {
             get: function () {
-                return this.docWidth - this.hypsZoneWidth - 5;
+                return this.hypsZoneEnd_;
+            },
+            set: function (newEnd) {
+                //let hypsWidths = $(".pi-btn.in-hypothesis-zone")
+                //    .map(function () { return $(this).outerWidth(); })
+                //    .toArray();
+                //let maxHypWidth = _.max(hypsWidths) + 80;
+                //if (hypsWidths.length === 0 || newWidth >= maxHypWidth) {
+                if (this.hypsZoneStart + 0.05 <= newEnd && newEnd <= 0.95) {
+                    this.hypsZoneEnd_ = newEnd;
+                }
+                //}
             }
         },
     },
@@ -320,27 +317,17 @@ export default {
         this.pathButtonMap = {}; // clean id <-> button map
     },
     updated: function () {
-        /*
-            if( this.proofState !== null && this.proofState !== undefined ) {
-                // re-render mathjax after this component is mounted
-                MathJax.Hub.Queue(["Typeset",MathJax.Hub]);
-            }
-            */
-
         if (this.displayMode == "mathml") {
             if (this.proofState !== null && this.proofState !== undefined) {
                 // MathJax.Hub.Queue(["Typeset",MathJax.Hub]);
             }
         }
-
-        this.bindDragBar();
     },
 
     mounted: function () {
-        // set a resize watcher
+        // Set a resize watcher to compute this.docWidth.
         this.handleResize();
         window.addEventListener("resize", this.handleResize);
-        this.hypsZoneWidth = 0.25 * this.docWidth;
     },
 
     beforeDestroy: function () {
@@ -348,44 +335,86 @@ export default {
     },
 
     methods: {
-        bindDragBar: function () {
-            let self = this;
+        // The user STARTS dragging the dragbar that's between the lemmas and hypotheses.
+        startDragLeft: function (e) {
+            e.preventDefault();
+            document.addEventListener('mouseup', this.endDrag);
+            document.addEventListener('mousemove', this.updateLeftDragbar);
 
-            // Resize horizontally
-            var dragBar = $(this.$el).find(".dragbar");
-            dragBar.off("mousedown");
-            dragBar.on("mousedown", function (e) {
-                e.preventDefault();
-                $(document).mouseup(function (e) {
-                    $(document).unbind("mousemove");
-                });
-                $(document).mousemove(function (e) {
-                    // debounce the new size affectation so we won't parse the whole proof too often
-                    _.debounce(() => {
-                        self.hypsZoneWidth = e.pageX;
-                    }, 20)();
-                });
-            });
-
-            // same as before but for touch interfaces
-            dragBar.off("touchstart");
-            dragBar.on("touchstart", function (e) {
-                e.preventDefault();
-                $(document).on("touchend", function (e) {
-                    $(document).unbind("touchmove");
-                });
-                $(document).on("touchmove", function (e) {
-                    let pageX = _.get(e, ["changedTouches", 0, "pageX"]);
-                    let pageY = _.get(e, ["changedTouches", 0, "pageY"]);
-                    if (pageX && pageY) {
-                        // debounce the new size affectation so we won't parse the whole proof too often
-                        _.debounce(() => {
-                            self.hypsZoneWidth = pageX;
-                        }, 20)();
-                    }
-                });
-            });
+            console.log("Start drag left");
         },
+
+        // The user STARTS dragging the dragbar that's between the hypotheses and work-zone.
+        startDragRight: function (e) {
+            e.preventDefault();
+            document.addEventListener('mouseup', this.endDrag);
+            document.addEventListener('mousemove', this.updateRightDragbar);
+
+            console.log("Start drag right");
+        },
+
+        // The user IS dragging the dragbar that's between the lemmas and hypotheses.
+        updateLeftDragbar: function (e) {
+            _.debounce(() => {
+                this.hypsZoneStart = e.pageX / this.docWidth;
+            }, 100)();
+        },
+
+        // The user IS dragging the dragbar that's between the hypotheses and work-zone.
+        updateRightDragbar: function (e) {
+            _.debounce(() => {
+                this.hypsZoneEnd = e.pageX / this.docWidth;
+            }, 100)();
+        },
+
+        // The user FINISHED dragging one of the two dragbars.
+        endDrag: function (e) {
+            e.preventDefault();
+            document.removeEventListener('mouseup', this.endDrag);
+            document.removeEventListener('mousemove', this.updateLeftDragbar);
+            document.removeEventListener('mousemove', this.updateRightDragbar);
+            console.log("End drag");
+        },
+
+
+        //bindDragBar: function () {
+        //    let self = this;
+        //
+        //    // Resize horizontally
+        //    var dragBar = $(this.$el).find(".dragbar");
+        //    dragBar.off("mousedown");
+        //    dragBar.on("mousedown", function (e) {
+        //        e.preventDefault();
+        //        $(document).mouseup(function (e) {
+        //            $(document).unbind("mousemove");
+        //        });
+        //        $(document).mousemove(function (e) {
+        //            // debounce the new size affectation so we won't parse the whole proof too often
+        //            _.debounce(() => {
+        //                self.hypsZoneWidth = e.pageX;
+        //            }, 20)();
+        //        });
+        //    });
+        //
+        //    // same as before but for touch interfaces
+        //    dragBar.off("touchstart");
+        //    dragBar.on("touchstart", function (e) {
+        //        e.preventDefault();
+        //        $(document).on("touchend", function (e) {
+        //            $(document).unbind("touchmove");
+        //        });
+        //        $(document).on("touchmove", function (e) {
+        //            let pageX = _.get(e, ["changedTouches", 0, "pageX"]);
+        //            let pageY = _.get(e, ["changedTouches", 0, "pageY"]);
+        //            if (pageX && pageY) {
+        //                // debounce the new size affectation so we won't parse the whole proof too often
+        //                _.debounce(() => {
+        //                    self.hypsZoneWidth = pageX;
+        //                }, 20)();
+        //            }
+        //        });
+        //    });
+        //},
 
         getGoalKey(index) {
             return "proof-" + this.proofState.handle + "-goal-" + "-" + index;
@@ -862,13 +891,13 @@ export default {
         },
 
         fitHypsZone(btn) {
-            btn = $(btn.$el);
-            if (btn.hasClass("in-hypothesis-zone")) {
-                let btnWidth = btn.outerWidth() + 80;
-                if (btnWidth > this.hypsZoneWidth) {
-                    this.hypsZoneWidth = btnWidth;
-                }
-            }
+            //btn = $(btn.$el);
+            //if (btn.hasClass("in-hypothesis-zone")) {
+            //    let btnWidth = btn.outerWidth() + 80;
+            //    if (btnWidth > this.hypsZoneWidth) {
+            //        this.hypsZoneWidth = btnWidth;
+            //    }
+            //}
         },
 
         findElement(handle) {

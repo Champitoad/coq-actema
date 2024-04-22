@@ -479,17 +479,13 @@ Eval compute in
 
 
 
-(* the main functions as described in our CPP 2022 article *)
-(* "side conditions" are generated (which are actually in the center
+(* The main functions as described in our CPP 2022 article.
+   "side conditions" are generated (which are actually in the center
    and not on the side : 
     - A->B  for the focused formulas (meant to be A->A in practice)
     - two equalites for equality rewrites which should be two trivial
       reflexive equalities
  *)
-
-
-
-
 
 Fixpoint b3 (l:trace)(ist:inst')(nh:ct)(hyp : cx nh)(hi : pp nh)
          (ng : ct)(goal : cx ng)(gi : pp ng) : o3 :=

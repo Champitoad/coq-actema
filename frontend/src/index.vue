@@ -44,21 +44,21 @@ export default {
             try {
                 let proofState = this.$refs.proofCanvas.getProofState();
                 let subgoal_idx = this.$refs.proofCanvas.getActiveSubgoal();
-                let propList = this.$refs.proofCanvas.$refs.plist[subgoal_idx];
+                let lemmaSearch = this.$refs.proofCanvas.$refs.lsearch[subgoal_idx];
 
                 // Load the lemmas in the proof engine.
                 proofState = proofState.loadlemmas(datab);
                 // Filter the lemma database.            
                 let selection = this.$refs.proofCanvas.getActiveSelection();
-                let pattern = propList.getLemmaSearchText();
+                let pattern = lemmaSearch.getLemmaSearchText();
                 proofState = proofState.filterlemmas(selection, pattern);
                 // Load the new proof engine.
                 this.$refs.proofCanvas.setProofState(proofState);
 
                 // Once the new proof engine is loaded, update the lemma search bar
                 // and focus it.
-                propList.updateLemmaList();
-                propList.focusLemmaSearchBar();
+                lemmaSearch.updateLemmaList();
+                lemmaSearch.focusLemmaSearchBar();
             } catch (e) {
                 this.$refs.proofCanvas.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
@@ -195,9 +195,9 @@ export default {
 
                 let proofState = this.$refs.proofCanvas.getProofState();
                 let subgoal_idx = this.$refs.proofCanvas.getActiveSubgoal();
-                let propList = this.$refs.proofCanvas.$refs.plist[subgoal_idx];
+                let lemmaSearch = this.$refs.proofCanvas.$refs.lsearch[subgoal_idx];
 
-                let pattern = propList.getLemmaSearchText();
+                let pattern = lemmaSearch.getLemmaSearchText();
                 let selection = this.$refs.proofCanvas.getActiveSelection();
                 let msg = proofState.lemmareqb(selection, pattern);
 
