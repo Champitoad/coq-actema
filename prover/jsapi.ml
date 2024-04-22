@@ -379,6 +379,17 @@ and js_subgoal parent (handle : Handle.t) =
       let aout = Array.of_list (List.map Js.string aout) in
       Js.array aout
 
+    method getclearb hyp_handle =
+      let doit () =
+        (* Get the hypothesis name. *)
+        let hidmap = Proof.hidmap parent##.proof in
+        let hyp_name = Hidmap.State.run (Hidmap.find hyp_handle) hidmap in
+        (* Construct the AClear action and encode it. *)
+        Api.Logic.AClear hyp_name |> Fun.flip Marshal.to_string [] |> Base64.encode_string
+        |> Js.string
+      in
+      !!doit ()
+
     (** [this#getcutb (form : string)] parses [form] in the current goal, and
         returns the base64-encoded string of the corresponding ACut action. *)
     method getcutb form =
@@ -406,7 +417,6 @@ and js_subgoal parent (handle : Handle.t) =
             (Failure ("lemma not found " ^ full_name))
         in
         Form.recheck db.db_env stmt;
-        js_log "recheck ok\n";
         (* Construct the action and encode it. *)
         Api.Logic.ALemma full_name |> Fun.flip Marshal.to_string [] |> Base64.encode_string
         |> Js.string

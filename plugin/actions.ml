@@ -686,8 +686,6 @@ let execute_ainstantiate coq_goal sign goal (witness : Logic.expr) (target : Log
 
   calltac tac args
 
-let execute_aclear coq_goal hyp_name = Tactics.clear [ Names.Id.of_string hyp_name ]
-
 let execute_helper (a : Logic.action) (coq_goal : Goal.t) : unit tactic =
   let goal, sign = Export.goal coq_goal peano in
   match a with
