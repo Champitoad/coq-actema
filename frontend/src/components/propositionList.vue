@@ -66,19 +66,19 @@ li .pi-expression.in-work-zone {
     outline: none !important;
 }
 
-.btn-archive {
+.btn-clear {
     opacity: 0.2;
 }
 
-.btn-archive:hover {
+.btn-clear:hover {
     opacity: 1;
 }
 
-.btn-copy {
+.btn-duplicate {
     opacity: 0.2;
 }
 
-.btn-copy:hover {
+.btn-duplicate:hover {
     opacity: 0.2;
 }
 
@@ -137,7 +137,7 @@ li .pi-expression.in-work-zone {
                         :key="'expression-' + expression.handle" draggable="true" :ref="expression.handle">
                     </expression>
                 </div>
-                <button class="btn btn-sm btn-secondary-outline btn-transparent btn-archive d-inline-block float-right"
+                <button class="btn btn-sm btn-secondary-outline btn-transparent btn-clear d-inline-block float-right"
                     @click="onClear(expression)" title="Clear">
                     <i class="fas fa-archive"></i>
                 </button>
@@ -151,12 +151,13 @@ li .pi-expression.in-work-zone {
                     <predicate :predicate="predicate" :selectMode="selectMode" :displayMode="displayMode"
                         :key="'predicate-' + predicate.handle" draggable="true" :ref="predicate.handle"></predicate>
                 </div>
-                <button class="btn btn-sm btn-secondary-outline btn-transparent btn-archive d-inline-block float-right"
+                <button class="btn btn-sm btn-secondary-outline btn-transparent btn-clear d-inline-block float-right"
                     @click="onClear(predicate)" title="Clear">
                     <i class="fas fa-archive"></i>
                 </button>
-                <button class="btn btn-sm btn-secondary-outline btn-transparent btn-copy d-inline-block float-right"
-                    @click="onCopy(predicate)" title="Duplicate">
+                <button
+                    class="btn btn-sm btn-secondary-outline btn-transparent btn-duplicate d-inline-block float-right"
+                    @click="onDuplicate(predicate)" title="Duplicate">
                     <i class="fas fa-copy"></i>
                 </button>
             </li>
@@ -271,8 +272,8 @@ export default {
             }
         },
 
-        onCopy: function (predicate) {
-            console.log("On copy\n");
+        onDuplicate: function (predicate) {
+            this.$parent.duplicateHyp(this.goal, predicate.handle);
         },
 
         onClear: function (predicate) {

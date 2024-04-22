@@ -379,6 +379,19 @@ and js_subgoal parent (handle : Handle.t) =
       let aout = Array.of_list (List.map Js.string aout) in
       Js.array aout
 
+    (** [this#getduplicateb (hyp_handle : int)] gets the hypothesis in the current goal, 
+        and returns the base64-encoded string of the corresponding ADuplicate action. *)
+    method getduplicateb hyp_handle =
+      let doit () =
+        (* Get the hypothesis name. *)
+        let hidmap = Proof.hidmap parent##.proof in
+        let hyp_name = Hidmap.State.run (Hidmap.find hyp_handle) hidmap in
+        (* Construct the ADuplicate action and encode it. *)
+        Api.Logic.ADuplicate hyp_name |> Fun.flip Marshal.to_string [] |> Base64.encode_string
+        |> Js.string
+      in
+      !!doit ()
+
     (** [this#getclearb (hyp_handle : int)] gets the hypothesis in the current goal, 
         and returns the base64-encoded string of the corresponding AClear action. *)
     method getclearb hyp_handle =
