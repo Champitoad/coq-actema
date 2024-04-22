@@ -9,6 +9,8 @@ open Api
 
 (** ** Debug logging *)
 
+let d = 0
+
 (** Set to true to log the arguments given to the DnD tactics *)
 let log_dnd_trace = false
 
