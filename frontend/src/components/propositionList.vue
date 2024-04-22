@@ -74,6 +74,14 @@ li .pi-expression.in-work-zone {
     opacity: 1;
 }
 
+.btn-copy {
+    opacity: 0.2;
+}
+
+.btn-copy:hover {
+    opacity: 0.2;
+}
+
 .predicate-dropspace {
     height: 5px;
     /* background-color: red; */
@@ -95,7 +103,7 @@ li .pi-expression.in-work-zone {
 
 .overflow-container {
     overflow-x: hidden;
-    width: calc(100% - 40px);
+    width: calc(100% - 80px);
     display: inline-block;
     height: 44px;
 }
@@ -126,10 +134,11 @@ li .pi-expression.in-work-zone {
             <li class="list-group-item text-success" :key="'li-' + expression.handle">
                 <div class="overflow-container">
                     <expression :expression="expression" :selectMode="selectMode" :displayMode="displayMode"
-                        :key="'expression-' + expression.handle" draggable="true" :ref="expression.handle"></expression>
+                        :key="'expression-' + expression.handle" draggable="true" :ref="expression.handle">
+                    </expression>
                 </div>
                 <button class="btn btn-sm btn-secondary-outline btn-transparent btn-archive d-inline-block float-right"
-                    @click="onClear(expression)">
+                    @click="onClear(expression)" title="Clear">
                     <i class="fas fa-archive"></i>
                 </button>
             </li>
@@ -143,8 +152,12 @@ li .pi-expression.in-work-zone {
                         :key="'predicate-' + predicate.handle" draggable="true" :ref="predicate.handle"></predicate>
                 </div>
                 <button class="btn btn-sm btn-secondary-outline btn-transparent btn-archive d-inline-block float-right"
-                    @click="onClear(predicate)">
+                    @click="onClear(predicate)" title="Clear">
                     <i class="fas fa-archive"></i>
+                </button>
+                <button class="btn btn-sm btn-secondary-outline btn-transparent btn-copy d-inline-block float-right"
+                    @click="onCopy(predicate)" title="Duplicate">
+                    <i class="fas fa-copy"></i>
                 </button>
             </li>
         </template>
@@ -258,12 +271,15 @@ export default {
             }
         },
 
+        onCopy: function (predicate) {
+            console.log("On copy\n");
+        },
+
         onClear: function (predicate) {
             this.$parent.clearHyp(this.goal, predicate.handle);
         },
 
         updateLemmaList: function () {
-            console.log("Updating lemma dropdown.");
             let lemmas = Object.entries(this.$parent.proofState.getlemmas());
 
             this.lemmaList = _.map(lemmas, l => {

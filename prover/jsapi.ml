@@ -379,6 +379,8 @@ and js_subgoal parent (handle : Handle.t) =
       let aout = Array.of_list (List.map Js.string aout) in
       Js.array aout
 
+    (** [this#getclearb (hyp_handle : int)] gets the hypothesis in the current goal, 
+        and returns the base64-encoded string of the corresponding AClear action. *)
     method getclearb hyp_handle =
       let doit () =
         (* Get the hypothesis name. *)
