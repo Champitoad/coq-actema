@@ -1,17 +1,40 @@
 <style scoped>
 .search-lemma-bar {
-    margin: 10px 10px 20px 0;
+    flex: 3 3 auto;
+}
+
+.search-button {
+    display: inline-block;
+    flex: 0 0 auto;
+    height: fit-content;
+    margin-left: 15px;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    margin-left: 15px;
+    margin-top: 15px;
+    margin-right: 0px;
 }
 </style>
 
 <template>
-    <vue-simple-suggest class="search-lemma-bar" placeholder="Search lemma..." v-model="lemmaSearchText"
-        display-attribute="shortName" value-attribute="name" @select="addLemma" :list="lemmaList"
-        :filter-by-query="false" :min-length="0" :preventHide="true" :key="lemmaKey" ref="lemmaSearchBar">
-        <div slot="suggestion-item" slot-scope="{ suggestion }">
-            <div>{{ suggestion.shortName }} : {{ suggestion.stmt }}</div>
-        </div>
-    </vue-simple-suggest>
+    <div class="row">
+        <vue-simple-suggest class="search-lemma-bar" placeholder="Search lemma..." v-model="lemmaSearchText"
+            display-attribute="shortName" value-attribute="name" @select="addLemma" :list="lemmaList"
+            :filter-by-query="false" :min-length="0" :max-suggestions="15" :preventHide="true" :key="lemmaKey"
+            ref="lemmaSearchBar">
+            <div slot="suggestion-item" slot-scope="{ suggestion }">
+                <div>{{ suggestion.shortName }} : {{ suggestion.stmt }}</div>
+            </div>
+        </vue-simple-suggest>
+
+        <button id="lemmas" class="btn btn-info search-button" @click="searchLemmas"
+            title="Search for lemmas matching the current name and selection (ctrl+f)">
+            Search
+        </button>
+    </div>
 </template>
 
 <script>
@@ -42,11 +65,22 @@ export default {
         };
     },
     methods: {
-        // Callback invoked when we click on an entry in the lemma dropdown (list).
-        addLemma: async function (lemma) {
-            this.$parent.sendLemma(this.goal, lemma.name);
-        },
+        // Called when the "Search" button is clicked.
+        searchLemmas: function () {
+            try {
+                console.log("Requesting lemmas\n");
 
+                let pattern = this.getLemmaSearchText();
+                let selection = this.$parent.getActiveSelection();
+                let proofState = this.$parent.getProofState();
+                let msg = proofState.lemmareqb(selection, pattern);
+
+                window.ipcRenderer.send('request_lemmas', msg);
+            } catch (e) {
+                this.$parent.showErrorMessage(e);
+                window.ipcRenderer.send('error', this.$parent.errorMsg);
+            }
+        },
 
         updateLemmaList: function () {
             let lemmas = Object.entries(this.$parent.proofState.getlemmas());
@@ -71,7 +105,12 @@ export default {
             setTimeout(() => {
                 this.$refs.lemmaSearchBar.input.focus();
             }, 0);
-        }
+        },
+
+        // Callback invoked when we click on an entry in the lemma dropdown (list).
+        addLemma: async function (lemma) {
+            this.$parent.sendLemma(this.goal, lemma.name);
+        },
     }
 };
 </script>

@@ -4,9 +4,6 @@
             <div class="row" style="padding-top: 20px; padding-bottom: 20px; background-color: #eee;">
                 <button id="done" class="btn btn-info ml-2" @click="done" title="Done"
                     :disabled="!connected">Done</button>
-                <button id="lemmas" class="btn btn-info ml-2" @click="applyLemma"
-                    title="Apply a lemma, filtering by the current selection and text input (ctrl+f)"
-                    :disabled="!connected">Apply lemma</button>
                 <div class="mx-auto"></div>
                 <div class="buttons text-right mr-2">
                     <button class="btn btn-outline-secondary btn-select" @click="toggleSelectionMode"
@@ -15,7 +12,7 @@
                     <button class="btn btn-outline-secondary btn-undo" @click="undo" :disabled="!connected"
                         title="Undo (ctrl+z)"><i class="fas fa-undo"></i></button>
                     <button class="btn btn-outline-secondary btn-redo" @click="redo" :disabled="!connected"
-                        title="Undo (ctrl+y)"><i class="fas fa-redo"></i></button>
+                        title="Redo (ctrl+y)"><i class="fas fa-redo"></i></button>
                 </div>
             </div>
             <div class="row" style="height: calc(100vh - 78px)">
@@ -106,7 +103,9 @@ export default {
                 }
                 else if (e.key === "f" && e.ctrlKey) {
                     // ctrl+f
-                    self.applyLemma();
+                    let subgoal_idx = self.$refs.proofCanvas.getActiveSubgoal();
+                    let lemmaSearch = self.$refs.proofCanvas.$refs.lsearch[subgoal_idx];
+                    lemmaSearch.searchLemmas();
                 }
             }
 
@@ -182,26 +181,6 @@ export default {
                 window.ipcRenderer.send('done');
                 this.connected = false;
                 this.$refs.proofCanvas.setProofState(null);
-            } catch (e) {
-                this.$refs.proofCanvas.showErrorMessage(e);
-                window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);
-            }
-        },
-
-        // Called when the "Apply lemma" button is clicked.
-        applyLemma() {
-            try {
-                console.log("Requesting lemmas\n");
-
-                let proofState = this.$refs.proofCanvas.getProofState();
-                let subgoal_idx = this.$refs.proofCanvas.getActiveSubgoal();
-                let lemmaSearch = this.$refs.proofCanvas.$refs.lsearch[subgoal_idx];
-
-                let pattern = lemmaSearch.getLemmaSearchText();
-                let selection = this.$refs.proofCanvas.getActiveSelection();
-                let msg = proofState.lemmareqb(selection, pattern);
-
-                window.ipcRenderer.send('request_lemmas', msg);
             } catch (e) {
                 this.$refs.proofCanvas.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);

@@ -340,8 +340,6 @@ export default {
             e.preventDefault();
             document.addEventListener('mouseup', this.endDrag);
             document.addEventListener('mousemove', this.updateLeftDragbar);
-
-            console.log("Start drag left");
         },
 
         // The user STARTS dragging the dragbar that's between the hypotheses and work-zone.
@@ -349,8 +347,6 @@ export default {
             e.preventDefault();
             document.addEventListener('mouseup', this.endDrag);
             document.addEventListener('mousemove', this.updateRightDragbar);
-
-            console.log("Start drag right");
         },
 
         // The user IS dragging the dragbar that's between the lemmas and hypotheses.
@@ -373,48 +369,7 @@ export default {
             document.removeEventListener('mouseup', this.endDrag);
             document.removeEventListener('mousemove', this.updateLeftDragbar);
             document.removeEventListener('mousemove', this.updateRightDragbar);
-            console.log("End drag");
         },
-
-
-        //bindDragBar: function () {
-        //    let self = this;
-        //
-        //    // Resize horizontally
-        //    var dragBar = $(this.$el).find(".dragbar");
-        //    dragBar.off("mousedown");
-        //    dragBar.on("mousedown", function (e) {
-        //        e.preventDefault();
-        //        $(document).mouseup(function (e) {
-        //            $(document).unbind("mousemove");
-        //        });
-        //        $(document).mousemove(function (e) {
-        //            // debounce the new size affectation so we won't parse the whole proof too often
-        //            _.debounce(() => {
-        //                self.hypsZoneWidth = e.pageX;
-        //            }, 20)();
-        //        });
-        //    });
-        //
-        //    // same as before but for touch interfaces
-        //    dragBar.off("touchstart");
-        //    dragBar.on("touchstart", function (e) {
-        //        e.preventDefault();
-        //        $(document).on("touchend", function (e) {
-        //            $(document).unbind("touchmove");
-        //        });
-        //        $(document).on("touchmove", function (e) {
-        //            let pageX = _.get(e, ["changedTouches", 0, "pageX"]);
-        //            let pageY = _.get(e, ["changedTouches", 0, "pageY"]);
-        //            if (pageX && pageY) {
-        //                // debounce the new size affectation so we won't parse the whole proof too often
-        //                _.debounce(() => {
-        //                    self.hypsZoneWidth = pageX;
-        //                }, 20)();
-        //            }
-        //        });
-        //    });
-        //},
 
         getGoalKey(index) {
             return "proof-" + this.proofState.handle + "-goal-" + "-" + index;
