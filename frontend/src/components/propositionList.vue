@@ -52,10 +52,6 @@ li .pi-expression.in-work-zone {
     position: absolute;
 }
 
-.search-lemma-bar {
-    margin: 10px 10px 20px 0;
-}
-
 .btn-cut {
     border: none;
     max-width: 40%;
@@ -79,12 +75,11 @@ li .pi-expression.in-work-zone {
 }
 
 .btn-duplicate:hover {
-    opacity: 0.2;
+    opacity: 1;
 }
 
 .predicate-dropspace {
     height: 5px;
-    /* background-color: red; */
     width: 100%;
 }
 

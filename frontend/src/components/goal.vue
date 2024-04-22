@@ -3,15 +3,11 @@
     position: absolute;
 }
 
-.pi-goal:hover {
-    /* color: red!important; */
-}
-
 .pi-goal .MathJax_Display {
     display: inline-block !important;
 }
 
-.pi-goal > .dropdown-toggle::after {
+.pi-goal>.dropdown-toggle::after {
     position: relative;
     top: -5px;
     margin-left: 10px;
@@ -52,12 +48,12 @@ span.generalize.highlight {
     background-color: #28a745;
     color: white;
 }
-
 </style>
 
 <template>
-    <div class="btn btn-outline-danger pi-btn pi-goal loading" :data-handle="subgoal.handle" v-html="html" @mousedown="mousedown" @mouseup="mouseup"
-    @touchstart="touchstart" @touchend="touchend" v-touch:tap="tap" :id="uniqId()" :key="getTitle()"></div>
+    <div class="btn btn-outline-danger pi-btn pi-goal loading" :data-handle="subgoal.handle" v-html="html"
+        @mousedown="mousedown" @mouseup="mouseup" @touchstart="touchstart" @touchend="touchend" v-touch:tap="tap"
+        :id="uniqId()" :key="getTitle()"></div>
 </template>
 
 <script>
@@ -67,7 +63,7 @@ import ButtonVue from "./button.vue";
 export default {
     extends: ButtonVue,
     props: ["subgoal", "selectMode", "displayMode"],
-    created: function() {
+    created: function () {
         // goals are always in work zone
         this.assignMetadata({ inWorkZone: true });
     },
@@ -77,11 +73,11 @@ export default {
         }
     },
     methods: {
-        is: function(str) {
+        is: function (str) {
             return str == "subgoal"; // Bad, allow to break polymorphism
         },
 
-        toHTML: function() {
+        toHTML: function () {
             return "<span class='generalize'>⇒</span>" + this.subgoal.conclusion().html();
         },
 
@@ -93,23 +89,23 @@ export default {
             return this.subgoal.conclusion().mathml();
         },
 
-        hasMultipleActions: function(e) {
+        hasMultipleActions: function (e) {
             return this.subgoal.ivariants().length > 1;
         },
 
-        getIvariants: function() {
+        getIvariants: function () {
             return this.subgoal.ivariants();
         },
 
-        setMetadata: function(metadata) {
+        setMetadata: function (metadata) {
             this.subgoal.setmeta(metadata);
         },
 
-        getMetadata: function() {
+        getMetadata: function () {
             return this.subgoal.getmeta();
         },
 
-        getTitle: function() {
+        getTitle: function () {
             var start = "Click to ";
             var variants = this.subgoal.ivariants();
             if (variants.length == 1) {
@@ -125,27 +121,27 @@ export default {
             }
         },
 
-        getSubGoal: function() {
+        getSubGoal: function () {
             return this.subgoal;
         },
 
-        getHandle: function() {
+        getHandle: function () {
             return this.subgoal.handle;
         },
 
-        getRootId: function() {
+        getRootId: function () {
             return this.getRootIdForType("C")
         },
 
-        getPosition: function() {
+        getPosition: function () {
             return 0; // There is only 1 goal per tab
         },
 
-        getCurrentZone: function() {
+        getCurrentZone: function () {
             return "work-zone"; // only zone allowed for goals
         },
 
-        quickSwitchToWorkZone: function() {
+        quickSwitchToWorkZone: function () {
             // nothing to do
         }
     }
