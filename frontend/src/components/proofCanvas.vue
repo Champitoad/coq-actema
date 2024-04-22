@@ -593,6 +593,25 @@ export default {
             }
         },
 
+        duplicateHyp(subgoal, hypHandle) {
+            try {
+                let action = subgoal.getduplicateb(hypHandle);
+                this.sendAction(action);
+            } catch (e) {
+                this.showErrorMessage(e);
+            }
+        },
+
+
+        clearHyp(subgoal, hypHandle) {
+            try {
+                let action = subgoal.getclearb(hypHandle);
+                this.sendAction(action);
+            } catch (e) {
+                this.showErrorMessage(e);
+            }
+        },
+
         moveHyp(subgoal, fromHandle, toHandle) {
             var proof = subgoal.movehyp(fromHandle, toHandle);
             this.setProofState(proof);

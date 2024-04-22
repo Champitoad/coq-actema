@@ -66,17 +66,20 @@ li .pi-expression.in-work-zone {
     outline: none !important;
 }
 
-.btn-archive {
+.btn-clear {
     opacity: 0.2;
 }
 
-.btn-archive:hover {
+.btn-clear:hover {
     opacity: 1;
 }
 
-li.archived .pi-predicate,
-li.archived .pi-expression {
-    opacity: 0.1;
+.btn-duplicate {
+    opacity: 0.2;
+}
+
+.btn-duplicate:hover {
+    opacity: 0.2;
 }
 
 .predicate-dropspace {
@@ -100,7 +103,7 @@ li.archived .pi-expression {
 
 .overflow-container {
     overflow-x: hidden;
-    width: calc(100% - 40px);
+    width: calc(100% - 80px);
     display: inline-block;
     height: 44px;
 }
@@ -125,63 +128,37 @@ li.archived .pi-expression {
                 </div>
             </vue-simple-suggest>
         </li>
-        <template v-for="expression in getSortedExpressions(false)">
+        <template v-for="expression in getSortedExpressions()">
             <div class="predicate-dropspace" :key="'dropspace-' + expression.handle" :data-handle="expression.handle">
             </div>
-            <li class="list-group-item text-success" :class="{ archived: isArchived(expression) }"
-                :key="'li-' + expression.handle">
+            <li class="list-group-item text-success" :key="'li-' + expression.handle">
                 <div class="overflow-container">
                     <expression :expression="expression" :selectMode="selectMode" :displayMode="displayMode"
-                        :key="'expression-' + expression.handle" draggable="true" :ref="expression.handle"></expression>
+                        :key="'expression-' + expression.handle" draggable="true" :ref="expression.handle">
+                    </expression>
                 </div>
-                <button class="btn btn-sm btn-secondary-outline btn-transparent btn-archive d-inline-block float-right"
-                    @click="toggleArchive(expression)">
+                <button class="btn btn-sm btn-secondary-outline btn-transparent btn-clear d-inline-block float-right"
+                    @click="onClear(expression)" title="Clear">
                     <i class="fas fa-archive"></i>
                 </button>
             </li>
         </template>
-        <template v-for="predicate in getSortedPredicates(false)">
+        <template v-for="predicate in getSortedPredicates()">
             <div class="predicate-dropspace" :key="'dropspace-' + predicate.handle" :data-handle="predicate.handle">
             </div>
-            <li class="list-group-item text-primary" :class="{ archived: isArchived(predicate) }"
-                :key="'li-' + predicate.handle">
+            <li class="list-group-item text-primary" :key="'li-' + predicate.handle">
                 <div class="overflow-container">
                     <predicate :predicate="predicate" :selectMode="selectMode" :displayMode="displayMode"
                         :key="'predicate-' + predicate.handle" draggable="true" :ref="predicate.handle"></predicate>
                 </div>
-                <button class="btn btn-sm btn-secondary-outline btn-transparent btn-archive d-inline-block float-right"
-                    @click="toggleArchive(predicate)">
+                <button class="btn btn-sm btn-secondary-outline btn-transparent btn-clear d-inline-block float-right"
+                    @click="onClear(predicate)" title="Clear">
                     <i class="fas fa-archive"></i>
                 </button>
-            </li>
-        </template>
-        <template v-for="expression in getSortedExpressions(true)">
-            <div class="predicate-dropspace" :key="'dropspace-' + expression.handle" :data-handle="expression.handle">
-            </div>
-            <li class="list-group-item text-success" :class="{ archived: isArchived(expression) }"
-                :key="'li-' + expression.handle">
-                <div class="overflow-container">
-                    <expression :expression="expression" :selectMode="selectMode" :displayMode="displayMode"
-                        :key="'expression-' + expression.handle" draggable="true" :ref="expression.handle"></expression>
-                </div>
-                <button class="btn btn-sm btn-secondary-outline btn-transparent btn-archive d-inline-block float-right"
-                    @click="toggleArchive(expression)">
-                    <i class="fas fa-archive"></i>
-                </button>
-            </li>
-        </template>
-        <template v-for="predicate in getSortedPredicates(true)">
-            <div class="predicate-dropspace" :key="'dropspace-' + predicate.handle" :data-handle="predicate.handle">
-            </div>
-            <li class="list-group-item text-primary" :class="{ archived: isArchived(predicate) }"
-                :key="'li-' + predicate.handle">
-                <div class="overflow-container">
-                    <predicate :predicate="predicate" :selectMode="selectMode" :displayMode="displayMode"
-                        :key="'predicate-' + predicate.handle" draggable="true" :ref="predicate.handle"></predicate>
-                </div>
-                <button class="btn btn-sm btn-secondary-outline btn-transparent btn-archive d-inline-block float-right"
-                    @click="toggleArchive(predicate)">
-                    <i class="fas fa-archive"></i>
+                <button
+                    class="btn btn-sm btn-secondary-outline btn-transparent btn-duplicate d-inline-block float-right"
+                    @click="onDuplicate(predicate)" title="Duplicate">
+                    <i class="fas fa-copy"></i>
                 </button>
             </li>
         </template>
@@ -222,24 +199,20 @@ export default {
         };
     },
     methods: {
-        getSortedPredicates: function (archived) {
+        getSortedPredicates: function () {
             var predicates = _.filter(this.context, o => {
                 var meta = o.getmeta();
                 var isInWorkZone = meta && meta.inWorkZone;
-                var isArchived = (meta && meta.archived) || false;
-                var hasRequiredArchiveStatus = !(archived ^ isArchived);
-                return !isInWorkZone && hasRequiredArchiveStatus;
+                return !isInWorkZone;
             });
             return _.sortBy(predicates, ["position"]);
         },
 
-        getSortedExpressions: function (archived) {
+        getSortedExpressions: function () {
             var expressions = _.filter(this.vars, o => {
                 var meta = o.getmeta();
                 var isInWorkZone = meta && meta.inWorkZone;
-                var isArchived = (meta && meta.archived) || false;
-                var hasRequiredArchiveStatus = !(archived ^ isArchived);
-                return !isInWorkZone && hasRequiredArchiveStatus;
+                return !isInWorkZone;
             });
             return _.sortBy(expressions, ["position"]);
         },
@@ -299,21 +272,15 @@ export default {
             }
         },
 
-        toggleArchive: function (predicate) {
-            var archived = this.isArchived(predicate);
-            var metadata = predicate.getmeta() || {};
-            Object.assign(metadata, { archived: !archived });
-            predicate.setmeta(metadata);
-            this.$parent.$forceUpdate();
+        onDuplicate: function (predicate) {
+            this.$parent.duplicateHyp(this.goal, predicate.handle);
         },
 
-        isArchived: function (predicate) {
-            var metadata = predicate.getmeta() || {};
-            return metadata.archived || false;
+        onClear: function (predicate) {
+            this.$parent.clearHyp(this.goal, predicate.handle);
         },
 
         updateLemmaList: function () {
-            console.log("Updating lemma dropdown.");
             let lemmas = Object.entries(this.$parent.proofState.getlemmas());
 
             this.lemmaList = _.map(lemmas, l => {

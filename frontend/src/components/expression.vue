@@ -21,7 +21,11 @@
 </style>
 
 <template>
-    <div class="btn btn-outline-success pi-btn pi-expression" :class="{'in-work-zone' : isInWorkZone(), 'in-hypothesis-zone' : !isInWorkZone()}" :data-handle="expression.handle" draggable="true" v-html="html" @mousedown="mousedown" @mouseup="mouseup" @dragstart="dragStart" @dragend="dragEnd" @touchstart="touchstart" @touchend="touchend" v-touch:tap="tap" :id="uniqId()"></div>
+    <div class="btn btn-outline-success pi-btn pi-expression"
+        :class="{ 'in-work-zone': isInWorkZone(), 'in-hypothesis-zone': !isInWorkZone() }"
+        :data-handle="expression.handle" draggable="true" v-html="html" @mousedown="mousedown" @mouseup="mouseup"
+        @dragstart="dragStart" @dragend="dragEnd" @touchstart="touchstart" @touchend="touchend" v-touch:tap="tap"
+        :id="uniqId()"></div>
 </template>
 
 <script>
@@ -37,7 +41,7 @@ export default {
         }
     },
     methods: {
-        is: function(str) {
+        is: function (str) {
             return str == "expression"; // Bad, allow to break polymorphism
         },
 
@@ -45,35 +49,35 @@ export default {
             return false;
         },
 
-        toHTML: function() {
+        toHTML: function () {
             return this.expression.html();
         },
 
-        toString: function() {
+        toString: function () {
             return this.expression.name;
         },
 
-        toMathML: function() {
+        toMathML: function () {
             return this.expression.mathml();
         },
 
-        setMetadata: function(metadata) {
+        setMetadata: function (metadata) {
             this.expression.setmeta(metadata);
         },
 
-        getMetadata: function() {
+        getMetadata: function () {
             return this.expression.getmeta();
         },
 
-        getSubGoal: function(e) {
+        getSubGoal: function (e) {
             return this.expression.parent;
         },
 
-        getHandle: function(e) {
+        getHandle: function (e) {
             return this.expression.handle;
         },
 
-        getRootId: function() {
+        getRootId: function () {
             return this.getRootIdForType("Vh")
         },
 
@@ -90,9 +94,9 @@ export default {
             }
         },
 
-        dragStart: function(e) {},
+        dragStart: function (e) { },
 
-        dragEnd: function(e) {},
+        dragEnd: function (e) { },
         /*
         dragStart: function(predicate, e) {
             // save the handle of the predicate into the event
@@ -114,7 +118,7 @@ export default {
         },
         */
 
-        getCurrentZone: function() {
+        getCurrentZone: function () {
             if (this.isInWorkZone()) {
                 return "work-zone";
             } else {
@@ -122,7 +126,7 @@ export default {
             }
         },
 
-        quickSwitchToWorkZone: function() {
+        quickSwitchToWorkZone: function () {
             var c = this.getCoord();
             this.setAbsolutePosition(c.x, c.y);
             $(this.$el)
@@ -142,4 +146,3 @@ export default {
     }
 };
 </script>
-
