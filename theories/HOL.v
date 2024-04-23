@@ -156,6 +156,9 @@ Inductive cx : (seq nat)  -> Type :=
 | ex : forall n s, (nat->nat) -> cx (cons s n) -> cx n
 | equality : forall n s,
     ((ppp ts n) -> (wsort ts s)) ->((ppp ts n) -> (wsort ts s)) -> cx n
+| seto : forall n s,
+    ((ppp ts n) -> (wsort ts s) -> (wsort ts s) -> Prop) ->
+    ((ppp ts n) -> (wsort ts s)) ->((ppp ts n) -> (wsort ts s)) -> cx n
 | property  : forall n s,
     ((ppp ts (cons s n)) -> Prop) ->
     ((ppp ts n) -> (wsort ts s))  -> cx n.
@@ -196,6 +199,7 @@ Fixpoint coerce  n (c:cx n) : (pp n) -> Prop :=
 | ex _ s _ c => fun  x =>  exists p:_,  (coerce _ c (p, x))
 | equality _ _ t u =>fun x =>
                        (t x) = (u x)
+| seto _ _ R t u => fun x => R x (t x) (u x)
 | property _ _ P t => fun x =>
                         ( P ((t x), x))
 end.
@@ -299,7 +303,7 @@ Proof.
 move=> m c.
 elim: {m} c  =>
         [n|n|n B hB|n P|n A B hB|n A hA B|n A  B hB|n A hA  B
-        |n A B hB|n A hA B|n s nv A hA |n s nv A hA|n t u|n P t] i //=;
+        |n A B hB|n A hA B|n s nv A hA |n s nv A hA|n t u|n R t u|n P t] i //=;
   split => h; try (move: (hA i) => [hA1 hA2]);
   try (move: (hB i) => [hB1 hB2]);           
   try ( move: h hA1 hA2;
@@ -506,7 +510,34 @@ Fixpoint b3 (rw:bool)(l:trace) (b:bool)(ist:inst')(nh:ct)(hyp : cx nh)(hi : pp n
               (Hol3 (s = s'/\((t (convert nh nh' hi))
                               =(trs ts s s' (v (convert ng ng' gi))))))
               (P (trs ts s' s (u (convert nh nh' hi)),
+                   (convert ng ng' gi)))
+      | (seto nh' s' R t u), (property ng' s P v) =>
+          if rw
+          then
+            andl3  
+              (Hol3 (s = s'/\((u (convert nh nh' hi))
+                              =(trs ts s s' (v (convert ng ng' gi))))
+                     /\(forall x y,
+                           R (convert nh nh' hi) (trs _ _ _ y)
+                             (trs _ _ _ x) ->
+                           P (y, (convert ng ng' gi)) ->
+                           P (x, (convert ng ng' gi)))))
+              (P (trs ts s' s (t (convert nh nh' hi)),
                      (convert ng ng' gi)))
+          else
+ (andl3  
+              (Hol3 (s = s'/\((t (convert nh nh' hi))
+                              =(trs ts s s' (v (convert ng ng' gi))))
+                     /\(forall x y,
+                           R (convert nh nh' hi) (trs _ _ _ x)
+                             (trs _ _ _ y) ->
+                           P (y, (convert ng ng' gi)) ->
+                           P (x, (convert ng ng' gi)))))
+              (P (trs ts s' s (u (convert nh nh' hi)),
+                     (convert ng ng' gi))))
+            
+       
+              
       | _,_ => bot3
           end
   | (cons x l) =>
@@ -664,6 +695,58 @@ with f3 (rw:bool)(l:trace)(b:bool)(ist: inst')(n1:ct)(h1 : cx n1)(i1 : pp n1)
                 (Hol3 (s1 = s2 /\
                 ((v (convert n1 n1' i1)  =
                     (trs ts s2 s1 (t (convert n2 n2' i2)))))))
+                (P (trs ts s2 s1 (u (convert n2 n2' i2)),
+                     (convert n1 n1' i1)))
+     | seto n1' s1 R t u, property n2' s2 P v =>
+          if rw then
+            impl3
+                (Hol3 (s1 = s2 /\
+                ( (v (convert n2 n2' i2))  =
+                    (trs ts s1 s2 (u (convert n1 n1' i1))))
+                       /\(forall x y,
+                           R (convert n1 n1' i1) (trs _ _ _ x)
+                             (trs _ _ _ y) ->
+                           P (y, (convert n2 n2' i2)) ->
+                           P (x, (convert n2 n2' i2)))))
+                  (P ((trs ts s1 s2 (t (convert n1 n1' i1))),
+                         (convert n2 n2' i2)))
+          else
+           impl3
+                (Hol3 (s1 = s2 /\
+                ((v (convert n2 n2' i2)  =
+                    (trs ts s1 s2 (t (convert n1 n1' i1)))))
+                       /\
+                         (forall x y,
+                           R (convert n1 n1' i1) (trs _ _ _ x)
+                             (trs _ _ _ y) ->
+                           P (x, (convert n2 n2' i2)) ->
+                           P (y, (convert n2 n2' i2)))))
+                  (P ((trs ts s1 s2 (u (convert n1 n1' i1))),
+                       (convert n2 n2' i2)))
+
+      | property n1' s1 P v, seto n2' s2 R t u =>
+          if rw then
+            impl3
+                (Hol3 (s1 = s2 /\
+                ((v (convert n1 n1' i1)  =
+                    (trs ts s2 s1 (u (convert n2 n2' i2)))))
+                       /\(forall x y,
+                           R (convert n2 n2' i2) (trs _ _ _ x)
+                             (trs _ _ _ y) ->
+                           P (y, (convert n1 n1' i1)) ->
+                           P (x, (convert n1 n1' i1)))))
+                (P (trs ts s2 s1 (t (convert n2 n2' i2)),
+                     (convert n1 n1' i1)))
+          else
+             impl3
+                (Hol3 (s1 = s2 /\
+                ((v (convert n1 n1' i1)  =
+                    (trs ts s2 s1 (t (convert n2 n2' i2)))))
+                  /\(forall x y,
+                           R (convert n2 n2' i2) (trs _ _ _ x)
+                             (trs _ _ _ y) ->
+                           P (x, (convert n1 n1' i1)) ->
+                           P (y, (convert n1 n1' i1)))))
                 (P (trs ts s2 s1 (u (convert n2 n2' i2)),
                      (convert n1 n1' i1)))
       | _,_ => top3
@@ -1129,10 +1212,10 @@ elim => [//=|[|] l hl]/=; split; try done;
 -  move => [|] _ _
    [|s2 n2]
    [nh'|nh'|nh' P|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
-       |nh' P h|nh' h P|s' nv nh' h|s' nv nh' h|nh' s' t u|nh s' P v] //= hi
+       |nh' P h|nh' h P|s' nv nh' h|s' nv nh' h|nh' s' t u|nh' s' R t u|nh s' P v] //= hi
    [|sg ng]
    [ng'|ng'|ng' Q| ng' Q|ng' Q g|ng' g Q|ng' Q g|ng' g Q
-       |ng' Q g|ng' g Q|sg' nv ng' g|sg' nv ng' g|ng' s'' t' u'|ng' s'' P' v']
+       |ng' Q g|ng' g Q|sg' nv ng' g|sg' nv ng' g|ng' s'' t' u'|ng' s'' R' t' u'|ng' s'' P' v']
    gi //=;
    rewrite /= ?convert_corr ;
   try (by rewrite /= ?convert_corr ?ppce//=; move => [-> h2] e//=);
@@ -1140,15 +1223,16 @@ elim => [//=|[|] l hl]/=; split; try done;
            move => [[e1 e2] p]//=; move: v' P' p e2; rewrite e1; move => v' P';
  rewrite ?trs_corr;
   try (by  move => p' <- <-);
-  by move => p' <- ->.
+  try (by move => p' <- ->);
+ try  (move => p' [-> eqr] r; eapply eqr; [rewrite ?trs_corr; exact r| done]).
 
 - move => [|] _ _
    [|s2 n2]
    [nh'|nh'|nh' P|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
-       |nh' P h|nh' h P|s' nv nh' h|s' nv nh' h|nh' s' t u|nh s' P v] //= hi
+       |nh' P h|nh' h P|s' nv nh' h|s' nv nh' h|nh' s' t u|nh' S' R t u |nh s' P v] //= hi
    [|sg ng]
    [ng'|ng'|ng' Q| ng' Q|ng' Q g|ng' g Q|ng' Q g|ng' g Q
-       |ng' Q g|ng' g Q|sg' nv ng' g|sg' nv ng' g|ng' s'' t' u'|ng' s'' P' v']
+       |ng' Q g|ng' g Q|sg' nv ng' g|sg' nv ng' g|ng' s'' t' u'|ng' S'' R' t' u' | ng' s'' P' v']
    gi //=;
    rewrite /= ?convert_corr ;
    try (by move => e1 p [e2 e3] //=;
@@ -1163,12 +1247,20 @@ elim => [//=|[|] l hl]/=; split; try done;
         move => v' P' p  ; rewrite !trs_corr; move => <-);
 
    try (by move => p <- [e1 e2];
-         move: {u'}  t' e2; rewrite -e1; move => t'; rewrite !trs_corr; move <-).
+         move: {u'}  t' e2; rewrite -e1; move => t'; rewrite !trs_corr; move <-);
+try(
+  move => r p [es]; move: t u R r; rewrite es => t u R r [e eqr];
+
+
+  eapply eqr; [rewrite ?trs_corr; exact r| rewrite trs_corr in e; rewrite -e; done]);
+try  (move => r p [es]; move: t' u' R' p; rewrite -es => t u R p [e eqr]; eapply eqr;
+    [ idtac| exact r];
+rewrite trs_corr in e; rewrite !trs_corr; rewrite e; done).
 
 - move => [|] b ist nh hyp hi ng
           [ng'|ng'|ng' Q|ng' Q|ng' Q g|ng' g Q|ng' Q g|ng' g Q
               |ng' Q g|ng' g Q|ng' nv' sg' g|ng' nv' sg' g
-              |ng' sg' t u|ng' s P v] gi //=;
+              |ng' sg' t u|ng' sg' R t u | ng' s P v] gi //=;
   rewrite /= ?ppce ?convert_corr //=; eauto;
   try (by move => [h|h]; eauto);
   try (by  move => [h1 h2]; split ; eauto).
@@ -1187,7 +1279,7 @@ elim => [//=|[|] l hl]/=; split; try done;
 
    move: h1 i1 hr1 =>
         [nh'|nh'|nh' P|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
-        |nh' P h|nh' h P|nh' s nw h|nh' s nw h|nh' s t u
+        |nh' P h|nh' h P|nh' s nw h|nh' s nw h|nh' s t u|
         |nh' s P v] //= P1 i1;
       rewrite ?convert_corr; eauto;
    try (by case: i1; eauto);
@@ -1199,7 +1291,7 @@ elim => [//=|[|] l hl]/=; split; try done;
  
  move: h2 i2 hr2 =>
         [nh'|nh'|nh' P|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
-        |nh' P h|nh' h P|nh' s nw h|nh' s nw h|nh' s t u
+        |nh' P h|nh' h P|nh' s nw h|nh' s nw h|nh' s t u|nh' s R t u
         |nh' s P v] //= P2 i2;
       rewrite ?convert_corr; eauto;
    try (by case: i2; eauto);
@@ -1225,7 +1317,7 @@ simpl. by move <-.
 
 - move => fl b ist nh
           [nh'|nh'|nh' P|nh' P|nh' P h|nh' h P|nh' P h|nh' h P
-              |nh' P h|nh' h P|nh' s nv h|nh' s nv h|nh' s t u
+              |nh' P h|nh' h P|nh' s nv h|nh' s nv h|nh' s t u|nh' s R t u
               |nh' s P v] i1 //=;
    rewrite ?convert_corr ?ppce  ?trs_corr //= => ng goal gi;
    try (by intuition; eauto).
@@ -1243,7 +1335,7 @@ case: ist => [//=|[f|] ist]; first by eauto.
 
 move => h1 i1 n2  [nh'|nh'|nh' P|nh' P|nh' P h|nh' h P|nh' P h
               |nh' h P|nh' P h|nh' h P|nh' s nw h|nh' s nw h
-                  |nh' s t u|nh' s P v] /= i2 p1 p2 //=;
+                  |nh' s t u|nh' s R t u|nh' s P v] /= i2 p1 p2 //=;
              rewrite ?convert_corr; try (by intuition; eauto).
   case: ist =>[//=|[f|] ist]; eauto; move => p; eauto.
   move: p2 => [p2 hp]; exists p2; rewrite trs_corr; eauto.
@@ -1252,7 +1344,7 @@ move => h1 i1 n2  [nh'|nh'|nh' P|nh' P|nh' P h|nh' h P|nh' P h
  move =>
   [nh'|nh'|nh' P|nh' P|nh' P h|nh' h P|nh' P h
               |nh' h P|nh' P h|nh' h P|nh' s nw h|nh' s nw h
-              |nh' s t u|nh' s P v] /= 
+              |nh' s t u|nh' s R t u|nh' s P v] /= 
          i1 n2 h2 i2 p1 p2 //=;
   rewrite ?convert_corr; try (by intuition; eauto).
      case: ist =>[//=|[f|] ist]; eauto; move => p; eauto.
@@ -1397,8 +1489,9 @@ Lemma inst_corr :
      by move => h'; exists (trs ts s s' o).
 - case: h =>    
           [n'|n'|n' h'|n' Q|n' Q h'|n' h' Q|n' Q h'|n' h' Q|
-            n' Q h'|n' h' Q| n' s' nv h'|n' s' nv h'|n' s' t1 t2|
-            n' s' Q t1] c; split; try (simpl; rewrite ?ppce; done);
+            n' Q h'|n' h' Q| n' s' nv h'|n' s' nv h'|
+            n' s' t1 t2 | n' s' R t1 t2 | n' s' Q t1] c;
+          split; try (simpl; rewrite ?ppce; done);
    try (by move: (ht _ o _ h' c)=> [ht1 ht2]; rewrite /= convert_corr; auto; try tauto).  
  * move => h''; simpl in h''. move => x; move: (ht _ o _ h' (x,c)) => [ht1 ht2].
    rewrite convert_corr; auto.
