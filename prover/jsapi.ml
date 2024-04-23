@@ -245,7 +245,7 @@ let rec js_proof_engine (proof : Proof.proof) =
         List.map
           begin
             fun Api.Logic.{ l_user; l_full; l_stmt } ->
-              (l_full, (l_user, Fo.Translate.to_form l_stmt))
+              Proof.{ l_user; l_full; l_form = Fo.Translate.to_form l_stmt }
           end
           lemmas
       in
@@ -255,9 +255,12 @@ let rec js_proof_engine (proof : Proof.proof) =
       in
       (* Check the lemmas are all well-typed in the database environment. *)
       Utils.time "type-check-lemmas" @@ fun () ->
-      List.iter (fun (_, (_, form)) -> Fo.Form.recheck env form) lemmas;
-      (* Create the lemma database. *)
-      let db = Proof.{ db_env = env; db_map = Map.of_seq @@ List.to_seq lemmas } in
+      List.iter (fun lemma -> Fo.Form.recheck env lemma.Proof.l_form) lemmas;
+      (* Create the lemma database. First we have to assign a handle to each lemma. *)
+      let db =
+        Proof.Lemmas.extend_env env @@ Proof.Lemmas.of_list
+        @@ List.mapi (fun _ lemma -> (Handle.fresh (), lemma)) lemmas
+      in
       (* Print debug info. *)
       js_log @@ Format.sprintf "Received lemmas (count=%d)\n" (List.length lemmas);
       (*List.iter (fun (name, _) -> js_log name) lemmas;*)
@@ -266,18 +269,19 @@ let rec js_proof_engine (proof : Proof.proof) =
       js_proof_engine new_proof
 
     (** Serialize the current lemma database into a JS array. 
-        Returns an array of lemmas. Each lemma contains three strings : (full-name, user-name, pretty-printed-formula).
+        Returns an array of lemmas. Each lemma contains the following : 
+          (full-name (string), user-name (string), pretty-printed-formula (string)).
         For performance reasons, we only return a limited amount of lemmas. *)
     method getlemmas =
       let db = _self##.proof |> Proof.get_db in
-      db.db_map |> Map.bindings |> List.take 100
+      db |> Proof.Lemmas.to_list |> List.take 100
       |> List.map
            begin
-             fun (full_name, (user_name, form)) ->
-               let full_name = full_name |> Js.string in
-               let user_name = user_name |> Js.string in
-               let stmt = Notation.f_tostring db.db_env form |> Js.string in
-               Js.array [| full_name; user_name; stmt |]
+             fun (_, lemma) ->
+               let full_name = lemma.Proof.l_full |> Js.string in
+               let user_name = lemma.Proof.l_user |> Js.string in
+               let form = Notation.f_tostring (Proof.Lemmas.env db) lemma.l_form |> Js.string in
+               Js.array [| full_name; user_name; form |]
            end
       |> Array.of_list |> Js.array
 
@@ -286,7 +290,7 @@ let rec js_proof_engine (proof : Proof.proof) =
         - a text pattern (usually the text in the lemma search-bar's input-box). 
         Both arguments are optional (in javascript-land, they can be undefined). *)
     method filterlemmas selection pattern =
-      let open Lemmas in
+      let open LemmaUtils in
       (* Convert the pattern from JS to ocaml. *)
       let pattern =
         pattern |> Js.Optdef.to_option
@@ -311,7 +315,7 @@ let rec js_proof_engine (proof : Proof.proof) =
           end
       in
       (* Filter the lemma database. *)
-      let proof = Utils.time "filter-lemmas" @@ fun () -> Lemmas.filter pred _self##.proof in
+      let proof = Utils.time "filter-lemmas" @@ fun () -> filter pred _self##.proof in
       js_proof_engine proof
   end
 
@@ -425,13 +429,13 @@ and js_subgoal parent (handle : Handle.t) =
         js_log @@ Format.sprintf "addlemmab %s\n" full_name;
         (* Check the lemma database contains the lemma name (and raise LemmaNotFound if it doesn't),
            and recheck the lemma's statement (just to make sure). *)
-        let db = Proof.get_db parent##.proof in
-        let _, stmt =
-          Option.get_exn
-            (Map.find_opt full_name db.db_map)
-            (Failure ("lemma not found " ^ full_name))
-        in
-        Form.recheck db.db_env stmt;
+        (*let db = Proof.get_db parent##.proof in
+          let lemma =
+            Proof.Lemmas.by_ Option.get_exn
+              (Map.find_opt full_name db.db_map)
+              (Failure ("lemma not found " ^ full_name))
+          in
+          Form.recheck db.db_env stmt;*)
         (* Construct the action and encode it. *)
         Api.Logic.ALemma full_name |> Fun.flip Marshal.to_string [] |> Base64.encode_string
         |> Js.string

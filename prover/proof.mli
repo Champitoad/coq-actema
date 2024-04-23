@@ -3,10 +3,10 @@
    and some additional bookkeeping information. *)
 
 open Fo
-open Utils
 
 exception InvalidGoalId of Handle.t
 exception InvalidHyphId of Handle.t
+exception InvalidLemmaId of Handle.t
 exception SubgoalNotOpened of Handle.t
 
 (** Abstract type of a proof state. *)
@@ -17,7 +17,6 @@ type hyp = { h_src : Handle.t option; h_gen : int; h_form : form }
 
 (** A module to handle collections of hypotheses. *)
 module Hyps : sig
-  (** Abstract type of a collection of hypotheses. *)
   type t
 
   val empty : t
@@ -33,14 +32,31 @@ module Hyps : sig
   val of_list : (Handle.t * hyp) list -> t
 end
 
+(** A single lemma. *)
+type lemma = { l_full : name; l_user : name; l_form : Fo.form }
+
+(** A module to handle a collection of lemmas together with an environment to type the lemmas.  *)
+module Lemmas : sig
+  type t
+
+  val empty : t
+  val extend_env : Fo.env -> t -> t
+  val env : t -> Fo.env
+  val byid : t -> Handle.t -> lemma
+  val add : t -> Handle.t -> lemma -> t
+  val remove : t -> Handle.t -> t
+  val ids : t -> Handle.t list
+  val map : (lemma -> lemma) -> t -> t
+  val iter : (lemma -> unit) -> t -> unit
+  val filter : (lemma -> bool) -> t -> t
+  val to_list : t -> (Handle.t * lemma) list
+  val of_list : (Handle.t * lemma) list -> t
+end
+
 type pregoal = { g_env : env; g_hyps : Hyps.t; g_goal : form }
 type pregoals = pregoal list
 type goal = { g_id : Handle.t; g_pregoal : pregoal }
 type subgoal = (Handle.t option * form list) list * form
-
-(** The lemma database. It consists in a map from lemma (full) name to statements and user name, 
-    and an environment to type the lemmas. *)
-type lemma_db = { db_env : env; db_map : (string, string * Fo.form) Map.t }
 
 (** Metadata associated to a goal. *)
 type meta = < > Js_of_ocaml.Js.t
@@ -65,10 +81,10 @@ val opened : proof -> Handle.t list
 val byid : proof -> Handle.t -> pregoal
 
 (** Get the lemma database. *)
-val get_db : proof -> lemma_db
+val get_db : proof -> Lemmas.t
 
 (** Set the lemma database. *)
-val set_db : proof -> lemma_db -> proof
+val set_db : proof -> Lemmas.t -> proof
 
 (** Attach metadata to a goal. *)
 val set_meta : proof -> Handle.t -> meta option -> unit
