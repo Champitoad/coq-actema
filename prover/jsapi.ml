@@ -274,7 +274,7 @@ let rec js_proof_engine (proof : Proof.proof) =
         For performance reasons, we only return a limited amount of lemmas. *)
     method getlemmas =
       let db = _self##.proof |> Proof.get_db in
-      db |> Proof.Lemmas.to_list |> List.take 100
+      db |> Proof.Lemmas.to_list |> List.take 5
       |> List.map
            begin
              fun (_, lemma) ->
