@@ -1,24 +1,31 @@
 <style>
-    .pi-predicate {
-        position: absolute;
-    }
+.pi-predicate {
+    position: absolute;
+}
 
-    .pi-predicate.dragged, .pi-predicate.dragged:hover, .pi-predicate.dragged:active {
-        color: #fff!important;
-        background-color: #007bff!important;
-        border-color: #007bff!important;
-    }
+.pi-predicate.dragged,
+.pi-predicate.dragged:hover,
+.pi-predicate.dragged:active {
+    color: #fff !important;
+    background-color: #007bff !important;
+    border-color: #007bff !important;
+}
 
-    .pi-predicate:hover, .pi-predicate:active {
-        background-color:rgba(0, 0, 0, 0)!important;
-        border-color:rgb(0, 123, 255)!important;
-        color: rgb(0, 123, 255)!important;
-        cursor: pointer;
-    }
+.pi-predicate:hover,
+.pi-predicate:active {
+    background-color: rgba(0, 0, 0, 0) !important;
+    border-color: rgb(0, 123, 255) !important;
+    color: rgb(0, 123, 255) !important;
+    cursor: pointer;
+}
 </style>
 
 <template>
-    <div class="btn btn-outline-primary pi-btn pi-predicate loading" :class="{'in-work-zone' : isInWorkZone(), 'in-hypothesis-zone' : !isInWorkZone() }" :data-handle="predicate.handle" draggable="true" v-html="html" @mousedown="mousedown" @mouseup="mouseup" @dragstart="dragStart" @dragend="dragEnd" @touchstart="touchstart" @touchend="touchend" v-touch:tap="tap" :id="uniqId()" @touchcancel="touchcancel"></div>
+    <div class="btn btn-outline-primary pi-btn pi-predicate loading"
+        :class="{ 'in-work-zone': isInWorkZone(), 'in-hypothesis-zone': !isInWorkZone() }"
+        :data-handle="predicate.handle" draggable="true" v-html="html" @mousedown="mousedown" @mouseup="mouseup"
+        @dragstart="dragStart" @dragend="dragEnd" @touchstart="touchstart" @touchend="touchend" v-touch:tap="tap"
+        :id="uniqId()" @touchcancel="touchcancel"></div>
 </template>
 
 <script>
@@ -38,39 +45,39 @@ export default {
         },
     },
     methods: {
-        is: function(str) {
+        is: function (str) {
             return str == "predicate"; // Bad, allow to break polymorphism
         },
 
-        toHTML: function() {
+        toHTML: function () {
             return this.predicate.form.html();
         },
 
-        toString: function() {
+        toString: function () {
             return this.predicate.form.tostring();
         },
 
-        toMathML: function() {
+        toMathML: function () {
             return this.predicate.form.mathml();
         },
 
-        setMetadata: function(metadata) {
+        setMetadata: function (metadata) {
             this.predicate.setmeta(metadata);
         },
 
-        getMetadata: function() {
+        getMetadata: function () {
             return this.predicate.getmeta();
         },
 
-        getSubGoal: function(e) {
+        getSubGoal: function (e) {
             return this.predicate.parent;
         },
 
-        getHandle: function(e) {
+        getHandle: function (e) {
             return this.predicate.handle;
         },
 
-        getRootId: function() {
+        getRootId: function () {
             return this.getRootIdForType("H")
         },
 
@@ -80,7 +87,7 @@ export default {
 
         // override button.assignStaticPosition
         assignPosition() {
-            if( this.hasSavedPosition() ) {
+            if (this.hasSavedPosition()) {
                 this.restoreSavedPosition();
             }
             else {
@@ -88,7 +95,7 @@ export default {
             }
         },
 
-        dragStart: function(predicate, e) {
+        dragStart: function (predicate, e) {
             // save the handle of the predicate into the event
             e.dataTransfer.setData("handle", predicate.handle);
 
@@ -98,17 +105,17 @@ export default {
             var offset = predicateDiv.offset();
 
             var deltaX = offset.left - e.clientX;
-            var deltaY = offset.top  - e.clientY;
+            var deltaY = offset.top - e.clientY;
             e.dataTransfer.setData("deltaX", deltaX);
             e.dataTransfer.setData("deltaY", deltaY);
         },
 
-        dragEnd: function() {
+        dragEnd: function () {
             this.$forceUpdate();
         },
 
-        getCurrentZone: function() {
-            if( this.isInWorkZone() ) {
+        getCurrentZone: function () {
+            if (this.isInWorkZone()) {
                 return "work-zone";
             }
             else {
@@ -116,7 +123,7 @@ export default {
             }
         },
 
-        quickSwitchToWorkZone: function() {
+        quickSwitchToWorkZone: function () {
             var c = this.getCoord();
             this.setAbsolutePosition(c.x, c.y);
             $(this.$el).removeClass('in-hypothesis-zone').addClass('in-work-zone');
@@ -130,4 +137,3 @@ export default {
 
 
 </script>
-
