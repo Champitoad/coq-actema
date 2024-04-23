@@ -8,31 +8,6 @@ open Api
 
 type proof = (int * Logic.action) list
 
-(** Carry out the effects of an action in Coq. *)
-let compile_action ((idx, a) : int * Logic.action) : unit tactic =
-  Goal.enter
-    begin
-      fun coq_goal ->
-        let goal, sign = Export.goal coq_goal peano in
-        Import.action sign goal coq_goal a
-    end
-  |>
-  let idx = idx + 1 in
-  tclFOCUS idx idx
-
-let compile_proof (prf : proof) : unit tactic =
-  let rec aux prf =
-    let open PVMonad in
-    begin
-      match prf with
-      | action :: prf ->
-          let* _ = compile_action action in
-          aux prf
-      | [] -> return ()
-    end
-  in
-  aux prf
-
 (** Export each coq goal to Actema. *)
 let export_goals () : Logic.goals tactic =
   let open PVMonad in
@@ -77,7 +52,7 @@ let interactive_proof () : proof tactic =
     (* Handle Undo/Redo. *)
     let continue idx a =
       let cont =
-        let* _ = compile_action (idx, a) in
+        let* _ = Actions.execute (idx, a) in
         aux ()
       in
       tclOR cont
@@ -158,10 +133,13 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
         in
         if force
         then interactive ()
-        else match Storage.load_proof id with Some prf -> compile_proof prf | _ -> interactive ()
+        else
+          match Storage.load_proof id with
+          | Some prf -> Actions.execute_list prf
+          | _ -> interactive ()
     end
 
-let rec print_modpath mpath =
+(*let rec print_modpath mpath =
   match mpath with
   | Names.ModPath.MPdot (mpath, label) ->
       print_modpath mpath ^ " DOT " ^ Names.Label.to_string label
@@ -173,7 +151,7 @@ let rec print_modpath mpath =
       let dirs = List.rev @@ Names.DirPath.repr dirpath in
       "MPbound "
       ^ Extlib.List.to_string ~sep:"." Names.Id.to_string dirs
-      ^ " " ^ Names.Id.to_string id
+      ^ " " ^ Names.Id.to_string id*)
 
 let test_tac () : unit tactic =
   Log.str @@ Storage.proofs_folder ();

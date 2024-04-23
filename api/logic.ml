@@ -107,6 +107,9 @@ type itrace = choice list [@@deriving show]
 
 type action =
   | AId (* The empty action which does nothing *)
+  | ADuplicate of uid (* Duplicate a hypothesis. *)
+  | AClear of uid (* Clear a hypothesis. *)
+  | AMove of (uid * uid option) (* Reordering of a hypothesis *)
   | ADef of (name * type_ * expr) (* Introduction of a local definition *)
   | ALemma of name (* Add a lemma to the hypotheses. *)
   | AIntro of (int * (expr * type_) option) (* Click on a conclusion *)
@@ -120,8 +123,6 @@ type action =
   | ACase of ipath (* Case contextual action *)
   | ACut of form (* Click on +hyp button *)
   | AGeneralize of uid (* Generalization of a hypothesis *)
-  | AMove of (uid * uid option) (* Reordering of a hypothesis *)
-  | ADuplicate of uid (* Duplication of a hypothesis *)
   | ALink of (ipath * ipath * itrace) (* DnD action for subformula linking *)
   | AInstantiate of (expr * ipath) (* DnD action for instantiating a quantifier *)
 [@@deriving show]
