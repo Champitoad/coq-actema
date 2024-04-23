@@ -1,13 +1,12 @@
 (** This module defines functions to manipulate the lemma database. *)
 
 open CoreLogic
-open Fo
 
 (** This module defines predicates on lemmas. *)
 module Pred : sig
   (** A predicate on lemmas. The first argument is the lemma full name, 
       the second argument is the lemma user name and statement. *)
-  type t = Proof.proof -> string -> string * form -> bool
+  type t = Proof.proof -> Proof.lemma -> bool
 
   (** [true_] is the predicate that always returns [true], regardless of its arguments. *)
   val true_ : t

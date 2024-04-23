@@ -4,6 +4,7 @@ module Js = Js_of_ocaml.Js
 
 exception InvalidGoalId of Handle.t
 exception InvalidHyphId of Handle.t
+exception InvalidLemmaId of Handle.t
 exception SubgoalNotOpened of Handle.t
 
 (** The type of a single hypothesis. *)
@@ -69,18 +70,53 @@ end = struct
   let of_list (hyps : t) = hyps
 end
 
+type lemma = { l_full : name; l_user : name; l_form : Fo.form }
+
+module Lemmas : sig
+  type t
+
+  val empty : t
+  val extend_env : Fo.env -> t -> t
+  val env : t -> Fo.env
+  val byid : t -> Handle.t -> lemma
+  val add : t -> Handle.t -> lemma -> t
+  val remove : t -> Handle.t -> t
+  val ids : t -> Handle.t list
+  val map : (lemma -> lemma) -> t -> t
+  val iter : (lemma -> unit) -> t -> unit
+  val filter : (lemma -> bool) -> t -> t
+  val to_list : t -> (Handle.t * lemma) list
+  val of_list : (Handle.t * lemma) list -> t
+end = struct
+  (** Abstract type of a collection of lemmas. It consists in a map from the lemma handle 
+      to the lemma statement and (user-facing) name, and an environment to type the lemmas. *)
+  type t = { db_env : Fo.env; db_map : (Handle.t, lemma) Map.t }
+
+  let empty = { db_env = Env.empty; db_map = Map.empty }
+  let extend_env env lemmas = { lemmas with db_env = Env.union lemmas.db_env env }
+  let env lemmas = lemmas.db_env
+  let byid lemmas id = Option.get_exn (Map.find_opt id lemmas.db_map) (InvalidLemmaId id)
+  let add lemmas id l = { lemmas with db_map = Map.add id l lemmas.db_map }
+  let remove lemmas id = { lemmas with db_map = Map.remove id lemmas.db_map }
+  let ids lemmas = Map.keys lemmas.db_map |> List.of_enum
+  let map f lemmas = { lemmas with db_map = Map.map f lemmas.db_map }
+  let iter f lemmas = Map.iter (fun _ -> f) lemmas.db_map
+  let filter pred lemmas = { lemmas with db_map = Map.filter (fun _ -> pred) lemmas.db_map }
+  let to_list lemmas = Map.bindings lemmas.db_map
+  let of_list ls = { db_env = Env.empty; db_map = Map.of_seq @@ List.to_seq ls }
+end
+
 type pregoal = { g_env : env; g_hyps : Hyps.t; g_goal : form }
 type pregoals = pregoal list
 type goal = { g_id : Handle.t; g_pregoal : pregoal }
 type meta = < > Js_of_ocaml.Js.t
-type lemma_db = { db_env : env; db_map : (string, string * Fo.form) Map.t }
 
 type proof =
   { p_goals : (Handle.t, goal) Map.t
         (** A map from goal handles to goals. Contains only the opened (i.e. currently active) goals. *)
   ; p_meta : (Handle.t, < > Js.t) Map.t ref  (** Metadata associated to each goal. *)
-  ; p_db : lemma_db  (** The lemma database. *)
-  ; p_hm : Hidmap.hidmap
+  ; p_db : Lemmas.t  (** The lemma database. *)
+  ; p_hm : Hidmap.hidmap  (** A map from hypothesis handle to hypothesis name. *)
   }
 
 let mk_hyp ?(src : Handle.t option) ?(gen : int = 0) form =
@@ -100,7 +136,7 @@ let init (env : env) (hyps : form list) (goal : form) =
 
   { p_goals = Map.singleton uid goal
   ; p_meta = ref Map.empty
-  ; p_db = { db_env = env; db_map = Map.empty }
+  ; p_db = Lemmas.extend_env env Lemmas.empty
   ; p_hm = Hidmap.empty
   }
 
@@ -121,10 +157,10 @@ let ginit (hm : Hidmap.hidmap) (pregoals : pregoal list) : proof =
       Map.empty pregoals
   in
 
-  { p_goals; p_meta = ref Map.empty; p_db = { db_env = Env.empty; db_map = Map.empty }; p_hm = hm }
+  { p_goals; p_meta = ref Map.empty; p_db = Lemmas.empty; p_hm = hm }
 
 let get_db (proof : proof) = proof.p_db
-let set_db (proof : proof) (db : lemma_db) = { proof with p_db = db }
+let set_db (proof : proof) (db : Lemmas.t) = { proof with p_db = db }
 
 let set_meta (proof : proof) (id : Handle.t) (meta : meta option) : unit =
   match meta with

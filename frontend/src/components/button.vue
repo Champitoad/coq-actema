@@ -357,13 +357,10 @@ export default {
             this.updateHTML();
             this.hide();
             this.onDisplayed(() => {
-                // console.log("Displayed element " + this.getHandle());
                 this.assignPosition();
                 this.$nextTick(() => {
                     this.show();
                 });
-                // console.log("width: " + width);
-                // console.log("contentWidth: " + contentWidth);
             });
         }
     },
@@ -808,7 +805,7 @@ export default {
         },
 
         getEventCoordinates(e) {
-            var rect = e.target.getBoundingClientRect();
+            //var rect = e.target.getBoundingClientRect();
             return {
                 pageX: e.pageX
                     ? e.pageX
@@ -1354,7 +1351,10 @@ export default {
 
         setAbsolutePosition(x, y) {
             if (this.alignment == "left") {
-                this.$el.style.left = x ? x + "px" : "";
+                // Now this is a hack. I don't want to fix this shitty spaghetti code.
+                var container = this.$proofCanvas.getWorkZone();
+                var cx = container[0].offsetLeft;
+                this.$el.style.left = x ? (x + cx) + "px" : "";
             } else if (this.alignment == "right") {
                 this.$el.style.right = x ? x + "px" : "";
             }
@@ -1394,8 +1394,10 @@ export default {
         },
 
         convertPositionToWorkzone(pos) {
+            var container = this.$proofCanvas.getWorkZone();
+            var cx = container[0].offsetLeft;
             return {
-                x: pos.x - this.$proofCanvas.getHypothesisZone().width(), // size of the hypothesis zone
+                x: pos.x - cx, // end of the hypothesis zone
                 y: pos.y
             };
         },
@@ -1420,7 +1422,7 @@ export default {
         restoreSavedPosition() {
             var metadata = this.getMetadata();
 
-            let savedAlignement = _.get(metadata, "alignment");
+            //let savedAlignement = _.get(metadata, "alignment");
 
             var x = _.get(metadata, "coord.x");
             var y = _.get(metadata, "coord.y");
@@ -1557,7 +1559,7 @@ export default {
 
         assignStaticPosition() {
             var c = this.getCoord();
-            var XMargin = 150;
+            //var XMargin = 150;
             var startingY = 50;
             var YMargin = 40;
 
