@@ -2,7 +2,7 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 
-Lemma test n (m : nat) (h : exists n, n = 42) (q : True \/ False) : n = 42.
+Lemma test n (m : nat) (h : exists n, n = 42) (q : True \/ False) : 0 + n = 42 + 0.
 Proof. actema_force.
 
 Lemma evenSSS n : PeanoNat.Nat.Even (S (S (S n))).
