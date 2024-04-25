@@ -22,11 +22,11 @@
 <template>
     <div class="row">
         <vue-simple-suggest class="search-lemma-bar" placeholder="Search lemma..." v-model="lemmaSearchText"
-            display-attribute="shortName" value-attribute="name" @select="addLemma" :list="lemmaList"
+            display-attribute="name" value-attribute="handle" @select="addLemma" :list="lemmaList"
             :filter-by-query="false" :min-length="0" :max-suggestions="15" :preventHide="true" :key="lemmaKey"
             ref="lemmaSearchBar">
             <div slot="suggestion-item" slot-scope="{ suggestion }">
-                <div>{{ suggestion.shortName }} : {{ suggestion.stmt }}</div>
+                <div>{{ suggestion.handle }} : {{ suggestion.name }} : {{ suggestion.form }}</div>
             </div>
         </vue-simple-suggest>
 
@@ -87,7 +87,7 @@ export default {
 
             this.lemmaList = _.map(lemmas, l => {
                 //console.log(l);
-                return { name: l[1][0], shortName: l[1][1], stmt: l[1][2] }
+                return { handle: l[1][0], name: l[1][1], form: l[1][2] }
             });
 
             // Force a re-render of the lemma list.
@@ -109,7 +109,7 @@ export default {
 
         // Callback invoked when we click on an entry in the lemma dropdown (list).
         addLemma: async function (lemma) {
-            this.$parent.sendLemma(this.goal, lemma.name);
+            this.$parent.sendLemma(this.goal, lemma.handle);
         },
     }
 };

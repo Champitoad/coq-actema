@@ -4,6 +4,7 @@ Require Import ssreflect.
 
 Lemma test n (h1 : n > 0) (h : exists n, n = 42) (q : True \/ False) : 0 + n = 42 + 0.
 Proof. actema_force.
+
 Lemma evenSSS n : PeanoNat.Nat.Even (S (S (S n))).
 actema_force.   
 

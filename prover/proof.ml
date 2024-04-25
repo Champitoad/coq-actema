@@ -88,22 +88,23 @@ module Lemmas : sig
   val to_list : t -> (Handle.t * lemma) list
   val of_list : (Handle.t * lemma) list -> t
 end = struct
+  module HandleMap = Map.Make (Handle)
   (** Abstract type of a collection of lemmas. It consists in a map from the lemma handle 
       to the lemma statement and (user-facing) name, and an environment to type the lemmas. *)
-  type t = { db_env : Fo.env; db_map : (Handle.t, lemma) Map.t }
+  type t = { db_env : Fo.env; db_map : lemma HandleMap.t }
 
-  let empty = { db_env = Env.empty; db_map = Map.empty }
+  let empty = { db_env = Env.empty; db_map = HandleMap.empty }
   let extend_env env lemmas = { lemmas with db_env = Env.union lemmas.db_env env }
   let env lemmas = lemmas.db_env
-  let byid lemmas id = Option.get_exn (Map.find_opt id lemmas.db_map) (InvalidLemmaId id)
-  let add lemmas id l = { lemmas with db_map = Map.add id l lemmas.db_map }
-  let remove lemmas id = { lemmas with db_map = Map.remove id lemmas.db_map }
-  let ids lemmas = Map.keys lemmas.db_map |> List.of_enum
-  let map f lemmas = { lemmas with db_map = Map.map f lemmas.db_map }
-  let iter f lemmas = Map.iter (fun _ -> f) lemmas.db_map
-  let filter pred lemmas = { lemmas with db_map = Map.filter (fun _ -> pred) lemmas.db_map }
-  let to_list lemmas = Map.bindings lemmas.db_map
-  let of_list ls = { db_env = Env.empty; db_map = Map.of_seq @@ List.to_seq ls }
+  let byid lemmas id = Option.get_exn (HandleMap.find_opt id lemmas.db_map) (InvalidLemmaId id)
+  let add lemmas id l = { lemmas with db_map = HandleMap.add id l lemmas.db_map }
+  let remove lemmas id = { lemmas with db_map = HandleMap.remove id lemmas.db_map }
+  let ids lemmas = HandleMap.keys lemmas.db_map |> List.of_enum
+  let map f lemmas = { lemmas with db_map = HandleMap.map f lemmas.db_map }
+  let iter f lemmas = HandleMap.iter (fun _ -> f) lemmas.db_map
+  let filter pred lemmas = { lemmas with db_map = HandleMap.filter (fun _ -> pred) lemmas.db_map }
+  let to_list lemmas = HandleMap.bindings lemmas.db_map
+  let of_list ls = { db_env = Env.empty; db_map = HandleMap.of_seq @@ List.to_seq ls }
 end
 
 type pregoal = { g_env : env; g_hyps : Hyps.t; g_goal : form }

@@ -270,18 +270,18 @@ let rec js_proof_engine (proof : Proof.proof) =
 
     (** Serialize the current lemma database into a JS array. 
         Returns an array of lemmas. Each lemma contains the following : 
-          (full-name (string), user-name (string), pretty-printed-formula (string)).
+          (handle (int), name (string), pretty-printed-formula (string)).
         For performance reasons, we only return a limited amount of lemmas. *)
     method getlemmas =
       let db = _self##.proof |> Proof.get_db in
-      db |> Proof.Lemmas.to_list
+      db |> Proof.Lemmas.to_list |> List.take 100
       |> List.map
            begin
-             fun (_, lemma) ->
-               let full_name = lemma.Proof.l_full |> Js.string in
-               let user_name = lemma.Proof.l_user |> Js.string in
+             fun (handle, lemma) ->
+               let handle = handle |> Handle.toint |> string_of_int |> Js.string in
+               let name = lemma.Proof.l_user |> Js.string in
                let form = Notation.f_tostring (Proof.Lemmas.env db) lemma.l_form |> Js.string in
-               Js.array [| full_name; user_name; form |]
+               Js.array [| handle; name; form |]
            end
       |> Array.of_list |> Js.array
 
@@ -435,22 +435,17 @@ and js_subgoal parent (handle : Handle.t) =
       in
       !!doit ()
 
-    (** [this#addlemmab (full_name : string)] return the base64-encoded string of the corresponding ALemma action. *)
-    method addlemmab full_name =
+    (** [this#addlemmab (handle : int)] return the base64-encoded string of the corresponding ALemma action. *)
+    method addlemmab handle =
       let doit () =
-        let full_name = Js.to_string full_name in
-        js_log @@ Format.sprintf "addlemmab %s\n" full_name;
-        (* Check the lemma database contains the lemma name (and raise LemmaNotFound if it doesn't),
-           and recheck the lemma's statement (just to make sure). *)
-        (*let db = Proof.get_db parent##.proof in
-          let lemma =
-            Proof.Lemmas.by_ Option.get_exn
-              (Map.find_opt full_name db.db_map)
-              (Failure ("lemma not found " ^ full_name))
-          in
-          Form.recheck db.db_env stmt;*)
+        (* Find the lemma (and raise an exception if it is not found). *)
+        let db = Proof.get_db parent##.proof in
+        let lemma = Proof.Lemmas.byid db handle in
+        js_log @@ Format.sprintf "addlemmab %s\n" lemma.l_full;
+        (* Recheck the lemma just to make sure. *)
+        Form.recheck (Proof.Lemmas.env db) lemma.l_form;
         (* Construct the action and encode it. *)
-        Api.Logic.ALemma full_name |> Fun.flip Marshal.to_string [] |> Base64.encode_string
+        Api.Logic.ALemma lemma.l_full |> Fun.flip Marshal.to_string [] |> Base64.encode_string
         |> Js.string
       in
       !!doit ()

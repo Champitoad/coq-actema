@@ -537,9 +537,9 @@ export default {
         },
 
         // Send an [lemma] action to the plugin.
-        sendLemma(subgoal, name) {
+        sendLemma(subgoal, handle) {
             try {
-                let action = subgoal.addlemmab(name);
+                let action = subgoal.addlemmab(handle);
                 this.sendAction(action);
             } catch (e) {
                 this.showErrorMessage(e);
