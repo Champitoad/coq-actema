@@ -14,8 +14,8 @@ type asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ] [@@deriving sho
 type asource = { kind : asource_kind; selection : selection } [@@deriving show]
 
 type action_type =
-  [ `Intro of int
-  | `Elim of Handle.t * int
+  [ `Intro of int  (** The [int] indicates which intro rule to use. See Api.Logic.AIntro. *)
+  | `Elim of Handle.t * int  (** The [Handle.t] identifies the hypothesis we are eliminating. *)
   | `Lemma of name
   | `Ind of Handle.t
   | `Simpl of IPath.t

@@ -112,7 +112,11 @@ type action =
   | AMove of (uid * uid option) (* Reordering of a hypothesis *)
   | ADef of (name * type_ * expr) (* Introduction of a local definition *)
   | ALemma of name (* Add a lemma to the hypotheses. *)
-  | AIntro of (int * (expr * type_) option) (* Click on a conclusion *)
+  | AIntro of int
+    (* Click on a conclusion.
+       The [int] indicates which introduction rule to use (0, 1, 2, etc.).
+       Usually it is [0], but for instance when the conclusion is a disjunction
+       it can be [0] to choose the left side or [1] to choose the right side. *)
   | AExact of uid (* Proof by assumption *)
   | AElim of (uid * int) (* Click on a hypothesis *)
   | AInd of uid (* Click on a variable of inductive type *)

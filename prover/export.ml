@@ -41,7 +41,7 @@ let of_itrace (itrace : itrace) : Logic.itrace =
 let of_action (proof : Proof.proof) ((hd, a) : Handle.t * Actions.action_type) :
     Logic.action State.t =
   match a with
-  | `Intro variant -> return (Logic.AIntro (variant, None))
+  | `Intro side -> return (Logic.AIntro side)
   | `Elim (subhd, i) ->
       let goal = Proof.byid proof hd in
       let hyp = (Proof.Hyps.byid goal.g_hyps subhd).h_form in

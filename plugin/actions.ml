@@ -291,31 +291,20 @@ let decode_constructor_name (name : string) : Names.Construct.t option =
   try Some (Scanf.sscanf name "I%s@/%s@/%s@/%d/%d" parse) with _ -> None
 
 (** Execute an [AIntro] action. *)
-let execute_aintro goal ind_var witness =
-  let open PVMonad in
-  match goal.Logic.g_concl with
-  | Logic.FTrue -> Tactics.one_constructor 1 Tactypes.NoBindings
-  | Logic.FConn (Logic.Imp, _) | Logic.FConn (Logic.Not, _) ->
+let execute_aintro goal side =
+  match (goal.Logic.g_concl, side) with
+  | Logic.FTrue, 0 -> Tactics.one_constructor 1 Tactypes.NoBindings
+  | Logic.FConn (Logic.Imp, _), 0 | Logic.FConn (Logic.Not, _), 0 ->
       let pat = mk_intro_patterns [ "imp_left" ] in
       Tactics.intro_patterns false pat
-  | Logic.FConn (Logic.And, _) | Logic.FConn (Logic.Equiv, _) -> Tactics.split Tactypes.NoBindings
-  | Logic.FConn (Logic.Or, _) as f ->
-      let rec arity acc f =
-        match f with Logic.FConn (Logic.Or, [ f1; f2 ]) -> arity (acc + 1) f1 | _ -> acc + 1
-      in
-      let rec aux zero i =
-        match i with
-        | 1 when zero -> Tactics.left Tactypes.NoBindings
-        | 0 -> Tactics.right Tactypes.NoBindings
-        | n ->
-            let* _ = Tactics.left Tactypes.NoBindings in
-            aux zero (n - 1)
-      in
-      aux (ind_var = 0) (arity 0 f - ind_var - 1)
-  | Logic.FBind (Logic.Forall, x, _, _) ->
+  | Logic.FConn (Logic.And, _), 0 | Logic.FConn (Logic.Equiv, _), 0 ->
+      Tactics.split Tactypes.NoBindings
+  | Logic.FConn (Logic.Or, _), 0 -> Tactics.left Tactypes.NoBindings
+  | Logic.FConn (Logic.Or, _), 1 -> Tactics.right Tactypes.NoBindings
+  | Logic.FBind (Logic.Forall, x, _, _), 0 ->
       let pat = mk_intro_patterns [ x ] in
       Tactics.intro_patterns false pat
-  | Logic.FPred ("_EQ", _) ->
+  | Logic.FPred ("_EQ", _), 0 ->
       (* Here we are not sure that the two sides of the equality are indeed equal.
 
          The frontend can only handle syntactic equality : it delegates to the plugin
@@ -325,7 +314,7 @@ let execute_aintro goal ind_var witness =
       Tacticals.tclTRY Tactics.reflexivity
   | _ ->
       let msg = "The goal has an invalid head connective/predicate for an introduction." in
-      raise @@ UnsupportedAction (Logic.AIntro (ind_var, witness), msg)
+      raise @@ UnsupportedAction (Logic.AIntro side, msg)
 
 (** Execute an [ALemma] action. This consists in adding the required lemma as a hypothesis. *)
 let execute_alemma coq_goal full_name =
@@ -706,7 +695,7 @@ let execute_helper (a : Logic.action) (coq_goal : Goal.t) : unit tactic =
       let id = Goal.fresh_name coq_goal () |> Names.Name.mk_name in
       let form = form (Goal.env coq_goal) (Goal.sigma coq_goal) sign goal.g_env [] f in
       Tactics.assert_before id form
-  | Logic.AIntro (ind_var, witness) -> execute_aintro goal ind_var witness
+  | Logic.AIntro side -> execute_aintro goal side
   | Logic.AElim (hyp_name, i) -> execute_aelim goal hyp_name i
   | Logic.ALink (src, dst, itr) -> execute_alink coq_goal sign goal src dst itr
   | Logic.AInstantiate (witness, target) -> execute_ainstantiate coq_goal sign goal witness target

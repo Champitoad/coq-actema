@@ -320,6 +320,7 @@ module Tactics = struct
     | FTrue -> [ "destruct" ]
     | FFalse -> [ "destruct" ]
     | FConn (`And, _) -> [ "destruct" ]
+    | FConn (`Equiv, _) -> [ "destruct" ]
     | FConn (`Or, _) -> [ "destruct" ]
     | FConn (`Imp, _) -> [ "apply" ]
     | FConn (`Not, _) -> [ "destruct" ]
