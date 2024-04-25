@@ -60,6 +60,9 @@ type linkaction =
 (** Lift a link into a hyperlink. *)
 val hyperlink_of_link : link -> hyperlink
 
+(** Remove all the [`Nothing] appearing in a linkaction. *)
+val remove_nothing : linkaction -> linkaction option
+
 (** A (hyper)link predicate ([Pred.lpred] and [Pred.hlpred]) captures functions which
     map a (hyper)link in a proof to a list of possible link actions.
 
@@ -150,43 +153,3 @@ module Pred : sig
       If the check succeeds, it returns either a [`Fold] or [`Unfold] link action. *)
   val fold : hlpred
 end
-
-(************************************************************************************)
-(* Actions. *)
-
-type asource = { kind : asource_kind; selection : selection }
-and asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ]
-and adnd = { source : IPath.t; destination : IPath.t option }
-and selection = IPath.t list
-
-type osource = [ `Click of IPath.t | `DnD of link | `Ctxt ]
-
-type action_type =
-  [ `Intro of int
-  | `Elim of Handle.t * int
-  | `Lemma of name
-  | `Ind of Handle.t
-  | `Simpl of IPath.t
-  | `Red of IPath.t
-  | `Indt of IPath.t
-  | `Case of IPath.t
-  | `Pbp of IPath.t
-  | `Fold of vname
-  | `Unfold of vname
-  | `Hyperlink of hyperlink * linkaction list ]
-
-(** An action consists in :
-      - The index of the goal its acts on. 
-      - The action type. *)
-type action = Handle.t * action_type
-
-type aoutput =
-  { description : string
-  ; icon : string option
-  ; highlights : IPath.t list
-  ; kind : osource
-  ; action : action
-  }
-
-(** Get the list of all valid actions on a given proof state. *)
-val actions : Proof.proof -> asource -> aoutput list

@@ -7,7 +7,7 @@ open State
 open CoreLogic
 open Interact
 
-exception UnsupportedAction of Link.action_type
+exception UnsupportedAction of Actions.action_type
 
 let of_ctxt (ctxt : IPath.ctxt) : Logic.ctxt State.t =
   let* handle =
@@ -38,7 +38,7 @@ let of_itrace (itrace : itrace) : Logic.itrace =
     end
     itrace
 
-let of_action (proof : Proof.proof) ((hd, a) : Link.action) : Logic.action State.t =
+let of_action (proof : Proof.proof) ((hd, a) : Actions.action) : Logic.action State.t =
   match a with
   | `Intro variant -> return (Logic.AIntro (variant, None))
   | `Elim (subhd, i) ->

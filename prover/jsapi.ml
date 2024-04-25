@@ -140,23 +140,23 @@ let rec js_proof_engine (proof : Proof.proof) =
               | "dnd" ->
                   let source = ipath_of_obj asource##.source in
                   let destination = ipath_of_opt asource##.destination in
-                  [ `DnD Link.{ source; destination } ]
+                  [ `DnD Actions.{ source; destination } ]
               | "any" ->
                   let path = ipath_of_obj asource##.path in
-                  [ `Click path; `DnD Link.{ source = path; destination = None } ]
+                  [ `Click path; `DnD Actions.{ source = path; destination = None } ]
               | _ -> raise InvalidASource)
           | _ -> raise InvalidASource
         and selection = ipath_of_array asource##.selection in
 
-        let asource = List.map (fun kind -> Link.{ kind; selection }) kinds in
+        let asource = List.map (fun kind -> Actions.{ kind; selection }) kinds in
 
-        List.flatten (List.map !!(Link.actions _self##.proof) asource)
+        List.flatten (List.map !!(Actions.actions _self##.proof) asource)
       in
 
       Js.array
         (Array.of_list
            (List.map
-              (fun Link.{ description = p; icon = ic; highlights = ps; kind = aui; action = a } ->
+              (fun Actions.{ description = p; icon = ic; highlights = ps; kind = aui; action = a } ->
                 let ps = List.map CoreLogic.IPath.to_string ps in
                 let ps = Js.array (Array.of_list (List.map Js.string ps)) in
 
