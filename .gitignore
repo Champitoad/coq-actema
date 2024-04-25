@@ -75,5 +75,3 @@ _opam/
 actema.proofs/
 
 .vscode/
-
-frontend/public/prover.js

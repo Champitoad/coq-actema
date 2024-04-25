@@ -323,18 +323,6 @@ module Tactics = struct
     | FBind (`Exist, _, _, _) -> [ "destruct" ]
     | _ -> []
 
-  let generalize proof ~goal_id ~hyp_id =
-    let goal = byid proof goal_id in
-    let hyp = (Hyps.byid goal.g_hyps hyp_id).h_form in
-
-    snd
-    @@ xprogress proof goal_id
-         [ { g_env = goal.g_env
-           ; g_hyps = Hyps.remove goal.g_hyps hyp_id
-           ; g_goal = FConn (`Imp, [ hyp; goal.g_goal ])
-           }
-         ]
-
   let move proof ~goal_id ~hyp_id ~dest_id =
     let goal = byid proof goal_id in
     let hyps = Hyps.move goal.g_hyps hyp_id dest_id in

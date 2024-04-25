@@ -107,9 +107,6 @@ module Tactics : sig
   (** Add a local definition (in a given goal). *)
   val add_local_def : proof -> goal_id:Handle.t -> string * Fo.type_ * Fo.expr -> proof
 
-  (** Generalize a hypothesis (in a given goal). *)
-  val generalize : proof -> goal_id:Handle.t -> hyp_id:Handle.t -> proof
-
   (** Move a hypothesis BEFORE another hypothesis. *)
   val move : proof -> goal_id:Handle.t -> hyp_id:Handle.t -> dest_id:Handle.t option -> proof
 
