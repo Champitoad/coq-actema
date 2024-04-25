@@ -38,7 +38,8 @@ let of_itrace (itrace : itrace) : Logic.itrace =
     end
     itrace
 
-let of_action (proof : Proof.proof) ((hd, a) : Actions.action) : Logic.action State.t =
+let of_action (proof : Proof.proof) ((hd, a) : Handle.t * Actions.action_type) :
+    Logic.action State.t =
   match a with
   | `Intro variant -> return (Logic.AIntro (variant, None))
   | `Elim (subhd, i) ->

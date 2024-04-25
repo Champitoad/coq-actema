@@ -8,8 +8,6 @@ and asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ]
 and adnd = { source : IPath.t; destination : IPath.t option }
 and selection = IPath.t list
 
-type osource = [ `Click of IPath.t | `DnD of link | `Ctxt ]
-
 type action_type =
   [ `Intro of int
   | `Elim of Handle.t * int
@@ -24,14 +22,15 @@ type action_type =
   | `Unfold of vname
   | `Hyperlink of hyperlink * linkaction list ]
 
-type action = Handle.t * action_type
+type aoutput_kind = [ `Click of IPath.t | `DnD of Link.link | `Ctxt ]
 
 type aoutput =
   { description : string
   ; icon : string option
   ; highlights : IPath.t list
-  ; kind : osource
-  ; action : action
+  ; kind : aoutput_kind
+  ; goal_handle : Handle.t
+  ; action : action_type
   }
 
 (** Create path to the root of every hypothesis (in a subgoal). *)
@@ -146,7 +145,8 @@ let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) : ao
     ; icon = None
     ; highlights = srcs @ dsts
     ; kind = `DnD (src, dst)
-    ; action = (g_id, `Hyperlink (lnk, actions))
+    ; goal_handle = g_id
+    ; action = `Hyperlink (lnk, actions)
     }
 
 type selpred = Proof.proof -> selection -> aoutput list
@@ -161,7 +161,8 @@ let single_subterm_sel : selpred =
     ; icon = Some "arrow-up-right-dots"
     ; highlights = sel
     ; kind = `Ctxt
-    ; action = (IPath.gid proof tgt, `Indt tgt)
+    ; goal_handle = IPath.gid proof tgt
+    ; action = `Indt tgt
     }
   in
 
@@ -170,7 +171,8 @@ let single_subterm_sel : selpred =
     ; icon = Some "list"
     ; highlights = sel
     ; kind = `Ctxt
-    ; action = (IPath.gid proof tgt, `Case tgt)
+    ; goal_handle = IPath.gid proof tgt
+    ; action = `Case tgt
     }
   in
 
@@ -179,7 +181,8 @@ let single_subterm_sel : selpred =
     ; icon = Some "hand-pointer"
     ; highlights = sel
     ; kind = `Ctxt
-    ; action = (IPath.gid proof tgt, `Pbp tgt)
+    ; goal_handle = IPath.gid proof tgt
+    ; action = `Pbp tgt
     }
   in
 
@@ -192,13 +195,15 @@ let single_subterm_sel : selpred =
             ; icon = Some "wand-magic-sparkles"
             ; highlights = sel
             ; kind = `Ctxt
-            ; action = (IPath.gid proof tgt, `Simpl tgt)
+            ; goal_handle = IPath.gid proof tgt
+            ; action = `Simpl tgt
             }
           ; { description = "Unfold"
             ; icon = Some "magnifying-glass"
             ; highlights = sel
             ; kind = `Ctxt
-            ; action = (IPath.gid proof tgt, `Red tgt)
+            ; goal_handle = IPath.gid proof tgt
+            ; action = `Red tgt
             }
           ; induction tgt
           ; case_eq tgt
@@ -240,7 +245,8 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
               ; icon = None
               ; highlights = [ hg ]
               ; kind = `Click hg
-              ; action = (hd, `Intro i)
+              ; goal_handle = hd
+              ; action = `Intro i
               })
             iv
         end
@@ -258,7 +264,8 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
               ; icon = None
               ; highlights = [ hg ]
               ; kind = `Click hg
-              ; action = (hd, `Elim (rp, i))
+              ; goal_handle = hd
+              ; action = `Elim (rp, i)
               })
             ev
       | `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
@@ -270,7 +277,8 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
             ; icon = None
             ; highlights = [ hg ]
             ; kind = `Click hg
-            ; action = (hd, `Ind hd)
+            ; goal_handle = hd
+            ; action = `Ind hd
             }
           ]
       | `V (x, (_, Some _)) ->
@@ -287,13 +295,15 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
             ; icon = None
             ; highlights = [ hg_unfold ]
             ; kind = `Click hg_unfold
-            ; action = (hd, `Unfold x)
+            ; goal_handle = hd
+            ; action = `Unfold x
             }
           ; { description = "Fold"
             ; icon = None
             ; highlights = [ hg_fold ]
             ; kind = `Click hg_fold
-            ; action = (hd, `Fold x)
+            ; goal_handle = hd
+            ; action = `Fold x
             }
           ]
       | _ -> []

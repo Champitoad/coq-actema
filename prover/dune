@@ -19,5 +19,5 @@
   ocamlgraph
   base64)
  (preprocess
-  (pps tyxml-ppx js_of_ocaml-ppx lwt_ppx))
+  (pps tyxml-ppx js_of_ocaml-ppx lwt_ppx ppx_deriving.show))
  (synopsis "Mini-prover (backend for the GUI)"))

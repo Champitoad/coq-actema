@@ -1,0 +1,4 @@
+(test
+ (name link_tests)
+ (modules link_tests)
+ (libraries coq-actema.prover qcheck-core qcheck-core.runner))

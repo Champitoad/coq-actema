@@ -6,8 +6,8 @@ open Syntax
 (* -------------------------------------------------------------------- *)
 (** Names *)
 
-type name = string
-type vname = name * int
+type name = string [@@deriving show]
+type vname = name * int [@@deriving show]
 
 let name_of_vname : vname -> name = fst
 
@@ -82,14 +82,15 @@ type type_ =
   | TProd of type_ * type_
   | TOr of type_ * type_
   | TRec of name * type_
+[@@deriving show]
 
-type arity = type_ list
-and sig_ = arity * type_
+type arity = type_ list [@@deriving show]
+and sig_ = arity * type_ [@@deriving show]
 
 (* -------------------------------------------------------------------- *)
 (** Expressions *)
 
-type expr = EVar of vname | EFun of name * expr list
+type expr = EVar of vname | EFun of name * expr list [@@deriving show]
 
 let rec e_vars =
   let open Monad.List in
@@ -102,8 +103,8 @@ let rec e_vars =
 (* -------------------------------------------------------------------- *)
 (* Formulas *)
 
-type logcon = [ `And | `Or | `Imp | `Equiv | `Not ]
-type bkind = [ `Forall | `Exist ]
+type logcon = [ `And | `Or | `Imp | `Equiv | `Not ] [@@deriving show]
+type bkind = [ `Forall | `Exist ] [@@deriving show]
 
 type form =
   | FTrue
@@ -111,11 +112,12 @@ type form =
   | FPred of name * expr list
   | FConn of logcon * form list
   | FBind of bkind * name * type_ * form
+[@@deriving show]
 
 (* -------------------------------------------------------------------- *)
 (* Terms = Formulas + Expressions *)
 
-type term = [ `F of form | `E of expr ]
+type term = [ `F of form | `E of expr ] [@@deriving show]
 
 let term_of_expr e : term = `E e
 let term_of_form f : term = `F f
@@ -156,8 +158,8 @@ type 'a eqns = ('a * 'a) list
 (* Environments *)
 
 type env =
-  { env_prp : (name, arity) Map.t
-  ; env_fun : (name, sig_) Map.t
+  { env_prp : (name, arity) Map.t (* Predicates. *)
+  ; env_fun : (name, sig_) Map.t (* Functions. *)
   ; env_prp_name : (name, name) Map.t
   ; env_fun_name : (name, name) Map.t
   ; env_sort_name : (name, name) Map.t
@@ -182,9 +184,6 @@ module Env : sig
 
   (** The union of two environments. *)
   val union : env -> env -> env
-
-  (** Given an environment [env] and a formula [f], filter [env] by keeping only the symbols needed to type [f]. *)
-  val restrict_to_form : env -> form -> env
 end = struct
   let nat = TVar ("nat", 0)
   let zero = EFun ("Z", [])
@@ -287,8 +286,6 @@ end = struct
         let acc = collect_type_symbols env t1 acc in
         collect_type_symbols env t2 acc
     | _ -> acc
-
-  let restrict_to_form env f = collect_form_symbols env f empty
 end
 
 (* -------------------------------------------------------------------- *)

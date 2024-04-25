@@ -156,7 +156,14 @@ let rec js_proof_engine (proof : Proof.proof) =
       Js.array
         (Array.of_list
            (List.map
-              (fun Actions.{ description = p; icon = ic; highlights = ps; kind = aui; action = a } ->
+              (fun Actions.
+                     { description = p
+                     ; icon = ic
+                     ; highlights = ps
+                     ; kind = aui
+                     ; action = a
+                     ; goal_handle = g_id
+                     } ->
                 let ps = List.map CoreLogic.IPath.to_string ps in
                 let ps = Js.array (Array.of_list (List.map Js.string ps)) in
 
@@ -189,7 +196,7 @@ let rec js_proof_engine (proof : Proof.proof) =
                    ; ("icon", icon)
                    ; ("highlight", Js.Unsafe.inject ps)
                    ; ("ui", aui)
-                   ; ("action", Js.Unsafe.inject a)
+                   ; ("action", Js.Unsafe.inject (g_id, a))
                   |])
               actions))
 
@@ -805,6 +812,33 @@ and js_type parent (ty : type_) =
     method tostring = Js.string _self##rawstring
   end
 
+(** Print a single goal in Actema format (for debug purposes). *)
+let print_goal (Proof.{ g_env; g_hyps; g_goal } : Proof.pregoal) : unit =
+  (* Conclusion. *)
+  js_log @@ Format.sprintf "GOAL %s\n" (show_form g_goal);
+  (* Hypotheses. *)
+  List.iter
+    begin
+      fun (_handle, hyp) -> js_log @@ Format.sprintf "HYP %s\n" (show_form hyp.Proof.h_form)
+    end
+    (Proof.Hyps.to_list g_hyps);
+  (* Environment. *)
+  Map.iter
+    begin
+      fun name arity -> js_log @@ Format.sprintf "PRED %s ---> %s\n" name (show_arity arity)
+    end
+    g_env.env_prp;
+  Map.iter
+    begin
+      fun name sig_ -> js_log @@ Format.sprintf "FUN %s ---> %s\n" name (show_sig_ sig_)
+    end
+    g_env.env_fun;
+  Map.iter
+    begin
+      fun name name' -> js_log @@ Format.sprintf "SORT %s ---> %s\n" name name'
+    end
+    g_env.env_sort_name
+
 (* -------------------------------------------------------------------- *)
 let export (name : string) : unit =
   Js.export name
@@ -853,5 +887,8 @@ let export (name : string) : unit =
          in
          let gls, hms = goals |> !!(List.map Proof.Translate.import_goal) |> List.split in
          let hm = List.fold_left Hidmap.union Hidmap.empty hms in
+         (* Log the goals. *)
+         List.iter print_goal gls;
+         (* Create a new proof engine. *)
          js_proof_engine (!!(Proof.ginit hm) gls)
     end)

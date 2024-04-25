@@ -70,13 +70,12 @@ val remove_nothing : linkaction -> linkaction option
     as well as some standard predicates. 
 
     One can emulate a traditional boolean predicate by returning the singleton
-    [`Nothing] to indicate membership, or the empty list to indicate absence
-    thereof. *)
+    [`Nothing] to indicate membership, or the empty list to indicate absence thereof. *)
 module Pred : sig
   (** A link predicate. *)
   type lpred = Proof.proof -> link -> linkaction list
 
-  (** A hyperlinkg predicate. *)
+  (** A hyperlink predicate. *)
   type hlpred = Proof.proof -> hyperlink -> linkaction list
 
   (** [search_linkactions hlp proof (src, dst)] returns all links between
