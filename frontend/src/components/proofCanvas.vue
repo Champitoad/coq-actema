@@ -536,7 +536,7 @@ export default {
             }
         },
 
-        // Send an [lemma] action to the plugin.
+        // Send a [lemma] action to the plugin.
         sendLemma(subgoal, handle) {
             try {
                 let action = subgoal.addlemmab(handle);
@@ -594,8 +594,12 @@ export default {
         },
 
         moveHyp(subgoal, fromHandle, toHandle) {
-            var proof = subgoal.movehyp(fromHandle, toHandle);
-            this.setProofState(proof);
+            try {
+                var proof = subgoal.movehyp(fromHandle, toHandle);
+                this.setProofState(proof);
+            } catch (e) {
+                this.showErrorMessage(e);
+            }
         },
 
         setProofState(proofState) {

@@ -7,7 +7,7 @@ type source = Handle.t * [ `C | `H of Handle.t ]
 
 (* -------------------------------------------------------------------- *)
 exception InvalidASource
-exception InvalidLemmaDB
+exception MoveOnlyHyps
 
 (* -------------------------------------------------------------------- *)
 module Exn : sig
@@ -51,6 +51,7 @@ let () =
       | TypingError -> Some "invalid goal (typing error)"
       | RecheckFailure -> Some "invalid goal (recheck failure)"
       | Proof.Tactics.TacticNotApplicable -> Some "tactic not applicable"
+      | MoveOnlyHyps -> Some "reordering variables is not supported"
       | _ -> None)
 
 (* -------------------------------------------------------------------- *)
@@ -493,12 +494,20 @@ and js_subgoal parent (handle : Handle.t) =
       !!doit ()
 
     (** [this#move_hyp (from : handle<js_hyp>) (before : handle<js_hyp> option)] move
-        hypothesis [from] before hypothesis [before]. Both hypothesis
-        must be part of this sub-goal. *)
+        hypothesis [from] before hypothesis [before]. 
+        Both hypotheses must be part of this sub-goal. 
+        Raises [InvalidHyphId] if [from] is not a hypothesis (for instance if it is a local variable). *)
     method movehyp from before =
       let doit () =
-        Proof.Tactics.move parent##.proof ~goal_id:_self##.handle ~hyp_id:from
-          ~dest_id:(Js.Opt.to_option before)
+        (* First check that [from] is indeed a valid hypothesis handle. *)
+        let subgoal = Proof.byid parent##.proof _self##.handle in
+        let is_hypothesis = List.mem from (Proof.Hyps.ids subgoal.g_hyps) in
+        if is_hypothesis
+        then
+          (* Actually move the hypothesis. *)
+          Proof.Tactics.move parent##.proof ~goal_id:_self##.handle ~hyp_id:from
+            ~dest_id:(Js.Opt.to_option before)
+        else raise MoveOnlyHyps
       in
       js_proof_engine (!!doit ())
 
