@@ -13,6 +13,7 @@ type hyp =
   ; h_gen : int
   ; h_form : form  (** The formula contained in the hypothesis. *)
   }
+[@@deriving show]
 
 module Hyps : sig
   type t
@@ -70,7 +71,7 @@ end = struct
   let of_list (hyps : t) = hyps
 end
 
-type lemma = { l_full : name; l_user : name; l_form : Fo.form }
+type lemma = { l_full : name; l_user : name; l_form : Fo.form } [@@deriving show]
 
 module Lemmas : sig
   type t
@@ -89,6 +90,7 @@ module Lemmas : sig
   val of_list : (Handle.t * lemma) list -> t
 end = struct
   module HandleMap = Map.Make (Handle)
+
   (** Abstract type of a collection of lemmas. It consists in a map from the lemma handle 
       to the lemma statement and (user-facing) name, and an environment to type the lemmas. *)
   type t = { db_env : Fo.env; db_map : lemma HandleMap.t }

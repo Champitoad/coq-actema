@@ -8,10 +8,10 @@
 open CoreLogic
 open Fo
 
-type asource = { kind : asource_kind; selection : selection }
-and asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ]
-and adnd = { source : IPath.t; destination : IPath.t option }
-and selection = IPath.t list
+type selection = IPath.t list [@@deriving show]
+type adnd = { source : IPath.t; destination : IPath.t option } [@@deriving show]
+type asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ] [@@deriving show]
+type asource = { kind : asource_kind; selection : selection } [@@deriving show]
 
 type action_type =
   [ `Intro of int
@@ -26,8 +26,9 @@ type action_type =
   | `Fold of vname
   | `Unfold of vname
   | `Hyperlink of Link.hyperlink * Link.linkaction list ]
+[@@deriving show]
 
-type aoutput_kind = [ `Click of IPath.t | `DnD of Link.link | `Ctxt ]
+type aoutput_kind = [ `Click of IPath.t | `DnD of Link.link | `Ctxt ] [@@deriving show]
 
 type aoutput =
   { description : string
@@ -37,6 +38,7 @@ type aoutput =
   ; goal_handle : Handle.t (* The goal this action executes in. *)
   ; action : action_type
   }
+[@@deriving show]
 
 (** Get the list of all valid actions on a given proof state. *)
 val actions : Proof.proof -> asource -> aoutput list

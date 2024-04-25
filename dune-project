@@ -50,4 +50,6 @@
   (ppx_deriving
    (>= 5.2.1))
   (alcotest
+   (>= 1.7.0))
+  (alcotest-js
    (>= 1.7.0))))

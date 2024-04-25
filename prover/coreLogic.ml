@@ -7,7 +7,7 @@ exception InvalidSubExprPath of int list
 (* -------------------------------------------------------------------- *)
 (** Items *)
 
-type item = [ `C of form | `H of Handle.t * Proof.hyp | `V of vname * bvar ]
+type item = [ `C of form | `H of Handle.t * Proof.hyp | `V of vname * bvar ] [@@deriving show]
 
 let form_of_item : item -> form = function
   | `C f | `H (_, Proof.{ h_form = f; _ }) -> f
@@ -80,9 +80,9 @@ let subexpr (t : term) (p : int list) =
   match subterm t p with `E e -> e | _ -> raise (InvalidSubExprPath p)
 
 module IPath = struct
-  type pkind = [ `Hyp | `Concl | `Var of [ `Head | `Body ] ]
-  type ctxt = { kind : pkind; handle : int }
-  type t = { root : int; ctxt : ctxt; sub : int list }
+  type pkind = [ `Hyp | `Concl | `Var of [ `Head | `Body ] ] [@@deriving show]
+  type ctxt = { kind : pkind; handle : int } [@@deriving show]
+  type t = { root : int; ctxt : ctxt; sub : int list } [@@deriving show]
 
   exception InvalidPath of string
 

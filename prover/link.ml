@@ -2,17 +2,21 @@ open CoreLogic
 open Fo
 open Utils
 
-type link = IPath.t * IPath.t
-type hyperlink = IPath.t list * IPath.t list
+type link = IPath.t * IPath.t [@@deriving show]
+type hyperlink = IPath.t list * IPath.t list [@@deriving show]
+
+(** This is a hack : I needed to do this because [@opaque] in [linkaction] would not work.*)
+type subst = (Form.Subst.subst[@opaque]) [@@deriving show]
 
 type linkaction =
   [ `Nothing
   | `Both of linkaction * linkaction
-  | `Subform of Form.Subst.subst * Form.Subst.subst
+  | `Subform of subst * subst
   | `Instantiate of expr * IPath.t
   | `Rewrite of expr * expr * IPath.t list
   | `Fold of vname * IPath.t list
   | `Unfold of vname * IPath.t list ]
+[@@deriving show]
 
 let hyperlink_of_link : link -> hyperlink = fun (src, dst) -> ([ src ], [ dst ])
 

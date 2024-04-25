@@ -1,7 +1,6 @@
 open Cohttp
 open Cohttp_lwt_unix
 open Lwt.Syntax
-open CoqUtils
 open Api
 
 exception ActemaError of string
@@ -64,10 +63,7 @@ let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t
 
 let send_lemmas (lemmas : Logic.lemma list) (env : Logic.env) : action Lwt.t =
   (* Send request with lemmas and environment. *)
-  let start = Sys.time () in
   let datab = (env, lemmas) |> Fun.flip Marshal.to_string [] |> Base64.encode_string in
-  let stop = Sys.time () in
-  Log.str @@ Format.sprintf "Time to serialize lemmas: %.2f" (stop -. start);
   let* resp, body = make_req "lemmas" datab in
   (* Handle the response. *)
   receive_action resp body

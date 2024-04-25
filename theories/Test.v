@@ -2,6 +2,12 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 
+Lemma test1 : forall n, 0 < n. 
+actema_force.
+
+Lemma test (n m : nat) (H1 : n > 0) (H2 : exists n, n = 3) (q : True \/ False) : forall b, b = true.
+actema_force.
+
 Lemma test n (h1 : n > 0) (h : exists n, n = 1) (q : True \/ false = true) : 0 + n = 0 + 0.
 Proof. actema_force.
 

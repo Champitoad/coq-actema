@@ -9,9 +9,11 @@
 (executables
  (names jsprover)
  (public_names -)
- (libraries coq-actema.prover coq-actema.api)
+ (libraries coq-actema.prover coq-actema.api js_of_ocaml)
  (package coq-actema)
- (modes js byte))
+ (modes js byte)
+ (preprocess
+  (pps js_of_ocaml-ppx lwt_ppx)))
 
 ; The next two rules seem to be quite fragile w.r.t dune's file naming conventions.
 

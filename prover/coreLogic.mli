@@ -15,6 +15,7 @@ type item =
   [ `C of form  (** Conclusion. *)
   | `H of Handle.t * Proof.hyp  (** Hypothesis. *)
   | `V of vname * bvar  (** Variable. *) ]
+[@@deriving show]
 
 (** This module defines paths to items. 
     A path can point to : 
@@ -24,14 +25,14 @@ type item =
     A path points to an item in a specific goal. *)
 module IPath : sig
   (** What kind of object does a path point to ? *)
-  type pkind = [ `Hyp | `Concl | `Var of [ `Head | `Body ] ]
+  type pkind = [ `Hyp | `Concl | `Var of [ `Head | `Body ] ] [@@deriving show]
 
   (** What object does a path point to ?
       Depending on the [kind], the [handle] is :
       - For [`Concl], it is always [0].
       - For [`Hyp], it is the index of the corresponding hypothesis in the goal.
       - For [`Var], it is the index of the corresponding variable binding in the goal's environment. *)
-  type ctxt = { kind : pkind; handle : int }
+  type ctxt = { kind : pkind; handle : int } [@@deriving show]
 
   (** A path to a subterm of an item. 
       As an example, consider the goal : 
@@ -49,6 +50,7 @@ module IPath : sig
     ; ctxt : ctxt  (** The object we point to. *)
     ; sub : int list  (** The position in the term we point to. *)
     }
+  [@@deriving show]
 
   (** The [string] argument contains the path (encoded as text). *)
   exception InvalidPath of string

@@ -40,10 +40,10 @@ open CoreLogic
 open Fo
 
 (** A link is simply a pair of a source path and destination path. *)
-type link = IPath.t * IPath.t
+type link = IPath.t * IPath.t [@@deriving show]
 
 (** A hyperlink relaxes the constraint that there is only one source and one destination. *)
-type hyperlink = IPath.t list * IPath.t list
+type hyperlink = IPath.t list * IPath.t list [@@deriving show]
 
 (** An action to perform after linking has been checked. 
     Not all links entail the same linkaction. *)
@@ -56,6 +56,7 @@ type linkaction =
     (** Rewrite expression [e1] into [e2] at several paths. *)
   | `Fold of vname * IPath.t list
   | `Unfold of vname * IPath.t list ]
+[@@deriving show]
 
 (** Lift a link into a hyperlink. *)
 val hyperlink_of_link : link -> hyperlink

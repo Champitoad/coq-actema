@@ -25,12 +25,14 @@ end
 module Handle : sig
   include Map.OrderedType
 
+  val pp : Format.formatter -> t -> unit
+  val show : t -> string
   val ofint : int -> t
   val fresh : unit -> t
   val eq : t -> t -> bool
   val toint : t -> int
 end = struct
-  type t = int
+  type t = int [@@deriving show]
 
   let compare = Utils.Uid.compare
   let fresh () : t = Utils.Uid.fresh ()
@@ -157,6 +159,8 @@ type 'a eqns = ('a * 'a) list
 (* -------------------------------------------------------------------- *)
 (* Environments *)
 
+type bvar = type_ * expr option [@@deriving show]
+
 type env =
   { env_prp : (name, arity) Map.t (* Predicates. *)
   ; env_fun : (name, sig_) Map.t (* Functions. *)
@@ -168,8 +172,6 @@ type env =
   ; env_evar : (name, type_ list) Map.t
   ; env_handles : (vname, Handle.t) BiMap.t
   }
-
-and bvar = type_ * expr option
 
 (* -------------------------------------------------------------------- *)
 module Env : sig

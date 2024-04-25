@@ -3,10 +3,10 @@ open CoreLogic
 open Link
 open Utils
 
-type asource = { kind : asource_kind; selection : selection }
-and asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ]
-and adnd = { source : IPath.t; destination : IPath.t option }
-and selection = IPath.t list
+type selection = IPath.t list [@@deriving show]
+type adnd = { source : IPath.t; destination : IPath.t option } [@@deriving show]
+type asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ] [@@deriving show]
+type asource = { kind : asource_kind; selection : selection } [@@deriving show]
 
 type action_type =
   [ `Intro of int
@@ -21,8 +21,9 @@ type action_type =
   | `Fold of vname
   | `Unfold of vname
   | `Hyperlink of hyperlink * linkaction list ]
+[@@deriving show]
 
-type aoutput_kind = [ `Click of IPath.t | `DnD of Link.link | `Ctxt ]
+type aoutput_kind = [ `Click of IPath.t | `DnD of Link.link | `Ctxt ] [@@deriving show]
 
 type aoutput =
   { description : string
@@ -32,6 +33,7 @@ type aoutput =
   ; goal_handle : Handle.t
   ; action : action_type
   }
+[@@deriving show]
 
 (** Create path to the root of every hypothesis (in a subgoal). *)
 let all_hyps_ipaths Proof.{ g_id; g_pregoal } =

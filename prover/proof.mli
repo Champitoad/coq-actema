@@ -13,7 +13,7 @@ exception SubgoalNotOpened of Handle.t
 type proof
 
 (** A single hypothesis. *)
-type hyp = { h_src : Handle.t option; h_gen : int; h_form : form }
+type hyp = { h_src : Handle.t option; h_gen : int; h_form : form } [@@deriving show]
 
 (** A module to handle collections of hypotheses. *)
 module Hyps : sig
@@ -33,7 +33,7 @@ module Hyps : sig
 end
 
 (** A single lemma. *)
-type lemma = { l_full : name; l_user : name; l_form : Fo.form }
+type lemma = { l_full : name; l_user : name; l_form : form } [@@deriving show]
 
 (** A module to handle a collection of lemmas together with an environment to type the lemmas.  *)
 module Lemmas : sig

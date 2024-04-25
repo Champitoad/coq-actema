@@ -11,8 +11,6 @@ include BatPervasives
 
 (* -------------------------------------------------------------------- *)
 
-(** You should use this instead of Format.printf or Printf.printf to log
-    messages from the prover (or else the messages might not get displayed). *)
 let js_log s = Js_of_ocaml.(Firebug.console##log (Js.string s))
 
 (** Time the execution of a function and print the measured duration. *)
@@ -24,7 +22,11 @@ let time (label : string) (f : unit -> 'a) : 'a =
   res
 
 (* -------------------------------------------------------------------- *)
+
+(** You should use this instead of Format.printf or Printf.printf to log
+    messages from the prover (or else the messages might not get displayed). *)
 let fst_map f (x, y) = (f x, y)
+
 let snd_map f (x, y) = (x, f y)
 let pair_map f (x, y) = (f x, f y)
 
