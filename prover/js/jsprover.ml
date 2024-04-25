@@ -838,7 +838,25 @@ let print_goal (Proof.{ g_env; g_hyps; g_goal } : Proof.pregoal) : unit =
     begin
       fun name name' -> js_log @@ Format.sprintf "SORT %s ---> %s\n" name name'
     end
-    g_env.env_sort_name
+    g_env.env_sort_name;
+  Map.iter
+    begin
+      fun name ty_ ->
+        js_log @@ Format.sprintf "TVAR %s ---> %s\n" name ([%derive.show: type_ option list] ty_)
+    end
+    g_env.env_tvar;
+  Map.iter
+    begin
+      fun name ty_ ->
+        js_log @@ Format.sprintf "EVAR %s ---> %s\n" name ([%derive.show: type_ list] ty_)
+    end
+    g_env.env_evar;
+  Map.iter
+    begin
+      fun name bvars ->
+        js_log @@ Format.sprintf "VAR %s ---> %s\n" name ([%derive.show: bvar list] bvars)
+    end
+    g_env.env_var
 
 (* -------------------------------------------------------------------- *)
 let export (name : string) : unit =

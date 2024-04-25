@@ -12,7 +12,10 @@ build:
 	cp -f _build/default/prover/js/jsprover.js frontend/public/prover.js
 
 test: build
+# Run the regular Ocaml tests.
 	dune runtest
+# Run the Ocaml tests that use Js_of_ocaml.
+	dune build @runtest-js
 
 clean:
 	dune clean

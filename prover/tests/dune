@@ -4,7 +4,14 @@
 ; (libraries coq-actema.prover))
 ;
 
-(test
+(executable
  (name actions_tests)
+ (public_name -)
  (modules actions_tests)
- (libraries coq-actema.prover alcotest-js))
+ (libraries coq-actema.prover alcotest)
+ (modes js))
+
+(rule
+ (alias runtest-js)
+ (action
+  (run node %{dep:actions_tests.bc.js})))

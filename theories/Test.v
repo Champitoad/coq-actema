@@ -2,7 +2,7 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 
-Lemma test1 : forall n, 0 < n. 
+Lemma test1 : true = false -> forall n, 0 < n. 
 actema_force.
 
 Lemma test (n m : nat) (H1 : n > 0) (H2 : exists n, n = 3) (q : True \/ False) : forall b, b = true.

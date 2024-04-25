@@ -13,7 +13,7 @@
  (package coq-actema)
  (modes js byte)
  (preprocess
-  (pps js_of_ocaml-ppx lwt_ppx)))
+  (pps js_of_ocaml-ppx lwt_ppx ppx_deriving.show)))
 
 ; The next two rules seem to be quite fragile w.r.t dune's file naming conventions.
 
