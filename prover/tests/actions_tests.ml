@@ -6,7 +6,7 @@ open CoreLogic
 let tnat = TVar ("nat", 0)
 let tbool = TVar ("bool", 0)
 
-let fake_env : env =
+let mk_test_env () : env =
   { env_prp = Map.of_seq @@ List.to_seq @@ [ ("lt", [ tnat; tnat ]); ("andb", [ tbool; tbool ]) ]
   ; env_fun =
       Map.of_seq @@ List.to_seq
@@ -25,11 +25,21 @@ let fake_env : env =
   ; env_handles = BiMap.empty
   }
 
-let fake_concl : Fo.form =
-  FBind (`Forall, "n", tnat, FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ]))
-
-let fake_pregoal : Proof.pregoal =
-  Proof.{ g_env = fake_env; g_hyps = Hyps.empty; g_goal = fake_concl }
+(** Make a dummy proof with a list of hypothesis formulas and a conclusion formula. 
+    These formulas can only used functions/symbols/sorts defined in [mk_test_env ()]. *)
+let mk_test_proof (hyps : form list) (concl : form) : Proof.proof =
+  let hyps =
+    hyps
+    |> List.map
+         begin
+           fun form ->
+             let handle = Handle.fresh () in
+             (handle, Proof.{ h_gen = 0; h_src = Some handle; h_form = form })
+         end
+    |> Proof.Hyps.of_list
+  in
+  let pregoal = Proof.{ g_env = mk_test_env (); g_hyps = hyps; g_goal = concl } in
+  Proof.ginit Hidmap.empty [ pregoal ]
 
 (**********************************************************************************************)
 (** Tests *)
@@ -43,13 +53,19 @@ let check_actions (actions : Actions.aoutput list) (pred : Actions.aoutput -> bo
       "Failed to find an action matching the given predicate. The list of actions was :\n%s\n"
       actions_str
 
+(* Test an [`AIntro] action on a goal of the form [forall n, ...]. *)
 let test_intro_forall proof =
-  let proof = Proof.ginit Hidmap.empty [ fake_pregoal ] in
+  (* Make the test proof. *)
+  let concl = FBind (`Forall, "n", tnat, FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ])) in
+  let proof = mk_test_proof [] concl in
+  (* Make the test action source. *)
   let gid = List.hd @@ Proof.opened proof in
   let concl_path = IPath.make ~ctxt:{ kind = `Concl; handle = 0 } (Handle.toint gid) in
-  (* Test an [`Intro] action. *)
   let source = Actions.{ kind = `Click concl_path; selection = [] } in
-  check_actions (Actions.actions proof source)
+  (* Generate the actions. *)
+  let actions = Actions.actions proof source in
+  (* Check the result. *)
+  check_actions actions
     begin
       fun output ->
         output.kind = `Click concl_path && output.goal_handle = gid && output.action = `Intro 0
