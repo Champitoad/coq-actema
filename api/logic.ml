@@ -122,7 +122,7 @@ type action =
   | APbp of ipath (* Proof-by-Pointing contextual action *)
   | ACase of ipath (* Case contextual action *)
   | ACut of form (* Click on +hyp button *)
-  | AGeneralize of uid (* Generalization of a hypothesis *)
+  | AGeneralize of uid (* Generalization of a hypothesis. This uses [generalize dependent]. *)
   | ALink of (ipath * ipath * itrace) (* DnD action for subformula linking *)
   | AInstantiate of (expr * ipath) (* DnD action for instantiating a quantifier *)
 [@@deriving show]

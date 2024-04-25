@@ -694,6 +694,9 @@ let execute_helper (a : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.AExact id ->
       let name = Names.Id.of_string id in
       Tactics.exact_check (EConstr.mkVar name)
+  | Logic.AGeneralize id ->
+      let name = Names.Id.of_string id in
+      Generalize.generalize_dep (EConstr.mkVar name)
   | Logic.ADef (x, _, e) ->
       let id = Names.Id.of_string x in
       let name = Names.Name.Name id in

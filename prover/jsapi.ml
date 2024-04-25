@@ -409,6 +409,19 @@ and js_subgoal parent (handle : Handle.t) =
       in
       !!doit ()
 
+    (** [this#getgeneralizeb (hyp_handle : int)] gets the hypothesis in the current goal, 
+        and returns the base64-encoded string of the corresponding AGeneralize action. *)
+    method getgeneralizeb hyp_handle =
+      let doit () =
+        (* Get the hypothesis name. *)
+        let hidmap = Proof.hidmap parent##.proof in
+        let hyp_name = Hidmap.State.run (Hidmap.find hyp_handle) hidmap in
+        (* Construct the AClear action and encode it. *)
+        Api.Logic.AGeneralize hyp_name |> Fun.flip Marshal.to_string [] |> Base64.encode_string
+        |> Js.string
+      in
+      !!doit ()
+
     (** [this#getcutb (form : string)] parses [form] in the current goal, and
         returns the base64-encoded string of the corresponding ACut action. *)
     method getcutb form =
@@ -494,10 +507,10 @@ and js_subgoal parent (handle : Handle.t) =
       in
       js_proof_engine (!!doit ())
 
-    (** [this#generalize (h : handle<js_hyps>)] generalizes the hypothesis [h] *)
-    method generalize hid =
+    (* [this#generalize (h : handle<js_hyps>)] generalizes the hypothesis [h] *)
+    (*method generalize hid =
       let doit () = Proof.Tactics.generalize parent##.proof ~goal_id:_self##.handle ~hyp_id:hid in
-      js_proof_engine (!!doit ())
+      js_proof_engine (!!doit ())*)
 
     method getmeta = Js.Opt.option (Proof.get_meta parent##.proof _self##.handle)
     method setmeta meta = Proof.set_meta parent##.proof _self##.handle (Js.Opt.to_option meta)

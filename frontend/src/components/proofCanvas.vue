@@ -526,18 +526,6 @@ export default {
             }
         },
 
-        generalize(predicate) {
-            let subgoal = predicate.parent;
-
-            try {
-                var proof = subgoal.generalize(predicate.handle);
-                this.resetSelection();
-                this.setProofState(proof);
-            } catch (e) {
-                this.showErrorMessage(e);
-            }
-        },
-
         // Send a [cut] action to the plugin.
         sendCutHypothesis(subgoal, text) {
             try {
@@ -590,6 +578,15 @@ export default {
         clearHyp(subgoal, hypHandle) {
             try {
                 let action = subgoal.getclearb(hypHandle);
+                this.sendAction(action);
+            } catch (e) {
+                this.showErrorMessage(e);
+            }
+        },
+
+        generalize(subgoal, hypHandle) {
+            try {
+                let action = subgoal.getgeneralizeb(hypHandle);
                 this.sendAction(action);
             } catch (e) {
                 this.showErrorMessage(e);

@@ -679,7 +679,7 @@ export default {
                 // If the predicate is not in work zone, we need to move it first
                 if (!this.isInWorkZone()) {
                     // add dragged class to our corresponding predicate-dropspace
-                    let handle = $(this.$el).attr("data-handle");
+                    //let handle = $(this.$el).attr("data-handle");
 
                     // TODO: refactor this procedure so we don't have to interrupt current DND
 
@@ -744,7 +744,7 @@ export default {
                 // If the predicate is not in work zone, we need to move it first
                 if (!this.isInWorkZone()) {
                     // add dragged class to our corresponding predicate-dropspace
-                    let handle = $(this.$el).attr("data-handle");
+                    //let handle = $(this.$el).attr("data-handle");
 
                     // TODO: refactor this procedure so we don't have to interrupt current DND
 
@@ -913,7 +913,7 @@ export default {
 
                     if (action.generalize) {
                         // it's a generalize, apply the generalize action
-                        this.generalize(action.predicate);
+                        this.$proofCanvas.generalize(action.subgoal, action.handle);
                     } else {
                         // if so, it's a "action drop"
                         this.drop(action.action);
@@ -1195,7 +1195,6 @@ export default {
         // Return the action that will be executed if we drop now
         // If we're not hover a valid div, return null
         getDropAction() {
-            var r = null;
             var actions = [];
             var thisRect = this.$el.getBoundingClientRect();
             _.each(this.dndActions, (action, divId) => {
@@ -1225,18 +1224,19 @@ export default {
                 let generalizeDiv = $(".pi-goal .generalize");
                 let generalizeRect = generalizeDiv[0].getBoundingClientRect();
                 if (this.overlap(thisRect, generalizeRect)) {
-                    if (!this.predicate) {
-                        throw "generalize can only be done on predicates !";
+                    if (this.predicate) {
+                        return { generalize: true, subgoal: this.predicate.parent, handle: this.predicate.handle };
                     }
-                    return { generalize: true, predicate: this.predicate };
+                    else if (this.expression) {
+                        return { generalize: true, subgoal: this.expression.parent, handle: this.expression.handle };
+                    }
+                    else {
+                        return null;
+                    }
                 } else {
                     return null;
                 }
             }
-        },
-
-        generalize(predicate) {
-            this.$proofCanvas.generalize(predicate);
         },
 
         showGeneralize() {
