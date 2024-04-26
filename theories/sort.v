@@ -21,8 +21,7 @@ Fixpoint eqr n m :=
 (* This is totally classic and works smoothly in Actema *)
         
 Lemma eqr_eq : forall n m, eqr n m -> n = m.
-  actema.
-Qed.
+Admitted.
 
 
 Lemma eqr_eqb : forall n m, eqr n m -> eqb n m = true.

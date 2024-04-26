@@ -1,4 +1,4 @@
-open Api
+open Utils
 open Fo
 open Fo.Translate
 open Proof
@@ -6,6 +6,7 @@ open Hidmap
 open State
 open CoreLogic
 open Interact
+open Api
 
 exception UnsupportedAction of Actions.action_type
 
@@ -50,7 +51,13 @@ let of_action (proof : Proof.proof) ((hd, a) : Handle.t * Actions.action_type) :
       return (if exact then Logic.AExact uid else Logic.AElim (uid, i))
   | `Lemma name -> return (Logic.ALemma name)
   | `Ind subhd ->
+      js_log @@ Format.sprintf "Export.of_action `Ind %d\n" (Handle.toint subhd);
+      let* state = State.get in
+      HandleMap.iter
+        (fun handle name -> js_log @@ Format.sprintf "%d --> %s\n" (Handle.toint handle) name)
+        state;
       let* uid = find subhd in
+      js_log @@ Format.sprintf "Found: %s\n" uid;
       return (Logic.AInd uid)
   | `Simpl tgt ->
       let* tgt = of_ipath tgt in

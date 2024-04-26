@@ -1,8 +1,4 @@
-;(test
-; (name link_tests)
-; (modules link_tests)
-; (libraries coq-actema.prover))
-;
+; Tests for prover/actions.ml
 
 (executable
  (name actions_tests)
@@ -15,3 +11,17 @@
  (alias runtest-js)
  (action
   (run node %{dep:actions_tests.bc.js})))
+
+; Tests for prover/link.ml
+
+(executable
+ (name link_tests)
+ (public_name -)
+ (modules link_tests)
+ (libraries coq-actema.prover alcotest)
+ (modes js))
+
+(rule
+ (alias runtest-js)
+ (action
+  (run node %{dep:link_tests.bc.js})))

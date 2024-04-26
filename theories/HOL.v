@@ -4292,7 +4292,7 @@ Ltac myinduction p :=
   | _ => pinduction ltac:(cdr p)
   end;
   simplify_goal;
-try discriminate.
+  try discriminate.
 
 Ltac myinduction_hyp h p :=
   let g := type of h in

@@ -1,3 +1,5 @@
+(** Tests for prover/actions.ml. *)
+
 open Prover
 open Fo
 open Utils
@@ -58,9 +60,9 @@ let check_actions (actions : Actions.aoutput list) (pred : Actions.aoutput -> bo
       (List.length actions) actions_str
 
 (**********************************************************************************************)
-(** [`AIntro] tests. *)
+(** [`Intro] tests. *)
 
-(** Make a test to check that an action with action type [`AIntro side] 
+(** Make a test to check that an action with action type [`Intro side] 
     is generated on a goal that has the conclusion [concl]. *)
 let mk_intro_test ?(sub = []) concl side =
   (* Make the test proof. *)
@@ -81,32 +83,32 @@ let mk_intro_test ?(sub = []) concl side =
         && output.highlights = [ ipath ] && output.description != ""
     end
 
-(** Test [`AIntro] on [True]. *)
+(** Test [`Intro] on [True]. *)
 let test_intro_true () =
   let concl = FTrue in
   mk_intro_test concl 0
 
-(** Test [`AIntro] on [not ...]. *)
+(** Test [`Intro] on [not ...]. *)
 let test_intro_not () =
   let concl = FConn (`Not, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]) ]) in
   mk_intro_test concl 0
 
-(** Test [`AIntro] on [... /\ ...]. *)
+(** Test [`Intro] on [... /\ ...]. *)
 let test_intro_and () =
   let concl = FConn (`And, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FTrue ]) in
   mk_intro_test concl 0
 
-(** Test [`AIntro] on [... <-> ...]. *)
+(** Test [`Intro] on [... <-> ...]. *)
 let test_intro_equiv () =
   let concl = FConn (`Equiv, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FTrue ]) in
   mk_intro_test concl 0
 
-(** Test [`AIntro] on [forall n, ...]. *)
+(** Test [`Intro] on [forall n, ...]. *)
 let test_intro_forall () =
   let concl = FBind (`Forall, "n", tnat, FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ])) in
   mk_intro_test concl 0
 
-(** Test [`AIntro] on [... -> ...]. *)
+(** Test [`Intro] on [... -> ...]. *)
 let test_intro_impl () =
   let concl =
     FConn
@@ -117,7 +119,7 @@ let test_intro_impl () =
   in
   mk_intro_test concl 0
 
-(** Test [`AIntro] on [... \/ ...]. *)
+(** Test [`Intro] on [... \/ ...]. *)
 let test_intro_or () =
   let concl =
     FConn
@@ -128,7 +130,7 @@ let test_intro_or () =
   mk_intro_test ~sub:[ 0 ] concl 0;
   mk_intro_test ~sub:[ 1 ] concl 1
 
-(** Test [`AIntro] on [... = ...]. *)
+(** Test [`Intro] on [... = ...]. *)
 let test_intro_eq () =
   let one = EFun ("S", [ EFun ("Z", []) ]) in
   let two = EFun ("S", [ one ]) in
@@ -136,9 +138,9 @@ let test_intro_eq () =
   mk_intro_test concl 0
 
 (**********************************************************************************************)
-(** [`AElim] tests. *)
+(** [`Elim] tests. *)
 
-(** Make a test to check that an [`AElim] action with action type [action_type] 
+(** Make a test to check that an [`Elim] action with action type [`Elim (_, side)] 
     is generated on a goal that has the single hypothesis [hyp]. *)
 let mk_elim_test ?(sub = []) hyp side =
   (* Make the test proof. *)
@@ -162,37 +164,37 @@ let mk_elim_test ?(sub = []) hyp side =
         && output.highlights = [ ipath ] && output.description != ""
     end
 
-(** Test [`AElim] on [True]. *)
+(** Test [`Elim] on [True]. *)
 let test_elim_true () =
   let hyp = FTrue in
   mk_elim_test hyp 0
 
-(** Test [`AElim] on [False]. *)
+(** Test [`Elim] on [False]. *)
 let test_elim_false () =
   let hyp = FFalse in
   mk_elim_test hyp 0
 
-(** Test [`AElim] on [not ...]. *)
+(** Test [`Elim] on [not ...]. *)
 let test_elim_not () =
   let hyp = FConn (`Not, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]) ]) in
   mk_elim_test hyp 0
 
-(** Test [`AElim] on [... /\ ...]. *)
+(** Test [`Elim] on [... /\ ...]. *)
 let test_elim_and () =
   let hyp = FConn (`And, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FTrue ]) in
   mk_elim_test hyp 0
 
-(** Test [`AElim] on [... <-> ...]. *)
+(** Test [`Elim] on [... <-> ...]. *)
 let test_elim_equiv () =
   let hyp = FConn (`Equiv, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FTrue ]) in
   mk_elim_test hyp 0
 
-(** Test [`AElim] on [exists n, ...]. *)
+(** Test [`Elim] on [exists n, ...]. *)
 let test_elim_exist () =
   let hyp = FBind (`Exist, "n", tnat, FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ])) in
   mk_elim_test hyp 0
 
-(** Test [`AElim] on [... -> ...]. *)
+(** Test [`Elim] on [... -> ...]. *)
 let test_elim_impl () =
   let hyp =
     FConn
@@ -203,7 +205,7 @@ let test_elim_impl () =
   in
   mk_elim_test hyp 0
 
-(** Test [`AElim] on [... \/ ...]. *)
+(** Test [`Elim] on [... \/ ...]. *)
 let test_elim_or () =
   let hyp =
     FConn
@@ -213,7 +215,7 @@ let test_elim_or () =
   in
   mk_elim_test hyp 0
 
-(** Test [`AElim] on [... = ...]. *)
+(** Test [`Elim] on [... = ...]. *)
 let test_elim_eq () =
   let one = EFun ("S", [ EFun ("Z", []) ]) in
   let two = EFun ("S", [ one ]) in
@@ -221,10 +223,50 @@ let test_elim_eq () =
   mk_elim_test hyp ~sub:[ 0 ] 0;
   mk_elim_test hyp ~sub:[ 1 ] 1
 
+(**********************************************************************************************)
+(** [`Indt] tests. *)
+
+(** Make a test to check that an [`Indt] action with action type [`Indt { ... sub}] 
+    is generated on a goal that has the conclusion [concl]. *)
+let mk_indt_test concl sub =
+  (* Make the test proof. *)
+  let proof = mk_test_proof [] concl in
+  (* Make the test action source. *)
+  let gid = List.hd @@ Proof.opened proof in
+  let ipath = IPath.make ~ctxt:{ kind = `Concl; handle = 0 } ~sub (Handle.toint gid) in
+  let source = Actions.{ kind = `Ctxt; selection = [ ipath ] } in
+  (* Generate the actions. *)
+  let actions = Actions.actions proof source in
+  (* Check the result. *)
+  check_actions actions
+    begin
+      fun output ->
+        output.kind = `Ctxt && output.goal_handle = gid
+        && output.action = `Indt ipath
+        && output.highlights = [ ipath ] && output.description != ""
+    end
+
+let test_indt_nat () =
+  let concl = FBind (`Forall, "n", tnat, FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ])) in
+  mk_indt_test concl []
+
+let test_indt_nat_2 () =
+  let bind name body = FBind (`Forall, name, tnat, body) in
+  let concl =
+    bind "s" @@ bind "n" @@ bind "r" @@ bind "q" @@ FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ])
+  in
+  mk_indt_test concl [];
+  mk_indt_test concl [ 0 ];
+  mk_indt_test concl [ 0; 0 ];
+  mk_indt_test concl [ 0; 0; 0 ]
+
+(** Running the tests. *)
+(**********************************************************************************************)
+
 let () =
   let open Alcotest in
   run "Prover.Actions"
-    [ ( "intro"
+    [ ( "introduction"
       , [ test_case "intro-true" `Quick test_intro_true
         ; test_case "intro-not" `Quick test_intro_not
         ; test_case "intro-and" `Quick test_intro_and
@@ -234,7 +276,7 @@ let () =
         ; test_case "intro-or" `Quick test_intro_or
         ; test_case "intro-eq" `Quick test_intro_eq
         ] )
-    ; ( "elim"
+    ; ( "elimination"
       , [ test_case "elim-true" `Quick test_elim_true
         ; test_case "elim-not" `Quick test_elim_not
         ; test_case "elim-and" `Quick test_elim_and
@@ -244,27 +286,7 @@ let () =
         ; test_case "elim-or" `Quick test_elim_or
         ; test_case "elim-eq" `Quick test_elim_eq
         ] )
+    ; ( "induction"
+      , [ test_case "indt-nat" `Quick test_indt_nat; test_case "indt-nat-2" `Quick test_indt_nat_2 ]
+      )
     ]
-
-(*open Prover
-
-  let fake_env =
-    Proof.
-      { env_prp = Map.of_list @@ [ "" ]
-      ; env_fun : (name, sig_) Map.t (* Functions. *)
-      ; env_prp_name : (name, name) Map.t
-      ; env_fun_name : (name, name) Map.t
-      ; env_sort_name : (name, name) Map.t
-      ; env_tvar : (name, type_ option list) Map.t
-      ; env_var : (name, bvar list) Map.t
-      ; env_evar : (name, type_ list) Map.t
-      ; env_handles : (vname, Handle.t) BiMap.t
-      }
-
-  let test_lowercase () = Alcotest.(check string) "same string" "hello!" (To_test.lowercase "hELLO!")
-
-  (* Run it *)
-  let () =
-    let open Alcotest in
-    run "Prover.Actions" [ ("string-concat", [ test_case "String mashing" `Quick test_str_concat ]) ]
-*)

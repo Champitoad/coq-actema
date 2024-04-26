@@ -704,23 +704,38 @@ let execute_helper (a : Logic.action) (coq_goal : Goal.t) : unit tactic =
       let hyp = EConstr.mkVar @@ Names.Id.of_string hyp_name in
       Tactics.pose_proof new_name hyp
   | Logic.AClear hyp_name -> Tactics.clear [ Names.Id.of_string hyp_name ]
-  | Logic.ASimpl tgt | Logic.ARed tgt | Logic.AIndt tgt | Logic.ACase tgt | Logic.APbp tgt ->
+  | Logic.AInd var_name ->
+      let var = EConstr.mkVar @@ Names.Id.of_string var_name in
+      Induction.induction false (Some true) var None None
+  | Logic.AIndt tgt ->
+      let tac_name, args =
+        let path = tgt.sub |> Trm.Datatypes.natlist (Goal.env coq_goal) in
+        match tgt.ctxt.kind with
+        | Logic.Concl -> ("myinduction", [ path ])
+        | _ ->
+            (* TODO: the COQ tactic [myinduction_hyp] is broken. *)
+            raise
+            @@ UnsupportedAction
+                 (a, "Logic.AIndt only works in the goal (use Logic.AInd for a local variable). ")
+      in
+      calltac (kname tac_name) args
+  | Logic.ASimpl tgt | Logic.ARed tgt | Logic.ACase tgt | Logic.APbp tgt ->
+      (* TODO: the COQ tactic [mycase_hyp] is broken. *)
       let tac_name =
         match a with
         | Logic.ASimpl _ -> "simpl_path"
         | Logic.ARed _ -> "unfold_path"
-        | Logic.AIndt _ -> "myinduction"
         | Logic.APbp _ -> "pbp"
         | Logic.ACase _ -> "mycase"
         | _ -> assert false
       in
       let tac_name, args =
-        let p = tgt.sub |> Trm.Datatypes.natlist (Goal.env coq_goal) in
+        let path = tgt.sub |> Trm.Datatypes.natlist (Goal.env coq_goal) in
         match tgt.ctxt.kind with
         | Logic.Hyp ->
             let id = Names.Id.of_string tgt.ctxt.handle in
-            (tac_name ^ "_hyp", [ EConstr.mkVar id; p ])
-        | Logic.Concl -> (tac_name, [ p ])
+            (tac_name ^ "_hyp", [ EConstr.mkVar id; path ])
+        | Logic.Concl -> (tac_name, [ path ])
         | _ -> raise (InvalidPath tgt)
       in
       calltac (kname tac_name) args

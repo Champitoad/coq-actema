@@ -2,8 +2,8 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 
-Lemma test1 n (h : n + 3 = 3 + n) : True. 
-actema_force.
+Lemma test1 n : forall p, n + p = 0 + n.
+actema.
 
 Lemma test (n m : nat) (H1 : n > 0) (H2 : exists n, n = 3) (q : True \/ False) : forall b, b = true.
 actema_force.

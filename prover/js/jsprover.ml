@@ -907,7 +907,7 @@ let export (name : string) : unit =
          let gls, hms = goals |> !!(List.map Proof.Translate.import_goal) |> List.split in
          let hm = List.fold_left Hidmap.union Hidmap.empty hms in
          (* Log the goals. *)
-         List.iter print_goal gls;
+         (*List.iter print_goal gls;*)
          (* Create a new proof engine. *)
          js_proof_engine (!!(Proof.ginit hm) gls)
     end)

@@ -154,5 +154,5 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
       ^ " " ^ Names.Id.to_string id*)
 
 let test_tac () : unit tactic =
-  Log.str @@ Storage.proofs_folder ();
-  Tacticals.tclIDTAC
+  let var = EConstr.mkVar @@ Names.Id.of_string "n" in
+  Induction.induction false (Some true) var None None

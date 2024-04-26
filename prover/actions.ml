@@ -280,7 +280,7 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
             ; highlights = [ hg ]
             ; kind = `Click hg
             ; goal_handle = hd
-            ; action = `Ind hd
+            ; action = `Ind rp
             }
           ]
       | `V (x, (_, Some _)) ->
