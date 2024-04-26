@@ -2,7 +2,7 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 
-Lemma test1 n : forall p, n + p = 0 + n.
+Lemma test1 : forall n, forall p, n + p = p + n.
 actema.
 
 Lemma test (n m : nat) (H1 : n > 0) (H2 : exists n, n = 3) (q : True \/ False) : forall b, b = true.

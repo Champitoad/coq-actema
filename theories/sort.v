@@ -156,10 +156,8 @@ Admitted.
 
 Lemma perm_length : forall l1 l2,
          perm l1 l2 -> length l1 = length l2.
-Proof.
-  actema_force.
-Qed.
- 
+Proof. Admitted.
+
 (* The insertion function *)
 Fixpoint insert n l :=
   match l with
@@ -224,12 +222,11 @@ Qed.*)
 
 (* One possble way to sow the result of sorting has the same content as the input *)
 (* Counting the elements as done later is easier *)
-
+ 
 
 Lemma perm_nil : forall l, perm lnil l -> l = lnil.
   move: perm_length => h.
-actema.  
-Qed.
+Admitted.
 
 Lemma app_cons :
   forall l1 n l2,

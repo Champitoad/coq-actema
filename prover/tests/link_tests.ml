@@ -9,24 +9,26 @@ open CoreLogic
 (** Making mock proofs. *)
 
 let tnat = TVar ("nat", 0)
-let tbool = TVar ("bool", 0)
+
+(** A list of naturals. *)
+let tlist = TVar ("list", 0)
 
 let mk_test_env () : env =
-  { env_prp = Map.of_seq @@ List.to_seq @@ [ ("lt", [ tnat; tnat ]); ("andb", [ tbool; tbool ]) ]
+  { env_prp = Map.of_seq @@ List.to_seq @@ [ ("perm", [ tlist; tlist ]) ]
   ; env_fun =
       Map.of_seq @@ List.to_seq
       @@ [ ("Z", ([], tnat))
          ; ("S", ([ tnat ], tnat))
-         ; ("true", ([], tbool))
-         ; ("false", ([], tbool))
-         ; ("add", ([ tnat; tnat ], tbool))
+         ; ("add", ([ tnat; tnat ], tnat))
+         ; ("nil", ([], tlist))
+         ; ("cons", ([ tnat; tlist ], tlist))
          ]
-  ; env_prp_name = Map.of_seq @@ List.to_seq @@ [ ("lt", "lt"); ("andb", "andb") ]
+  ; env_prp_name = Map.of_seq @@ List.to_seq @@ [ ("perm", "perm") ]
   ; env_fun_name =
       Map.of_seq @@ List.to_seq
-      @@ [ ("Z", "Z"); ("S", "S"); ("true", "true"); ("false", "false"); ("add", "add") ]
-  ; env_sort_name = Map.of_seq @@ List.to_seq @@ [ ("nat", "nat"); ("bool", "bool") ]
-  ; env_tvar = Map.of_seq @@ List.to_seq @@ [ ("nat", [ None ]); ("bool", [ None ]) ]
+      @@ [ ("Z", "Z"); ("S", "S"); ("add", "add"); ("nil", "nil"); ("cons", "cons") ]
+  ; env_sort_name = Map.of_seq @@ List.to_seq @@ [ ("nat", "nat"); ("list", "list") ]
+  ; env_tvar = Map.of_seq @@ List.to_seq @@ [ ("nat", [ None ]); ("list", [ None ]) ]
   ; env_var = Map.empty
   ; env_evar = Map.empty
   ; env_handles = BiMap.empty
@@ -64,9 +66,6 @@ let check_linkactions (linkactions : Link.linkaction list) (pred : Link.linkacti
        %s\n"
       (List.length linkactions) linkactions_str
 
-(**********************************************************************************************)
-(** Actual tests. *)
-
 let rec flatten_linkaction (la : Link.linkaction) : Link.linkaction list =
   match la with
   | `Both (left, right) -> flatten_linkaction left @ flatten_linkaction right
@@ -97,8 +96,35 @@ let link_forward hyp1 sub1 hyp2 sub2 hlpred : Link.linkaction list =
   in
   List.concat_map flatten_linkaction actions
 
+let link_backward hyp hyp_sub concl concl_sub hlpred : Link.linkaction list =
+  (* Make a test proof. *)
+  let proof = mk_test_proof [ hyp ] concl in
+  let goal_id = List.hd @@ Proof.opened proof in
+  let hyps = (Proof.byid proof goal_id).g_hyps in
+  let hyp_id = List.hd @@ Proof.Hyps.ids hyps in
+  (* Compute the linkactions. *)
+  let actions =
+    hlpred proof
+      ( [ IPath.make
+            ~ctxt:{ kind = `Hyp; handle = Handle.toint hyp_id }
+            ~sub:hyp_sub (Handle.toint goal_id)
+        ]
+      , [ IPath.make ~ctxt:{ kind = `Concl; handle = 0 } ~sub:concl_sub (Handle.toint goal_id) ] )
+  in
+  List.concat_map flatten_linkaction actions
+
+let var name = EVar (name, 0)
+let forall name type_ body = FBind (`Forall, name, type_, body)
+let exist name type_ body = FBind (`Exist, name, type_, body)
+
+(**********************************************************************************************)
+(** Actual tests. *)
+
 let test_sfl_1 () =
-  let hlpred = Link.Pred.lift Link.Pred.wf_subform in
+  let hlpred =
+    let open Link.Pred in
+    mult [ lift wf_subform; lift intuitionistic ]
+  in
   let hyp1 = FConn (`Imp, [ FTrue; FFalse ]) in
   let hyp2 = FTrue in
   let actions = link_forward hyp1 [ 0 ] hyp2 [] hlpred in
@@ -107,6 +133,78 @@ let test_sfl_1 () =
       fun link_act -> match link_act with `Subform _ -> true | _ -> false
     end
 
+let test_sfl_2 () =
+  let hlpred =
+    let open Link.Pred in
+    mult [ lift wf_subform; lift intuitionistic ]
+  in
+  let hyp = forall "l" tlist @@ FPred ("perm", [ EVar ("l", 0); EVar ("l", 0) ]) in
+  let concl =
+    forall "x" tnat @@ forall "l" tlist
+    @@ FPred ("perm", [ EFun ("cons", [ var "x"; var "l" ]); EFun ("cons", [ var "x"; var "l" ]) ])
+  in
+  let actions = link_backward hyp [ 0 ] concl [ 0; 0 ] hlpred in
+  check_linkactions actions
+    begin
+      fun link_act -> match link_act with `Subform _ -> true | _ -> false
+    end
+
+let test_sfl_3 () =
+  let hlpred =
+    let open Link.Pred in
+    mult [ lift wf_subform; lift intuitionistic ]
+  in
+  let hyp =
+    forall "l1" tlist @@ forall "l2" tlist @@ forall "l3" tlist
+    @@ FConn
+         ( `Imp
+         , [ FPred ("perm", [ var "l1"; var "l2" ])
+           ; FConn
+               ( `Imp
+               , [ FPred ("perm", [ var "l2"; var "l3" ]); FPred ("perm", [ var "l1"; var "l3" ]) ]
+               )
+           ] )
+  in
+  let concl =
+    forall "x" tnat @@ forall "l1" tlist @@ forall "l2" tlist
+    @@ FPred ("perm", [ EFun ("cons", [ var "x"; var "l1" ]); EFun ("cons", [ var "x"; var "l2" ]) ])
+  in
+  let actions = link_backward hyp [ 0; 0; 0; 1; 1 ] concl [ 0; 0; 0 ] hlpred in
+  check_linkactions actions
+    begin
+      fun link_act -> match link_act with `Subform _ -> true | _ -> false
+    end
+
+let test_sfl_4 () =
+  let hlpred =
+    let open Link.Pred in
+    mult [ lift wf_subform; lift intuitionistic ]
+  in
+  let hyp =
+    forall "x" tnat @@ forall "l1" tlist @@ forall "l2" tlist
+    @@ FPred ("perm", [ EFun ("cons", [ var "x"; var "l1" ]); EFun ("cons", [ var "x"; var "l2" ]) ])
+  in
+  let concl =
+    forall "x" tnat @@ forall "l1" tlist @@ forall "l2" tlist @@ exist "l0" tlist
+    @@ FConn
+         ( `And
+         , [ FPred ("perm", [ EFun ("cons", [ var "x"; var "l1" ]); var "l0" ])
+           ; FPred ("perm", [ var "l0"; EFun ("cons", [ var "x"; var "l2" ]) ])
+           ] )
+  in
+  let actions = link_backward hyp [ 0; 0; 0 ] concl [ 0; 0; 0; 0; 0 ] hlpred in
+  check_linkactions actions
+    begin
+      fun link_act -> match link_act with `Subform _ -> true | _ -> false
+    end
+
 let () =
   let open Alcotest in
-  run "Prover.Link" [ ("subformula-linking", [ test_case "sfl-1" `Quick test_sfl_1 ]) ]
+  run "Prover.Link"
+    [ ( "subformula-linking"
+      , [ test_case "sfl-1" `Quick test_sfl_1
+        ; test_case "sfl-2" `Quick test_sfl_2
+        ; test_case "sfl-3" `Quick test_sfl_3
+        ; test_case "sfl-4" `Quick test_sfl_4
+        ] )
+    ]
