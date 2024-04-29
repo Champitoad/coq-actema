@@ -1,40 +1,43 @@
 <style scoped>
-.search-lemma-bar {
-    flex: 3 3 auto;
+.list {
+    margin-left: 25px;
 }
 
-.search-button {
+.search-lemma-input {
     display: inline-block;
-    flex: 0 0 auto;
-    height: fit-content;
-    margin-left: 15px;
 }
 
-.row {
-    display: flex;
-    align-items: center;
-    margin-left: 15px;
-    margin-top: 15px;
-    margin-right: 0px;
+.btn-search {
+    display: inline-block;
+    margin-left: auto;
+    height: fit-content;
+}
+
+.lemma {
+    font-size: 15;
+}
+
+.lemma:hover {
+    background-color: #d4d4d4;
 }
 </style>
 
 <template>
-    <div class="row">
-        <vue-simple-suggest class="search-lemma-bar" placeholder="Search lemma..." v-model="lemmaSearchText"
-            display-attribute="name" value-attribute="handle" @select="addLemma" :list="lemmaList"
-            :filter-by-query="false" :min-length="0" :max-suggestions="15" :preventHide="true" :key="lemmaKey"
-            ref="lemmaSearchBar">
-            <div slot="suggestion-item" slot-scope="{ suggestion }">
-                <div>{{ suggestion.handle }} : {{ suggestion.name }} : {{ suggestion.form }}</div>
-            </div>
-        </vue-simple-suggest>
-
-        <button id="lemmas" class="btn btn-info search-button" @click="searchLemmas"
-            title="Search for lemmas matching the current name and selection (ctrl+f)">
-            Search
-        </button>
-    </div>
+    <ul class="list-group list">
+        <li class="row my-2">
+            <input class="search-lemma-input" type="text" placeholder="Search lemma..." maxlength="50"
+                v-model="lemmaSearchText" />
+            <button id="lemmas" class="btn btn-info btn-small btn-search ml-2" @click="searchLemmas"
+                title="Search for lemmas matching the current name and selection (ctrl+f)">
+                Search
+            </button>
+        </li>
+        <template v-for="lemma in lemmaList">
+            <li class="row p-1 my-1 lemma" @onclick="addLemma(lemma)">
+                <b>{{ lemma.name }}</b>{{ lemma.form }}
+            </li>
+        </template>
+    </ul>
 </template>
 
 <script>
@@ -66,11 +69,11 @@ export default {
     },
     methods: {
         // Called when the "Search" button is clicked.
-        searchLemmas: function () {
+        searchLemmas: async function () {
             try {
                 console.log("Requesting lemmas\n");
 
-                let pattern = this.getLemmaSearchText();
+                let pattern = this.lemmaSearchText;
                 let selection = this.$parent.getActiveSelection();
                 let proofState = this.$parent.getProofState();
                 let msg = proofState.lemmareqb(selection, pattern);
@@ -102,9 +105,9 @@ export default {
             // For some reason using "setTimeout" is necessary here.
             // For somewhat of an explanation read :
             // https://bobbyhadz.com/blog/focus-not-working-in-javascript
-            setTimeout(() => {
-                this.$refs.lemmaSearchBar.input.focus();
-            }, 0);
+            //setTimeout(() => {
+            //    this.$refs.lemmaSearchBar.input.focus();
+            //}, 0);
         },
 
         // Callback invoked when we click on an entry in the lemma dropdown (list).
