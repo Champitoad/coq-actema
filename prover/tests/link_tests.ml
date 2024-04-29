@@ -29,7 +29,7 @@ let mk_test_env () : env =
       @@ [ ("Z", "Z"); ("S", "S"); ("add", "add"); ("nil", "nil"); ("cons", "cons") ]
   ; env_sort_name = Map.of_seq @@ List.to_seq @@ [ ("nat", "nat"); ("list", "list") ]
   ; env_tvar = Map.of_seq @@ List.to_seq @@ [ ("nat", [ None ]); ("list", [ None ]) ]
-  ; env_var = Map.empty
+  ; env_var = Map.of_seq @@ List.to_seq @@ [ ("local_x", [ (tnat, None) ]) ]
   ; env_evar = Map.empty
   ; env_handles = BiMap.empty
   }
@@ -65,6 +65,16 @@ let check_linkactions (linkactions : Link.linkaction list) (pred : Link.linkacti
        generated :\n\
        %s\n"
       (List.length linkactions) linkactions_str
+
+let check_empty (linkactions : Link.linkaction list) : unit =
+  if linkactions = []
+  then ()
+  else
+    let linkactions_str =
+      List.to_string ~sep:"\n\n" ~left:"" ~right:"" Link.show_linkaction linkactions
+    in
+    Alcotest.failf "There were %d unwanted linkactions generated :\n%s\n" (List.length linkactions)
+      linkactions_str
 
 let rec flatten_linkaction (la : Link.linkaction) : Link.linkaction list =
   match la with
@@ -116,21 +126,147 @@ let link_backward hyp hyp_sub concl concl_sub hlpred : Link.linkaction list =
 let var name = EVar (name, 0)
 let forall name type_ body = FBind (`Forall, name, type_, body)
 let exist name type_ body = FBind (`Exist, name, type_, body)
+let eq a b = FPred ("_EQ", [ a; b ])
 
 (**********************************************************************************************)
-(** Actual tests. *)
+(** Testing [Pred.opposite_pol_formulas]. *)
 
-let test_sfl_1 () =
+let test_pol_0 () =
+  let hlpred = Link.Pred.(lift opposite_pol_formulas) in
+  let hyp = FConn (`Imp, [ FConn (`Not, [ FTrue ]); FFalse ]) in
+  let concl =
+    forall "n" tnat @@ FConn (`And, [ eq (var "local_x") (var "n"); exist "l" tlist FTrue ])
+  in
+  let actions = link_backward hyp [ 0; 0 ] concl [ 0; 1 ] hlpred in
+  check_linkactions actions @@ fun link_act -> match link_act with `Nothing -> true | _ -> false
+
+let test_pol_1 () =
+  let hlpred = Link.Pred.(lift opposite_pol_formulas) in
+  let hyp = FConn (`Imp, [ FConn (`Not, [ FTrue ]); FFalse ]) in
+  let concl =
+    forall "n" tnat @@ FConn (`And, [ eq (var "local_x") (var "n"); exist "l" tlist FTrue ])
+  in
+  let actions = link_backward hyp [ 0 ] concl [ 0; 1 ] hlpred in
+  (* Both formulas have positive polarity. *)
+  check_empty actions
+
+let test_pol_2 () =
+  let hlpred = Link.Pred.(lift opposite_pol_formulas) in
+  let hyp = FConn (`Imp, [ FConn (`Not, [ FTrue ]); FFalse ]) in
+  let concl =
+    forall "n" tnat @@ FConn (`And, [ eq (var "local_x") (var "n"); exist "l" tlist FTrue ])
+  in
+  let actions = link_backward hyp [ 0; 0 ] concl [ 0; 0; 1 ] hlpred in
+  (* The second path points to an expression (not a formula). *)
+  check_empty actions
+
+(**********************************************************************************************)
+(** Testing [Pred.neg_eq_operand]. *)
+
+let test_eq_0 () =
+  let hlpred = Link.Pred.(lift neg_eq_operand) in
+  let hyp =
+    FConn
+      ( `Imp
+      , [ FConn (`Not, [ forall "x" tnat @@ exist "y" tnat @@ eq (var "x") (var "y") ]); FFalse ] )
+  in
+  let concl =
+    forall "n" tnat
+    @@ FConn
+         ( `And
+         , [ FConn (`Imp, [ eq (var "local_x") (EFun ("S", [ var "n" ])); FFalse ])
+           ; exist "l" tlist FTrue
+           ] )
+  in
+  let actions = link_backward hyp [ 0; 0; 0; 0; 0 ] concl [ 0 ] hlpred in
+  check_linkactions actions @@ fun action -> match action with `Nothing -> true | _ -> false
+
+let test_eq_1 () =
+  let hlpred = Link.Pred.(lift neg_eq_operand) in
+  let hyp =
+    FConn
+      ( `Imp
+      , [ FConn (`Not, [ forall "x" tnat @@ exist "y" tnat @@ eq (var "x") (var "y") ]); FFalse ] )
+  in
+  let concl =
+    forall "n" tnat
+    @@ FConn
+         ( `And
+         , [ FConn (`Imp, [ eq (var "local_x") (EFun ("S", [ var "n" ])); FFalse ])
+           ; exist "l" tlist FTrue
+           ] )
+  in
+  let actions = link_backward hyp [ 1 ] concl [ 0; 0; 0; 1 ] hlpred in
+  check_linkactions actions @@ fun action -> match action with `Nothing -> true | _ -> false
+
+let test_eq_2 () =
+  let hlpred = Link.Pred.(lift neg_eq_operand) in
+  let hyp =
+    FConn
+      ( `Imp
+      , [ FConn (`Not, [ forall "x" tnat @@ exist "y" tnat @@ eq (var "x") (var "y") ]); FFalse ] )
+  in
+  let concl =
+    forall "n" tnat
+    @@ FConn
+         ( `And
+         , [ FConn (`Imp, [ eq (var "local_x") (EFun ("S", [ var "n" ])); FFalse ])
+           ; exist "l" tlist FTrue
+           ] )
+  in
+  let actions = link_backward hyp [ 1 ] concl [ 0; 0; 0; 1; 0 ] hlpred in
+  (* The second path points too far under an equality. *)
+  check_empty actions
+
+let test_eq_3 () =
+  let hlpred = Link.Pred.(lift neg_eq_operand) in
+  let hyp =
+    FConn
+      ( `Imp
+      , [ FConn (`Not, [ forall "x" tnat @@ exist "y" tnat @@ eq (var "x") (var "y") ]); FFalse ] )
+  in
+  let concl =
+    forall "n" tnat
+    @@ FConn
+         ( `And
+         , [ FConn (`Imp, [ eq (var "local_x") (EFun ("S", [ var "n" ])); FFalse ])
+           ; exist "l" tlist FTrue
+           ] )
+  in
+  let actions = link_backward hyp [ 1 ] concl [ 0; 0; 0 ] hlpred in
+  (* The second path points to an equality instead of an equality argument. *)
+  check_empty actions
+
+let test_eq_4 () =
+  let hlpred = Link.Pred.(lift neg_eq_operand) in
+  let hyp1 =
+    FConn
+      ( `Imp
+      , [ FConn (`Not, [ forall "x" tnat @@ exist "y" tnat @@ eq (var "x") (var "y") ]); FFalse ] )
+  in
+  let hyp2 =
+    forall "n" tnat
+    @@ FConn
+         ( `And
+         , [ FConn (`Imp, [ eq (var "local_x") (EFun ("S", [ var "n" ])); FFalse ])
+           ; exist "l" tlist FTrue
+           ] )
+  in
+  let actions = link_forward hyp1 [ 1 ] hyp2 [ 0; 0; 0; 1 ] hlpred in
+  (* The second path points to an equality argument with positive polarity. *)
+  check_empty actions
+
+(**********************************************************************************************)
+(** Testing [Pred.wf_subform]. *)
+
+let test_sfl_0 () =
   let hlpred = Link.Pred.wf_subform in
   let hyp1 = FConn (`Imp, [ FTrue; FFalse ]) in
   let hyp2 = FTrue in
   let actions = link_forward hyp1 [ 0 ] hyp2 [] hlpred in
-  check_linkactions actions
-    begin
-      fun link_act -> match link_act with `Nothing -> true | _ -> false
-    end
+  check_linkactions actions @@ fun link_act -> match link_act with `Subform _ -> true | _ -> false
 
-let test_sfl_2 () =
+let test_sfl_1 () =
   let hlpred = Link.Pred.wf_subform in
   let hyp = forall "l" tlist @@ FPred ("perm", [ EVar ("l", 0); EVar ("l", 0) ]) in
   let concl =
@@ -138,12 +274,9 @@ let test_sfl_2 () =
     @@ FPred ("perm", [ EFun ("cons", [ var "x"; var "l" ]); EFun ("cons", [ var "x"; var "l" ]) ])
   in
   let actions = link_backward hyp [ 0 ] concl [ 0; 0 ] hlpred in
-  check_linkactions actions
-    begin
-      fun link_act -> match link_act with `Subform _ -> true | _ -> false
-    end
+  check_linkactions actions @@ fun link_act -> match link_act with `Subform _ -> true | _ -> false
 
-let test_sfl_3 () =
+let test_sfl_2 () =
   let hlpred = Link.Pred.wf_subform in
   let hyp =
     forall "l1" tlist @@ forall "l2" tlist @@ forall "l3" tlist
@@ -161,12 +294,9 @@ let test_sfl_3 () =
     @@ FPred ("perm", [ EFun ("cons", [ var "x"; var "l1" ]); EFun ("cons", [ var "x"; var "l2" ]) ])
   in
   let actions = link_backward hyp [ 0; 0; 0; 1; 1 ] concl [ 0; 0; 0 ] hlpred in
-  check_linkactions actions
-    begin
-      fun link_act -> match link_act with `Subform _ -> true | _ -> false
-    end
+  check_linkactions actions @@ fun link_act -> match link_act with `Subform _ -> true | _ -> false
 
-let test_sfl_4 () =
+let test_sfl_3 () =
   let hlpred = Link.Pred.wf_subform in
   let hyp =
     forall "x" tnat @@ forall "l1" tlist @@ forall "l2" tlist
@@ -181,18 +311,18 @@ let test_sfl_4 () =
            ] )
   in
   let actions = link_backward hyp [ 0; 0; 0 ] concl [ 0; 0; 0; 0; 0 ] hlpred in
-  check_linkactions actions
-    begin
-      fun link_act -> match link_act with `Subform _ -> true | _ -> false
-    end
+  check_linkactions actions @@ fun link_act -> match link_act with `Subform _ -> true | _ -> false
 
-let test_drw_1 () =
+(**********************************************************************************************)
+(** Testing [Pred.deep_rewrite]. *)
+
+let test_drw_0 () =
   let hlpred =
     let open Link.Pred in
     deep_rewrite
   in
   let zero = EFun ("Z", []) in
-  let hyp = forall "x" tnat @@ FPred ("_EQ", [ EFun ("add", [ var "x"; zero ]); var "x" ]) in
+  let hyp = forall "x" tnat @@ eq (EFun ("add", [ var "x"; zero ])) (var "x") in
   let concl =
     forall "n" tnat @@ exist "l" tlist
     @@ FPred
@@ -202,19 +332,20 @@ let test_drw_1 () =
            ] )
   in
   let actions = link_backward hyp [ 0; 0 ] concl [ 0; 0; 1; 0 ] hlpred in
-  check_linkactions actions
-    begin
-      fun link_act -> match link_act with `Subform _ -> true | _ -> false
-    end
+  check_linkactions actions @@ fun link_act -> match link_act with `Subform _ -> true | _ -> false
+
+(**********************************************************************************************)
+(** Running the tests. *)
 
 let () =
   let open Alcotest in
+  let test_group name tests =
+    let cases = List.mapi (fun i t -> test_case (Format.sprintf "%s-%d" name i) `Quick t) tests in
+    (name, cases)
+  in
   run "Prover.Link"
-    [ ( "subformula-linking"
-      , [ test_case "sfl-1" `Quick test_sfl_1
-        ; test_case "sfl-2" `Quick test_sfl_2
-        ; test_case "sfl-3" `Quick test_sfl_3
-        ; test_case "sfl-4" `Quick test_sfl_4
-        ] )
-    ; ("deep-rewrite", [ test_case "drw-1" `Quick test_drw_1 ])
+    [ test_group "opposite-polarity-formulas" [ test_pol_0; test_pol_1; test_pol_2 ]
+    ; test_group "neg-polarity-eq-operand" [ test_eq_0; test_eq_1; test_eq_2; test_eq_3; test_eq_4 ]
+    ; test_group "subformula-linking" [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3 ]
+    ; test_group "deep-rewrite" [ test_drw_0 ]
     ]

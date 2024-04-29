@@ -39,10 +39,12 @@
 open CoreLogic
 open Fo
 
-(** A link is simply a pair of a source path and destination path. *)
+(** A link is simply a pair of a source path and destination path.
+    You are NOT supposed to link two subterms of a same item. *)
 type link = IPath.t * IPath.t [@@deriving show]
 
-(** A hyperlink relaxes the constraint that there is only one source and one destination. *)
+(** A hyperlink relaxes the constraint that there is only one source and one destination.
+    You are NOT supposed to link two subterms of a same item. *)
 type hyperlink = IPath.t list * IPath.t list [@@deriving show]
 
 (** An action to perform after linking has been checked. 

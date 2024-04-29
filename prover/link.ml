@@ -267,7 +267,7 @@ module Pred = struct
           match Polarity.of_subform (Polarity.of_item item, form_of_item item) eq_sub with
           | Neg, FPred ("_EQ", _) -> true
           | _ -> false
-        with Invalid_argument _ -> false
+        with Invalid_argument _ | InvalidSubFormPath _ -> false
     in
     if check src || check dst then [ `Nothing ] else []
 
