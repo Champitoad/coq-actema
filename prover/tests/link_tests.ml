@@ -128,6 +128,20 @@ let forall name type_ body = FBind (`Forall, name, type_, body)
 let exist name type_ body = FBind (`Exist, name, type_, body)
 let eq a b = FPred ("_EQ", [ a; b ])
 
+(** Is [name] bound in [subst] ? *)
+let subst_contains name subst =
+  List.exists (fun (name', _) -> name = name') (Form.Subst.aslist subst)
+
+(** Is [name] bound to an [Sbound _] item in [subst] ? *)
+let subst_sbound name subst =
+  let item_bound sitem = match sitem with Sflex -> false | Sbound _ -> true in
+  List.exists (fun (name', sitem) -> name = name' && item_bound sitem) (Form.Subst.aslist subst)
+
+(** Is [name] bound to an [Sflex _] item in [subst] ? *)
+let subst_sflex name subst =
+  let item_flex sitem = match sitem with Sflex -> true | Sbound _ -> false in
+  List.exists (fun (name', sitem) -> name = name' && item_flex sitem) (Form.Subst.aslist subst)
+
 (**********************************************************************************************)
 (** Testing [Pred.opposite_pol_formulas]. *)
 
@@ -138,7 +152,7 @@ let test_pol_0 () =
     forall "n" tnat @@ FConn (`And, [ eq (var "local_x") (var "n"); exist "l" tlist FTrue ])
   in
   let actions = link_backward hyp [ 0; 0 ] concl [ 0; 1 ] hlpred in
-  check_linkactions actions @@ fun link_act -> match link_act with `Nothing -> true | _ -> false
+  check_linkactions actions @@ function `Nothing -> true | _ -> false
 
 let test_pol_1 () =
   let hlpred = Link.Pred.(lift opposite_pol_formulas) in
@@ -147,7 +161,7 @@ let test_pol_1 () =
     forall "n" tnat @@ FConn (`And, [ eq (var "local_x") (var "n"); exist "l" tlist FTrue ])
   in
   let actions = link_backward hyp [ 0; 0 ] concl [ 0; 1 ] hlpred in
-  check_linkactions actions @@ fun link_act -> match link_act with `Nothing -> true | _ -> false
+  check_linkactions actions @@ function `Nothing -> true | _ -> false
 
 let test_pol_2 () =
   let hlpred = Link.Pred.(lift opposite_pol_formulas) in
@@ -188,7 +202,7 @@ let test_eq_0 () =
            ] )
   in
   let actions = link_backward hyp [ 0; 0; 0; 0; 0 ] concl [ 0 ] hlpred in
-  check_linkactions actions @@ fun action -> match action with `Nothing -> true | _ -> false
+  check_linkactions actions @@ function `Nothing -> true | _ -> false
 
 let test_eq_1 () =
   let hlpred = Link.Pred.(lift neg_eq_operand) in
@@ -206,7 +220,7 @@ let test_eq_1 () =
            ] )
   in
   let actions = link_backward hyp [ 1 ] concl [ 0; 0; 0; 1 ] hlpred in
-  check_linkactions actions @@ fun action -> match action with `Nothing -> true | _ -> false
+  check_linkactions actions @@ function `Nothing -> true | _ -> false
 
 let test_eq_2 () =
   let hlpred = Link.Pred.(lift neg_eq_operand) in
@@ -266,6 +280,88 @@ let test_eq_4 () =
   check_empty actions
 
 (**********************************************************************************************)
+(** Testing [Pred.unifiable]. *)
+
+let test_unif_0 () =
+  let hlpred = Link.Pred.(lift unifiable) in
+  let hyp1 = FConn (`Imp, [ FTrue; FFalse ]) in
+  let hyp2 = FTrue in
+  let actions = link_forward hyp1 [ 0 ] hyp2 [] hlpred in
+  check_linkactions actions @@ function
+  | `Subform (s1, s2) -> Form.Subst.is_empty s1 && Form.Subst.is_empty s2
+  | _ -> false
+
+let test_unif_1 () =
+  let hlpred = Link.Pred.lift Link.Pred.unifiable in
+  let hyp = forall "l" tlist @@ FPred ("perm", [ EVar ("l", 0); EVar ("l", 0) ]) in
+  let concl =
+    forall "x" tnat @@ forall "l" tlist
+    @@ FPred ("perm", [ EFun ("cons", [ var "x"; var "l" ]); EFun ("cons", [ var "x"; var "l" ]) ])
+  in
+  let actions = link_backward hyp [ 0 ] concl [ 0; 0 ] hlpred in
+  check_linkactions actions @@ function
+  | `Subform (s1, s2) -> subst_sbound "l" s1 && Form.Subst.is_empty s2
+  | _ -> false
+
+let test_unif_2 () =
+  let hlpred = Link.Pred.(lift unifiable) in
+  let hyp =
+    forall "l1" tlist @@ forall "l2" tlist @@ forall "l3" tlist
+    @@ FConn
+         ( `Imp
+         , [ FPred ("perm", [ var "l1"; var "l2" ])
+           ; FConn
+               ( `Imp
+               , [ FPred ("perm", [ var "l2"; var "l3" ]); FPred ("perm", [ var "l1"; var "l3" ]) ]
+               )
+           ] )
+  in
+  let concl =
+    FConn
+      ( `Not
+      , [ forall "x" tnat @@ exist "l1" tlist @@ forall "l2" tlist
+          @@ FPred
+               ( "perm"
+               , [ EFun ("cons", [ var "x"; var "l1" ]); EFun ("cons", [ var "x"; var "l2" ]) ] )
+        ] )
+  in
+  let actions = link_backward hyp [ 0; 0; 0; 1; 1 ] concl [ 0; 0; 0; 0 ] hlpred in
+  check_linkactions actions @@ function
+  | `Subform (s1, s2) ->
+      subst_sbound "l1" s1 && subst_sflex "l2" s1 && subst_sbound "l3" s1 && subst_sflex "x" s2
+      && (not (subst_contains "l1" s2))
+      && subst_sflex "l2" s2
+  | _ -> false
+
+let test_unif_3 () =
+  let hlpred = Link.Pred.(lift unifiable) in
+  let hyp =
+    forall "x" tnat @@ forall "l1" tlist @@ exist "l2" tlist
+    @@ FPred ("perm", [ EFun ("cons", [ var "x"; var "l1" ]); EFun ("cons", [ var "x"; var "l2" ]) ])
+  in
+  let concl =
+    exist "x" tnat @@ forall "l1" tlist
+    @@ FConn
+         ( `Not
+         , [ forall "l2" tlist @@ forall "l0" tlist
+             @@ FConn
+                  ( `And
+                  , [ FPred ("perm", [ EFun ("cons", [ var "x"; var "l1" ]); var "l0" ])
+                    ; FPred ("perm", [ var "l0"; EFun ("cons", [ var "x"; var "l2" ]) ])
+                    ] )
+           ] )
+  in
+  let actions = link_backward hyp [ 0; 0; 0 ] concl [ 0; 0; 0; 0; 0; 0 ] hlpred in
+  check_linkactions actions @@ function
+  | `Subform (s1, s2) ->
+      subst_sbound "x" s1 && subst_sbound "l1" s1
+      && (not (subst_contains "l2" s1))
+      && subst_sflex "x" s2
+      && (not (subst_contains "l1" s2))
+      && subst_sflex "l2" s2 && subst_sbound "l0" s2
+  | _ -> false
+
+(**********************************************************************************************)
 (** Testing [Pred.wf_subform]. *)
 
 let test_sfl_0 () =
@@ -273,17 +369,17 @@ let test_sfl_0 () =
   let hyp1 = FConn (`Imp, [ FTrue; FFalse ]) in
   let hyp2 = FTrue in
   let actions = link_forward hyp1 [ 0 ] hyp2 [] hlpred in
-  check_linkactions actions @@ fun link_act -> match link_act with `Subform _ -> true | _ -> false
+  check_linkactions actions @@ function `Subform _ -> true | _ -> false
 
 let test_sfl_1 () =
-  let hlpred = Link.Pred.wf_subform in
+  let hlpred = Link.Pred.lift Link.Pred.unifiable in
   let hyp = forall "l" tlist @@ FPred ("perm", [ EVar ("l", 0); EVar ("l", 0) ]) in
   let concl =
     forall "x" tnat @@ forall "l" tlist
     @@ FPred ("perm", [ EFun ("cons", [ var "x"; var "l" ]); EFun ("cons", [ var "x"; var "l" ]) ])
   in
   let actions = link_backward hyp [ 0 ] concl [ 0; 0 ] hlpred in
-  check_linkactions actions @@ fun link_act -> match link_act with `Subform _ -> true | _ -> false
+  check_linkactions actions @@ function `Subform _ -> true | _ -> false
 
 let test_sfl_2 () =
   let hlpred = Link.Pred.wf_subform in
@@ -303,7 +399,7 @@ let test_sfl_2 () =
     @@ FPred ("perm", [ EFun ("cons", [ var "x"; var "l1" ]); EFun ("cons", [ var "x"; var "l2" ]) ])
   in
   let actions = link_backward hyp [ 0; 0; 0; 1; 1 ] concl [ 0; 0; 0 ] hlpred in
-  check_linkactions actions @@ fun link_act -> match link_act with `Subform _ -> true | _ -> false
+  check_linkactions actions @@ function `Subform _ -> true | _ -> false
 
 let test_sfl_3 () =
   let hlpred = Link.Pred.wf_subform in
@@ -320,14 +416,14 @@ let test_sfl_3 () =
            ] )
   in
   let actions = link_backward hyp [ 0; 0; 0 ] concl [ 0; 0; 0; 0; 0 ] hlpred in
-  check_linkactions actions @@ fun link_act -> match link_act with `Subform _ -> true | _ -> false
+  check_linkactions actions @@ function `Subform _ -> true | _ -> false
 
 let test_sfl_4 () =
   let hlpred = Link.Pred.wf_subform in
   let hyp1 = FConn (`Equiv, [ FTrue; FFalse ]) in
   let hyp2 = FTrue in
   let actions = link_forward hyp1 [ 0 ] hyp2 [] hlpred in
-  check_linkactions actions @@ fun link_act -> match link_act with `Subform _ -> true | _ -> false
+  check_linkactions actions @@ function `Subform _ -> true | _ -> false
 
 (**********************************************************************************************)
 (** Testing [Pred.deep_rewrite]. *)
@@ -348,7 +444,7 @@ let test_drw_0 () =
            ] )
   in
   let actions = link_backward hyp [ 0; 0 ] concl [ 0; 0; 1; 0 ] hlpred in
-  check_linkactions actions @@ fun link_act -> match link_act with `Subform _ -> true | _ -> false
+  check_linkactions actions @@ function `Subform _ -> true | _ -> false
 
 (**********************************************************************************************)
 (** Running the tests. *)
@@ -362,6 +458,7 @@ let () =
   run "Prover.Link"
     [ test_group "opposite-polarity-formulas" [ test_pol_0; test_pol_1; test_pol_2; test_pol_3 ]
     ; test_group "neg-polarity-eq-operand" [ test_eq_0; test_eq_1; test_eq_2; test_eq_3; test_eq_4 ]
+    ; test_group "unification" [ test_unif_0; test_unif_1; test_unif_2; test_unif_3 ]
     ; test_group "subformula-linking" [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3; test_sfl_4 ]
     ; test_group "deep-rewrite" [ test_drw_0 ]
     ]

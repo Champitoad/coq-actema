@@ -245,9 +245,6 @@ Qed.
 
 (* I leave the textual proofs in the comments *)
 
-Lemma p_test (h : forall l, perm l l) : forall x, forall l, perm (lcons x l) (lcons x l).
-actema.
-
 Lemma p_cons : forall a l1 l2,
     perm l1 l2 -> perm (lcons a l1) (lcons a l2).
   actema.

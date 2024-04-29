@@ -1218,6 +1218,7 @@ module Form : sig
     exception UnboundVariable of vname * subst
 
     val empty : subst
+    val is_empty : subst -> bool
     val aslist : subst -> (name * sitem) list
     val oflist : (name * sitem) list -> subst
     val fold : ('a -> name * sitem -> 'a) -> 'a -> subst -> 'a
@@ -1622,6 +1623,7 @@ end = struct
     type subst = (name * sitem) list
 
     let empty = []
+    let is_empty subst = subst = []
     let aslist (s : subst) : _ list = s
     let oflist (s : _ list) : subst = s
     let fold = List.fold_left
@@ -1703,7 +1705,7 @@ end = struct
 
     let to_string =
       List.to_string ~sep:", " ~left:"{" ~right:"}" (fun (x, tag) ->
-          match tag with Sflex -> "?" ^ x | Sbound e -> x ^ " := ")
+          match tag with Sflex -> "Sflex(" ^ x ^ ")" | Sbound e -> "Sbound(" ^ x ^ ")")
   end
 
   let rec occurs (x : vname) : expr -> bool = function

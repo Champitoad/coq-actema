@@ -15,7 +15,7 @@
     (where the linked items are denoted by curly braces) :
       [C ⇒ (A ∧ {B}) |- D ∧ {B}]
     The process unfolds as follows :
-    1. The user linked the two occurences of the formula {B}.
+    1. The user links the two occurences of the formula {B}.
     2. Subformula linking checks that these subformulas are unifiable. 
        In this case it is trivial, but in general there can be quantifiers above 
        each linked subformula, making this more tricky. 
@@ -33,8 +33,8 @@
        (R∧₂) C ∧ D ∧ (A ∧ {B} |- {B})
        ...
 
-       Choosing an order for the rules is important as the rewrite system is non-confluent.
-*)
+       Choosing an order for the rules is important as the rewrite system 
+       is non-confluent (see the paper "A drag and drop proof tactic"). *)
 
 open CoreLogic
 open Fo
@@ -47,8 +47,13 @@ type link = IPath.t * IPath.t [@@deriving show]
     You are NOT supposed to link two subterms of a same item. *)
 type hyperlink = IPath.t list * IPath.t list [@@deriving show]
 
-(** An action to perform after linking has been checked. 
-    Not all links entail the same linkaction. *)
+(** An action to perform after linking has been checked.
+
+    The substitutions in [`Subform] deserve some explanation : they contain the variables 
+    that are instantiable (i.e. are bound by a [forall] with negative polarity or [exist] 
+    with positive polarity) in the two linked subterms.
+    In order to unify the linked subterms, some of these variables 
+    have to be substituted [Sbound _], and others have no constraint [Sflex]. *)
 type linkaction =
   [ `Nothing
   | `Both of linkaction * linkaction
