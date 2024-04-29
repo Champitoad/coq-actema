@@ -239,7 +239,7 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
 
   let rec backward (ctx : fctx) (itrace : itrace) (s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       (((l, _), (r, rsub)) as linkage : (form * int list) * (form * int list)) : form * itrace =
-    (* js_log (Subst.to_string s1 ^ " ⊢ " ^ Subst.to_string s2); *)
+    js_log (Subst.to_string (s |> fst |> snd) ^ " ⊢ " ^ Subst.to_string (s |> snd |> snd));
     js_log (show_linkage goal.g_env `Backward linkage);
 
     match linkage with

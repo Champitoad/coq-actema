@@ -1233,7 +1233,7 @@ module Form : sig
     val f_iter : subst -> int -> form -> form
     val f_apply : subst -> form -> form
     val close : subst -> subst
-    val to_string : env -> subst -> string
+    val to_string : subst -> string
   end
 
   val e_unify : env -> LEnv.lenv -> Subst.subst -> expr eqns -> Subst.subst option
@@ -1701,9 +1701,9 @@ end = struct
                (x, tag)
            end
 
-    let to_string env =
+    let to_string =
       List.to_string ~sep:", " ~left:"{" ~right:"}" (fun (x, tag) ->
-          match tag with Sflex -> "?" ^ x | Sbound e -> x ^ " := " ^ Notation.e_tostring env e)
+          match tag with Sflex -> "?" ^ x | Sbound e -> x ^ " := ")
   end
 
   let rec occurs (x : vname) : expr -> bool = function

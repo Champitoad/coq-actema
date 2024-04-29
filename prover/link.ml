@@ -250,9 +250,15 @@ module Pred = struct
       let _, item_src, (sub_src, _) = IPath.destr proof src in
       let _, item_dst, (sub_dst, _) = IPath.destr proof dst in
 
-      let s = Polarity.of_subform (Polarity.of_item item_src, form_of_item item_src) sub_src in
-      let d = Polarity.of_subform (Polarity.of_item item_dst, form_of_item item_dst) sub_dst in
-      match (s, d) with (Neg, _), (Pos, _) | (Pos, _), (Neg, _) -> [ `Nothing ] | _ -> []
+      let src_pol =
+        fst @@ Polarity.of_subform (Polarity.of_item item_src, form_of_item item_src) sub_src
+      in
+      let dst_pol =
+        fst @@ Polarity.of_subform (Polarity.of_item item_dst, form_of_item item_dst) sub_dst
+      in
+      match (src_pol, dst_pol) with
+      | Neg, Pos | Pos, Neg | Sup, _ | _, Sup -> [ `Nothing ]
+      | _ -> []
     with Invalid_argument _ | InvalidSubFormPath _ -> []
 
   let neg_eq_operand : lpred =

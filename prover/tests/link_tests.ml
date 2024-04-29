@@ -142,6 +142,15 @@ let test_pol_0 () =
 
 let test_pol_1 () =
   let hlpred = Link.Pred.(lift opposite_pol_formulas) in
+  let hyp = FConn (`Equiv, [ FConn (`Not, [ FTrue ]); FFalse ]) in
+  let concl =
+    forall "n" tnat @@ FConn (`And, [ eq (var "local_x") (var "n"); exist "l" tlist FTrue ])
+  in
+  let actions = link_backward hyp [ 0; 0 ] concl [ 0; 1 ] hlpred in
+  check_linkactions actions @@ fun link_act -> match link_act with `Nothing -> true | _ -> false
+
+let test_pol_2 () =
+  let hlpred = Link.Pred.(lift opposite_pol_formulas) in
   let hyp = FConn (`Imp, [ FConn (`Not, [ FTrue ]); FFalse ]) in
   let concl =
     forall "n" tnat @@ FConn (`And, [ eq (var "local_x") (var "n"); exist "l" tlist FTrue ])
@@ -150,7 +159,7 @@ let test_pol_1 () =
   (* Both formulas have positive polarity. *)
   check_empty actions
 
-let test_pol_2 () =
+let test_pol_3 () =
   let hlpred = Link.Pred.(lift opposite_pol_formulas) in
   let hyp = FConn (`Imp, [ FConn (`Not, [ FTrue ]); FFalse ]) in
   let concl =
@@ -313,6 +322,13 @@ let test_sfl_3 () =
   let actions = link_backward hyp [ 0; 0; 0 ] concl [ 0; 0; 0; 0; 0 ] hlpred in
   check_linkactions actions @@ fun link_act -> match link_act with `Subform _ -> true | _ -> false
 
+let test_sfl_4 () =
+  let hlpred = Link.Pred.wf_subform in
+  let hyp1 = FConn (`Equiv, [ FTrue; FFalse ]) in
+  let hyp2 = FTrue in
+  let actions = link_forward hyp1 [ 0 ] hyp2 [] hlpred in
+  check_linkactions actions @@ fun link_act -> match link_act with `Subform _ -> true | _ -> false
+
 (**********************************************************************************************)
 (** Testing [Pred.deep_rewrite]. *)
 
@@ -344,8 +360,8 @@ let () =
     (name, cases)
   in
   run "Prover.Link"
-    [ test_group "opposite-polarity-formulas" [ test_pol_0; test_pol_1; test_pol_2 ]
+    [ test_group "opposite-polarity-formulas" [ test_pol_0; test_pol_1; test_pol_2; test_pol_3 ]
     ; test_group "neg-polarity-eq-operand" [ test_eq_0; test_eq_1; test_eq_2; test_eq_3; test_eq_4 ]
-    ; test_group "subformula-linking" [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3 ]
+    ; test_group "subformula-linking" [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3; test_sfl_4 ]
     ; test_group "deep-rewrite" [ test_drw_0 ]
     ]
