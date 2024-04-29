@@ -2,6 +2,9 @@ open CoreLogic
 open Link
 open Fo
 open Utils
+open Form
+open Subst
+open Proof
 
 type choice = int * (LEnv.lenv * LEnv.lenv * expr) option
 type itrace = choice list
@@ -64,13 +67,58 @@ let show_linkage env (mode : [ `Backward | `Forward ]) ((l, _), (r, _)) =
   let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
   Printf.sprintf "%s %s %s" (Notation.f_tostring env l) op (Notation.f_tostring env r)
 
+(** [well_scoped goal lenv e] returns [true] if all variables in the
+    expression [e] are bound either in the global environment [goal.g_env],
+    or in the local environment [lenv]. *)
+let well_scoped goal ctx e =
+  e_vars e
+  |> List.for_all
+       begin
+         fun x -> fc_is_bound x ctx || Vars.exists goal.g_env (fc_exit x ctx)
+       end
+
+(** [instantiable goal lenv ctx s x] returns [true] if the variable [x] is
+    either flex, or bound in substitution [s] to an expression [e] which is
+    well-scoped. *)
+let instantiable goal lenv ctx s x ty =
+  let lenv = LEnv.enter lenv x ty in
+  match get_tag (x, LEnv.get_index lenv x) s with
+  | Some (Sbound e) -> well_scoped goal ctx e
+  | Some Sflex -> true
+  | None -> false
+
+let invertible (kind : [ `Left | `Right | `Forward ]) (f : form) : bool =
+  match kind with
+  (* Right invertible *)
+  | `Right -> begin
+      match f with
+      | FConn (c, _) -> begin match c with `Imp | `Not | `Equiv -> true | _ -> false end
+      | FBind (`Forall, _, _, _) -> true
+      | _ -> false
+    end
+  (* Left invertible *)
+  | `Left -> begin
+      match f with
+      | FConn (c, _) -> begin match c with `Or -> true | _ -> false end
+      | FBind (`Exist, _, _, _) -> true
+      | _ -> false
+    end
+  (* Forward invertible *)
+  | `Forward -> begin
+      match f with
+      | FConn (c, _) -> begin match c with _ -> false end
+      | FBind (`Exist, _, _, _) -> true
+      | _ -> false
+    end
+
+let no_prio kind ((f, sub) : form * int list) =
+  let inv = invertible kind f in
+  (not inv) || List.is_empty sub
+
 (** This function is a horrible mess and should be refactored.
     Some tests would also be a great idea : I encountered weird bugs in here. *)
 let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.subst)
-    (proof : Proof.proof) : Proof.subgoal * itrace =
-  let open Form in
-  let open Subst in
-  let open Proof in
+    (proof : Proof.proof) : itrace =
   let { g_pregoal = goal; _ }, item_src, (sub_src, t_src) = IPath.destr proof src in
   let _, item_dst, (sub_dst, t_dst) = IPath.destr proof dst in
 
@@ -79,58 +127,6 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
     | `F _, `E _ | `E _, `F _ -> raise Tactics.TacticNotApplicable
     | _ -> ()
   end;
-
-  (* [well_scoped lenv e] returns [true] if all variables in the
-     expression [e] are bound either in the global environment [goal.g_env],
-     or in the local environment [lenv]. *)
-  let well_scoped ctx e =
-    e_vars e
-    |> List.for_all
-         begin
-           fun x -> fc_is_bound x ctx || Vars.exists goal.g_env (fc_exit x ctx)
-         end
-  in
-
-  (* [instantiable lenv ctx s x] returns [true] if the variable [x] is
-     either flex, or bound in substitution [s] to an expression [e] which is
-     well-scoped. *)
-  let instantiable lenv ctx s x ty =
-    let lenv = LEnv.enter lenv x ty in
-    match get_tag (x, LEnv.get_index lenv x) s with
-    | Some (Sbound e) -> well_scoped ctx e
-    | Some Sflex -> true
-    | None -> false
-  in
-
-  let invertible (kind : [ `Left | `Right | `Forward ]) (f : form) : bool =
-    match kind with
-    (* Right invertible *)
-    | `Right -> begin
-        match f with
-        | FConn (c, _) -> begin match c with `Imp | `Not | `Equiv -> true | _ -> false end
-        | FBind (`Forall, _, _, _) -> true
-        | _ -> false
-      end
-    (* Left invertible *)
-    | `Left -> begin
-        match f with
-        | FConn (c, _) -> begin match c with `Or -> true | _ -> false end
-        | FBind (`Exist, _, _, _) -> true
-        | _ -> false
-      end
-    (* Forward invertible *)
-    | `Forward -> begin
-        match f with
-        | FConn (c, _) -> begin match c with _ -> false end
-        | FBind (`Exist, _, _, _) -> true
-        | _ -> false
-      end
-  in
-
-  let no_prio kind ((f, sub) : form * int list) =
-    let inv = invertible kind f in
-    (not inv) || List.is_empty sub
-  in
 
   (* I had to refactor [backward_core] out of [backward] to "fix" a very weird bug
      involving pattern matching. It might be related to the following compiler bug :
@@ -171,7 +167,7 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
       | _, (FConn (`Equiv, [ _; _ ]), _) ->
           failwith "DnD on positive equivalence currently unsupported"
       | _, (FBind (`Exist, x, ty, f1), 0 :: sub)
-        when no_prio `Left h && instantiable env2 ctx s2 x ty ->
+        when no_prio `Left h && instantiable goal env2 ctx s2 x ty ->
           let env2 = LEnv.enter env2 x ty in
           s := (es1, (env2, s2));
           begin
@@ -221,7 +217,7 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
           let c = (f_shift (x, 0) r, rsub) in
           (Some (CBind (`Forall, x, ty)), (0, None), ((f1, sub), c))
       | (FBind (`Forall, x, ty, f1), 0 :: sub), _
-        when no_prio `Right c && instantiable env1 ctx s1 x ty ->
+        when no_prio `Right c && instantiable goal env1 ctx s1 x ty ->
           let env1 = LEnv.enter env1 x ty in
           s := ((env1, s1), es2);
           begin
@@ -356,7 +352,7 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
                 let h = (f_shift (x, 0) l, lsub) in
                 (Some (CBind (`Exist, x, ty)), (h, (f1, sub)))
             | _, (FBind (`Forall, x, ty, f1), 0 :: sub)
-              when no_prio `Forward h && instantiable env2 ctx s2 x ty ->
+              when no_prio `Forward h && instantiable goal env2 ctx s2 x ty ->
                 let env2 = LEnv.enter env2 x ty in
                 s := (es1, (env2, s2));
                 begin
@@ -386,7 +382,7 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
         cont ctx itrace !s linkage
   in
 
-  let subgoal, itrace =
+  let _, itrace =
     match ((item_src, sub_src, s_src), (item_dst, sub_dst, s_dst)) with
     | (`H (hid, { h_form = h; _ }), subh, sh), (`C c, subc, sc)
     | (`C c, subc, sc), (`H (hid, { h_form = h; _ }), subh, sh) ->
@@ -401,6 +397,4 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
         (([ (Some hid, []); (Some hid', [ form |> elim_units ]) ], goal.g_goal), itrace)
     | _ -> raise Tactics.TacticNotApplicable
   in
-  let itrace = List.rev itrace in
-
-  (subgoal, itrace)
+  List.rev itrace

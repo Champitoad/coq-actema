@@ -271,61 +271,6 @@ module Pred = struct
     in
     if check src || check dst then [ `Nothing ] else []
 
-  (*let wf_subform ?(drewrite = false) : lpred =
-    let open Form in
-    let open PreUnif in
-    fun proof (src, dst) ->
-      try
-        let deps, trav_src, trav_dst = traverse_link proof (src, dst) in
-        let s = Subst.(oflist (aslist trav_src.subst @ aslist trav_dst.subst)) in
-
-        let goal, item_src, (sub_src, t_src) = IPath.destr proof src in
-        let _, item_dst, (sub_dst, t_dst) = IPath.destr proof dst in
-
-        let s =
-          begin
-            match (trav_src.term, trav_dst.term) with
-            (* Subformula linking *)
-            | `F f1, `F f2 when not drewrite -> begin
-                (* Check that the two subformulas have opposite polarities. *)
-                match (trav_src.pol, trav_dst.pol) with
-                | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
-                    (* Unify the two subformulas. *)
-                    f_unify goal.g_pregoal.g_env LEnv.empty s [ (f1, f2) ]
-                | _ -> None
-              end
-            (* Deep rewrite *)
-            | `E e1, `E e2
-              when drewrite
-                   &&
-                   let env = goal.g_pregoal.g_env in
-                   let ty1 = einfer (IPath.env proof src) (expr_of_term t_src) in
-                   let ty2 = einfer (IPath.env proof dst) (expr_of_term t_dst) in
-                   Form.(t_equal env ty1 ty2) ->
-                let eq1, eq2 = pair_map (is_eq_operand proof) (src, dst) in
-                begin
-                  match ((trav_src.pol, eq1), (trav_dst.pol, eq2)) with
-                  | (Neg, true), _ | _, (Neg, true) ->
-                      e_unify goal.g_pregoal.g_env LEnv.empty s [ (e1, e2) ]
-                  | _ -> None
-                end
-            | _ -> None
-          end
-        in
-
-        (* Check the substitution is acyclic. *)
-        match s with
-        | Some s when acyclic (Deps.subst deps s) ->
-            let s1, s2 =
-              List.split_at (List.length @@ Subst.aslist trav_dst.subst) (Subst.aslist s)
-            in
-            (* Apply the renamings. *)
-            let s1 = s1 |> rename trav_src.rename trav_dst.rename |> List.rev |> Subst.oflist in
-            let s2 = s2 |> rename trav_dst.rename trav_src.rename |> List.rev |> Subst.oflist in
-            [ `Subform (s1, s2) ]
-        | _ -> []
-      with Invalid_argument _ -> []*)
-
   let intuitionistic : lpred =
    fun proof (src, dst) ->
     let neg_count (p : IPath.t) =

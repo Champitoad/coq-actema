@@ -77,7 +77,7 @@ let of_action (proof : Proof.proof) ((hd, a) : Handle.t * Actions.action_type) :
   | `Hyperlink (lnk, actions) -> begin
       match (lnk, actions) with
       | ([ src ], [ dst ]), [ `Subform substs ] ->
-          let _, itrace = dlink (src, dst) substs proof in
+          let itrace = dlink (src, dst) substs proof in
           let* src = of_ipath src in
           let* dst = of_ipath dst in
           return (Logic.ALink (src, dst, of_itrace itrace))

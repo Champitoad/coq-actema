@@ -31,8 +31,8 @@ val show_choice : env -> choice -> string
 val show_itrace : env -> itrace -> string
 
 (** [dlink] stands for deep linking, and implements the deep interaction phase
-    à la Chaudhuri for intuitionistic logic.
+    à la Chaudhuri for intuitionistic logic (i.e. ).
     The list of rules and explanations are available in :
         "A Drag-and-Drop Proof Tactic"
         http://www.lix.polytechnique.fr/Labo/Pablo.DONATO/papers/cpp-article.pdf *)
-val dlink : link -> Form.Subst.subst * Form.Subst.subst -> Proof.proof -> Proof.subgoal * itrace
+val dlink : link -> Form.Subst.subst * Form.Subst.subst -> Proof.proof -> itrace
