@@ -136,9 +136,9 @@ module Pred = struct
 
     module State = Monad.State (Env)
 
-    let traverse (p, t) i : (Polarity.t * term) State.t =
+    let traverse_aux (pol, term) i : (Polarity.t * term) State.t =
       let open State in
-      match (p, t) with
+      match (pol, term) with
       | Polarity.Pos, `F (FBind (`Forall, x, _, f)) | Polarity.Neg, `F (FBind (`Exist, x, _, f)) ->
           get >>= fun { deps; rnm; subst } ->
           let z = EVars.fresh () in
@@ -147,7 +147,7 @@ module Pred = struct
           let rnm = (z, x) :: rnm in
           put { deps; rnm; subst } >>= fun _ ->
           let f = Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f in
-          return (p, `F f)
+          return (pol, `F f)
       | Polarity.Neg, `F (FBind (`Forall, x, _, f)) | Polarity.Pos, `F (FBind (`Exist, x, _, f)) ->
           get >>= fun ({ rnm; subst; _ } as st) ->
           let z = EVars.fresh () in
@@ -155,63 +155,140 @@ module Pred = struct
           let subst = Subst.push z Sflex subst in
           put { st with rnm; subst } >>= fun _ ->
           let f = Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f in
-          return (p, `F f)
-      | _ -> return (Polarity.of_direct_subterm (p, t) i)
+          return (pol, `F f)
+      | _ -> return (Polarity.of_direct_subterm (pol, term) i)
 
-    let traverse = State.fold traverse
+    let traverse = State.fold traverse_aux
   end
 
-  let wf_subform ?(drewrite = false) : lpred =
+  type tres = { term : term; rename : (name * name) list; subst : subst }
+
+  (** Traverse both sides of a link, and collect some information used for unifying.
+      Assumes both sides of the link point to a hypothesis or the conclusion. *)
+  let traverse_link proof (src, dst) : PreUnif.Deps.t * tres * tres =
+    let goal, item_src, (sub_src, t_src) = IPath.destr proof src in
+    let _, item_dst, (sub_dst, t_dst) = IPath.destr proof dst in
+    let f_src = form_of_item item_src in
+    let f_dst = form_of_item item_dst in
+
+    let p_src = Polarity.of_item item_src in
+    let p_dst = Polarity.of_item item_dst in
+
+    let open PreUnif in
+    let open State in
+    run
+      begin
+        traverse (p_src, `F f_src) sub_src >>= fun (_, sf1) ->
+        get >>= fun st1 ->
+        put { st1 with rnm = []; subst = Form.Subst.empty } >>= fun _ ->
+        traverse (p_dst, `F f_dst) sub_dst >>= fun (_, sf2) ->
+        get >>= fun st2 ->
+        return
+          ( st2.deps
+          , { term = sf1; rename = st1.rnm; subst = st1.subst }
+          , { term = sf2; rename = st2.rnm; subst = st2.subst } )
+      end
+      { deps = Deps.empty; rnm = []; subst = Form.Subst.empty }
+
+  let rename (rnm1 : (name * name) list) (rnm2 : (name * name) list) =
+    List.map
+      begin
+        fun (x, tag) ->
+          let get_name x rnm = Option.default x (List.assoc_opt x rnm) in
+          let x = get_name x rnm1 in
+          let tag =
+            let rec rename = function
+              | EVar (x, i) -> EVar (get_name x rnm2, i)
+              | EFun (f, es) -> EFun (f, List.map rename es)
+            in
+            match tag with Sbound e -> Sbound (rename e) | _ -> tag
+          in
+          (x, tag)
+      end
+
+  let unifiable : lpred =
     let open Form in
     let open PreUnif in
-    let is_eq_operand proof (p : IPath.t) =
-      try
-        let eq_sub = List.(remove_at (length p.sub - 1) p.sub) in
-        let eq_path = { p with sub = eq_sub } in
-        let _, _, (_, t) = IPath.destr proof eq_path in
-        match t with `F (FPred ("_EQ", _)) -> true | _ -> false
-      with Invalid_argument _ -> false
-    in
-
     fun proof (src, dst) ->
-      let goal, item_src, (sub_src, t_src) = IPath.destr proof src in
-      let _, item_dst, (sub_dst, t_dst) = IPath.destr proof dst in
-
       try
-        let f1 = form_of_item item_src in
-        let f2 = form_of_item item_dst in
+        let deps, trav_src, trav_dst = traverse_link proof (src, dst) in
+        let s = Subst.(oflist (aslist trav_src.subst @ aslist trav_dst.subst)) in
 
-        let p1 = Polarity.of_item item_src in
-        let p2 = Polarity.of_item item_dst in
-
-        let sub1 = sub_src in
-        let sub2 = sub_dst in
-
-        let deps, sp1, st1, rnm1, s1, sp2, st2, rnm2, s2 =
-          let open State in
-          run
-            begin
-              traverse (p1, `F f1) sub1 >>= fun (sp1, sf1) ->
-              get >>= fun st1 ->
-              put { st1 with rnm = []; subst = Subst.empty } >>= fun _ ->
-              traverse (p2, `F f2) sub2 >>= fun (sp2, sf2) ->
-              get >>= fun st2 ->
-              return (st2.deps, sp1, sf1, st1.rnm, st1.subst, sp2, sf2, st2.rnm, st2.subst)
-            end
-            { deps = Deps.empty; rnm = []; subst = Subst.empty }
-        in
-
-        let s1 = Subst.aslist s1 in
-        let s2 = Subst.aslist s2 in
-        let s = Subst.oflist (s1 @ s2) in
+        let goal, item_src, (sub_src, t_src) = IPath.destr proof src in
+        let _, item_dst, (sub_dst, t_dst) = IPath.destr proof dst in
 
         let s =
           begin
-            match (st1, st2) with
+            match (trav_src.term, trav_dst.term) with
+            | `F f1, `F f2 -> f_unify goal.g_pregoal.g_env LEnv.empty s [ (f1, f2) ]
+            | `E e1, `E e2
+              when let env = goal.g_pregoal.g_env in
+                   let ty1 = einfer (IPath.env proof src) (expr_of_term t_src) in
+                   let ty2 = einfer (IPath.env proof dst) (expr_of_term t_dst) in
+                   Form.(t_equal env ty1 ty2) ->
+                e_unify goal.g_pregoal.g_env LEnv.empty s [ (e1, e2) ]
+            | _ -> None
+          end
+        in
+
+        (* Check the substitution is acyclic. *)
+        match s with
+        | Some s when acyclic (Deps.subst deps s) ->
+            let s1, s2 =
+              List.split_at (List.length @@ Subst.aslist trav_dst.subst) (Subst.aslist s)
+            in
+            (* Apply the renamings. *)
+            let s1 = s1 |> rename trav_src.rename trav_dst.rename |> List.rev |> Subst.oflist in
+            let s2 = s2 |> rename trav_dst.rename trav_src.rename |> List.rev |> Subst.oflist in
+            [ `Subform (s1, s2) ]
+        | _ -> []
+      with Invalid_argument _ -> []
+
+  let opposite_pol_formulas : lpred =
+   fun proof (src, dst) ->
+    try
+      let _, item_src, (sub_src, _) = IPath.destr proof src in
+      let _, item_dst, (sub_dst, _) = IPath.destr proof dst in
+
+      let s = Polarity.of_subform (Polarity.of_item item_src, form_of_item item_src) sub_src in
+      let d = Polarity.of_subform (Polarity.of_item item_dst, form_of_item item_dst) sub_dst in
+      match (s, d) with (Neg, _), (Pos, _) | (Pos, _), (Neg, _) -> [ `Nothing ] | _ -> []
+    with Invalid_argument _ | InvalidSubFormPath _ -> []
+
+  let neg_eq_operand : lpred =
+   fun proof (src, dst) ->
+    let check (path : IPath.t) : bool =
+      let _, item, (sub, term) = IPath.destr proof path in
+      if sub = []
+      then false
+      else
+        let eq_sub = List.remove_at (List.length sub - 1) sub in
+        try
+          match Polarity.of_subform (Polarity.of_item item, form_of_item item) eq_sub with
+          | Neg, FPred ("_EQ", _) -> true
+          | _ -> false
+        with Invalid_argument _ -> false
+    in
+    if check src || check dst then [ `Nothing ] else []
+
+  (*let wf_subform ?(drewrite = false) : lpred =
+    let open Form in
+    let open PreUnif in
+    fun proof (src, dst) ->
+      try
+        let deps, trav_src, trav_dst = traverse_link proof (src, dst) in
+        let s = Subst.(oflist (aslist trav_src.subst @ aslist trav_dst.subst)) in
+
+        let goal, item_src, (sub_src, t_src) = IPath.destr proof src in
+        let _, item_dst, (sub_dst, t_dst) = IPath.destr proof dst in
+
+        let s =
+          begin
+            match (trav_src.term, trav_dst.term) with
             (* Subformula linking *)
             | `F f1, `F f2 when not drewrite -> begin
                 (* Check that the two subformulas have opposite polarities. *)
-                match (sp1, sp2) with
+                match (trav_src.pol, trav_dst.pol) with
                 | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
                     (* Unify the two subformulas. *)
                     f_unify goal.g_pregoal.g_env LEnv.empty s [ (f1, f2) ]
@@ -227,7 +304,7 @@ module Pred = struct
                    Form.(t_equal env ty1 ty2) ->
                 let eq1, eq2 = pair_map (is_eq_operand proof) (src, dst) in
                 begin
-                  match ((sp1, eq1), (sp2, eq2)) with
+                  match ((trav_src.pol, eq1), (trav_dst.pol, eq2)) with
                   | (Neg, true), _ | _, (Neg, true) ->
                       e_unify goal.g_pregoal.g_env LEnv.empty s [ (e1, e2) ]
                   | _ -> None
@@ -236,33 +313,18 @@ module Pred = struct
           end
         in
 
+        (* Check the substitution is acyclic. *)
         match s with
         | Some s when acyclic (Deps.subst deps s) ->
-            let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
-
-            let rename rnm1 rnm2 =
-              List.map
-                begin
-                  fun (x, tag) ->
-                    let get_name x rnm = Option.default x (List.assoc_opt x rnm) in
-                    let x = get_name x rnm1 in
-                    let tag =
-                      let rec rename = function
-                        | EVar (x, i) -> EVar (get_name x rnm2, i)
-                        | EFun (f, es) -> EFun (f, List.map rename es)
-                      in
-                      match tag with Sbound e -> Sbound (rename e) | _ -> tag
-                    in
-                    (x, tag)
-                end
+            let s1, s2 =
+              List.split_at (List.length @@ Subst.aslist trav_dst.subst) (Subst.aslist s)
             in
-
-            let s1 = s1 |> rename rnm1 rnm2 |> List.rev |> Subst.oflist in
-            let s2 = s2 |> rename rnm2 rnm1 |> List.rev |> Subst.oflist in
-
+            (* Apply the renamings. *)
+            let s1 = s1 |> rename trav_src.rename trav_dst.rename |> List.rev |> Subst.oflist in
+            let s2 = s2 |> rename trav_dst.rename trav_src.rename |> List.rev |> Subst.oflist in
             [ `Subform (s1, s2) ]
         | _ -> []
-      with Invalid_argument _ -> []
+      with Invalid_argument _ -> []*)
 
   let intuitionistic : lpred =
    fun proof (src, dst) ->
@@ -281,6 +343,11 @@ module Pred = struct
       | m, n when (m > 0 && n > 0) || (m = 0 && n <= 1) || (m <= 1 && n = 0) -> [ `Nothing ]
       | _ -> []
     with InvalidSubFormPath _ | Invalid_argument _ -> []
+
+  let wf_subform : hlpred = mult [ lift opposite_pol_formulas; lift unifiable; lift intuitionistic ]
+
+  (* A deep rewrite link is not required to be intuitionistic. *)
+  let deep_rewrite : hlpred = mult [ lift neg_eq_operand; lift unifiable ]
 
   let instantiate : hlpred =
     let is_free_expr (t : term) (sub : int list) : bool =

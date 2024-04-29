@@ -49,10 +49,7 @@ module Pred = struct
 
   let link_sfl selection proof lemma =
     (* Create a link predicate for subformula linking. *)
-    let hlpred =
-      let open Link in
-      Pred.mult @@ List.map Pred.lift [ Pred.wf_subform ~drewrite:false; Pred.intuitionistic ]
-    in
+    let hlpred = Link.Pred.wf_subform in
     (* Prepare the goal. *)
     let proof, lemma_path, selection = prepare_goal proof lemma.Proof.l_form selection in
     (* Test against relevant links. As we are testing for subformula linking,
@@ -77,10 +74,7 @@ module Pred = struct
 
   let link_drewrite selection proof lemma =
     (* Create a link predicate for subformula linking. *)
-    let hlpred =
-      let open Link in
-      Pred.lift @@ Pred.wf_subform ~drewrite:true
-    in
+    let hlpred = Link.Pred.deep_rewrite in
     (* Prepare the goal. *)
     let proof, lemma_path, selection = prepare_goal proof lemma.Proof.l_form selection in
     (* Test against relevant links.  As we are testing for deep rewrites,

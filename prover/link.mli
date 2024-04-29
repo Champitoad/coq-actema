@@ -50,7 +50,8 @@ type hyperlink = IPath.t list * IPath.t list [@@deriving show]
 type linkaction =
   [ `Nothing
   | `Both of linkaction * linkaction
-  | `Subform of Form.Subst.subst * Form.Subst.subst  (** Subformula linking. *)
+  | `Subform of Form.Subst.subst * Form.Subst.subst
+    (** Subformula linking. This includes deep rewrites. *)
   | `Instantiate of expr * IPath.t
   | `Rewrite of expr * expr * IPath.t list
     (** Rewrite expression [e1] into [e2] at several paths. *)
@@ -107,19 +108,35 @@ module Pred : sig
       union of the actions denoted by the hyperlink predicates in [lps]. *)
   val add : hlpred list -> hlpred
 
-  (** [Pred.if_empty p1 p2] is equivalent to [p1] at links where the
-      latter is non-empty, and [p2] elsewhere. *)
+  (** [Pred.if_empty p1 p2] is equivalent to [p1] at links where it is non-empty, 
+      and [p2] elsewhere. *)
   val if_empty : hlpred -> hlpred -> hlpred
+
+  (** [Pred.unifiable proof (src, dst)] checks that [src] and [dst] lead to either :
+      - two unifiable formulas.
+      - two unifiable expressions, that additionnally have the same type. 
+      If this check succeeds, returns a `Subform linkaction. *)
+  val unifiable : lpred
+
+  (** [Pred.opposite_pol_formulas proof (src, dst)] checks that [src] and [dst]
+      lead to formulas of opposite polarities. *)
+  val opposite_pol_formulas : lpred
+
+  (** [Pred.neg_eq_operand proof (src, dst)] checks that either [src] or [dst] 
+      leads to the left or right argument of an equality, and that this equality 
+      has a negative polarity. *)
+  val neg_eq_operand : lpred
 
   (** [Pred.wf_subform proof (src, dst)] checks if [src] and [dst] lead to
       unifiable subformulas of opposite polarities in the focused goal of
       [proof], and returns the associated substitutions if they do inside a
-      [`Subform] link action.
-             
-      If [drewrite] is set to [true], it only checks for deep rewrite links,
-      that is links where one side is a negative equality operand, and the other
-      side an arbitrary unifiable subexpression of the same type. *)
-  val wf_subform : ?drewrite:bool -> lpred
+      [`Subform] link action. *)
+  val wf_subform : hlpred
+
+  (** [Pred.deep_rewrite proof (src, dst)] checks if [src] and [dst] lead to
+      unifiable expressions of the same type, and additionally that either [src] 
+      or [dst] leads to the left or right side of an equality that has a negative polarity. *)
+  val deep_rewrite : hlpred
 
   (** [Pred.intuitionistic lnk] checks if [lnk] is an intuitionistic link,
                    and returns a [`Nothing] link action if so. *)

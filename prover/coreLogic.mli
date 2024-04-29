@@ -90,8 +90,15 @@ module IPath : sig
   val env : Proof.proof -> t -> env
 end
 
+(** Extract the formula of a hypothesis or conclusion. 
+    Raises [Invalid_argument] if the item is a variable. *)
 val form_of_item : item -> form
+
+(** Extract the expression of a variable. 
+    Raises [Invalid_argument] if the item is not a variable, 
+    or if the variable has no body. *)
 val expr_of_item : ?where:[< `Body | `Head > `Body ] -> item -> expr
+
 val term_of_item : ?where:[< `Body | `Head > `Body ] -> item -> term
 val direct_subterm : term -> int -> term
 val subterm : term -> int list -> term
@@ -127,7 +134,7 @@ val subexpr : term -> int list -> expr
     implication. *)
 module Polarity : sig
   (** A polarity : positive, negative or superposed (i.e. both positive and negative). *)
-  type t = Pos | Neg | Sup
+  type t = Pos | Neg | Sup [@@deriving show]
 
   (** [Polarity.opp p] returns the opposite polarity of [p].
       [Sup] is mapped to itself. *)
@@ -147,10 +154,10 @@ module Polarity : sig
   (** [Polarity.neg_count f sub] counts the number of negations in [f] along path [sub] *)
   val neg_count : form -> int list -> int
 
-  (** [Polarity.of_item it] returns the polarity of the item [it] *)
+  (** [Polarity.of_item it] returns the polarity of the item [it]. Does not raise exceptions. *)
   val of_item : item -> t
 
   (** [Polarity.of_ipath proof p] returns the polarity of the subformula
-      at path [p] in [proof] *)
+      at path [p] in [proof]. Raises an exception if [p] does not point to a formula. *)
   val of_ipath : Proof.proof -> IPath.t -> t
 end

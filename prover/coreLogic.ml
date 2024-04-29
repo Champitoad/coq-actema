@@ -11,7 +11,7 @@ type item = [ `C of form | `H of Handle.t * Proof.hyp | `V of vname * bvar ] [@@
 
 let form_of_item : item -> form = function
   | `C f | `H (_, Proof.{ h_form = f; _ }) -> f
-  | _ -> raise (Invalid_argument "Expected a formula item")
+  | _ -> raise @@ Invalid_argument "Expected a formula item"
 
 let expr_of_item ?(where = `Body) : item -> expr = function
   | `V (x, (_, b)) -> begin
@@ -196,18 +196,20 @@ end
 (** Polarities *)
 
 module Polarity = struct
-  type t = Pos | Neg | Sup
+  type t = Pos | Neg | Sup [@@deriving show]
 
   let opp = function Pos -> Neg | Neg -> Pos | Sup -> Sup
 
   let of_direct_subform ((p, f) : t * form) (i : int) =
     match f with
-    | FConn (c, fs) ->
+    | FConn (c, fs) when 0 <= i && i < List.length fs ->
         let subp = match (c, i) with `Imp, 0 | `Not, 0 -> opp p | `Equiv, _ -> Sup | _, _ -> p in
-        let subf = try List.at fs i with Invalid_argument _ -> raise (InvalidSubFormPath [ i ]) in
+        let subf =
+          try List.at fs i with Invalid_argument _ -> raise @@ InvalidSubFormPath [ i ]
+        in
         (subp, subf)
-    | FBind (_, _, _, subf) -> (p, subf)
-    | _ -> raise (InvalidSubFormPath [ i ])
+    | FBind (_, _, _, subf) when i = 0 -> (p, subf)
+    | _ -> raise @@ InvalidSubFormPath [ i ]
 
   let of_direct_subterm ((p, t) : t * term) (i : int) =
     match (t, direct_subterm t i) with
@@ -218,7 +220,7 @@ module Polarity = struct
 
   let of_subform (p, f) sub =
     try List.fold_left of_direct_subform (p, f) sub
-    with InvalidSubFormPath _ -> raise (InvalidSubFormPath sub)
+    with InvalidSubFormPath _ -> raise @@ InvalidSubFormPath sub
 
   let neg_count (f : form) (sub : int list) : int =
     let rec aux (n, f) = function

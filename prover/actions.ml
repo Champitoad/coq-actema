@@ -94,14 +94,14 @@ let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) : ao
     List.remove_if (fun p -> p.IPath.ctxt.handle = dnd.source.ctxt.handle) selection
   in
 
-  let hlpred_only_sel (p : Pred.hlpred) : Pred.hlpred =
-   fun pr lnk -> if lnk = (srcsel, dstsel) then p pr lnk else []
+  let hlpred_only_sel (pred : Pred.hlpred) : Pred.hlpred =
+   fun proof link -> if link = (srcsel, dstsel) then pred proof link else []
   in
 
   let hlp =
     Pred.add
-      [ Pred.mult (List.map Pred.lift [ Pred.wf_subform; Pred.intuitionistic ])
-      ; Pred.if_empty (Pred.wf_subform ~drewrite:true |> Pred.lift) (Pred.rewrite |> hlpred_only_sel)
+      [ Pred.wf_subform
+      ; Pred.if_empty Pred.deep_rewrite (Pred.rewrite |> hlpred_only_sel)
       ; Pred.fold |> hlpred_only_sel
       ; Pred.instantiate
       ]

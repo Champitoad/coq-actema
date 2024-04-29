@@ -121,23 +121,17 @@ let exist name type_ body = FBind (`Exist, name, type_, body)
 (** Actual tests. *)
 
 let test_sfl_1 () =
-  let hlpred =
-    let open Link.Pred in
-    mult [ lift wf_subform; lift intuitionistic ]
-  in
+  let hlpred = Link.Pred.wf_subform in
   let hyp1 = FConn (`Imp, [ FTrue; FFalse ]) in
   let hyp2 = FTrue in
   let actions = link_forward hyp1 [ 0 ] hyp2 [] hlpred in
   check_linkactions actions
     begin
-      fun link_act -> match link_act with `Subform _ -> true | _ -> false
+      fun link_act -> match link_act with `Nothing -> true | _ -> false
     end
 
 let test_sfl_2 () =
-  let hlpred =
-    let open Link.Pred in
-    mult [ lift wf_subform; lift intuitionistic ]
-  in
+  let hlpred = Link.Pred.wf_subform in
   let hyp = forall "l" tlist @@ FPred ("perm", [ EVar ("l", 0); EVar ("l", 0) ]) in
   let concl =
     forall "x" tnat @@ forall "l" tlist
@@ -150,10 +144,7 @@ let test_sfl_2 () =
     end
 
 let test_sfl_3 () =
-  let hlpred =
-    let open Link.Pred in
-    mult [ lift wf_subform; lift intuitionistic ]
-  in
+  let hlpred = Link.Pred.wf_subform in
   let hyp =
     forall "l1" tlist @@ forall "l2" tlist @@ forall "l3" tlist
     @@ FConn
@@ -176,10 +167,7 @@ let test_sfl_3 () =
     end
 
 let test_sfl_4 () =
-  let hlpred =
-    let open Link.Pred in
-    mult [ lift wf_subform; lift intuitionistic ]
-  in
+  let hlpred = Link.Pred.wf_subform in
   let hyp =
     forall "x" tnat @@ forall "l1" tlist @@ forall "l2" tlist
     @@ FPred ("perm", [ EFun ("cons", [ var "x"; var "l1" ]); EFun ("cons", [ var "x"; var "l2" ]) ])
@@ -198,6 +186,27 @@ let test_sfl_4 () =
       fun link_act -> match link_act with `Subform _ -> true | _ -> false
     end
 
+let test_drw_1 () =
+  let hlpred =
+    let open Link.Pred in
+    deep_rewrite
+  in
+  let zero = EFun ("Z", []) in
+  let hyp = forall "x" tnat @@ FPred ("_EQ", [ EFun ("add", [ var "x"; zero ]); var "x" ]) in
+  let concl =
+    forall "n" tnat @@ exist "l" tlist
+    @@ FPred
+         ( "perm"
+         , [ EFun ("cons", [ var "n"; var "l" ])
+           ; EFun ("cons", [ EFun ("add", [ var "n"; zero ]); var "l" ])
+           ] )
+  in
+  let actions = link_backward hyp [ 0; 0 ] concl [ 0; 0; 1; 0 ] hlpred in
+  check_linkactions actions
+    begin
+      fun link_act -> match link_act with `Subform _ -> true | _ -> false
+    end
+
 let () =
   let open Alcotest in
   run "Prover.Link"
@@ -207,4 +216,5 @@ let () =
         ; test_case "sfl-3" `Quick test_sfl_3
         ; test_case "sfl-4" `Quick test_sfl_4
         ] )
+    ; ("deep-rewrite", [ test_case "drw-1" `Quick test_drw_1 ])
     ]
