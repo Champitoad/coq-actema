@@ -46,7 +46,7 @@
     <div>
         <div class="row my-2 ml-3">
             <input class="search-lemma-input" type="text" placeholder="Search lemma..." maxlength="50"
-                v-model="lemmaSearchText" />
+                spellcheck="false" v-model="lemmaSearchText" @keydown="searchLemmaKeyDown" />
             <button id="lemmas" class="btn btn-info btn-small btn-search ml-2" @click="searchLemmas"
                 title="Search for lemmas matching the current name and selection (ctrl+f)">
                 Search
@@ -133,9 +133,17 @@ export default {
             //}, 0);
         },
 
-        // Callback invoked when we click on an entry in the lemma dropdown (list).
+        // Callback invoked when iser clicks on an entry in the lemma list.
         addLemma: async function (lemma) {
             this.$parent.sendLemma(this.goal, lemma.handle);
+        },
+
+        // Callback invoked when the user types in the "search lemmas" input field.
+        searchLemmaKeyDown: function (ev) {
+            // On [Enter], search for lemmas.
+            if (ev.key == "Enter") {
+                this.searchLemmas();
+            }
         },
     }
 };

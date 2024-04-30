@@ -89,24 +89,21 @@ export default {
         // also capture ctrl+z and ctrl+y and M for MathML
         var self = this;
         $(document).keydown(function (e) {
-            if (!$('input[type="text"]').is(":focus")) {
-                // dont capture on textboxes
-                if (e.key === "y" && e.ctrlKey) {
-                    // ctrl+y
-                    self.redo();
-                } else if (e.key === "z" && e.ctrlKey) {
-                    // ctrl+z
-                    self.undo();
-                } else if (e.key === "m" && e.ctrlKey) {
-                    // ctrl+m
-                    self.toggleDisplayMode();
-                }
-                else if (e.key === "f" && e.ctrlKey) {
-                    // ctrl+f
-                    let subgoal_idx = self.$refs.proofCanvas.getActiveSubgoal();
-                    let lemmaSearch = self.$refs.proofCanvas.$refs.lsearch[subgoal_idx];
-                    lemmaSearch.searchLemmas();
-                }
+            if (e.key === "y" && e.ctrlKey) {
+                // ctrl+y
+                self.redo();
+            } else if (e.key === "z" && e.ctrlKey) {
+                // ctrl+z
+                self.undo();
+            } else if (e.key === "m" && e.ctrlKey) {
+                // ctrl+m
+                self.toggleDisplayMode();
+            }
+            else if (e.key === "f" && e.ctrlKey) {
+                // ctrl+f
+                let subgoal_idx = self.$refs.proofCanvas.getActiveSubgoal();
+                let lemmaSearch = self.$refs.proofCanvas.$refs.lsearch[subgoal_idx];
+                lemmaSearch.searchLemmas();
             }
 
             if (e.key == "Shift" && !e.ctrlKey) {
