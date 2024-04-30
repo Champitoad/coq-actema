@@ -1,6 +1,30 @@
 <style scoped>
 .list {
     margin-left: 25px;
+    overflow-y: scroll;
+    max-height: 80vh;
+    scrollbar-width: none;
+}
+
+.list::-webkit-scrollbar {
+    width: 15px;
+}
+
+.list::-webkit-scrollbar-corner {
+    background: rgba(0, 0, 0, 0);
+}
+
+.list::-webkit-scrollbar-thumb {
+    background-color: #ccc;
+    border-radius: 6px;
+    border: 4px solid rgba(0, 0, 0, 0);
+    background-clip: content-box;
+    min-width: 32px;
+    min-height: 32px;
+}
+
+.list::-webkit-scrollbar-track {
+    background-color: rgba(0, 0, 0, 0);
 }
 
 .search-lemma-input {
@@ -13,31 +37,30 @@
     height: fit-content;
 }
 
-.lemma {
-    font-size: 15;
-}
-
 .lemma:hover {
     background-color: #d4d4d4;
 }
 </style>
 
 <template>
-    <ul class="list-group list">
-        <li class="row my-2">
+    <div>
+        <div class="row my-2 ml-3">
             <input class="search-lemma-input" type="text" placeholder="Search lemma..." maxlength="50"
                 v-model="lemmaSearchText" />
             <button id="lemmas" class="btn btn-info btn-small btn-search ml-2" @click="searchLemmas"
                 title="Search for lemmas matching the current name and selection (ctrl+f)">
                 Search
             </button>
-        </li>
-        <template v-for="lemma in lemmaList">
-            <li class="row p-1 my-1 lemma" @onclick="addLemma(lemma)">
-                <b>{{ lemma.name }}</b>{{ lemma.form }}
-            </li>
-        </template>
-    </ul>
+        </div>
+        <ul class="list-group list">
+            <template v-for="lemma in lemmaList">
+                <li class="list-group-item p-1 my-1 lemma" title="Add this lemma as a hypothesis"
+                    @click="addLemma(lemma)">
+                    <b>{{ lemma.name }}</b> <br> {{ lemma.form }}
+                </li>
+            </template>
+        </ul>
+    </div>
 </template>
 
 <script>
