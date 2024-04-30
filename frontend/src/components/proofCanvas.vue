@@ -110,7 +110,7 @@
 
 .lemmas-zone {
     padding-left: 15px;
-    padding-right: 15px;
+    padding-right: 5px;
 }
 
 .nav-tabs {

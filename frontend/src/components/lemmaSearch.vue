@@ -1,9 +1,28 @@
 <style scoped>
+.search-row {
+    margin-left: 25px;
+    margin-right: 15px;
+    display: table;
+}
+
+.search-row>div {
+    display: table-cell;
+    width: 100%;
+}
+
+.search-input {
+    width: 100%;
+}
+
+.btn-search {
+    height: fit-content;
+}
+
+
 .list {
     margin-left: 25px;
     overflow-y: scroll;
     max-height: 80vh;
-    scrollbar-width: none;
 }
 
 .list::-webkit-scrollbar {
@@ -27,15 +46,6 @@
     background-color: rgba(0, 0, 0, 0);
 }
 
-.search-lemma-input {
-    display: inline-block;
-}
-
-.btn-search {
-    display: inline-block;
-    margin-left: auto;
-    height: fit-content;
-}
 
 .lemma:hover {
     background-color: #d4d4d4;
@@ -44,9 +54,11 @@
 
 <template>
     <div>
-        <div class="row my-2 ml-3">
-            <input class="search-lemma-input" type="text" placeholder="Search lemma..." maxlength="50"
-                spellcheck="false" v-model="lemmaSearchText" @keydown="searchLemmaKeyDown" />
+        <div class="row my-2 search-row">
+            <div>
+                <input class="search-input" type="text" placeholder="Search lemma..." maxlength="50" spellcheck="false"
+                    v-model="lemmaSearchText" @keydown="searchLemmaKeyDown" />
+            </div>
             <button id="lemmas" class="btn btn-info btn-small btn-search ml-2" @click="searchLemmas"
                 title="Search for lemmas matching the current name and selection (ctrl+f)">
                 Search
