@@ -52,10 +52,8 @@ export default {
                 // Load the new proof engine.
                 this.$refs.proofCanvas.setProofState(proofState);
 
-                // Once the new proof engine is loaded, update the lemma search bar
-                // and focus it.
+                // Once the new proof engine is loaded, update the lemma search bar.
                 lemmaSearch.updateLemmaList();
-                lemmaSearch.focusLemmaSearchBar();
             } catch (e) {
                 this.$refs.proofCanvas.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);

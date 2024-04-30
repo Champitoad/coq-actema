@@ -96,17 +96,15 @@ export default {
         return {
             lemmaList: [],
             lemmaSearchText: "",
-            // A variable used to force a re-render of the lemma list when needed.
-            // This is known as the key-changing technique. For more information see :
-            // https://michaelnthiessen.com/force-re-render
-            lemmaKey: 0,
         };
     },
     methods: {
         // Called when the "Search" button is clicked.
-        searchLemmas: async function () {
+        searchLemmas: function () {
             try {
                 console.log("Requesting lemmas\n");
+                let button = document.getElementById("lemmas");
+                button.style.display = "none";
 
                 let pattern = this.lemmaSearchText;
                 let selection = this.$parent.getActiveSelection();
@@ -124,25 +122,15 @@ export default {
             let lemmas = Object.entries(this.$parent.proofState.getlemmas());
 
             this.lemmaList = _.map(lemmas, l => {
-                //console.log(l);
                 return { handle: l[1][0], name: l[1][1], form: l[1][2] }
             });
 
-            // Force a re-render of the lemma list.
-            this.lemmaKey += 1;
+            let button = document.getElementById("lemmas");
+            button.style.display = "block";
         },
 
         getLemmaSearchText: function () {
             return this.lemmaSearchText;
-        },
-
-        focusLemmaSearchBar: function () {
-            // For some reason using "setTimeout" is necessary here.
-            // For somewhat of an explanation read :
-            // https://bobbyhadz.com/blog/focus-not-working-in-javascript
-            //setTimeout(() => {
-            //    this.$refs.lemmaSearchBar.input.focus();
-            //}, 0);
         },
 
         // Callback invoked when iser clicks on an entry in the lemma list.

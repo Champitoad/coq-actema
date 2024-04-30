@@ -245,12 +245,10 @@ let rec js_proof_engine (proof : Proof.proof) =
       (* Decode the data.
          The type annotation here is very important for unmarshaling to work. *)
       let (env, lemmas) : Api.Logic.lemmadb =
-        Utils.time "decode-lemmas" @@ fun () ->
         datab |> Js.to_string |> Base64.decode_exn |> Fun.flip Marshal.from_string 0
       in
       (* Translate the lemmas and env to the actema format. *)
       let lemmas =
-        Utils.time "translate-lemmas" @@ fun () ->
         List.map
           begin
             fun Api.Logic.{ l_user; l_full; l_stmt } ->
@@ -258,12 +256,8 @@ let rec js_proof_engine (proof : Proof.proof) =
           end
           lemmas
       in
-      let env =
-        Utils.time "translate-env" @@ fun () ->
-        Hidmap.State.run (Fo.Translate.to_env env) Hidmap.empty
-      in
+      let env = Hidmap.State.run (Fo.Translate.to_env env) Hidmap.empty in
       (* Check the lemmas are all well-typed in the database environment. *)
-      Utils.time "type-check-lemmas" @@ fun () ->
       List.iter (fun lemma -> Fo.Form.recheck env lemma.Proof.l_form) lemmas;
       (* Create the lemma database. First we have to assign a handle to each lemma. *)
       let db =
