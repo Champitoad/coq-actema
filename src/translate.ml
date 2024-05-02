@@ -24,7 +24,7 @@ type symbol =
 | Var of Names.Id.t
 
 module Symbol : sig
-  include Map.OrderedType 
+  include Map.OrderedType
   val to_string : t -> string
 end with type t = symbol = struct
   type t = symbol
@@ -809,7 +809,7 @@ module Import = struct
       (mode : [`Back | `Forw]) (lp : int list) (rp : int list)
       (lf : Logic_t.form) (rf : Logic_t.form)
       (itr : Logic_t.itrace) : bool list * EConstr.t =
-    let focus, inst = Stdlib.List.split itr in
+    let focus, inst = Stdlib.List.split itr.choices in
     let t = focus |> boollist_of_intlist in
     let i =
       let open EConstr in
@@ -853,9 +853,10 @@ module Import = struct
             end
         end in
       let insts =
-        filtered_quant [] mode itr lp lf rp rf |>
+        filtered_quant [] mode itr.choices lp lf rp rf |>
         List.map begin fun (side, w) ->
-          Option.map begin fun (le1, le2, e) ->
+          Option.map begin fun e ->
+            let (le1, le2) = itr.lenv in
             Log.str (Printf.sprintf "le1: %d\n" (List.length le1));
             Log.str (Printf.sprintf "le2: %d\n" (List.length le2));
             let lenv = le1 @ le2 in

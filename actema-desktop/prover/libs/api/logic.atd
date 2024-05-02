@@ -77,8 +77,8 @@ type ipath = { ctxt : ctxt; sub : int list }
 
 (* Trace of a subformula linking, from which the list of rewrite rules to apply
    can be reconstructed *)
-type choice = (int * (lenv * lenv * expr) option)
-type itrace = choice list
+type choice = (int * expr option)
+type itrace = { lenv : (lenv * lenv); choices : choice list }
 
 type action = [
   | AId                                     (* The empty action which does nothing *)

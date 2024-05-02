@@ -1511,14 +1511,14 @@ end = struct
         raise TacticNotApplicable
   
 
-  type choice = (int * (LEnv.lenv * LEnv.lenv * expr) option)
-  type itrace = choice list
+  type choice = (int * expr option)
+  type itrace = { lenv : LEnv.lenv * LEnv.lenv; choices : choice list }
 
-  let print_choice env ((side, witness) : choice) : string =
+  let print_choice env ((le1, le2) : LEnv.lenv * LEnv.lenv) ((side, witness) : choice) : string =
     let side = if side = 0 then "←" else "→" in
     let witness =
       witness |> Option.map_default
-        (fun (le1, le2, e) ->
+        (fun e ->
           let print (x, ty) =
             Printf.sprintf "%s : %s" x (Notation.t_tostring env ty) in
           let le1 = List.to_string print (LEnv.bindings le1) in
@@ -1527,8 +1527,8 @@ end = struct
           Printf.sprintf "%s%s{%s}" le1 le2 e) "" in
     Printf.sprintf "%s%s" side witness
 
-  let print_itrace env : itrace -> string =
-    Utils.List.to_string (print_choice env) ~left:"" ~right:"" ~sep:" "
+  let print_itrace env { lenv; choices } =
+    Utils.List.to_string (print_choice env lenv) ~left:"" ~right:"" ~sep:" " choices
 
   type pnode += TLink of (ipath * ipath * itrace)
 
@@ -1817,7 +1817,7 @@ end = struct
     in
 
     let subgoals = pbp (goal, []) item_src sub_src s_src item_dst sub_dst s_dst in
-    Proof.xprogress proof hd (TLink (src, dst, [])) subgoals
+    Proof.xprogress proof hd (TLink (src, dst, { lenv = (LEnv.empty, LEnv.empty); choices = [] })) subgoals
 
 
   (** [elim_units f] eliminates all occurrences of units
@@ -1940,12 +1940,14 @@ end = struct
       not inv || List.is_empty sub
     in
 
-    let rec backward (ctx : fctx) (itrace : itrace)
+    let rec backward (ctx : fctx) (choices : choice list)
       ((env1, s1 as es1), (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       (((l, lsub as h), (r, rsub as c)) as linkage : (form * int list) * (form * int list)) : form * itrace =
       
       (* js_log (Subst.to_string s1 ^ " ⊢ " ^ Subst.to_string s2); *)
       js_log (print_linkage goal.g_env `Backward linkage);
+      
+      let lenv = (env1, env2) in
       
       match linkage with
 
@@ -1964,7 +1966,7 @@ end = struct
           (* Brel *)
           | _ -> f_imp l r
           end
-        in fc_fill f (fc_rev ctx), itrace
+        in fc_fill f (fc_rev ctx), { lenv; choices }
       
       | (FPred ("_EQ", [e1; e2]), [i]), (FPred _, _)
         when e_equal_delta goal.g_env (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
@@ -1974,7 +1976,7 @@ end = struct
           (* L=₂ *)
           else e1 in
         let f = rewrite_subterm (`E res) (`F r) rsub |> form_of_term in
-        fc_fill f (fc_rev ctx), itrace
+        fc_fill f (fc_rev ctx), { lenv; choices }
       
       (** Commuting rules *)
 
@@ -2036,7 +2038,7 @@ end = struct
             (* R∃i *)
             | Some Sbound e ->
               let f1 = Subst.f_apply1 (x, 0) e f1 in
-              None, (1, Some (env1, env2, e)), (h, (f1, sub))
+              None, (1, Some e), (h, (f1, sub))
             (* R∃s *)
             | Some Sflex ->
               s := es1, (new_env2, s2);
@@ -2102,7 +2104,7 @@ end = struct
             (* L∀i *)
             | Some Sbound e ->
               let f1 = f_apply1 (x, 0) e f1 in
-              None, (0, Some (env1, env2, e)), ((f1, sub), c)
+              None, (0, Some e), ((f1, sub), c)
             (* L∀s *)
             | Some Sflex ->
               s := (new_env1, s1), es2;
@@ -2118,14 +2120,16 @@ end = struct
         let ctx = match ictx with
           | Some i -> i :: ctx
           | None -> ctx in 
-        cont ctx (choice :: itrace) !s linkage
+        cont ctx (choice :: choices) !s linkage
       
 
-    and forward (ctx : fctx) (itrace : itrace) ?(side = 1)
+    and forward (ctx : fctx) (choices : choice list) ?(side = 1)
       ((env1, _) as es1, (env2, s2 as es2) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
       (((l, lsub as h), (r, rsub)) as linkage : (form * int list) * (form * int list)) : form * itrace =
 
       js_log (print_linkage goal.g_env `Forward linkage);
+      
+      let lenv = (env1, env2) in
       
       match linkage with
 
@@ -2140,7 +2144,7 @@ end = struct
           (* Frel *)
           | _ -> f_and l r
         end in
-        fc_fill f (fc_rev ctx), itrace
+        fc_fill f (fc_rev ctx), { lenv; choices }
 
       | (FPred ("_EQ", [e1; e2]), [i]), (FPred _, _)
         when e_equal_delta goal.g_env (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
@@ -2150,7 +2154,7 @@ end = struct
           (* L=₂ *)
           else e1 in
         let f = rewrite_subterm (`E res) (`F r) rsub |> form_of_term in
-        fc_fill f (fc_rev ctx), itrace
+        fc_fill f (fc_rev ctx), { lenv; choices }
 
       (** Commuting rules *)
 
@@ -2227,10 +2231,7 @@ end = struct
             (* F∀i *)
             | Some Sbound e ->
               let f1 = Subst.f_apply1 (x, 0) e f1 in
-              witness :=
-                if side = 1
-                then Some (env1, env2, e)
-                else Some (env2, env1, e);
+              witness := Some e;
               None, (h, (f1, sub))
             (* F∀s *)
             | Some Sflex ->
@@ -2251,10 +2252,10 @@ end = struct
         let ctx = match ictx with
           | Some i -> i :: ctx
           | None -> ctx in 
-        let itrace =
-          if !new_side <> side then itrace
-          else (!new_side, !witness) :: itrace in
-        cont ctx itrace !s linkage
+        let choices =
+          if !new_side <> side then choices
+          else (!new_side, !witness) :: choices in
+        cont ctx choices !s linkage
     in
 
     let subgoal, itrace =
@@ -2270,7 +2271,7 @@ end = struct
       
       | _ -> raise TacticNotApplicable
     in
-    let itrace = List.rev itrace in
+    let itrace = { itrace with choices = List.rev itrace.choices } in
 
     js_log (Printf.sprintf "itrace: %s" (print_itrace goal.g_env itrace));
 
@@ -3267,10 +3268,9 @@ end = struct
       LEnv.bindings lenv |>
       List.map (fun (x, ty) -> x, of_type_ ty)
     
-    let of_itrace (itrace : itrace) : Logic_t.itrace =
-      List.map begin fun (i, w) ->
-        i, Option.map (fun (le1, le2, e) -> of_lenv le1, of_lenv le2, of_expr e) w
-      end itrace
+    let of_itrace ({ lenv = (le1, le2); choices } : itrace) : Logic_t.itrace =
+      let choices = List.map (fun (i, w) -> (i, Option.map of_expr w)) choices in
+      Logic_t.{ lenv = (of_lenv le1, of_lenv le2); choices }
 
     let action_of_pnode (p : pnode) : Logic_t.action State.t =
       begin match p with
