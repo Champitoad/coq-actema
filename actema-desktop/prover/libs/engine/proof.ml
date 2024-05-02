@@ -2272,6 +2272,8 @@ end = struct
     in
     let itrace = List.rev itrace in
 
+    js_log (Printf.sprintf "itrace: %s" (print_itrace goal.g_env itrace));
+
     subgoal, itrace
   
   let dlink_tac (src, dst : link) (s_src, s_dst : Form.Subst.subst * Form.Subst.subst) : tactic =
