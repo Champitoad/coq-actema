@@ -2034,6 +2034,7 @@ end = struct
             instantiable env2 ctx s2 x ty
             ->
             let new_env2 = LEnv.enter env2 x ty in
+            s := es1, (new_env2, s2);
             begin match get_tag (x, LEnv.get_index new_env2 x) s2 with
             (* R∃i *)
             | Some Sbound e ->
@@ -2041,7 +2042,6 @@ end = struct
               None, (1, Some e), (h, (f1, sub))
             (* R∃s *)
             | Some Sflex ->
-              s := es1, (new_env2, s2);
               let h = (f_shift (x, 0) l), lsub in
               Some (CBind (`Exist, x, ty)), (1, None), (h, (f1, sub))
             | None -> assert false
@@ -2100,6 +2100,7 @@ end = struct
             instantiable env1 ctx s1 x ty
             ->
             let new_env1 = LEnv.enter env1 x ty in
+            s := (new_env1, s1), es2;
             begin match get_tag (x, LEnv.get_index new_env1 x) s1 with
             (* L∀i *)
             | Some Sbound e ->
@@ -2107,7 +2108,6 @@ end = struct
               None, (0, Some e), ((f1, sub), c)
             (* L∀s *)
             | Some Sflex ->
-              s := (new_env1, s1), es2;
               let c = (f_shift (x, 0) r), rsub in
               Some (CBind (`Exist, x, ty)), (0, None), ((f1, sub), c)
             | None -> assert false
@@ -2227,6 +2227,7 @@ end = struct
             instantiable env2 ctx s2 x ty
             ->
             let new_env2 = LEnv.enter env2 x ty in
+            s := es1, (new_env2, s2);
             begin match get_tag (x, LEnv.get_index new_env2 x) s2 with
             (* F∀i *)
             | Some Sbound e ->
@@ -2235,7 +2236,6 @@ end = struct
               None, (h, (f1, sub))
             (* F∀s *)
             | Some Sflex ->
-              s := es1, (new_env2, s2);
               let h = (f_shift (x, 0) l), lsub in
               Some (CBind (`Forall, x, ty)), (h, (f1, sub))
             | None -> assert false
