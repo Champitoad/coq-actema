@@ -2,7 +2,7 @@
 (** Names *)
 
 module Name : sig
-  type t
+  type t [@@deriving show]
 
   val str : t -> string
   val make : string -> t
@@ -11,7 +11,7 @@ module Name : sig
 
   module Map : Map.S with type key = t
 end = struct
-  type t = { str : string; tag : int }
+  type t = { str : string; tag : int } [@@deriving show]
 
   let str var = var.str
 
@@ -45,12 +45,25 @@ module Term = struct
     | Arrow of t * t
     | Prod of Name.t * t * t
     | Cst of Name.t
+  [@@deriving show]
 end
 
 (***************************************************************************************)
 (** Environments *)
 
 module Env = struct
-  type pp_info = { symbol : string; position : [ `Prefix | `Infix | `Suffix ] }
-  type t = { globals : Term.t Name.Map.t; locals : Term.t Name.Map.t; pp : pp_info Name.Map.t }
+  type pp_info = { symbol : string; position : [ `Prefix | `Infix | `Suffix ] } [@@deriving show]
+  type t = { globals : Term.t Name.Map.t; locals : Term.t Name.Map.t; pp_info : pp_info Name.Map.t }
+
+  let empty = { globals = Name.Map.empty; locals = Name.Map.empty; pp_info = Name.Map.empty }
+
+  let union env1 env2 =
+    let check_binding _key value1 value2 =
+      assert (value1 = value2);
+      Some value1
+    in
+    { globals = Name.Map.union check_binding env1.globals env2.globals
+    ; locals = Name.Map.union check_binding env1.locals env2.locals
+    ; pp_info = Name.Map.union check_binding env1.pp_info env2.pp_info
+    }
 end

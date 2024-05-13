@@ -13,8 +13,9 @@ module Name : sig
       This is mainly for efficiency reasons, i.e. to avoid comparing potentially long strings,
       but it also makes implementing unification more convenient.
       
-      It is important that we cannot access a variable's tag from outside this module. *)
-  type t
+      The default pretty-printer provided is for debug purposes only (it includes the tag). 
+      For showing names to the user in the frontend, use [Name.str] instead. *)
+  type t [@@deriving show]
 
   (** Get the string representation of a variable. 
       This does NOT include the variable's tag, i.e. different variables can yield the same string. *)
@@ -74,6 +75,7 @@ module Term : sig
        for such little gain.
     *)
     | Cst of Name.t
+  [@@deriving show]
 end
 
 (***************************************************************************************)
@@ -95,6 +97,7 @@ module Env : sig
               [`Suffix] only makes sense for unary functions.
               [`Prefix] is always valid, and is what is used by default. *)
     }
+  [@@deriving show]
 
   (** An environment contains all the information needed to :
       - Type check terms.
@@ -102,6 +105,13 @@ module Env : sig
   type t =
     { globals : Term.t Name.Map.t  (** The type of each GLOBAL variable. *)
     ; locals : Term.t Name.Map.t  (** The type of each LOCAL variable. *)
-    ; pp : pp_info Name.Map.t  (** The information needed to pretty-print *)
+    ; pp_info : pp_info Name.Map.t  (** The information needed to pretty-print *)
     }
+
+  (** The empty environment. *)
+  val empty : t
+
+  (** [Env.union e1 e2] takes the union of [e1] and [e2]. This assumes that the information
+      contained in [e1] and [e2] is the same for common variables. *)
+  val union : t -> t -> t
 end

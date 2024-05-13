@@ -1,0 +1,6 @@
+(library
+ (name api_new)
+ (public_name coq-actema.api-new)
+ (libraries coq-actema.ann-print)
+ (preprocess
+  (pps ppx_deriving.show)))

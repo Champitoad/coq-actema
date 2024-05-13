@@ -1,4 +1,0 @@
-(library
- (name lang)
- (public_name coq-actema.lang)
- (libraries coq-actema.ann-print))
