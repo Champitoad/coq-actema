@@ -7,7 +7,8 @@ exception InvalidSubExprPath of int list
 (* -------------------------------------------------------------------- *)
 (** Items *)
 
-type item = [ `C of form | `H of Handle.t * Proof.hyp | `V of vname * bvar ] [@@deriving show]
+type item = [ `C of form | `H of Handle.t * Proof.hyp | `V of vname * bvar ]
+[@@deriving show]
 
 let form_of_item : item -> form = function
   | `C f | `H (_, Proof.{ h_form = f; _ }) -> f
@@ -17,7 +18,9 @@ let expr_of_item ?(where = `Body) : item -> expr = function
   | `V (x, (_, b)) -> begin
       match where with
       | `Head -> EVar x
-      | `Body -> Option.get_exn b (Invalid_argument "Expected a local variable with a body")
+      | `Body ->
+          Option.get_exn b
+            (Invalid_argument "Expected a local variable with a body")
     end
   | _ -> raise (Invalid_argument "Expected an expression item")
 
@@ -25,7 +28,8 @@ let term_of_item ?where it =
   try `F (form_of_item it)
   with Invalid_argument _ -> (
     try `E (expr_of_item ?where it)
-    with Invalid_argument _ -> raise (Invalid_argument "Expected an expression or formula item"))
+    with Invalid_argument _ ->
+      raise (Invalid_argument "Expected an expression or formula item"))
 
 let direct_subterm (t : term) (i : int) : term =
   let open Form in
@@ -48,8 +52,8 @@ let modify_direct_subterm (f : term -> term) (t : term) (i : int) : term =
     | `F (FPred _) | `E _ -> raise (InvalidSubExprPath [ i ])
     | `F _ -> raise (InvalidSubFormPath [ i ]))
 
-let modify_subterm (f : 'a -> term -> term) (acc : int -> term -> 'a -> 'a) (a : 'a) (t : term)
-    (p : int list) : term =
+let modify_subterm (f : 'a -> term -> term) (acc : int -> term -> 'a -> 'a)
+    (a : 'a) (t : term) (p : int list) : term =
   let rec aux a t = function
     | [] -> f a t
     | i :: p ->
@@ -93,23 +97,31 @@ module IPath = struct
       [ (`Hyp, "H"); (`Concl, "C"); (`Var `Head, "Vh"); (`Var `Body, "Vb") ]
 
   let string_of_pkind : pkind -> string = BiMap.find ^~ pkind_codes
-  let pkind_of_string : string -> pkind = BiMap.find ^~ BiMap.inverse pkind_codes
 
-  let make ?(ctxt : ctxt = { kind = `Concl; handle = 0 }) ?(sub : int list = []) (root : int) =
+  let pkind_of_string : string -> pkind =
+    BiMap.find ^~ BiMap.inverse pkind_codes
+
+  let make ?(ctxt : ctxt = { kind = `Concl; handle = 0 }) ?(sub : int list = [])
+      (root : int) =
     { root; ctxt; sub }
 
   let to_string (p : t) =
     let pp_sub =
-      Format.pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt "/") Format.pp_print_int
+      Format.pp_print_list
+        ~pp_sep:(fun fmt () -> Format.fprintf fmt "/")
+        Format.pp_print_int
     in
-    Format.asprintf "%d/%s#%d:%a" p.root (string_of_pkind p.ctxt.kind) p.ctxt.handle pp_sub p.sub
+    Format.asprintf "%d/%s#%d:%a" p.root
+      (string_of_pkind p.ctxt.kind)
+      p.ctxt.handle pp_sub p.sub
 
   let of_string (str : string) =
     let root, ({ handle; _ } as ctxt), sub =
       try
         Scanf.sscanf str "%d/%s@#%d:%s" (fun x1 x2 x3 x4 ->
             (x1, { kind = pkind_of_string x2; handle = x3 }, x4))
-      with Scanf.Scan_failure _ | Not_found | End_of_file -> raise (Invalid_argument str)
+      with Scanf.Scan_failure _ | Not_found | End_of_file ->
+        raise (Invalid_argument str)
     in
 
     if root < 0 || handle < 0 then raise (InvalidPath str);
@@ -124,12 +136,16 @@ module IPath = struct
 
     { root; ctxt; sub }
 
-  let destr (proof : Proof.proof) (p : t) : Proof.goal * item * (uid list * term) =
+  let destr (proof : Proof.proof) (p : t) :
+      Proof.goal * item * (uid list * term) =
     let exn = InvalidPath (to_string p) in
 
     let { root; ctxt; sub } = p in
 
-    let goal = try Proof.byid proof (Handle.ofint root) with Proof.InvalidGoalId _ -> raise exn in
+    let goal =
+      try Proof.byid proof (Handle.ofint root)
+      with Proof.InvalidGoalId _ -> raise exn
+    in
 
     let item, t_item =
       match (ctxt.kind, ctxt.handle) with
@@ -139,7 +155,9 @@ module IPath = struct
       | `Hyp, hd -> begin
           try
             let rp = Handle.ofint hd in
-            let ({ Proof.h_form = hf; _ } as hyd) = Proof.Hyps.byid goal.Proof.g_hyps rp in
+            let ({ Proof.h_form = hf; _ } as hyd) =
+              Proof.Hyps.byid goal.Proof.g_hyps rp
+            in
             (`H (rp, hyd), `F hf)
           with Proof.InvalidHyphId _ -> raise exn
         end
@@ -147,7 +165,9 @@ module IPath = struct
           let ((x, (_, body)) as def) =
             Option.get_exn (Vars.byid goal.g_env (Handle.ofint hd)) exn
           in
-          let expr = match part with `Head -> EVar x | `Body -> Option.get_exn body exn in
+          let expr =
+            match part with `Head -> EVar x | `Body -> Option.get_exn body exn
+          in
           (`V def, `E expr)
       | _ -> raise exn
     in
@@ -178,14 +198,17 @@ module IPath = struct
           | i :: sub -> (
               match (t, i) with
               | `E _, _ -> env
-              | `F (FBind (_, x, ty, f)), 0 -> aux (Vars.push env (x, (ty, None))) (`F f) sub
+              | `F (FBind (_, x, ty, f)), 0 ->
+                  aux (Vars.push env (x, (ty, None))) (`F f) sub
               | `F _, _ -> aux env (direct_subterm t i) sub)
         in
         aux env (`F f) sub
 
   let subpath p sp =
-    p.root = sp.root && p.ctxt.handle = sp.ctxt.handle
-    && (p.ctxt.kind = sp.ctxt.kind || (p.ctxt.kind = `Var `Head && sp.ctxt.kind = `Var `Body))
+    p.root = sp.root
+    && p.ctxt.handle = sp.ctxt.handle
+    && (p.ctxt.kind = sp.ctxt.kind
+       || (p.ctxt.kind = `Var `Head && sp.ctxt.kind = `Var `Body))
     && List.is_prefix sp.sub p.sub
 
   let erase_sub { root; ctxt; _ } = { root; ctxt; sub = [] }
@@ -203,9 +226,15 @@ module Polarity = struct
   let of_direct_subform ((p, f) : t * form) (i : int) =
     match f with
     | FConn (c, fs) when 0 <= i && i < List.length fs ->
-        let subp = match (c, i) with `Imp, 0 | `Not, 0 -> opp p | `Equiv, _ -> Sup | _, _ -> p in
+        let subp =
+          match (c, i) with
+          | `Imp, 0 | `Not, 0 -> opp p
+          | `Equiv, _ -> Sup
+          | _, _ -> p
+        in
         let subf =
-          try List.at fs i with Invalid_argument _ -> raise @@ InvalidSubFormPath [ i ]
+          try List.at fs i
+          with Invalid_argument _ -> raise @@ InvalidSubFormPath [ i ]
         in
         (subp, subf)
     | FBind (_, _, _, subf) when i = 0 -> (p, subf)
@@ -230,7 +259,8 @@ module Polarity = struct
           | FConn (c, fs) ->
               let n = match (c, i) with `Imp, 0 | `Not, 0 -> n + 1 | _ -> n in
               let subf =
-                try List.at fs i with Invalid_argument _ -> raise (InvalidSubFormPath sub)
+                try List.at fs i
+                with Invalid_argument _ -> raise (InvalidSubFormPath sub)
               in
               aux (n, subf) sub
           | FBind (_, _, _, subf) -> aux (n, subf) sub

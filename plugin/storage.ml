@@ -3,9 +3,11 @@ open Api
 type proof = (int * Logic.action) list
 
 let hash_of (s : string) : string =
-  s |> Sha512.string |> Sha512.to_bin |> Base64.encode_string ~alphabet:Base64.uri_safe_alphabet
+  s |> Sha512.string |> Sha512.to_bin
+  |> Base64.encode_string ~alphabet:Base64.uri_safe_alphabet
 
-let hash_of_aident (id : Logic.aident) : string = id |> Logic.show_aident |> hash_of
+let hash_of_aident (id : Logic.aident) : string =
+  id |> Logic.show_aident |> hash_of
 
 let remove_trailing c str =
   let n = String.length str in
@@ -30,7 +32,9 @@ let save_proof (id : Logic.aident) (prf : proof) : unit =
     match status with
     | WEXITED 0 -> ()
     | _ ->
-        let err_msg = Printf.sprintf "Could not create directory %s" (proofs_folder ()) in
+        let err_msg =
+          Printf.sprintf "Could not create directory %s" (proofs_folder ())
+        in
         raise (Sys_error err_msg)
   end;
   let oc = open_out path in
@@ -38,7 +42,9 @@ let save_proof (id : Logic.aident) (prf : proof) : unit =
   |> List.iter
        begin
          fun (idx, action) ->
-           let actionb = action |> Fun.flip Marshal.to_string [] |> Base64.encode_exn in
+           let actionb =
+             action |> Fun.flip Marshal.to_string [] |> Base64.encode_exn
+           in
            Printf.fprintf oc "%d\n%s\n" idx actionb
        end;
   close_out oc
@@ -57,7 +63,9 @@ let load_proof (id : Logic.aident) : proof option =
           let idx = line |> int_of_string in
 
           let line = input_line ic in
-          let action : Logic.action = line |> Base64.decode_exn |> Fun.flip Marshal.from_string 0 in
+          let action : Logic.action =
+            line |> Base64.decode_exn |> Fun.flip Marshal.from_string 0
+          in
 
           prf := (idx, action) :: !prf
         done

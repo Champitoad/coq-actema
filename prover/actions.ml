@@ -5,7 +5,10 @@ open Utils
 
 type selection = IPath.t list [@@deriving show]
 type adnd = { source : IPath.t; destination : IPath.t option } [@@deriving show]
-type asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ] [@@deriving show]
+
+type asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ]
+[@@deriving show]
+
 type asource = { kind : asource_kind; selection : selection } [@@deriving show]
 
 type action_type =
@@ -23,7 +26,8 @@ type action_type =
   | `Hyperlink of hyperlink * linkaction list ]
 [@@deriving show]
 
-type aoutput_kind = [ `Click of IPath.t | `DnD of Link.link | `Ctxt ] [@@deriving show]
+type aoutput_kind = [ `Click of IPath.t | `DnD of Link.link | `Ctxt ]
+[@@deriving show]
 
 type aoutput =
   { description : string
@@ -42,7 +46,9 @@ let all_hyps_ipaths Proof.{ g_id; g_pregoal } =
   |> (* Create a list of paths to each hypothesis *)
   List.map
     begin
-      fun hd -> IPath.make (Handle.toint g_id) ~ctxt:{ kind = `Hyp; handle = Handle.toint hd }
+      fun hd ->
+        IPath.make (Handle.toint g_id)
+          ~ctxt:{ kind = `Hyp; handle = Handle.toint hd }
     end
 
 (** Create a path to the body (and optionally the head) of every variable (in a subgoal). *)
@@ -56,12 +62,16 @@ let all_vars_ipaths ?(heads = true) Proof.{ g_id; g_pregoal } =
       fun hd ->
         (if heads
          then
-           [ IPath.make (Handle.toint g_id) ~ctxt:{ kind = `Var `Head; handle = Handle.toint hd } ]
+           [ IPath.make (Handle.toint g_id)
+               ~ctxt:{ kind = `Var `Head; handle = Handle.toint hd }
+           ]
          else [])
         @
         match Vars.byid env hd with
         | Some (_, (_, Some _)) ->
-            [ IPath.make (Handle.toint g_id) ~ctxt:{ kind = `Var `Body; handle = Handle.toint hd } ]
+            [ IPath.make (Handle.toint g_id)
+                ~ctxt:{ kind = `Var `Body; handle = Handle.toint hd }
+            ]
         | _ -> []
     end
 
@@ -85,13 +95,16 @@ let all_items_ipaths ?heads goal =
       [dnd.source] (resp. [dnd.destination]). If [dnd.destination] is [None], it
       will search for destinations everywhere in the current goal.
  *)
-let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) : aoutput list =
+let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) :
+    aoutput list =
   let (Proof.{ g_id; _ } as goal) = IPath.goal proof dnd.source in
 
   let srcsel : selection = List.filter (IPath.subpath dnd.source) selection in
 
   let dstsel : selection =
-    List.remove_if (fun p -> p.IPath.ctxt.handle = dnd.source.ctxt.handle) selection
+    List.remove_if
+      (fun p -> p.IPath.ctxt.handle = dnd.source.ctxt.handle)
+      selection
   in
 
   let hlpred_only_sel (pred : Pred.hlpred) : Pred.hlpred =
@@ -136,7 +149,9 @@ let dnd_actions ((dnd, selection) : adnd * selection) (proof : Proof.proof) : ao
   let open Monad.List in
   srcs >>= fun src ->
   dsts >>= fun dst ->
-  let linkactions = Pred.search_linkactions hlp proof ?fixed_srcs ?fixed_dsts (src, dst) in
+  let linkactions =
+    Pred.search_linkactions hlp proof ?fixed_srcs ?fixed_dsts (src, dst)
+  in
 
   linkactions >>= fun (((srcs, dsts) as lnk), actions) ->
   let actions = List.filter_map Link.remove_nothing actions in
@@ -232,7 +247,9 @@ let ctxt_actions (sel : selection) (proof : Proof.proof) : aoutput list =
 let actions (proof : Proof.proof) (p : asource) : aoutput list =
   match p.kind with
   | `Click path -> begin
-      let Proof.{ g_id = hd; g_pregoal = goal }, item, (_, _) = IPath.destr proof path in
+      let Proof.{ g_id = hd; g_pregoal = goal }, item, (_, _) =
+        IPath.destr proof path
+      in
       match item with
       | `C _ -> begin
           let iv = Proof.Tactics.ivariants proof ~goal_id:hd in
@@ -273,7 +290,8 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
       | `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
           let rp = Vars.getid goal.g_env x |> Option.get in
           let hg =
-            IPath.make (Handle.toint hd) ~ctxt:{ kind = `Var `Head; handle = Handle.toint rp }
+            IPath.make (Handle.toint hd)
+              ~ctxt:{ kind = `Var `Head; handle = Handle.toint rp }
           in
           [ { description = "Induction"
             ; icon = None
@@ -287,10 +305,12 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
           let rp = Vars.getid goal.g_env x |> Option.get in
 
           let hg_unfold =
-            IPath.make (Handle.toint hd) ~ctxt:{ kind = `Var `Head; handle = Handle.toint rp }
+            IPath.make (Handle.toint hd)
+              ~ctxt:{ kind = `Var `Head; handle = Handle.toint rp }
           in
           let hg_fold =
-            IPath.make (Handle.toint hd) ~ctxt:{ kind = `Var `Body; handle = Handle.toint rp }
+            IPath.make (Handle.toint hd)
+              ~ctxt:{ kind = `Var `Body; handle = Handle.toint rp }
           in
 
           [ { description = "Unfold"

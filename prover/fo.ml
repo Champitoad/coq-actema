@@ -72,7 +72,8 @@ module Hidmap = struct
 
   let to_string m =
     m |> HandleMap.bindings
-    |> List.to_string (fun (hd, id) -> Printf.sprintf "%d -> %s" (Handle.toint hd) id)
+    |> List.to_string (fun (hd, id) ->
+           Printf.sprintf "%d -> %s" (Handle.toint hd) id)
 end
 
 (* -------------------------------------------------------------------- *)
@@ -125,7 +126,9 @@ let term_of_expr e : term = `E e
 let term_of_form f : term = `F f
 
 let expr_of_term (t : term) =
-  match t with `E e -> e | _ -> raise (Invalid_argument "Expected an expression")
+  match t with
+  | `E e -> e
+  | _ -> raise (Invalid_argument "Expected an expression")
 
 let form_of_term (t : term) =
   match t with `F f -> f | _ -> raise (Invalid_argument "Expected a formula")
@@ -148,7 +151,10 @@ type ectx = iectx list
 
 (* A subterm is either a subformula, a subexpression in isolation,
    or a subexpression occurring in a predicate argument *)
-type ctx = CForm of fctx | CExpr of ectx | CExprPred of fctx * name * expr list * int * ectx
+type ctx =
+  | CForm of fctx
+  | CExpr of ectx
+  | CExprPred of fctx * name * expr list * int * ectx
 
 (* -------------------------------------------------------------------- *)
 (* Unification *)
@@ -308,7 +314,8 @@ module LEnv : sig
   val exit : lenv -> lenv
   val fold : lenv -> name -> type_ -> 'a -> (lenv -> 'a -> 'b) -> 'b
 end = struct
-  type lenv = { le_indices : (name, type_ list) Map.t; le_bindings : (name * type_) list }
+  type lenv =
+    { le_indices : (name, type_ list) Map.t; le_bindings : (name * type_) list }
 
   exception EmptyLEnv
 
@@ -316,7 +323,9 @@ end = struct
   let indices lenv = Map.map (List.length |>> ( - ) 1) lenv.le_indices
   let bindings lenv = lenv.le_bindings
   let get_index (lenv : lenv) (name : name) = Map.find name (indices lenv)
-  let exists (lenv : lenv) (x : vname) = List.mem x (Map.bindings (indices lenv))
+
+  let exists (lenv : lenv) (x : vname) =
+    List.mem x (Map.bindings (indices lenv))
 
   let enter (lenv : lenv) (name : name) (ty : type_) =
     { le_indices = Map.modify_def [] name (List.cons ty) lenv.le_indices
@@ -332,9 +341,12 @@ end = struct
           if bds = [] then None else Some bds
         in
 
-        { le_bindings = bds; le_indices = Map.modify_opt name update lenv.le_indices }
+        { le_bindings = bds
+        ; le_indices = Map.modify_opt name update lenv.le_indices
+        }
 
-  let fold (lenv : lenv) (name : name) (ty : type_) (x : 'a) (f : lenv -> 'a -> 'b) =
+  let fold (lenv : lenv) (name : name) (ty : type_) (x : 'a)
+      (f : lenv -> 'a -> 'b) =
     f (enter lenv name ty) x
 end
 
@@ -443,7 +455,13 @@ end = struct
     | `Imp -> prio_Imp
     | `Equiv -> prio_Equiv
 
-  and prio_of_fun = function "Z" -> max_int | "S" -> 3 | "mult" -> 2 | "add" -> 1 | _ -> min_int
+  and prio_of_fun = function
+    | "Z" -> max_int
+    | "S" -> 3
+    | "mult" -> 2
+    | "add" -> 1
+    | _ -> min_int
+
   and prio_Not = 5
   and prio_And = 4
   and prio_Or = 3
@@ -491,7 +509,9 @@ end = struct
       | TVar (x, i) -> Printf.sprintf "%s{%d}" x i
       | (TProd (t1, t2) | TOr (t1, t2)) as ty ->
           let t1 = for_type env ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
-          let t2 = for_type env ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
+          let t2 =
+            for_type env ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2
+          in
           let tycon =
             begin
               match ty with TProd _ -> '*' | TOr _ -> '+' | _ -> assert false
@@ -522,7 +542,8 @@ end = struct
           | `Not, [ f ] -> spaced ~left:false text_lg ^ f
           | (`And | `Or | `Imp | `Not | `Equiv), _ -> assert false
         end
-      | FPred ("_EQ", [ e1; e2 ]) -> Format.sprintf "%s = %s" (for_expr env e1) (for_expr env e2)
+      | FPred ("_EQ", [ e1; e2 ]) ->
+          Format.sprintf "%s = %s" (for_expr env e1) (for_expr env e2)
       | FPred (name, []) -> shortname name env.env_prp_name
       | FPred (name, args) ->
           let args = List.map (for_expr env) args in
@@ -530,7 +551,8 @@ end = struct
           shortname name env.env_prp_name ^ pr args
       | FBind (bd, x, ty, f) ->
           let bd = match bd with `Forall -> "forall" | `Exist -> "exists" in
-          Format.sprintf "%s %s : %s . %s" bd x (for_type env ty) (for_form env f)
+          Format.sprintf "%s %s : %s . %s" bd x (for_type env ty)
+            (for_form env f)
     in
 
     ((fun f -> for_form f), (fun e -> for_expr e), fun t -> for_type t)
@@ -547,7 +569,9 @@ end = struct
       | TVar (x, i) -> Printf.sprintf "%s{%d}" x i
       | (TProd (t1, t2) | TOr (t1, t2)) as ty ->
           let t1 = for_type env ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
-          let t2 = for_type env ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
+          let t2 =
+            for_type env ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2
+          in
           let tycon =
             begin
               match ty with TProd _ -> '*' | TOr _ -> '+' | _ -> assert false
@@ -592,7 +616,9 @@ end = struct
       | FTrue -> UTF8.of_char (UChar.chr 0x22A4)
       | FFalse -> UTF8.of_char (UChar.chr 0x22A5)
       | FConn (`Not, [ FPred ("_EQ", [ e1; e2 ]) ]) ->
-          for_expr env e1 ^ spaced (UTF8.of_char (UChar.chr 0x2260)) ^ for_expr env e2
+          for_expr env e1
+          ^ spaced (UTF8.of_char (UChar.chr 0x2260))
+          ^ for_expr env e2
       | FConn (lg, fs) -> begin
           let text_lg = lg |> unicode_of_op |> UChar.chr |> UTF8.of_char in
           let text_fs =
@@ -607,7 +633,8 @@ end = struct
           | (`And | `Or | `Imp | `Not | `Equiv), _ -> assert false
         end
       | FPred ("_dummy", _) -> "🫠"
-      | FPred ("_EQ", [ e1; e2 ]) -> Format.sprintf "%s = %s" (for_expr env e1) (for_expr env e2)
+      | FPred ("_EQ", [ e1; e2 ]) ->
+          Format.sprintf "%s = %s" (for_expr env e1) (for_expr env e2)
       | FPred (name, []) -> shortname name env.env_prp_name
       | FPred (name, args) ->
           let args = List.map (for_expr env) args in
@@ -619,12 +646,15 @@ end = struct
             | `Forall -> UTF8.of_char (UChar.chr 0x2200)
             | `Exist -> UTF8.of_char (UChar.chr 0x2203)
           in
-          Format.sprintf "%s%s : %s . %s" bd x (for_type env ty) (for_form env f)
+          Format.sprintf "%s%s : %s . %s" bd x (for_type env ty)
+            (for_form env f)
     in
 
     ((fun f -> for_form f), (fun e -> for_expr e), fun t -> for_type t)
 
-  let tostring env = function `E e -> e_tostring env e | `F f -> f_tostring env f
+  let tostring env = function
+    | `E e -> e_tostring env e
+    | `F f -> f_tostring env f
 
   let f_tohtml, e_tohtml, t_tohtml =
     let open Utils.Html in
@@ -636,9 +666,15 @@ end = struct
         | TVar (x, 0) -> [ span [ Xml.pcdata (shortname x env.env_sort_name) ] ]
         | TVar (x, i) -> [ span [ Xml.pcdata (Printf.sprintf "%s{%d}" x i) ] ]
         | TProd (t1, t2) | TOr (t1, t2) ->
-            let t1 = for_type env ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
-            let t2 = for_type env ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
-            let tycon = match ty with TProd _ -> '*' | TOr _ -> '+' | _ -> assert false in
+            let t1 =
+              for_type env ~is_pr:(prio_of_type t1 < prio_of_type ty) t1
+            in
+            let t2 =
+              for_type env ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2
+            in
+            let tycon =
+              match ty with TProd _ -> '*' | TOr _ -> '+' | _ -> assert false
+            in
             t1 @ spaced [ Xml.pcdata (UTF8.of_char (UChar.of_char tycon)) ] @ t2
         | TRec (x, t) ->
             let aout =
@@ -651,15 +687,17 @@ end = struct
       in
 
       [ span (pr ~doit:is_pr data) ]
-    and for_expr ?(id : string option option) ?(is_pr = false) env (p : int list) (expr : expr) :
-        Xml.elt list =
+    and for_expr ?(id : string option option) ?(is_pr = false) env
+        (p : int list) (expr : expr) : Xml.elt list =
       let for_expr = for_expr ?id in
 
       let thisid p =
         id
         |> Option.map (fun prefix ->
                let p = String.concat "/" (List.rev_map string_of_int p) in
-               Option.fold (fun p prefix -> Format.sprintf "%s:%s" prefix p) p prefix)
+               Option.fold
+                 (fun p prefix -> Format.sprintf "%s:%s" prefix p)
+                 p prefix)
         |> Option.map (fun x -> Xml.string_attrib "id" x)
         |> List.of_option
       in
@@ -678,7 +716,9 @@ end = struct
             let xml es p =
               List.combine es (assoc_of_fun f)
               |> List.mapi (fun i (e, cmp) ->
-                     for_expr env ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) (i :: p) e)
+                     for_expr env
+                       ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f))
+                       (i :: p) e)
             in
 
             begin
@@ -688,9 +728,13 @@ end = struct
                   id := false;
                   let rec numeral acc num sub = function
                     | EFun ("S", [ x ]) ->
-                        numeral (fun x -> [ span ~a:(thisid sub) (acc x) ]) (num + 1) (0 :: sub) x
+                        numeral
+                          (fun x -> [ span ~a:(thisid sub) (acc x) ])
+                          (num + 1) (0 :: sub) x
                     | EFun ("Z", []) ->
-                        [ span ~a:(thisid sub) (acc [ Xml.pcdata (string_of_int num) ]) ]
+                        [ span ~a:(thisid sub)
+                            (acc [ Xml.pcdata (string_of_int num) ])
+                        ]
                     | e ->
                         acc
                           begin
@@ -700,15 +744,21 @@ end = struct
                           end
                   in
                   numeral identity 0 p expr
-              | "add", [ e1; e2 ] -> e1 @ spaced [ span [ Xml.pcdata "+" ] ] @ e2
-              | "mult", [ e1; e2 ] -> e1 @ spaced [ span [ Xml.pcdata "⋅" ] ] @ e2
+              | "add", [ e1; e2 ] ->
+                  e1 @ spaced [ span [ Xml.pcdata "+" ] ] @ e2
+              | "mult", [ e1; e2 ] ->
+                  e1 @ spaced [ span [ Xml.pcdata "⋅" ] ] @ e2
               | _ -> assert false
             end
         | EFun (name, args) ->
             let args = List.mapi (fun i e -> for_expr env (i :: p) e) args in
             let aout =
               [ [ span [ Xml.pcdata (shortname name env.env_fun_name) ] ] ]
-              @ [ pr (List.flatten (List.join [ span [ Xml.pcdata ","; Xml.entity "nbsp" ] ] args))
+              @ [ pr
+                    (List.flatten
+                       (List.join
+                          [ span [ Xml.pcdata ","; Xml.entity "nbsp" ] ]
+                          args))
                 ]
             in
 
@@ -716,14 +766,17 @@ end = struct
       in
 
       [ span ~a:(if !id then thisid p else []) (pr ~doit:is_pr data) ]
-    and for_form ?(id : string option option) ?(is_pr = false) env (p : int list) (form : form) =
+    and for_form ?(id : string option option) ?(is_pr = false) env
+        (p : int list) (form : form) =
       let for_form = for_form ?id in
 
       let thisid p =
         id
         |> Option.map (fun prefix ->
                let p = String.concat "/" (List.rev_map string_of_int p) in
-               Option.fold (fun p prefix -> Format.sprintf "%s:%s" prefix p) p prefix)
+               Option.fold
+                 (fun p prefix -> Format.sprintf "%s:%s" prefix p)
+                 p prefix)
         |> Option.map (fun x -> Xml.string_attrib "id" x)
         |> List.of_option
       in
@@ -736,7 +789,11 @@ end = struct
             [ span
                 ~a:(thisid (0 :: p))
                 [ span (for_expr ?id env (0 :: 0 :: p) e1)
-                ; span [ Xml.entity "nbsp"; Xml.entity "#x2260"; Xml.entity "nbsp" ]
+                ; span
+                    [ Xml.entity "nbsp"
+                    ; Xml.entity "#x2260"
+                    ; Xml.entity "nbsp"
+                    ]
                 ; span (for_expr ?id env (1 :: 0 :: p) e2)
                 ]
             ]
@@ -749,11 +806,14 @@ end = struct
             let xml_fs =
               List.combine fs (assoc_of_op lg)
               |> List.mapi (fun i (f, cmp) ->
-                     for_form env ~is_pr:(cmp (prio_of_form f) (prio_of_op lg)) (i :: p) f)
+                     for_form env
+                       ~is_pr:(cmp (prio_of_form f) (prio_of_op lg))
+                       (i :: p) f)
             in
 
             match (lg, xml_fs) with
-            | (`And | `Or | `Imp | `Equiv), [ f1; f2 ] -> f1 @ spaced xml_lg @ f2
+            | (`And | `Or | `Imp | `Equiv), [ f1; f2 ] ->
+                f1 @ spaced xml_lg @ f2
             | `Not, [ f ] -> spaced ~left:false xml_lg @ f
             | (`And | `Or | `Imp | `Not | `Equiv), _ -> assert false
           end
@@ -763,12 +823,19 @@ end = struct
             ; span [ Xml.entity "nbsp"; Xml.pcdata "="; Xml.entity "nbsp" ]
             ; span (for_expr ?id env (1 :: p) e2)
             ]
-        | FPred (name, []) -> [ span [ Xml.pcdata (shortname name env.env_prp_name) ] ]
+        | FPred (name, []) ->
+            [ span [ Xml.pcdata (shortname name env.env_prp_name) ] ]
         | FPred (name, args) ->
-            let args = List.mapi (fun i e -> for_expr ?id env (i :: p) e) args in
+            let args =
+              List.mapi (fun i e -> for_expr ?id env (i :: p) e) args
+            in
             let aout =
               [ [ span [ Xml.pcdata (shortname name env.env_prp_name) ] ] ]
-              @ [ pr (List.flatten (List.join [ span [ Xml.pcdata ","; Xml.entity "nbsp" ] ] args))
+              @ [ pr
+                    (List.flatten
+                       (List.join
+                          [ span [ Xml.pcdata ","; Xml.entity "nbsp" ] ]
+                          args))
                 ]
             in
 
@@ -799,7 +866,9 @@ end = struct
     , (fun ?id env (expr : expr) -> span (for_expr ?id env [] expr))
     , fun env (ty : type_) -> span (for_type env ty) )
 
-  let tohtml ?id env = function `E e -> e_tohtml ?id env e | `F f -> f_tohtml ?id env f
+  let tohtml ?id env = function
+    | `E e -> e_tohtml ?id env e
+    | `F f -> f_tohtml ?id env f
 
   let f_tomathml, e_tomathml, t_tomathml =
     let open Tyxml in
@@ -814,8 +883,12 @@ end = struct
             let x = Printf.sprintf "%s{%d}" x i in
             [ mi x ]
         | TProd (t1, t2) | TOr (t1, t2) ->
-            let t1 = for_type env ~is_pr:(prio_of_type t1 < prio_of_type ty) t1 in
-            let t2 = for_type env ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2 in
+            let t1 =
+              for_type env ~is_pr:(prio_of_type t1 < prio_of_type ty) t1
+            in
+            let t2 =
+              for_type env ~is_pr:(prio_of_type t2 <= prio_of_type ty) t2
+            in
             let tycon =
               match ty with
               | TProd _ -> UChar.of_int 0x00D7
@@ -823,11 +896,14 @@ end = struct
               | _ -> assert false
             in
             t1 @ [ mo (UTF8.of_char tycon) ] @ t2
-        | TRec (x, t) -> [ mo (UTF8.of_char (UChar.of_int 0x03BC)); mi x; mo "." ] @ for_type env t
+        | TRec (x, t) ->
+            [ mo (UTF8.of_char (UChar.of_int 0x03BC)); mi x; mo "." ]
+            @ for_type env t
       in
 
       [ pr ~doit:is_pr (row data) ]
-    and for_expr ?(id : string option option) ?(is_pr = false) env (p : int list) (expr : expr) =
+    and for_expr ?(id : string option option) ?(is_pr = false) env
+        (p : int list) (expr : expr) =
       let for_expr = for_expr ?id in
 
       let data =
@@ -843,7 +919,9 @@ end = struct
             let xml es p =
               List.combine es (assoc_of_fun f)
               |> List.mapi (fun i (e, cmp) ->
-                     for_expr ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f)) env (i :: p) e)
+                     for_expr
+                       ~is_pr:(cmp (prio_of_expr e) (prio_of_fun f))
+                       env (i :: p) e)
             in
 
             begin
@@ -856,7 +934,8 @@ end = struct
                         | EFun ("S", [ x ]) -> numeral (acc + 1) x
                         | EFun ("Z", []) -> [ mn (string_of_int acc) ]
                         | e ->
-                            (xml [ e ] (List.init (acc - 1) (fun _ -> 0) @ p) |> List.hd)
+                            (xml [ e ] (List.init (acc - 1) (fun _ -> 0) @ p)
+                            |> List.hd)
                             @ [ mo "⊕" ]
                             @ [ mn (string_of_int acc) ]
                       in
@@ -877,19 +956,24 @@ end = struct
         id
         |> Option.map (fun prefix ->
                let p = String.concat "/" (List.rev_map string_of_int p) in
-               Option.fold (fun p prefix -> Format.sprintf "%s:%s" prefix p) p prefix)
+               Option.fold
+                 (fun p prefix -> Format.sprintf "%s:%s" prefix p)
+                 p prefix)
       in
       let thisid = thisid |> Option.map (Xml.string_attrib "id") in
 
       [ pr ~doit:is_pr (row ~a:(List.of_option thisid) data) ]
-    and for_form ?(id : string option option) ?(is_pr = false) env (p : int list) (form : form) =
+    and for_form ?(id : string option option) ?(is_pr = false) env
+        (p : int list) (form : form) =
       let for_form = for_form ?id in
 
       let thisid p =
         id
         |> Option.map (fun prefix ->
                let p = String.concat "/" (List.rev_map string_of_int p) in
-               Option.fold (fun p prefix -> Format.sprintf "%s:%s" prefix p) p prefix)
+               Option.fold
+                 (fun p prefix -> Format.sprintf "%s:%s" prefix p)
+                 p prefix)
         |> Option.map (fun x -> Xml.string_attrib "id" x)
         |> List.of_option
       in
@@ -906,12 +990,16 @@ end = struct
                 @ for_expr ?id env (1 :: 0 :: p) e2)
             ]
         | FConn (lg, fs) -> begin
-            let xml_lg = [ mo (UTF8.of_char (UChar.of_int (unicode_of_op lg))) ] in
+            let xml_lg =
+              [ mo (UTF8.of_char (UChar.of_int (unicode_of_op lg))) ]
+            in
 
             let xml_fs =
               List.combine fs (assoc_of_op lg)
               |> List.mapi (fun i (f, cmp) ->
-                     for_form ~is_pr:(cmp (prio_of_form f) (prio_of_op lg)) env (i :: p) f)
+                     for_form
+                       ~is_pr:(cmp (prio_of_form f) (prio_of_op lg))
+                       env (i :: p) f)
             in
 
             match (lg, xml_fs) with
@@ -920,10 +1008,14 @@ end = struct
             | (`And | `Or | `Imp | `Not | `Equiv), _ -> assert false
           end
         | FPred ("_EQ", [ e1; e2 ]) ->
-            for_expr ?id env (0 :: p) e1 @ [ mo "=" ] @ for_expr ?id env (1 :: p) e2
+            for_expr ?id env (0 :: p) e1
+            @ [ mo "=" ]
+            @ for_expr ?id env (1 :: p) e2
         | FPred (name, []) -> [ mi (shortname name env.env_prp_name) ]
         | FPred (name, args) ->
-            let args = List.mapi (fun i e -> for_expr ?id env (i :: p) e) args in
+            let args =
+              List.mapi (fun i e -> for_expr ?id env (i :: p) e) args
+            in
             [ mi (shortname name env.env_prp_name) ]
             @ [ pr (row (List.flatten (List.join [ mo "," ] args))) ]
         | FBind (bd, x, ty, f) ->
@@ -933,7 +1025,10 @@ end = struct
               | `Exist -> UTF8.of_char (UChar.chr 0x2203)
             in
 
-            [ mo bd; mi x; mo ":" ] @ for_type env ty @ [ mo "." ] @ for_form env (0 :: p) f
+            [ mo bd; mi x; mo ":" ]
+            @ for_type env ty
+            @ [ mo "." ]
+            @ for_form env (0 :: p) f
       in
 
       [ pr ~doit:is_pr (row ~a:(thisid p) data) ]
@@ -943,7 +1038,9 @@ end = struct
     , (fun ?id env (expr : expr) -> row (for_expr ?id env [] expr))
     , fun env (ty : type_) -> row (for_type env ty) )
 
-  let tomathml ?id env = function `E e -> e_tomathml ?id env e | `F f -> f_tomathml ?id env f
+  let tomathml ?id env = function
+    | `E e -> e_tomathml ?id env e
+    | `F f -> f_tomathml ?id env f
 end
 
 (* -------------------------------------------------------------------- *)
@@ -1027,7 +1124,8 @@ end = struct
     get env x >>= fun body -> return (x, body)
 
   let diff env1 env2 =
-    BiMap.vdiff env1.env_handles env2.env_handles |> BiMap.bindings |> List.split |> snd
+    BiMap.vdiff env1.env_handles env2.env_handles
+    |> BiMap.bindings |> List.split |> snd
 
   let map (env : env) (f : expr option -> expr option) =
     { env with env_var = Map.map (List.map (snd_map f)) env.env_var }
@@ -1041,7 +1139,9 @@ end = struct
          (fun (ty, body) ->
            match body with
            | Some b ->
-               Printf.sprintf "%s := %s" (Notation.t_tostring env ty) (Notation.e_tostring env b)
+               Printf.sprintf "%s := %s"
+                 (Notation.t_tostring env ty)
+                 (Notation.e_tostring env b)
            | None -> Printf.sprintf "%s" (Notation.t_tostring env ty))
          bs)
 
@@ -1078,11 +1178,17 @@ end = struct
   end
 
   let lindex (bds : bds) (x : name) : int =
-    let rec aux i = function [] -> i | (y, _) :: bds -> aux (i + if x = y then 1 else 0) bds in
+    let rec aux i = function
+      | [] -> i
+      | (y, _) :: bds -> aux (i + if x = y then 1 else 0) bds
+    in
     aux 0 bds
 
   let rindex (bds : bds) (x : name) : int =
-    let rec aux i = function [] -> i | (_, y) :: bds -> aux (i + if x = y then 1 else 0) bds in
+    let rec aux i = function
+      | [] -> i
+      | (_, y) :: bds -> aux (i + if x = y then 1 else 0) bds
+    in
     aux 0 bds
 
   let lfind (bds : bds) ((x, i) : vname) =
@@ -1193,8 +1299,11 @@ module Form : sig
     val to_string : subst -> string
   end
 
-  val e_unify : env -> LEnv.lenv -> Subst.subst -> expr eqns -> Subst.subst option
-  val f_unify : env -> LEnv.lenv -> Subst.subst -> form eqns -> Subst.subst option
+  val e_unify :
+    env -> LEnv.lenv -> Subst.subst -> expr eqns -> Subst.subst option
+
+  val f_unify :
+    env -> LEnv.lenv -> Subst.subst -> form eqns -> Subst.subst option
 end = struct
   let f_and f1 f2 = FConn (`And, [ f1; f2 ])
   let f_or f1 f2 = FConn (`Or, [ f1; f2 ])
@@ -1205,22 +1314,32 @@ end = struct
   let f_true : form = FTrue
 
   let f_ands (fs : form list) : form =
-    match fs with [] -> f_true | [ f ] -> f | f :: fs -> List.fold_left f_and f fs
+    match fs with
+    | [] -> f_true
+    | [ f ] -> f
+    | f :: fs -> List.fold_left f_and f fs
 
   let f_ors (fs : form list) : form =
-    match fs with [] -> f_false | [ f ] -> f | f :: fs -> List.fold_left f_or f fs
+    match fs with
+    | [] -> f_false
+    | [ f ] -> f
+    | f :: fs -> List.fold_left f_or f fs
 
   let f_imps (fs : form list) (f : form) = List.fold_right f_imp fs f
 
   let flatten_disjunctions =
     let rec doit acc f =
-      match f with FConn (`Or, [ f1; f2 ]) -> doit (f2 :: acc) f1 | _ -> f :: acc
+      match f with
+      | FConn (`Or, [ f1; f2 ]) -> doit (f2 :: acc) f1
+      | _ -> f :: acc
     in
     fun f -> doit [] f
 
   let flatten_conjunctions =
     let rec doit acc f =
-      match f with FConn (`And, [ f1; f2 ]) -> doit (f2 :: acc) f1 | _ -> f :: acc
+      match f with
+      | FConn (`And, [ f1; f2 ]) -> doit (f2 :: acc) f1
+      | _ -> f :: acc
     in
     fun f -> doit [] f
 
@@ -1228,9 +1347,12 @@ end = struct
     match lg with `And -> 2 | `Or -> 2 | `Imp -> 2 | `Equiv -> 2 | `Not -> 1
 
   let t_equal =
-    let rec eq_alias (bds : VName.bds) (env : env) (a : vname) (ty : type_) : bool =
+    let rec eq_alias (bds : VName.bds) (env : env) (a : vname) (ty : type_) :
+        bool =
       let tgt_a = TVars.get env a in
-      let b, tgt_b = match ty with TVar b -> (Some b, TVars.get env b) | _ -> (None, None) in
+      let b, tgt_b =
+        match ty with TVar b -> (Some b, TVars.get env b) | _ -> (None, None)
+      in
       match (b, pair_map Monad.Option.concat (tgt_a, tgt_b)) with
       (* Base case *)
       | None, (None, _) -> false (* b is not a var, and a is not an alias *)
@@ -1244,9 +1366,11 @@ end = struct
       | TVar ("_dummy", 0), _ | _, TVar ("_dummy", 0) -> true
       | TVar a, ty | ty, TVar a -> eq_alias bds env a ty
       | TUnit, TUnit -> true
-      | TProd (tya1, tyb1), TProd (tya2, tyb2) | TOr (tya1, tyb1), TOr (tya2, tyb2) ->
+      | TProd (tya1, tyb1), TProd (tya2, tyb2)
+      | TOr (tya1, tyb1), TOr (tya2, tyb2) ->
           eq bds env tya1 tya2 && eq bds env tyb1 tyb2
-      | TRec (a1, ty1), TRec (a2, ty2) -> eq (VName.Map.push bds a1 a2) env ty1 ty2
+      | TRec (a1, ty1), TRec (a2, ty2) ->
+          eq (VName.Map.push bds a1 a2) env ty1 ty2
       | _, _ -> false
     in
 
@@ -1267,7 +1391,9 @@ end = struct
       match (e1, e2) with
       | EVar x1, EVar x2 when VName.equal bds x1 x2 -> true
       | EVar x1, t | t, EVar x1 -> (
-          match Vars.get env x1 with Some (_, Some u) -> aux bds env t u | _ -> false)
+          match Vars.get env x1 with
+          | Some (_, Some u) -> aux bds env t u
+          | _ -> false)
       | EFun (f1, es1), EFun (f2, es2) when List.length es1 = List.length es2 ->
           f1 = f2 && List.for_all2 (aux bds env) es1 es2
       | _, _ -> false
@@ -1278,9 +1404,11 @@ end = struct
     let rec aux bds env f1 f2 =
       match (f1, f2) with
       | FTrue, FTrue | FFalse, FFalse -> true
-      | FPred (p1, es1), FPred (p2, es2) when List.length es1 = List.length es2 ->
+      | FPred (p1, es1), FPred (p2, es2) when List.length es1 = List.length es2
+        ->
           p1 = p2 && List.for_all2 (e_equal ~bds) es1 es2
-      | FConn (c1, fs1), FConn (c2, fs2) when List.length fs1 = List.length fs2 ->
+      | FConn (c1, fs1), FConn (c2, fs2) when List.length fs1 = List.length fs2
+        ->
           c1 = c2 && List.for_all2 (aux bds env) fs1 fs2
       | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2) when b1 = b2 ->
           t_equal env ty1 ty2 && aux (VName.Map.push bds x1 x2) env f1 f2
@@ -1314,13 +1442,17 @@ end = struct
     | (FTrue | FFalse) as f -> f
     | FPred (p, es) -> FPred (p, List.map (e_shift ~incr (x, i)) es)
     | FConn (c, fs) -> FConn (c, List.map (f_shift ~incr (x, i)) fs)
-    | FBind (b, y, ty, f) -> FBind (b, y, ty, f_shift ~incr (x, i + if x = y then 1 else 0) f)
+    | FBind (b, y, ty, f) ->
+        FBind (b, y, ty, f_shift ~incr (x, i + if x = y then 1 else 0) f)
 
-  let shift ?incr x = function `E e -> `E (e_shift ?incr x e) | `F f -> `F (f_shift ?incr x f)
+  let shift ?incr x = function
+    | `E e -> `E (e_shift ?incr x e)
+    | `F f -> `F (f_shift ?incr x f)
 
   (** [shift_under t u] will shift by 1 the variable x in [u] if [t] starts with
       a binder for x. *)
-  let shift_under t u = match t with `F (FBind (_, x, _, _)) -> shift (x, 0) u | _ -> u
+  let shift_under t u =
+    match t with `F (FBind (_, x, _, _)) -> shift (x, 0) u | _ -> u
 
   let direct_subforms = function
     | FTrue | FFalse | FPred _ -> []
@@ -1351,8 +1483,10 @@ end = struct
     match t with
     | `F (FPred (p, es)) when List.length es = List.length ts ->
         `F (FPred (p, List.map expr_of_term ts))
-    | `F f -> ts |> List.map form_of_term |> modify_direct_subforms f |> term_of_form
-    | `E e -> ts |> List.map expr_of_term |> modify_direct_subexprs e |> term_of_expr
+    | `F f ->
+        ts |> List.map form_of_term |> modify_direct_subforms f |> term_of_form
+    | `E e ->
+        ts |> List.map expr_of_term |> modify_direct_subexprs e |> term_of_expr
 
   let rec rewrite ?bds env red res (t : term) =
     if equal ?bds env red t
@@ -1374,7 +1508,9 @@ end = struct
   let rec fc_is_bound (x, i) = function
     | [] -> false
     | CBind (_, y, _) :: c ->
-        if x = y then if i = 0 then true else fc_is_bound (x, i - 1) c else fc_is_bound (x, i) c
+        if x = y
+        then if i = 0 then true else fc_is_bound (x, i - 1) c
+        else fc_is_bound (x, i) c
     | _ :: c -> fc_is_bound (x, i) c
 
   let fc_exit (x, i) =
@@ -1399,7 +1535,9 @@ end = struct
     | CForm c | CExprPred (c, _, _, _, _) -> fc_is_bound x c
     | CExpr _ -> false
 
-  let c_exit x = function CForm c | CExprPred (c, _, _, _, _) -> fc_exit x c | CExpr _ -> x
+  let c_exit x = function
+    | CForm c | CExprPred (c, _, _, _, _) -> fc_exit x c
+    | CExpr _ -> x
 
   exception InvalidContextFill of term * ctx
 
@@ -1415,23 +1553,30 @@ end = struct
   let c_rev = function
     | CForm c -> CForm (fc_rev c)
     | CExpr c -> CExpr (ec_rev c)
-    | CExprPred (fc, name, args, i, ec) -> CExprPred (fc_rev fc, name, args, i, ec_rev ec)
+    | CExprPred (fc, name, args, i, ec) ->
+        CExprPred (fc_rev fc, name, args, i, ec_rev ec)
 
   let c_push_e ic = function
     | CExpr c -> CExpr (ic :: c)
-    | CExprPred (fc, name, args, i, ec) -> CExprPred (fc, name, args, i, ic :: ec)
+    | CExprPred (fc, name, args, i, ec) ->
+        CExprPred (fc, name, args, i, ic :: ec)
     | _ -> raise (Invalid_argument "cannot push expression to formula context")
 
   let c_push_p (p, args, i) = function
     | CForm fc -> CExprPred (fc, p, args, i, [])
-    | _ -> raise (Invalid_argument "cannot push predicate to expression context")
+    | _ ->
+        raise (Invalid_argument "cannot push predicate to expression context")
 
   let c_push_f ic = function
     | CForm c -> CForm (ic :: c)
     | _ -> raise (Invalid_argument "cannot push formula to expression context")
 
   let c_push ic c =
-    match ic with `E e -> c_push_e e c | `P p -> c_push_p p c | `F f -> c_push_f f c | `None -> c
+    match ic with
+    | `E e -> c_push_e e c
+    | `P p -> c_push_p p c
+    | `F f -> c_push_f f c
+    | `None -> c
 
   (* [fresh_var ~basename names] generates a fresh name for a
      variable relative to the ones in [names], based on an optional [basename]. *)
@@ -1483,7 +1628,9 @@ end = struct
   let rec einfer (env : env) (e : expr) : type_ =
     match e with
     | EVar x -> begin
-        match Vars.get env x with None -> raise TypingError | Some (xty, _) -> xty
+        match Vars.get env x with
+        | None -> raise TypingError
+        | Some (xty, _) -> xty
       end
     | EFun ("_dummy", _) -> TVar ("_dummy", 0)
     | EFun (f, args) -> begin
@@ -1492,7 +1639,8 @@ end = struct
         | Some (fargs, fres) ->
             if List.length fargs <> List.length args then raise TypingError;
             let args = List.map (einfer env) args in
-            if not (List.for_all2 (t_equal env) fargs args) then raise TypingError;
+            if not (List.for_all2 (t_equal env) fargs args)
+            then raise TypingError;
             fres
       end
 
@@ -1513,7 +1661,8 @@ end = struct
     | FPred (name, [ e1; e2 ]) when name = "_EQ" ->
         let t1, t2 =
           begin
-            try pair_map (einfer env) (e1, e2) with TypingError -> raise TypingError
+            try pair_map (einfer env) (e1, e2)
+            with TypingError -> raise TypingError
           end
         in
         if not (t_equal env t1 t2) then raise RecheckFailure
@@ -1556,14 +1705,17 @@ end = struct
     | PFNot f1 -> pred `Not [ f1 ]
     | PFApp (name, [ e1; e2 ]) when unloc name = "_EQ" ->
         let (e1, t1), (e2, t2) = pair_map (echeck env) (e1, e2) in
-        if not (t_equal env t1 t2) then raise TypingError else FPred ("_EQ", [ e1; e2 ])
+        if not (t_equal env t1 t2)
+        then raise TypingError
+        else FPred ("_EQ", [ e1; e2 ])
     | PFApp (name, args) -> begin
         match Prps.get env (unloc name) with
         | None -> raise TypingError
         | Some ar ->
             if List.length args <> List.length ar then raise TypingError;
             let args = List.map (echeck env) args in
-            if not (List.for_all2 (t_equal env) ar (List.snd args)) then raise TypingError;
+            if not (List.for_all2 (t_equal env) ar (List.snd args))
+            then raise TypingError;
             FPred (unloc name, List.fst args)
       end
     | PFForall ((x, xty), f) ->
@@ -1587,7 +1739,8 @@ end = struct
     let rec get_tag ((n, i) as x : vname) (s : subst) =
       match s with
       | [] -> None
-      | (m, tag) :: s when n = m -> if i = 0 then Some tag else get_tag (n, i - 1) s
+      | (m, tag) :: s when n = m ->
+          if i = 0 then Some tag else get_tag (n, i - 1) s
       | _ :: s -> get_tag x s
 
     let flex (x : vname) (s : subst) = get_tag x s = Some Sflex
@@ -1598,7 +1751,9 @@ end = struct
     exception UnboundVariable of vname * subst
 
     let fetch (x : vname) (s : subst) =
-      match get_tag x s with Some (Sbound e) -> e | _ -> raise (UnboundVariable (x, s))
+      match get_tag x s with
+      | Some (Sbound e) -> e
+      | _ -> raise (UnboundVariable (x, s))
 
     let rec add ((n, i) as x : vname) (e : expr) : subst -> subst = function
       | [] -> failwith "Subst.add [1]"
@@ -1623,7 +1778,11 @@ end = struct
       | FConn (lg, fs) -> FConn (lg, List.map (f_apply1 (x, i) e) fs)
       | FPred (name, args) -> FPred (name, List.map (e_apply1 (x, i) e) args)
       | FBind (bd, y, ty, f) ->
-          FBind (bd, y, ty, f_apply1 (x, i + if x = y then 1 else 0) (e_shift (y, i) e) f)
+          FBind
+            ( bd
+            , y
+            , ty
+            , f_apply1 (x, i + if x = y then 1 else 0) (e_shift (y, i) e) f )
 
     let rec e_iter s i e =
       if i = 0
@@ -1647,7 +1806,9 @@ end = struct
     let f_apply s f = f_iter s (List.length s) f
 
     let rec e_close s = function
-      | EVar x -> begin try e_close s (fetch x s) with UnboundVariable _ -> EVar x end
+      | EVar x -> begin
+          try e_close s (fetch x s) with UnboundVariable _ -> EVar x
+        end
       | EFun (f, es) -> EFun (f, List.map (e_close s) es)
 
     let close s =
@@ -1655,13 +1816,17 @@ end = struct
       |> List.map
            begin
              fun (x, tag) ->
-               let tag = match tag with Sbound e -> Sbound (e_close s e) | _ -> tag in
+               let tag =
+                 match tag with Sbound e -> Sbound (e_close s e) | _ -> tag
+               in
                (x, tag)
            end
 
     let to_string =
       List.to_string ~sep:", " ~left:"{" ~right:"}" (fun (x, tag) ->
-          match tag with Sflex -> "Sflex(" ^ x ^ ")" | Sbound e -> "Sbound(" ^ x ^ ")")
+          match tag with
+          | Sflex -> "Sflex(" ^ x ^ ")"
+          | Sbound e -> "Sbound(" ^ x ^ ")")
   end
 
   let rec occurs (x : vname) : expr -> bool = function
@@ -1689,13 +1854,19 @@ end = struct
           Subst.flex x s
           && (not (occurs x t))
           && (* maybe unnecessary check? *)
-          Map.for_all (fun n i -> not (occurs_under (n, i) t)) (LEnv.indices lenv)
+          Map.for_all
+            (fun n i -> not (occurs_under (n, i) t))
+            (LEnv.indices lenv)
         in
         let unify_body x t = e_unify venv lenv (Subst.add x t s) eqns in
 
         let substitute_cond x = Subst.bound x s in
-        let substitute_body x t = e_unify venv lenv s ((Subst.fetch x s, t) :: eqns) in
-        let is_const x = match Vars.get venv x with Some (_, Some _) -> true | _ -> false in
+        let substitute_body x t =
+          e_unify venv lenv s ((Subst.fetch x s, t) :: eqns)
+        in
+        let is_const x =
+          match Vars.get venv x with Some (_, Some _) -> true | _ -> false
+        in
 
         match (t, u) with
         (* (eliminate) is decomposed into the 2 following mutually exclusive cases: *)
@@ -1709,7 +1880,8 @@ end = struct
         (* (delete) *)
         | EVar x, EVar y when x = y -> e_unify venv lenv s eqns
         (* (decompose) *)
-        | EFun (f, ts), EFun (g, us) when f = g -> e_unify venv lenv s (List.combine ts us @ eqns)
+        | EFun (f, ts), EFun (g, us) when f = g ->
+            e_unify venv lenv s (List.combine ts us @ eqns)
         (* (expand) *)
         | t, EVar y when is_const y -> (
             match Vars.get venv y with
@@ -1733,13 +1905,19 @@ end = struct
     | (f1, f2) :: eqns -> (
         match (f1, f2) with
         | FTrue, FTrue | FFalse, FFalse -> f_unify venv lenv s eqns
-        | FPred (p1, l1), FPred (p2, l2) when p1 = p2 && List.length l1 = List.length l2 ->
-            e_unify venv lenv s (List.combine l1 l2) >>= fun s -> f_unify venv lenv s eqns
-        | FConn (c1, l1), FConn (c2, l2) when c1 = c2 && List.length l1 = List.length l2 ->
+        | FPred (p1, l1), FPred (p2, l2)
+          when p1 = p2 && List.length l1 = List.length l2 ->
+            e_unify venv lenv s (List.combine l1 l2) >>= fun s ->
+            f_unify venv lenv s eqns
+        | FConn (c1, l1), FConn (c2, l2)
+          when c1 = c2 && List.length l1 = List.length l2 ->
             let subeqns = List.combine l1 l2 in
             f_unify venv lenv s (subeqns @ eqns)
-        | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2) when b1 = b2 && ty1 = ty2 ->
-            let f2 = Subst.f_apply1 (x2, 0) (EVar (x1, 0)) (f_shift (x1, 0) f2) in
+        | FBind (b1, x1, ty1, f1), FBind (b2, x2, ty2, f2)
+          when b1 = b2 && ty1 = ty2 ->
+            let f2 =
+              Subst.f_apply1 (x2, 0) (EVar (x1, 0)) (f_shift (x1, 0) f2)
+            in
             f_unify venv (LEnv.enter lenv x1 ty1) s [ (f1, f2) ] >>= fun s ->
             f_unify venv lenv s eqns
         | _ -> None)
@@ -1764,7 +1942,8 @@ end = struct
     let for_expr = Form.echeck env in
     function
     | PProp (name, ar) -> EPVar (unloc name, List.map for_type ar)
-    | PFun (name, (ar, ty)) -> ETFun (unloc name, (List.map for_type ar, for_type ty))
+    | PFun (name, (ar, ty)) ->
+        ETFun (unloc name, (List.map for_type ar, for_type ty))
     | PVar (name, ty) -> ETVar (unloc name, (for_type ty, None))
     | PExpr (name, body) ->
         let body, ty = for_expr body in
@@ -1795,7 +1974,9 @@ module Translate = struct
   (** From engine to API *)
 
   let rec of_expr (e : expr) : Logic.expr =
-    match e with EVar (x, _) -> Logic.EVar x | EFun (f, es) -> Logic.EFun (f, List.map of_expr es)
+    match e with
+    | EVar (x, _) -> Logic.EVar x
+    | EFun (f, es) -> Logic.EFun (f, List.map of_expr es)
 
   let of_type_ (t : type_) : Logic.type_ =
     match t with
@@ -1825,9 +2006,12 @@ module Translate = struct
     | FBind (b, x, ty, f) -> Logic.FBind (of_bkind b, x, of_type_ ty, of_form f)
 
   let of_term (t : term) : Logic.term =
-    match t with `E expr -> Logic.E (of_expr expr) | `F form -> Logic.F (of_form form)
+    match t with
+    | `E expr -> Logic.E (of_expr expr)
+    | `F form -> Logic.F (of_form form)
 
-  let of_bvar ((ty, body) : bvar) : Logic.bvar = (of_type_ ty, Option.map of_expr body)
+  let of_bvar ((ty, body) : bvar) : Logic.bvar =
+    (of_type_ ty, Option.map of_expr body)
 
   let of_env (env : env) : Logic.env =
     let map_to_assoc m f = Map.bindings m |> List.map f in
@@ -1836,7 +2020,9 @@ module Translate = struct
 
     let env_prp = map_to_assoc env.env_prp (fun (p, ar) -> (p, of_arity ar)) in
 
-    let env_fun = map_to_assoc env.env_fun (fun (f, sig_) -> (f, of_sig_ sig_)) in
+    let env_fun =
+      map_to_assoc env.env_fun (fun (f, sig_) -> (f, of_sig_ sig_))
+    in
 
     let env_sort_name = map_to_assoc env.env_sort_name identity in
 
@@ -1844,20 +2030,36 @@ module Translate = struct
 
     let env_fun_name = map_to_assoc env.env_prp_name identity in
 
-    let env_var = map_to_assoc env.env_var (fun (x, bodies) -> (x, bodies |> List.hd |> of_bvar)) in
+    let env_var =
+      map_to_assoc env.env_var (fun (x, bodies) ->
+          (x, bodies |> List.hd |> of_bvar))
+    in
 
-    { env_sort; env_prp; env_fun; env_sort_name; env_prp_name; env_fun_name; env_var }
+    { env_sort
+    ; env_prp
+    ; env_fun
+    ; env_sort_name
+    ; env_prp_name
+    ; env_fun_name
+    ; env_var
+    }
 
   (* -------------------------------------------------------------------- *)
   (** From API to engine *)
 
   let rec to_expr (e : Logic.expr) : expr =
-    match e with Logic.EVar x -> EVar (x, 0) | Logic.EFun (f, es) -> EFun (f, List.map to_expr es)
+    match e with
+    | Logic.EVar x -> EVar (x, 0)
+    | Logic.EFun (f, es) -> EFun (f, List.map to_expr es)
 
-  let to_type_ (t : Logic.type_) : type_ = match t with Logic.TVar x -> TVar (x, 0)
+  let to_type_ (t : Logic.type_) : type_ =
+    match t with Logic.TVar x -> TVar (x, 0)
+
   let to_arity (ar : Logic.arity) : arity = List.map to_type_ ar
   let to_sig_ ((ar, ret) : Logic.sig_) : sig_ = (to_arity ar, to_type_ ret)
-  let to_bvar ((ty, body) : Logic.bvar) : bvar = (to_type_ ty, Option.map to_expr body)
+
+  let to_bvar ((ty, body) : Logic.bvar) : bvar =
+    (to_type_ ty, Option.map to_expr body)
 
   let to_logcon (c : Logic.logcon) : logcon =
     match c with
@@ -1883,7 +2085,9 @@ module Translate = struct
 
     let env_prp = assoc_to_map env.env_prp (fun (p, ar) -> (p, to_arity ar)) in
 
-    let env_fun = assoc_to_map env.env_fun (fun (f, sig_) -> (f, to_sig_ sig_)) in
+    let env_fun =
+      assoc_to_map env.env_fun (fun (f, sig_) -> (f, to_sig_ sig_))
+    in
 
     let env_sort_name = assoc_to_map env.env_sort_name identity in
 
@@ -1893,7 +2097,9 @@ module Translate = struct
 
     let env_tvar = assoc_to_map env.env_sort (fun x -> (x, [ None ])) in
 
-    let env_var = assoc_to_map env.env_var (fun (x, body) -> (x, [ to_bvar body ])) in
+    let env_var =
+      assoc_to_map env.env_var (fun (x, body) -> (x, [ to_bvar body ]))
+    in
 
     let open Hidmap.State in
     let* env_handles =
@@ -1967,7 +2173,8 @@ let e_subs (f : form) : int list list =
                let sub = sub @ [ i ] in
                sub :: e_aux sub e)
         |> List.concat
-    | FConn (_, fs) -> fs |> List.mapi (fun i f -> f_aux (sub @ [ i ]) f) |> List.concat
+    | FConn (_, fs) ->
+        fs |> List.mapi (fun i f -> f_aux (sub @ [ i ]) f) |> List.concat
     | FBind (_, _, _, f) -> f_aux (sub @ [ 0 ]) f
     | _ -> []
   and e_aux sub = function

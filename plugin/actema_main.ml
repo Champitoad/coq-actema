@@ -61,7 +61,9 @@ let interactive_proof () : proof tactic =
             match exn with
             | ApplyUndo -> aux ()
             | _ ->
-                let msg = CErrors.iprint_no_report iexn |> Pp.string_of_ppcmds in
+                let msg =
+                  CErrors.iprint_no_report iexn |> Pp.string_of_ppcmds
+                in
                 Lwt_main.run (Client.send_error msg);
                 !hist.before <- Stdlib.List.tl !hist.before;
                 aux ()
@@ -77,7 +79,8 @@ let interactive_proof () : proof tactic =
           let lemmas =
             lemmas
             |> Option.default Fun.id (Option.map Lemmas.preselect_name pattern)
-            |> Option.default Fun.id (Option.map Lemmas.preselect_selection term)
+            |> Option.default Fun.id
+                 (Option.map Lemmas.preselect_selection term)
           in
           (* Send the lemmas to the server. *)
           let act = Lwt_main.run @@ Client.send_lemmas lemmas lemmas_env in
@@ -93,7 +96,9 @@ let interactive_proof () : proof tactic =
     (* Handle the action. *)
     begin
       match act with
-      | Lemmas _ -> failwith "Actema_main.interactive_proof: call handle_lemmas on the action."
+      | Lemmas _ ->
+          failwith
+            "Actema_main.interactive_proof: call handle_lemmas on the action."
       | Do (idx, a) ->
           !hist.before <- (idx, a) :: !hist.before;
           continue idx a
@@ -163,7 +168,8 @@ let isReflexiveInstance goal (cname, (cbody, _)) =
     then
       let name, _ = EConstr.destConst sigma head in
       let target =
-        Names.Constant.make1 @@ kername [ "Coq"; "Classes"; "RelationClasses" ] "Reflexive"
+        Names.Constant.make1
+        @@ kername [ "Coq"; "Classes"; "RelationClasses" ] "Reflexive"
       in
       Names.Constant.UserOrd.equal name target
     else false
@@ -172,7 +178,8 @@ let isReflexiveInstance goal (cname, (cbody, _)) =
 let print_instance goal (inst : Typeclasses.instance) : unit =
   let body =
     match inst.is_impl with
-    | Names.GlobRef.ConstRef name -> Environ.lookup_constant name (Goal.env goal)
+    | Names.GlobRef.ConstRef name ->
+        Environ.lookup_constant name (Goal.env goal)
     | _ ->
         failwith
         @@ Format.sprintf "%s is not a constant !"
@@ -207,9 +214,12 @@ let test_tac () : unit tactic =
       fun goal ->
         let target =
           (*Names.Constant.make1 @@ kername [ "Coq"; "Classes"; "RelationClasses" ] "Reflexive"*)
-          Names.Constant.make1 @@ kername [ "Coq"; "Classes"; "Morphisms" ] "Proper"
+          Names.Constant.make1
+          @@ kername [ "Coq"; "Classes"; "Morphisms" ] "Proper"
         in
-        let instances = Typeclasses.instances @@ Names.GlobRef.ConstRef target in
+        let instances =
+          Typeclasses.instances @@ Names.GlobRef.ConstRef target
+        in
         begin
           match instances with
           | None -> Log.str "Not a class."

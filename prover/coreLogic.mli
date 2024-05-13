@@ -105,7 +105,12 @@ val subterm : term -> int list -> term
 val modify_direct_subterm : (term -> term) -> term -> int -> term
 
 val modify_subterm :
-  ('a -> term -> term) -> (int -> term -> 'a -> 'a) -> 'a -> term -> int list -> term
+     ('a -> term -> term)
+  -> (int -> term -> 'a -> 'a)
+  -> 'a
+  -> term
+  -> int list
+  -> term
 
 (** [rewrite_subterm_all env red res t sub] rewrites all occurrences of [red]
       in the subterm of [t] at subpath [sub] into [res], shifting variables in

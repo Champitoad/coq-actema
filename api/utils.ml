@@ -64,11 +64,15 @@ end
 
 exception TypingError
 
-let t_equal (ty1 : type_) (ty2 : type_) = match (ty1, ty2) with TVar a, TVar b -> a = b
+let t_equal (ty1 : type_) (ty2 : type_) =
+  match (ty1, ty2) with TVar a, TVar b -> a = b
 
 let rec einfer (env : env) (e : expr) : type_ =
   match e with
-  | EVar x -> ( match Vars.get env x with None -> raise TypingError | Some (xty, _) -> xty)
+  | EVar x -> (
+      match Vars.get env x with
+      | None -> raise TypingError
+      | Some (xty, _) -> xty)
   | EFun (f, args) -> (
       match Funs.get env f with
       | None -> raise TypingError
@@ -82,7 +86,9 @@ let term_of_expr e : term = E e
 let term_of_form f : term = F f
 
 let expr_of_term (t : term) =
-  match t with E e -> e | _ -> raise (Invalid_argument "Expected an expression")
+  match t with
+  | E e -> e
+  | _ -> raise (Invalid_argument "Expected an expression")
 
 let form_of_term (t : term) =
   match t with F f -> f | _ -> raise (Invalid_argument "Expected a formula")
@@ -111,10 +117,14 @@ let direct_subterm (t : term) (i : int) : term =
     | F _ -> raise (InvalidSubFormPath [ i ]))
 
 let direct_subform (f : form) (i : int) =
-  match direct_subterm (F f) i with F f -> f | _ -> raise (InvalidSubFormPath [ i ])
+  match direct_subterm (F f) i with
+  | F f -> f
+  | _ -> raise (InvalidSubFormPath [ i ])
 
 let direct_subexpr (e : expr) (i : int) =
-  match direct_subterm (E e) i with E e -> e | _ -> raise (InvalidSubExprPath [ i ])
+  match direct_subterm (E e) i with
+  | E e -> e
+  | _ -> raise (InvalidSubExprPath [ i ])
 
 let subterm (t : term) (p : int list) =
   try List.fold_left direct_subterm t p with
@@ -132,7 +142,8 @@ type item = C of form | H of uid * hyp | V of name * bvar
 exception InvalidHypId of uid
 
 let byid (hyps : hyp list) (id : uid) =
-  try List.find (fun { h_id; _ } -> h_id = id) hyps with Not_found -> raise (InvalidHypId id)
+  try List.find (fun { h_id; _ } -> h_id = id) hyps
+  with Not_found -> raise (InvalidHypId id)
 
 let of_ipath (goal : goal) (p : ipath) : goal * item * (int list * term) =
   let exn = InvalidPath p in
@@ -176,8 +187,16 @@ let opp = function Pos -> Neg | Neg -> Pos | Sup -> Sup
 let direct_subform_pol ((p, f) : pol * form) (i : int) =
   match f with
   | FConn (c, fs) ->
-      let subp = match (c, i) with Imp, 0 | Not, 0 -> opp p | Equiv, _ -> Sup | _, _ -> p in
-      let subf = try List.nth fs i with Invalid_argument _ -> raise (InvalidSubFormPath [ i ]) in
+      let subp =
+        match (c, i) with
+        | Imp, 0 | Not, 0 -> opp p
+        | Equiv, _ -> Sup
+        | _, _ -> p
+      in
+      let subf =
+        try List.nth fs i
+        with Invalid_argument _ -> raise (InvalidSubFormPath [ i ])
+      in
       (subp, subf)
   | FBind (_, _, _, subf) -> (p, subf)
   | _ -> raise (InvalidSubFormPath [ i ])

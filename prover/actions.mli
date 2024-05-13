@@ -10,12 +10,17 @@ open Fo
 
 type selection = IPath.t list [@@deriving show]
 type adnd = { source : IPath.t; destination : IPath.t option } [@@deriving show]
-type asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ] [@@deriving show]
+
+type asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ]
+[@@deriving show]
+
 type asource = { kind : asource_kind; selection : selection } [@@deriving show]
 
 type action_type =
-  [ `Intro of int  (** The [int] indicates which intro rule to use. See Api.Logic.AIntro. *)
-  | `Elim of Handle.t * int  (** The [Handle.t] identifies the hypothesis we are eliminating. *)
+  [ `Intro of int
+    (** The [int] indicates which intro rule to use. See Api.Logic.AIntro. *)
+  | `Elim of Handle.t * int
+    (** The [Handle.t] identifies the hypothesis we are eliminating. *)
   | `Lemma of name
   | `Ind of Handle.t
   | `Simpl of IPath.t
@@ -28,7 +33,8 @@ type action_type =
   | `Hyperlink of Link.hyperlink * Link.linkaction list ]
 [@@deriving show]
 
-type aoutput_kind = [ `Click of IPath.t | `DnD of Link.link | `Ctxt ] [@@deriving show]
+type aoutput_kind = [ `Click of IPath.t | `DnD of Link.link | `Ctxt ]
+[@@deriving show]
 
 type aoutput =
   { description : string

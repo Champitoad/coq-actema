@@ -158,7 +158,7 @@ val infix : int -> int -> 'a doc -> 'a doc -> 'a doc -> 'a doc
 val flow : 'a doc -> 'a doc list -> 'a doc
 
 (** [flow_map sep f docs] is equivalent to [flow sep (List.map f docs)]. *)
-val flow_map : 'a doc -> ('a -> 'a doc) -> 'a list -> 'a doc
+val flow_map : 'a doc -> ('b -> 'a doc) -> 'b list -> 'a doc
 
 (** [x ^+^ y] separates [x] and [y] with a non-breakable space.
     It is a short-hand for [x ^^ space ^^ y]. *)
@@ -246,7 +246,9 @@ end) : Backend with type annot = A.t and type output = string
     (depending on whether the content is empty or not) with tag [tag] and attributes [attribs].
 *)
 module XmlBackend :
-  Backend with type annot = string * Xml.attrib list and type output = Xml.elt list
+  Backend
+    with type annot = string * Xml.attrib list
+     and type output = Xml.elt list
 
 (**************************************************************************************)
 (** Pretty-printing to a backend. *)

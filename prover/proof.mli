@@ -13,7 +13,8 @@ exception SubgoalNotOpened of Handle.t
 type proof
 
 (** A single hypothesis. *)
-type hyp = { h_src : Handle.t option; h_gen : int; h_form : form } [@@deriving show]
+type hyp = { h_src : Handle.t option; h_gen : int; h_form : form }
+[@@deriving show]
 
 (** A module to handle collections of hypotheses. *)
 module Hyps : sig
@@ -105,10 +106,16 @@ module Tactics : sig
   val xprogress : proof -> Handle.t -> pregoals -> Handle.t list * proof
 
   (** Add a local definition (in a given goal). *)
-  val add_local_def : proof -> goal_id:Handle.t -> string * Fo.type_ * Fo.expr -> proof
+  val add_local_def :
+    proof -> goal_id:Handle.t -> string * Fo.type_ * Fo.expr -> proof
 
   (** Move a hypothesis BEFORE another hypothesis. *)
-  val move : proof -> goal_id:Handle.t -> hyp_id:Handle.t -> dest_id:Handle.t option -> proof
+  val move :
+       proof
+    -> goal_id:Handle.t
+    -> hyp_id:Handle.t
+    -> dest_id:Handle.t option
+    -> proof
 
   (** Get all the introduction variants (in a given goal). *)
   val ivariants : proof -> goal_id:Handle.t -> string list

@@ -12,7 +12,9 @@ module BiMap (S : Map.OrderedType) (T : Map.OrderedType) = struct
 
   let of_list xs =
     let r = xs |> List.to_seq |> SMap.of_seq in
-    let l = xs |> List.map (fun (x, y) -> (y, x)) |> List.to_seq |> TMap.of_seq in
+    let l =
+      xs |> List.map (fun (x, y) -> (y, x)) |> List.to_seq |> TMap.of_seq
+    in
     (r, l)
 
   let keys (r, _) = SMap.bindings r |> Stdlib.List.split |> fst
@@ -24,7 +26,9 @@ module BiMap (S : Map.OrderedType) (T : Map.OrderedType) = struct
     let f _ x _ = Some x in
     (SMap.union f l1 l2, TMap.union f r1 r2)
 
-  let add k v (r, l) = if SMap.mem k r then (r, l) else (SMap.add k v r, TMap.add v k l)
+  let add k v (r, l) =
+    if SMap.mem k r then (r, l) else (SMap.add k v r, TMap.add v k l)
+
   let replace k v (r, l) = (SMap.add k v r, TMap.add v k l)
 
   let remove k (r, l) =
@@ -60,7 +64,9 @@ module List = struct
   let take n l =
     let rec loop n acc l =
       begin
-        match l with x :: l' when n > 0 -> loop (n - 1) (x :: acc) l' | _ -> List.rev acc
+        match l with
+        | x :: l' when n > 0 -> loop (n - 1) (x :: acc) l'
+        | _ -> List.rev acc
       end
     in
     loop n [] l
@@ -71,10 +77,14 @@ module List = struct
     match l with
     | [] -> None
     | hd :: tl -> (
-        match unsnoc tl with Some (init, last) -> Some (hd :: init, last) | None -> Some ([], hd))
+        match unsnoc tl with
+        | Some (init, last) -> Some (hd :: init, last)
+        | None -> Some ([], hd))
 
   let last (l : 'a list) : 'a =
-    match unsnoc l with Some (_, x) -> x | None -> failwith "List.last : got an empty list"
+    match unsnoc l with
+    | Some (_, x) -> x
+    | None -> failwith "List.last : got an empty list"
 end
 
 let ssystime () = Printf.sprintf "%f" (Sys.time ())

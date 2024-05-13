@@ -20,7 +20,9 @@ end = struct
     (* [max_tag[x]] stores the maximum tag that was used to create a variable with name [x]. *)
     let max_tag : (string, int) Hashtbl.t = Hashtbl.create 32 in
     fun str ->
-      let tag = match Hashtbl.find_opt max_tag str with None -> 0 | Some n -> n + 1 in
+      let tag =
+        match Hashtbl.find_opt max_tag str with None -> 0 | Some n -> n + 1
+      in
       Hashtbl.replace max_tag str tag;
       { str; tag }
 
@@ -46,16 +48,35 @@ module Term = struct
     | Prod of Name.t * t * t
     | Cst of Name.t
   [@@deriving show]
+
+  let mkApp f arg =
+    match f with
+    | App (f, f_args) -> App (f, f_args @ [ arg ])
+    | _ -> App (f, [ arg ])
+
+  let mkApps f args =
+    assert (not @@ List.is_empty args);
+    match f with App (f, f_args) -> App (f, f_args @ args) | _ -> App (f, args)
 end
 
 (***************************************************************************************)
 (** Environments *)
 
 module Env = struct
-  type pp_info = { symbol : string; position : [ `Prefix | `Infix | `Suffix ] } [@@deriving show]
-  type t = { globals : Term.t Name.Map.t; locals : Term.t Name.Map.t; pp_info : pp_info Name.Map.t }
+  type pp_info = { symbol : string; position : [ `Prefix | `Infix | `Suffix ] }
+  [@@deriving show]
 
-  let empty = { globals = Name.Map.empty; locals = Name.Map.empty; pp_info = Name.Map.empty }
+  type t =
+    { globals : Term.t Name.Map.t
+    ; locals : Term.t Name.Map.t
+    ; pp_info : pp_info Name.Map.t
+    }
+
+  let empty =
+    { globals = Name.Map.empty
+    ; locals = Name.Map.empty
+    ; pp_info = Name.Map.empty
+    }
 
   let union env1 env2 =
     let check_binding _key value1 value2 =

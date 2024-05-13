@@ -35,7 +35,8 @@ with type t = symbol = struct
 
   let to_string = function
     | Cst c -> Names.Constant.to_string c
-    | Ctr ((mind, i), j) -> Printf.sprintf "%s_%d_%d" (Names.MutInd.to_string mind) i j
+    | Ctr ((mind, i), j) ->
+        Printf.sprintf "%s_%d_%d" (Names.MutInd.to_string mind) i j
     | Ind (mind, i) -> Printf.sprintf "%s_%d" (Names.MutInd.to_string mind) i
     | Var id -> Names.Id.to_string id
 
@@ -49,11 +50,16 @@ module FOSign = struct
   module SymbolMap = Map.Make (Symbol)
 
   type symbols = SymbolNames.t
-  type typing = { t_funcs : Logic.sig_ NameMap.t; t_preds : Logic.arity NameMap.t }
+
+  type typing =
+    { t_funcs : Logic.sig_ NameMap.t; t_preds : Logic.arity NameMap.t }
+
   type t = { symbols : symbols; typing : typing }
 
   let empty : t =
-    { symbols = SymbolNames.empty; typing = { t_funcs = NameMap.empty; t_preds = NameMap.empty } }
+    { symbols = SymbolNames.empty
+    ; typing = { t_funcs = NameMap.empty; t_preds = NameMap.empty }
+    }
 
   let union (s1 : t) (s2 : t) : t =
     let f _ x _ = Some x in
@@ -68,10 +74,14 @@ module FOSign = struct
     sign.symbols
     |> SymbolNames.filter
          begin
-           fun _ n -> not (NameMap.mem n sign.typing.t_funcs || NameMap.mem n sign.typing.t_preds)
+           fun _ n ->
+             not
+               (NameMap.mem n sign.typing.t_funcs
+               || NameMap.mem n sign.typing.t_preds)
          end
 
-  let sort_names (sign : t) : string list = sign |> sort_symbols |> SymbolNames.values
+  let sort_names (sign : t) : string list =
+    sign |> sort_symbols |> SymbolNames.values
 end
 
 let peano : FOSign.t =
@@ -84,7 +94,8 @@ let peano : FOSign.t =
     |> add (Ctr Trm.Datatypes.zero_name) "Z"
     |> add (Ctr Trm.Datatypes.succ_name) "S"
     |> fun m ->
-    List.fold_left (fun m name -> add (Cst name) "add" m) m Trm.add_names |> fun m ->
+    List.fold_left (fun m name -> add (Cst name) "add" m) m Trm.add_names
+    |> fun m ->
     List.fold_left (fun m name -> add (Cst name) "mult" m) m Trm.mul_names
   in
   let typing =
@@ -116,7 +127,9 @@ module Export = struct
 
   let is_imp (env, evd) x t1 t2 : bool =
     is_prop env evd t1
-    && is_prop (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env) evd t2
+    && is_prop
+         (EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env)
+         evd t2
     && (x.Context.binder_name = Names.Anonymous || EConstr.Vars.noccurn evd 1 t2)
 
   type destenv = { env : Environ.env; evd : Evd.evar_map }
@@ -133,15 +146,21 @@ module Export = struct
     Some (res, sign)
 
   let dest_to_state default (m : 'a Dest.t) : 'a State.t =
-   fun sign -> match Dest.run m sign with None -> (default, sign) | Some (v, sign) -> (v, sign)
+   fun sign ->
+    match Dest.run m sign with
+    | None -> (default, sign)
+    | Some (v, sign) -> (v, sign)
 
   open FOSign
   open Dest
 
   let destKO = lift None
-  let destwrap (f : 'a -> 'b) (x : 'a) : 'b Dest.t = try return (f x) with Constr.DestKO -> destKO
 
-  let compdest (f : 'a -> 'b Dest.t) (g : 'a -> 'b Dest.t) (x : 'a) : 'b Dest.t =
+  let destwrap (f : 'a -> 'b) (x : 'a) : 'b Dest.t =
+    try return (f x) with Constr.DestKO -> destKO
+
+  let compdest (f : 'a -> 'b Dest.t) (g : 'a -> 'b Dest.t) (x : 'a) : 'b Dest.t
+      =
     let* sign = get in
     match f x sign with
     | Some (v, sign) ->
@@ -149,7 +168,8 @@ module Export = struct
         return v
     | None -> g x
 
-  let trydest (f : 'a -> 'b Dest.t) (g : 'a -> 'b State.t) (x : 'a) : 'b State.t =
+  let trydest (f : 'a -> 'b Dest.t) (g : 'a -> 'b State.t) (x : 'a) : 'b State.t
+      =
     let open State in
     let* sign = get in
     match f x sign with
@@ -219,12 +239,15 @@ module Export = struct
 
   and add_symbol ?(strict = false) name sy ty e : unit Dest.t =
     begin
-      add_sort name sy ty @> add_func ~strict name sy ty @> add_pred name sy ty
+      add_sort name sy ty
+      @> add_func ~strict name sy ty
+      @> add_pred name sy ty
       @> fun _ -> return ()
     end
       e
 
-  and add_symbol_lazy ?(strict = false) sy (info : unit -> string * EConstr.t) e : unit Dest.t =
+  and add_symbol_lazy ?(strict = false) sy (info : unit -> string * EConstr.t) e
+      : unit Dest.t =
     let* sign = get in
     if not (SymbolNames.mem sy sign.symbols)
     then
@@ -312,7 +335,8 @@ module Export = struct
       let info () =
         let name = Names.Id.to_string id in
         let ty =
-          Environ.lookup_named id env |> Context.Named.Declaration.get_type |> EConstr.of_constr
+          Environ.lookup_named id env
+          |> Context.Named.Declaration.get_type |> EConstr.of_constr
         in
         (name, ty)
       in
@@ -344,15 +368,22 @@ module Export = struct
    fun ({ env; evd; _ }, t) ->
     let* n = destwrap (EConstr.destRel evd) t in
     let name =
-      EConstr.lookup_rel n env |> EConstr.to_rel_decl evd |> Context.Rel.Declaration.get_name
+      EConstr.lookup_rel n env |> EConstr.to_rel_decl evd
+      |> Context.Rel.Declaration.get_name
     in
-    match name with Name id -> return (Logic.EVar (Names.Id.to_string id)) | _ -> destKO
+    match name with
+    | Name id -> return (Logic.EVar (Names.Id.to_string id))
+    | _ -> destKO
 
   and dest_eapp : edest =
    fun (({ evd; _ } as e), t) ->
     let* head, args = destwrap (EConstr.destApp evd) t in
     let* name, _ = find_func (e, head) in
-    let* targs = args |> Array.to_list |> State.map (fun u -> dest_expr (e, u)) |> state_to_dest in
+    let* targs =
+      args |> Array.to_list
+      |> State.map (fun u -> dest_expr (e, u))
+      |> state_to_dest
+    in
     return (Logic.EFun (name, targs))
 
   and dest_edummy : destarg -> Logic.expr State.t =
@@ -360,7 +391,8 @@ module Export = struct
     if log_dummy
     then
       Log.str
-      @@ Format.sprintf "Failed to translate expression:\n%s" (Log.string_of_econstr env evd t);
+      @@ Format.sprintf "Failed to translate expression:\n%s"
+           (Log.string_of_econstr env evd t);
     State.return dummy_expr
 
   and dest_expr : destarg -> Logic.expr State.t =
@@ -397,7 +429,9 @@ module Export = struct
       let* head, args = destwrap (EConstr.destApp evd) t in
       let* name, _ = find_pred (e, head) in
       let* targs =
-        args |> Array.to_list |> State.map (fun u -> dest_expr (e, u)) |> state_to_dest
+        args |> Array.to_list
+        |> State.map (fun u -> dest_expr (e, u))
+        |> state_to_dest
       in
       Dest.return (Logic.FPred (name, targs))
 
@@ -437,7 +471,9 @@ module Export = struct
     if not (is_imp (env, evd) x t1 t2)
     then destKO
     else
-      let env = EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env in
+      let env =
+        EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env
+      in
       let* f1 = dest_form (e, t1) |> state_to_dest in
       let* f2 = dest_form ({ e with env }, t2) |> state_to_dest in
       return (Logic.FConn (Logic.Imp, [ f1; f2 ]))
@@ -505,7 +541,9 @@ module Export = struct
     | Name id ->
         let name = Names.Id.to_string id in
         let ty = Logic.TVar sort in
-        let env = EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env in
+        let env =
+          EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env
+        in
         let* body = dest_form ({ e with env }, t2) |> state_to_dest in
         return (Logic.FBind (Logic.Forall, name, ty, body))
     | _ -> destKO
@@ -523,7 +561,11 @@ module Export = struct
           | Name id ->
               let name = Names.Id.to_string id in
               let ty = Logic.TVar sort in
-              let env = EConstr.push_rel (Context.Rel.Declaration.LocalAssum (x, t1)) env in
+              let env =
+                EConstr.push_rel
+                  (Context.Rel.Declaration.LocalAssum (x, t1))
+                  env
+              in
               let* body = dest_form ({ e with env }, t2) |> state_to_dest in
               return (Logic.FBind (Logic.Exist, name, ty, body))
           | _ -> destKO
@@ -534,15 +576,17 @@ module Export = struct
    fun ({ env; evd; _ }, t) ->
     if log_dummy
     then
-      Log.str @@ Format.sprintf "Failed to translate formula:\n%s" (Log.string_of_econstr env evd t);
+      Log.str
+      @@ Format.sprintf "Failed to translate formula:\n%s"
+           (Log.string_of_econstr env evd t);
     State.return dummy_form
 
   and dest_form : destarg -> Logic.form State.t =
    fun et ->
     begin
-      dest_imp @>? dest_forall @>? dest_eq @>? dest_exists @>? dest_and @>? dest_or @>? dest_iff
-      @>? dest_not @>? dest_true @>? dest_false @>? dest_papp @>? dest_pconst @>? dest_pvar
-      @>? dest_dummy
+      dest_imp @>? dest_forall @>? dest_eq @>? dest_exists @>? dest_and
+      @>? dest_or @>? dest_iff @>? dest_not @>? dest_true @>? dest_false
+      @>? dest_papp @>? dest_pconst @>? dest_pvar @>? dest_dummy
     end
       et
 
@@ -560,24 +604,37 @@ module Export = struct
     let env_sort = "_dummy" :: sort_names sign in
     let env_sort_name = List.(combine env_sort (map shortname env_sort)) in
 
-    let func_names = sign.typing.t_funcs |> NameMap.bindings |> List.split |> fst in
+    let func_names =
+      sign.typing.t_funcs |> NameMap.bindings |> List.split |> fst
+    in
     let env_fun =
       ("_dummy", ([], Logic.TVar "_dummy"))
       :: List.map (fun f -> (f, NameMap.find f sign.typing.t_funcs)) func_names
     in
     let env_fun_name = List.(combine func_names (map shortname func_names)) in
 
-    let pred_names = sign.typing.t_preds |> NameMap.bindings |> List.split |> fst in
+    let pred_names =
+      sign.typing.t_preds |> NameMap.bindings |> List.split |> fst
+    in
     let env_prp =
-      ("_dummy", []) :: List.map (fun p -> (p, NameMap.find p sign.typing.t_preds)) pred_names
+      ("_dummy", [])
+      :: List.map (fun p -> (p, NameMap.find p sign.typing.t_preds)) pred_names
     in
     let env_prp_name = List.(combine pred_names (map shortname pred_names)) in
 
     let env_var = NameMap.bindings venv in
 
-    { env_sort; env_sort_name; env_fun; env_fun_name; env_prp; env_prp_name; env_var }
+    { env_sort
+    ; env_sort_name
+    ; env_fun
+    ; env_fun_name
+    ; env_prp
+    ; env_prp_name
+    ; env_var
+    }
 
-  let add_var name ty value ({ env; evd } as e : destenv) (venv : varenv) : varenv Dest.t =
+  let add_var name ty value ({ env; evd } as e : destenv) (venv : varenv) :
+      varenv Dest.t =
     let* sort = find_sort (e, ty) in
     let* body =
       match value with
@@ -596,7 +653,9 @@ module Export = struct
         fun venv decl ->
           let id = Context.Named.Declaration.get_id decl in
           let name = id |> Names.Id.to_string in
-          let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
+          let ty =
+            decl |> Context.Named.Declaration.get_type |> EConstr.of_constr
+          in
           let value = Context.Named.Declaration.get_value decl in
 
           let open State in
@@ -619,21 +678,24 @@ module Export = struct
 
           return venv
       end
-      NameMap.empty (Environ.named_context coq_env)
+      NameMap.empty
+      (Environ.named_context coq_env)
 
   (** Does an expression contain [_dummy] as a sub-expression ? *)
   let rec expr_contains_dummy expr : bool =
     match expr with
     | Logic.EVar name -> false
     | Logic.EFun (f, exprs) ->
-        (f = "_dummy" && List.length exprs = 0) || List.exists expr_contains_dummy exprs
+        (f = "_dummy" && List.length exprs = 0)
+        || List.exists expr_contains_dummy exprs
 
   (** Does a formula contain [_dummy] as a sub-formula or sub-expression ? *)
   let rec form_contains_dummy form : bool =
     match form with
     | Logic.FTrue | Logic.FFalse -> false
     | Logic.FPred (name, exprs) ->
-        (name = "_dummy" && List.length exprs = 0) || List.exists expr_contains_dummy exprs
+        (name = "_dummy" && List.length exprs = 0)
+        || List.exists expr_contains_dummy exprs
     | Logic.FConn (conn, forms) -> List.exists form_contains_dummy forms
     | Logic.FBind (kind, x, ty, f) -> form_contains_dummy f
 
@@ -678,9 +740,11 @@ module Export = struct
     with Invalid_argument _ -> None
 
   (** Collect all the lemmas from coq_env.env_globals.constants we can translate to Actema. *)
-  let constant_lemmas ({ env = coq_env; evd } as e : destenv) : Logic.lemma list State.t =
+  let constant_lemmas ({ env = coq_env; evd } as e : destenv) :
+      Logic.lemma list State.t =
     let g_consts =
-      (Environ.Globals.view coq_env.env_globals).constants |> Names.Cmap_env.bindings
+      (Environ.Globals.view coq_env.env_globals).constants
+      |> Names.Cmap_env.bindings
     in
     State.fold
       begin
@@ -691,7 +755,9 @@ module Export = struct
             match encode_lemma_name id with
             | None -> return lemmas
             | Some l_full ->
-                let l_user = id |> Names.Constant.label |> Names.Label.to_string in
+                let l_user =
+                  id |> Names.Constant.label |> Names.Label.to_string
+                in
                 let ty = ckey.Declarations.const_type |> EConstr.of_constr in
                 let* l_stmt = dest_form (e, ty) in
 
@@ -705,10 +771,12 @@ module Export = struct
       [] g_consts
 
   (** Collect all the lemmas from coq_env.env_globals.inductives we can translate to Actema. *)
-  let constructor_lemmas ({ env = coq_env; evd } as e : destenv) : Logic.lemma list State.t =
+  let constructor_lemmas ({ env = coq_env; evd } as e : destenv) :
+      Logic.lemma list State.t =
     let g_constructs =
       (* Get the list of all mutual inductives. *)
-      (Environ.Globals.view coq_env.env_globals).inductives |> Names.Mindmap_env.bindings
+      (Environ.Globals.view coq_env.env_globals).inductives
+      |> Names.Mindmap_env.bindings
       (* Get the list of all inductives.
          Inductives in a block are indexed starting at 0. *)
       |> List.concat_map
@@ -736,7 +804,10 @@ module Export = struct
             | None -> return lemmas
             | Some l_full ->
                 let _, j = constr_name in
-                let l_user = ind_body.Declarations.mind_consnames.(j - 1) |> Names.Id.to_string in
+                let l_user =
+                  ind_body.Declarations.mind_consnames.(j - 1)
+                  |> Names.Id.to_string
+                in
                 let ty = constr_type |> EConstr.of_constr in
                 let* l_stmt = dest_form (e, ty) in
 
@@ -758,7 +829,9 @@ module Export = struct
       begin
         fun hyps decl ->
           let name = Context.Named.Declaration.get_id decl in
-          let ty = decl |> Context.Named.Declaration.get_type |> EConstr.of_constr in
+          let ty =
+            decl |> Context.Named.Declaration.get_type |> EConstr.of_constr
+          in
           dest_to_state hyps
             begin
               let open Dest in
@@ -771,7 +844,8 @@ module Export = struct
               else return hyps
             end
       end
-      [] (Environ.named_context coq_env)
+      []
+      (Environ.named_context coq_env)
 
   (** [goal env sign gl] exports the Coq goal [gl] into an Actema goal and a
      mapping from Actema uids to Coq identifiers *)
@@ -804,7 +878,8 @@ module Export = struct
     (goal, sign)
 
   (** Get the list of all lemmas we can export to actema. *)
-  let lemmas (goal : Goal.t) (init_sign : FOSign.t) : Logic.lemma list * FOSign.t =
+  let lemmas (goal : Goal.t) (init_sign : FOSign.t) :
+      Logic.lemma list * FOSign.t =
     State.run
       begin
         let open State in
@@ -815,10 +890,12 @@ module Export = struct
         let* l2 = constructor_lemmas destenv in
         let stop = Sys.time () in
         Log.str
-        @@ Format.sprintf "Time to export lemmas: %.2fs (constants) and %.2fs (inductives)"
+        @@ Format.sprintf
+             "Time to export lemmas: %.2fs (constants) and %.2fs (inductives)"
              (middle -. start) (stop -. middle);
         Log.str
-        @@ Format.sprintf "Succesfully exported lemmas: %d (constants) and %d (inductives)"
+        @@ Format.sprintf
+             "Succesfully exported lemmas: %d (constants) and %d (inductives)"
              (List.length l1) (List.length l2);
         return (l1 @ l2)
       end

@@ -74,7 +74,8 @@ type goals = goal list [@@deriving show]
 type lgoal = hyp list * form [@@deriving show]
 
 (* Abstract goal, without the signature *)
-type agoal = { a_vars : varenv; a_hyps : hyp list; a_concl : form } [@@deriving show]
+type agoal = { a_vars : varenv; a_hyps : hyp list; a_concl : form }
+[@@deriving show]
 
 (* A lemma has a "user name" : the name we display to the user,
    and a "full name" : a potentially not very readable encoding
@@ -126,9 +127,11 @@ type action =
   | APbp of ipath (* Proof-by-Pointing contextual action *)
   | ACase of ipath (* Case contextual action *)
   | ACut of form (* Click on +hyp button *)
-  | AGeneralize of uid (* Generalization of a hypothesis. This uses [generalize dependent]. *)
+  | AGeneralize of uid
+    (* Generalization of a hypothesis. This uses [generalize dependent]. *)
   | ALink of (ipath * ipath * itrace) (* DnD action for subformula linking *)
-  | AInstantiate of (expr * ipath) (* DnD action for instantiating a quantifier *)
+  | AInstantiate of (expr * ipath)
+    (* DnD action for instantiating a quantifier *)
 [@@deriving show]
 
 (* An action identifier is a pair of an abstract goal and an arbitrary string identifier *)

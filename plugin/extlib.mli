@@ -27,7 +27,14 @@ module List : sig
   include module type of Stdlib.List
 
   val nth_index : int -> 'a -> 'a t -> int
-  val to_string : ?sep:string -> ?left:string -> ?right:string -> ('a -> string) -> 'a t -> string
+
+  val to_string :
+       ?sep:string
+    -> ?left:string
+    -> ?right:string
+    -> ('a -> string)
+    -> 'a t
+    -> string
 
   (** Returns the first [n] elements of a list [l]. 
       If [l] has less than [n] elements, returns [l]. *)

@@ -101,7 +101,8 @@ let empty = Empty
 let fancysubstring s ofs len apparent_length =
   if len = 0 then empty else FancyString (s, ofs, len, apparent_length)
 
-let fancystring s apparent_length = fancysubstring s 0 (String.length s) apparent_length
+let fancystring s apparent_length =
+  fancysubstring s 0 (String.length s) apparent_length
 
 let utf8_length s =
   let rec length_aux s c i =
@@ -109,7 +110,15 @@ let utf8_length s =
     then c
     else
       let n = Char.code (String.unsafe_get s i) in
-      let k = if n < 0x80 then 1 else if n < 0xe0 then 2 else if n < 0xf0 then 3 else 4 in
+      let k =
+        if n < 0x80
+        then 1
+        else if n < 0xe0
+        then 2
+        else if n < 0xf0
+        then 3
+        else 4
+      in
       length_aux s (c + 1) (i + k)
   in
   length_aux s 0 0
@@ -124,7 +133,10 @@ let char c =
 let space = FancyString (" ", 0, 1, 1)
 let hardline = HardLine
 let blank n = match n with 0 -> empty | 1 -> space | _ -> Blank n
-let ifflat doc1 doc2 = match doc1 with IfFlat (doc1, _) | doc1 -> IfFlat (doc1, doc2)
+
+let ifflat doc1 doc2 =
+  match doc1 with IfFlat (doc1, _) | doc1 -> IfFlat (doc1, doc2)
+
 let break i = ifflat (blank i) hardline
 
 let ( ^^ ) x y =
@@ -169,7 +181,9 @@ let concat docs =
   List.fold_left ( ^^ ) empty docs
 
 let separate sep docs =
-  foldli (fun i accu doc -> if i = 0 then doc else accu ^^ sep ^^ doc) empty docs
+  foldli
+    (fun i accu doc -> if i = 0 then doc else accu ^^ sep ^^ doc)
+    empty docs
 
 let hang i d = align (nest i d)
 let optional f = function None -> empty | Some x -> f x
@@ -220,7 +234,10 @@ struct
   let initial_state () = Buffer.create 256
   let get_output buffer = Buffer.contents buffer
   let add_char channel char = Buffer.add_char channel char
-  let add_substring channel string ~ofs ~len = Buffer.add_substring channel string ofs len
+
+  let add_substring channel string ~ofs ~len =
+    Buffer.add_substring channel string ofs len
+
   let enter_annot _channel _annot = ()
   let exit_annot _channel _annot = ()
 end
@@ -263,10 +280,12 @@ module XmlBackend = struct
     (* [Xml.pcdta] automatically escapes special characters (e.g. '<' or '>') to Xml entities.
        However it does not escape whitespace (spaces and newlines) : the resulting Xml has
        to be rendered with style="white-space: pre" to preserve whitespace. *)
-    modify_top stack @@ fun frame -> Xml.pcdata (String.sub str ofs len) :: frame
+    modify_top stack @@ fun frame ->
+    Xml.pcdata (String.sub str ofs len) :: frame
 
   (** Add a single character to the current frame. *)
-  let add_char stack char = add_substring stack (String.make 1 char) ~ofs:0 ~len:1
+  let add_char stack char =
+    add_substring stack (String.make 1 char) ~ofs:0 ~len:1
 
   (** Enter a new annotation scope, i.e. push a frame on the stack. *)
   let enter_annot stack _ = Stack.push [] stack
@@ -277,7 +296,9 @@ module XmlBackend = struct
     (* Pop the current top frame and make an Xml node/leaf out of it. *)
     let children = List.rev @@ Stack.pop stack in
     let new_elt =
-      if children = [] then Xml.leaf tag ~a:attribs else Xml.node tag ~a:attribs children
+      if children = []
+      then Xml.leaf tag ~a:attribs
+      else Xml.node tag ~a:attribs children
     in
     (* Add this Xml element to the new top frame. *)
     modify_top stack @@ fun frame -> new_elt :: frame
@@ -327,7 +348,8 @@ module Make (B : Backend) = struct
         B.add_char state.channel '\n';
         blanks state.channel indent;
         state.column <- indent
-    | IfFlat (doc1, doc2) -> pretty state indent flatten (if flatten then doc1 else doc2)
+    | IfFlat (doc1, doc2) ->
+        pretty state indent flatten (if flatten then doc1 else doc2)
     | Cat (_, doc1, doc2) ->
         pretty state indent flatten doc1;
         pretty state indent flatten doc2

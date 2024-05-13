@@ -7,7 +7,11 @@ module L = Lexing
 let lexbuf_from_channel name channel =
   let lexbuf = Lexing.from_channel channel in
   lexbuf.Lexing.lex_curr_p <-
-    { Lexing.pos_fname = name; Lexing.pos_lnum = 1; Lexing.pos_bol = 0; Lexing.pos_cnum = 0 };
+    { Lexing.pos_fname = name
+    ; Lexing.pos_lnum = 1
+    ; Lexing.pos_bol = 0
+    ; Lexing.pos_cnum = 0
+    };
   lexbuf
 
 (* -------------------------------------------------------------------- *)
@@ -58,16 +62,21 @@ let lexer (lexbuf : L.lexbuf) =
   (token, L.lexeme_start_p lexbuf, L.lexeme_end_p lexbuf)
 
 (* -------------------------------------------------------------------- *)
-let parse_type (reader : reader) = parserfun_type (fun () -> lexer (lexbuf reader))
+let parse_type (reader : reader) =
+  parserfun_type (fun () -> lexer (lexbuf reader))
 
 (* -------------------------------------------------------------------- *)
-let parse_expr (reader : reader) = parserfun_expr (fun () -> lexer (lexbuf reader))
+let parse_expr (reader : reader) =
+  parserfun_expr (fun () -> lexer (lexbuf reader))
 
 (* -------------------------------------------------------------------- *)
-let parse_nexpr (reader : reader) = parserfun_nexpr (fun () -> lexer (lexbuf reader))
+let parse_nexpr (reader : reader) =
+  parserfun_nexpr (fun () -> lexer (lexbuf reader))
 
 (* -------------------------------------------------------------------- *)
-let parse_form (reader : reader) = parserfun_form (fun () -> lexer (lexbuf reader))
+let parse_form (reader : reader) =
+  parserfun_form (fun () -> lexer (lexbuf reader))
 
 (* -------------------------------------------------------------------- *)
-let parse_goal (reader : reader) = parserfun_goal (fun () -> lexer (lexbuf reader))
+let parse_goal (reader : reader) =
+  parserfun_goal (fun () -> lexer (lexbuf reader))

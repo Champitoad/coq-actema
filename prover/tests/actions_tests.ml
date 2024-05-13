@@ -12,7 +12,9 @@ let tnat = TVar ("nat", 0)
 let tbool = TVar ("bool", 0)
 
 let mk_test_env () : env =
-  { env_prp = Map.of_seq @@ List.to_seq @@ [ ("lt", [ tnat; tnat ]); ("andb", [ tbool; tbool ]) ]
+  { env_prp =
+      Map.of_seq @@ List.to_seq
+      @@ [ ("lt", [ tnat; tnat ]); ("andb", [ tbool; tbool ]) ]
   ; env_fun =
       Map.of_seq @@ List.to_seq
       @@ [ ("Z", ([], tnat))
@@ -20,11 +22,15 @@ let mk_test_env () : env =
          ; ("true", ([], tbool))
          ; ("false", ([], tbool))
          ]
-  ; env_prp_name = Map.of_seq @@ List.to_seq @@ [ ("lt", "lt"); ("andb", "andb") ]
+  ; env_prp_name =
+      Map.of_seq @@ List.to_seq @@ [ ("lt", "lt"); ("andb", "andb") ]
   ; env_fun_name =
-      Map.of_seq @@ List.to_seq @@ [ ("Z", "Z"); ("S", "S"); ("true", "true"); ("false", "false") ]
-  ; env_sort_name = Map.of_seq @@ List.to_seq @@ [ ("nat", "nat"); ("bool", "bool") ]
-  ; env_tvar = Map.of_seq @@ List.to_seq @@ [ ("nat", [ None ]); ("bool", [ None ]) ]
+      Map.of_seq @@ List.to_seq
+      @@ [ ("Z", "Z"); ("S", "S"); ("true", "true"); ("false", "false") ]
+  ; env_sort_name =
+      Map.of_seq @@ List.to_seq @@ [ ("nat", "nat"); ("bool", "bool") ]
+  ; env_tvar =
+      Map.of_seq @@ List.to_seq @@ [ ("nat", [ None ]); ("bool", [ None ]) ]
   ; env_var = Map.empty
   ; env_evar = Map.empty
   ; env_handles = BiMap.empty
@@ -43,19 +49,25 @@ let mk_test_proof (hyps : form list) (concl : form) : Proof.proof =
          end
     |> Proof.Hyps.of_list
   in
-  let pregoal = Proof.{ g_env = mk_test_env (); g_hyps = hyps; g_goal = concl } in
+  let pregoal =
+    Proof.{ g_env = mk_test_env (); g_hyps = hyps; g_goal = concl }
+  in
   Proof.ginit Hidmap.empty [ pregoal ]
 
 (**********************************************************************************************)
 (** Testing utilities. *)
 
-let check_actions (actions : Actions.aoutput list) (pred : Actions.aoutput -> bool) : unit =
+let check_actions (actions : Actions.aoutput list)
+    (pred : Actions.aoutput -> bool) : unit =
   if List.exists pred actions
   then ()
   else
-    let actions_str = List.to_string ~sep:"\n\n" ~left:"" ~right:"" Actions.show_aoutput actions in
+    let actions_str =
+      List.to_string ~sep:"\n\n" ~left:"" ~right:"" Actions.show_aoutput actions
+    in
     Alcotest.failf
-      "Failed to find an action matching the given predicate. There were %d actions generated :\n\
+      "Failed to find an action matching the given predicate. There were %d \
+       actions generated :\n\
        %s\n"
       (List.length actions) actions_str
 
@@ -69,7 +81,9 @@ let mk_intro_test ?(sub = []) concl side =
   let proof = mk_test_proof [] concl in
   (* Make the test action source. *)
   let gid = List.hd @@ Proof.opened proof in
-  let ipath = IPath.make ~ctxt:{ kind = `Concl; handle = 0 } ~sub (Handle.toint gid) in
+  let ipath =
+    IPath.make ~ctxt:{ kind = `Concl; handle = 0 } ~sub (Handle.toint gid)
+  in
   let source = Actions.{ kind = `Click ipath; selection = [] } in
   (* Generate the actions. *)
   let actions = Actions.actions proof source in
@@ -80,7 +94,8 @@ let mk_intro_test ?(sub = []) concl side =
         output.kind = `Click ipath
         && output.goal_handle = gid
         && output.action = `Intro side
-        && output.highlights = [ ipath ] && output.description != ""
+        && output.highlights = [ ipath ]
+        && output.description != ""
     end
 
 (** Test [`Intro] on [True]. *)
@@ -90,22 +105,33 @@ let test_intro_true () =
 
 (** Test [`Intro] on [not ...]. *)
 let test_intro_not () =
-  let concl = FConn (`Not, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]) ]) in
+  let concl =
+    FConn (`Not, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]) ])
+  in
   mk_intro_test concl 0
 
 (** Test [`Intro] on [... /\ ...]. *)
 let test_intro_and () =
-  let concl = FConn (`And, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FTrue ]) in
+  let concl =
+    FConn
+      (`And, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FTrue ])
+  in
   mk_intro_test concl 0
 
 (** Test [`Intro] on [... <-> ...]. *)
 let test_intro_equiv () =
-  let concl = FConn (`Equiv, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FTrue ]) in
+  let concl =
+    FConn
+      ( `Equiv
+      , [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FTrue ] )
+  in
   mk_intro_test concl 0
 
 (** Test [`Intro] on [forall n, ...]. *)
 let test_intro_forall () =
-  let concl = FBind (`Forall, "n", tnat, FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ])) in
+  let concl =
+    FBind (`Forall, "n", tnat, FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ]))
+  in
   mk_intro_test concl 0
 
 (** Test [`Intro] on [... -> ...]. *)
@@ -124,8 +150,9 @@ let test_intro_or () =
   let concl =
     FConn
       ( `Or
-      , [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FConn (`Or, [ FTrue; FFalse ]) ]
-      )
+      , [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ])
+        ; FConn (`Or, [ FTrue; FFalse ])
+        ] )
   in
   mk_intro_test ~sub:[ 0 ] concl 0;
   mk_intro_test ~sub:[ 1 ] concl 1
@@ -149,7 +176,9 @@ let mk_elim_test ?(sub = []) hyp side =
   let gid = List.hd @@ Proof.opened proof in
   let hyp_id = List.hd @@ Proof.Hyps.ids (Proof.byid proof gid).g_hyps in
   let ipath =
-    IPath.make ~ctxt:{ kind = `Hyp; handle = Handle.toint hyp_id } ~sub (Handle.toint gid)
+    IPath.make
+      ~ctxt:{ kind = `Hyp; handle = Handle.toint hyp_id }
+      ~sub (Handle.toint gid)
   in
   let source = Actions.{ kind = `Click ipath; selection = [] } in
   (* Generate the actions. *)
@@ -161,7 +190,8 @@ let mk_elim_test ?(sub = []) hyp side =
         output.kind = `Click ipath
         && output.goal_handle = gid
         && output.action = `Elim (hyp_id, side)
-        && output.highlights = [ ipath ] && output.description != ""
+        && output.highlights = [ ipath ]
+        && output.description != ""
     end
 
 (** Test [`Elim] on [True]. *)
@@ -176,22 +206,33 @@ let test_elim_false () =
 
 (** Test [`Elim] on [not ...]. *)
 let test_elim_not () =
-  let hyp = FConn (`Not, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]) ]) in
+  let hyp =
+    FConn (`Not, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]) ])
+  in
   mk_elim_test hyp 0
 
 (** Test [`Elim] on [... /\ ...]. *)
 let test_elim_and () =
-  let hyp = FConn (`And, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FTrue ]) in
+  let hyp =
+    FConn
+      (`And, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FTrue ])
+  in
   mk_elim_test hyp 0
 
 (** Test [`Elim] on [... <-> ...]. *)
 let test_elim_equiv () =
-  let hyp = FConn (`Equiv, [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FTrue ]) in
+  let hyp =
+    FConn
+      ( `Equiv
+      , [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FTrue ] )
+  in
   mk_elim_test hyp 0
 
 (** Test [`Elim] on [exists n, ...]. *)
 let test_elim_exist () =
-  let hyp = FBind (`Exist, "n", tnat, FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ])) in
+  let hyp =
+    FBind (`Exist, "n", tnat, FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ]))
+  in
   mk_elim_test hyp 0
 
 (** Test [`Elim] on [... -> ...]. *)
@@ -210,8 +251,9 @@ let test_elim_or () =
   let hyp =
     FConn
       ( `Or
-      , [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ]); FConn (`Or, [ FTrue; FFalse ]) ]
-      )
+      , [ FPred ("_EQ", [ EFun ("true", []); EFun ("false", []) ])
+        ; FConn (`Or, [ FTrue; FFalse ])
+        ] )
   in
   mk_elim_test hyp 0
 
@@ -233,7 +275,9 @@ let mk_indt_test concl sub =
   let proof = mk_test_proof [] concl in
   (* Make the test action source. *)
   let gid = List.hd @@ Proof.opened proof in
-  let ipath = IPath.make ~ctxt:{ kind = `Concl; handle = 0 } ~sub (Handle.toint gid) in
+  let ipath =
+    IPath.make ~ctxt:{ kind = `Concl; handle = 0 } ~sub (Handle.toint gid)
+  in
   let source = Actions.{ kind = `Ctxt; selection = [ ipath ] } in
   (* Generate the actions. *)
   let actions = Actions.actions proof source in
@@ -243,17 +287,21 @@ let mk_indt_test concl sub =
       fun output ->
         output.kind = `Ctxt && output.goal_handle = gid
         && output.action = `Indt ipath
-        && output.highlights = [ ipath ] && output.description != ""
+        && output.highlights = [ ipath ]
+        && output.description != ""
     end
 
 let test_indt_nat () =
-  let concl = FBind (`Forall, "n", tnat, FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ])) in
+  let concl =
+    FBind (`Forall, "n", tnat, FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ]))
+  in
   mk_indt_test concl []
 
 let test_indt_nat_2 () =
   let bind name body = FBind (`Forall, name, tnat, body) in
   let concl =
-    bind "s" @@ bind "n" @@ bind "r" @@ bind "q" @@ FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ])
+    bind "s" @@ bind "n" @@ bind "r" @@ bind "q"
+    @@ FPred ("lt", [ EFun ("Z", []); EVar ("n", 0) ])
   in
   mk_indt_test concl [];
   mk_indt_test concl [ 0 ];
@@ -287,6 +335,7 @@ let () =
         ; test_case "elim-eq" `Quick test_elim_eq
         ] )
     ; ( "induction"
-      , [ test_case "indt-nat" `Quick test_indt_nat; test_case "indt-nat-2" `Quick test_indt_nat_2 ]
-      )
+      , [ test_case "indt-nat" `Quick test_indt_nat
+        ; test_case "indt-nat-2" `Quick test_indt_nat_2
+        ] )
     ]

@@ -35,7 +35,11 @@ let of_lenv (lenv : LEnv.lenv) : Logic.lenv =
 let of_itrace (itrace : itrace) : Logic.itrace =
   List.map
     begin
-      fun (i, w) -> (i, Option.map (fun (le1, le2, e) -> (of_lenv le1, of_lenv le2, of_expr e)) w)
+      fun (i, w) ->
+        ( i
+        , Option.map
+            (fun (le1, le2, e) -> (of_lenv le1, of_lenv le2, of_expr e))
+            w )
     end
     itrace
 
@@ -54,7 +58,8 @@ let of_action (proof : Proof.proof) ((hd, a) : Handle.t * Actions.action_type) :
       js_log @@ Format.sprintf "Export.of_action `Ind %d\n" (Handle.toint subhd);
       let* state = State.get in
       HandleMap.iter
-        (fun handle name -> js_log @@ Format.sprintf "%d --> %s\n" (Handle.toint handle) name)
+        (fun handle name ->
+          js_log @@ Format.sprintf "%d --> %s\n" (Handle.toint handle) name)
         state;
       let* uid = find subhd in
       js_log @@ Format.sprintf "Found: %s\n" uid;

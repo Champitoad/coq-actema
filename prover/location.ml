@@ -11,7 +11,12 @@ type t =
   }
 
 let _dummy : t =
-  { loc_fname = ""; loc_start = (-1, -1); loc_end = (-1, -1); loc_bchar = -1; loc_echar = -1 }
+  { loc_fname = ""
+  ; loc_start = (-1, -1)
+  ; loc_end = (-1, -1)
+  ; loc_bchar = -1
+  ; loc_echar = -1
+  }
 
 (* -------------------------------------------------------------------- *)
 let make (p1 : position) (p2 : position) =
@@ -37,7 +42,9 @@ let merge (p1 : t) (p2 : t) =
   ; loc_echar = max p1.loc_echar p2.loc_echar
   }
 
-let mergeall (p : t list) = match p with [] -> _dummy | t :: ts -> List.fold_left merge t ts
+let mergeall (p : t list) =
+  match p with [] -> _dummy | t :: ts -> List.fold_left merge t ts
+
 let isdummy (p : t) = p.loc_bchar < 0 || p.loc_echar < 0
 
 (* --------------------------------------------------------------------- *)
@@ -46,10 +53,12 @@ let tostring (p : t) =
     if p.loc_start = p.loc_end
     then Printf.sprintf "line %d (%d)" (fst p.loc_start) (snd p.loc_start)
     else if fst p.loc_start = fst p.loc_end
-    then Printf.sprintf "line %d (%d-%d)" (fst p.loc_start) (snd p.loc_start) (snd p.loc_end)
+    then
+      Printf.sprintf "line %d (%d-%d)" (fst p.loc_start) (snd p.loc_start)
+        (snd p.loc_end)
     else
-      Printf.sprintf "line %d (%d) to line %d (%d)" (fst p.loc_start) (snd p.loc_start)
-        (fst p.loc_end) (snd p.loc_end)
+      Printf.sprintf "line %d (%d) to line %d (%d)" (fst p.loc_start)
+        (snd p.loc_start) (fst p.loc_end) (snd p.loc_end)
   in
   Printf.sprintf "%s: %s" p.loc_fname spos
 

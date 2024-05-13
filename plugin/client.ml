@@ -30,10 +30,13 @@ let make_req (cmd : string) (param : string) =
 (** Receive a [unit] action from the frontend. *)
 let receive_unit (resp : Response.t) (_body : Cohttp_lwt.Body.t) : unit Lwt.t =
   let code = resp |> Response.status |> Code.code_of_status in
-  match code with 200 -> Lwt.return () | _ -> raise (UnsupportedHttpResponseCode code)
+  match code with
+  | 200 -> Lwt.return ()
+  | _ -> raise (UnsupportedHttpResponseCode code)
 
 (** Receive an [action] response from the frontend. *)
-let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t =
+let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t
+    =
   let* body = body |> Cohttp_lwt.Body.to_string in
   let code = resp |> Response.status |> Code.code_of_status in
   match code with
@@ -63,7 +66,9 @@ let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t
 
 let send_lemmas (lemmas : Logic.lemma list) (env : Logic.env) : action Lwt.t =
   (* Send request with lemmas and environment. *)
-  let datab = (env, lemmas) |> Fun.flip Marshal.to_string [] |> Base64.encode_string in
+  let datab =
+    (env, lemmas) |> Fun.flip Marshal.to_string [] |> Base64.encode_string
+  in
   let* resp, body = make_req "lemmas" datab in
   (* Handle the response. *)
   receive_action resp body

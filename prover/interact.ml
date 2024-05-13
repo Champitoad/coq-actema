@@ -15,7 +15,9 @@ let show_choice env ((side, witness) : choice) : string =
     witness
     |> Option.map_default
          (fun (le1, le2, e) ->
-           let print (x, ty) = Printf.sprintf "%s : %s" x (Notation.t_tostring env ty) in
+           let print (x, ty) =
+             Printf.sprintf "%s : %s" x (Notation.t_tostring env ty)
+           in
            let le1 = List.to_string print (LEnv.bindings le1) in
            let le2 = List.to_string print (LEnv.bindings le2) in
            let e = Fo.Notation.e_tostring env e in
@@ -65,7 +67,10 @@ let rec elim_units : form -> form = function
 (** Compute a debug representation of a linkage between formulas. *)
 let show_linkage env (mode : [ `Backward | `Forward ]) ((l, _), (r, _)) =
   let op = match mode with `Backward -> "⊢" | `Forward -> "∗" in
-  Printf.sprintf "%s %s %s" (Notation.f_tostring env l) op (Notation.f_tostring env r)
+  Printf.sprintf "%s %s %s"
+    (Notation.f_tostring env l)
+    op
+    (Notation.f_tostring env r)
 
 (** [well_scoped goal lenv e] returns [true] if all variables in the
     expression [e] are bound either in the global environment [goal.g_env],
@@ -92,7 +97,9 @@ let invertible (kind : [ `Left | `Right | `Forward ]) (f : form) : bool =
   (* Right invertible *)
   | `Right -> begin
       match f with
-      | FConn (c, _) -> begin match c with `Imp | `Not | `Equiv -> true | _ -> false end
+      | FConn (c, _) -> begin
+          match c with `Imp | `Not | `Equiv -> true | _ -> false
+        end
       | FBind (`Forall, _, _, _) -> true
       | _ -> false
     end
@@ -117,9 +124,12 @@ let no_prio kind ((f, sub) : form * int list) =
 
 (** This function is a horrible mess and should be refactored.
     Some tests would also be a great idea : I encountered weird bugs in here. *)
-let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.subst)
-    (proof : Proof.proof) : itrace =
-  let { g_pregoal = goal; _ }, item_src, (sub_src, t_src) = IPath.destr proof src in
+let dlink ((src, dst) : link)
+    ((s_src, s_dst) : Form.Subst.subst * Form.Subst.subst) (proof : Proof.proof)
+    : itrace =
+  let { g_pregoal = goal; _ }, item_src, (sub_src, t_src) =
+    IPath.destr proof src
+  in
   let _, item_dst, (sub_dst, t_dst) = IPath.destr proof dst in
 
   begin
@@ -131,9 +141,11 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
   (* I had to refactor [backward_core] out of [backward] to "fix" a very weird bug
      involving pattern matching. It might be related to the following compiler bug :
      https://github.com/ocaml/ocaml/issues/7241 *)
-  let backward_core (ctx : fctx) (s : ((LEnv.lenv * subst) * (LEnv.lenv * subst)) ref)
+  let backward_core (ctx : fctx)
+      (s : ((LEnv.lenv * subst) * (LEnv.lenv * subst)) ref)
       (switch_pol : bool ref)
-      ((((l, lsub) as h), ((r, rsub) as c)) as linkage : (form * int list) * (form * int list)) =
+      ((((l, lsub) as h), ((r, rsub) as c)) as linkage :
+        (form * int list) * (form * int list)) =
     let ((env1, s1) as es1), ((env2, s2) as es2) = !s in
     begin
       match linkage with
@@ -237,8 +249,10 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
     end
   in
 
-  let rec backward (ctx : fctx) (itrace : itrace) (s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
-      (((l, _), (r, rsub)) as linkage : (form * int list) * (form * int list)) : form * itrace =
+  let rec backward (ctx : fctx) (itrace : itrace)
+      (s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
+      (((l, _), (r, rsub)) as linkage : (form * int list) * (form * int list)) :
+      form * itrace =
     (*js_log (Subst.to_string (s |> fst |> snd) ^ " ⊢ " ^ Subst.to_string (s |> snd |> snd));*)
     js_log (show_linkage goal.g_env `Backward linkage);
 
@@ -251,14 +265,18 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
             (* Bid *)
             | _ when f_equal goal.g_env l r -> f_true
             | FPred (c1, ts1), FPred (c2, ts2) when c1 = c2 ->
-                List.fold_left2 (fun f t1 t2 -> f_and f (FPred ("_EQ", [ t1; t2 ]))) f_true ts1 ts2
+                List.fold_left2
+                  (fun f t1 t2 -> f_and f (FPred ("_EQ", [ t1; t2 ])))
+                  f_true ts1 ts2
             (* Brel *)
             | _ -> f_imp l r
           end
         in
         (fc_fill f (fc_rev ctx), itrace)
     | (FPred ("_EQ", [ e1; e2 ]), [ i ]), (FPred _, _)
-      when e_equal_delta goal.g_env (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
+      when e_equal_delta goal.g_env
+             (subexpr (`F r) rsub)
+             (if i = 0 then e1 else e2) ->
         let res =
           (* L=₁ *)
           if i = 0 then e2 (* L=₂ *) else e1
@@ -279,9 +297,10 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
         let ctx = match ictx with Some i -> i :: ctx | None -> ctx in
         cont ctx (choice :: itrace) !s linkage
   and forward (ctx : fctx) (itrace : itrace) ?(side = 1)
-      ((((env1, _) as es1), ((env2, s2) as es2)) as s : (LEnv.lenv * subst) * (LEnv.lenv * subst))
-      ((((l, lsub) as h), (r, rsub)) as linkage : (form * int list) * (form * int list)) :
-      form * itrace =
+      ((((env1, _) as es1), ((env2, s2) as es2)) as s :
+        (LEnv.lenv * subst) * (LEnv.lenv * subst))
+      ((((l, lsub) as h), (r, rsub)) as linkage :
+        (form * int list) * (form * int list)) : form * itrace =
     js_log (show_linkage goal.g_env `Forward linkage);
 
     match linkage with
@@ -298,7 +317,9 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
         in
         (fc_fill f (fc_rev ctx), itrace)
     | (FPred ("_EQ", [ e1; e2 ]), [ i ]), (FPred _, _)
-      when e_equal_delta goal.g_env (subexpr (`F r) rsub) (if i = 0 then e1 else e2) ->
+      when e_equal_delta goal.g_env
+             (subexpr (`F r) rsub)
+             (if i = 0 then e1 else e2) ->
         let res =
           (* L=₁ *)
           if i = 0 then e2 (* L=₂ *) else e1
@@ -312,7 +333,8 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
         let new_side = ref side in
         let witness = ref None in
 
-        let (ictx : ifctx option), (linkage : (form * int list) * (form * int list)) =
+        let ( (ictx : ifctx option)
+            , (linkage : (form * int list) * (form * int list)) ) =
           begin
             match linkage with
             (* F∧ *)
@@ -339,11 +361,13 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
                 switch_pol := true;
                 (Some (CConn (`Not, [], 0)), (h, (f1, sub)))
             (* F⇔₁ *)
-            | _, (FConn (`Equiv, [ f1; f2 ]), 0 :: sub) when no_prio `Forward h ->
+            | _, (FConn (`Equiv, [ f1; f2 ]), 0 :: sub) when no_prio `Forward h
+              ->
                 switch_pol := true;
                 (Some (CConn (`Imp, [ f2 ], 0)), (h, (f1, sub)))
             (* F⇔₂ *)
-            | _, (FConn (`Equiv, [ f1; f2 ]), 1 :: sub) when no_prio `Forward h ->
+            | _, (FConn (`Equiv, [ f1; f2 ]), 1 :: sub) when no_prio `Forward h
+              ->
                 switch_pol := true;
                 (Some (CConn (`Imp, [ f1 ], 0)), (h, (f2, sub)))
             (* F∃s *)
@@ -360,7 +384,10 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
                   (* F∀i *)
                   | Some (Sbound e) ->
                       let f1 = Subst.f_apply1 (x, 0) e f1 in
-                      witness := if side = 1 then Some (env1, env2, e) else Some (env2, env1, e);
+                      witness :=
+                        if side = 1
+                        then Some (env1, env2, e)
+                        else Some (env2, env1, e);
                       (None, (h, (f1, sub)))
                   (* F∀s *)
                   | Some Sflex ->
@@ -378,7 +405,9 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
         in
         let cont = if !switch_pol then backward else forward ~side:!new_side in
         let ctx = match ictx with Some i -> i :: ctx | None -> ctx in
-        let itrace = if !new_side <> side then itrace else (!new_side, !witness) :: itrace in
+        let itrace =
+          if !new_side <> side then itrace else (!new_side, !witness) :: itrace
+        in
         cont ctx itrace !s linkage
   in
 
@@ -387,14 +416,20 @@ let dlink ((src, dst) : link) ((s_src, s_dst) : Form.Subst.subst * Form.Subst.su
     | (`H (hid, { h_form = h; _ }), subh, sh), (`C c, subc, sc)
     | (`C c, subc, sc), (`H (hid, { h_form = h; _ }), subh, sh) ->
         let form, itrace =
-          backward [] [] ((LEnv.empty, sh), (LEnv.empty, sc)) ((h, subh), (c, subc))
+          backward [] []
+            ((LEnv.empty, sh), (LEnv.empty, sc))
+            ((h, subh), (c, subc))
         in
         (([ (Some hid, []) ], form |> elim_units), itrace)
-    | (`H (hid, { h_form = h; _ }), subh, s), (`H (hid', { h_form = h'; _ }), subh', s') ->
+    | ( (`H (hid, { h_form = h; _ }), subh, s)
+      , (`H (hid', { h_form = h'; _ }), subh', s') ) ->
         let form, itrace =
-          forward [] [] ((LEnv.empty, s), (LEnv.empty, s')) ((h, subh), (h', subh'))
+          forward [] []
+            ((LEnv.empty, s), (LEnv.empty, s'))
+            ((h, subh), (h', subh'))
         in
-        (([ (Some hid, []); (Some hid', [ form |> elim_units ]) ], goal.g_goal), itrace)
+        ( ([ (Some hid, []); (Some hid', [ form |> elim_units ]) ], goal.g_goal)
+        , itrace )
     | _ -> raise Tactics.TacticNotApplicable
   in
   List.rev itrace

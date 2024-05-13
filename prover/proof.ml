@@ -42,7 +42,8 @@ end = struct
     assert (Option.is_none (List.Exceptionless.assoc id hyps));
     (id, h) :: hyps
 
-  let remove (hyps : t) (id : Handle.t) : t = List.filter (fun (x, _) -> not (Handle.eq x id)) hyps
+  let remove (hyps : t) (id : Handle.t) : t =
+    List.filter (fun (x, _) -> not (Handle.eq x id)) hyps
 
   let move (hyps : t) (from : Handle.t) (before : Handle.t option) =
     let tg = byid hyps from in
@@ -59,19 +60,24 @@ end = struct
         let post, pre = List.split_at (1 + pos) hyps in
         post @ ((from, tg) :: pre)
 
-  let bump (hyps : t) : t = List.map (fun (id, h) -> (id, { h with h_gen = h.h_gen + 1 })) hyps
+  let bump (hyps : t) : t =
+    List.map (fun (id, h) -> (id, { h with h_gen = h.h_gen + 1 })) hyps
+
   let ids (hyps : t) = List.fst hyps
   let map f (hyps : t) = List.map (snd_map f) hyps
   let iter f (hyps : t) = List.iter (fun (_handle, hyp) -> f hyp) hyps
 
   let diff (hs1 : t) (hs2 : t) =
-    hs1 |> List.filter (fun (id, _) -> not (List.exists (fun (id', _) -> Handle.eq id id') hs2))
+    hs1
+    |> List.filter (fun (id, _) ->
+           not (List.exists (fun (id', _) -> Handle.eq id id') hs2))
 
   let to_list (hyps : t) = hyps
   let of_list (hyps : t) = hyps
 end
 
-type lemma = { l_full : name; l_user : name; l_form : Fo.form } [@@deriving show]
+type lemma = { l_full : name; l_user : name; l_form : Fo.form }
+[@@deriving show]
 
 module Lemmas : sig
   type t
@@ -96,17 +102,32 @@ end = struct
   type t = { db_env : Fo.env; db_map : lemma HandleMap.t }
 
   let empty = { db_env = Env.empty; db_map = HandleMap.empty }
-  let extend_env env lemmas = { lemmas with db_env = Env.union lemmas.db_env env }
+
+  let extend_env env lemmas =
+    { lemmas with db_env = Env.union lemmas.db_env env }
+
   let env lemmas = lemmas.db_env
-  let byid lemmas id = Option.get_exn (HandleMap.find_opt id lemmas.db_map) (InvalidLemmaId id)
-  let add lemmas id l = { lemmas with db_map = HandleMap.add id l lemmas.db_map }
-  let remove lemmas id = { lemmas with db_map = HandleMap.remove id lemmas.db_map }
+
+  let byid lemmas id =
+    Option.get_exn (HandleMap.find_opt id lemmas.db_map) (InvalidLemmaId id)
+
+  let add lemmas id l =
+    { lemmas with db_map = HandleMap.add id l lemmas.db_map }
+
+  let remove lemmas id =
+    { lemmas with db_map = HandleMap.remove id lemmas.db_map }
+
   let ids lemmas = HandleMap.keys lemmas.db_map |> List.of_enum
   let map f lemmas = { lemmas with db_map = HandleMap.map f lemmas.db_map }
   let iter f lemmas = HandleMap.iter (fun _ -> f) lemmas.db_map
-  let filter pred lemmas = { lemmas with db_map = HandleMap.filter (fun _ -> pred) lemmas.db_map }
+
+  let filter pred lemmas =
+    { lemmas with db_map = HandleMap.filter (fun _ -> pred) lemmas.db_map }
+
   let to_list lemmas = HandleMap.bindings lemmas.db_map
-  let of_list ls = { db_env = Env.empty; db_map = HandleMap.of_seq @@ List.to_seq ls }
+
+  let of_list ls =
+    { db_env = Env.empty; db_map = HandleMap.of_seq @@ List.to_seq ls }
 end
 
 type pregoal = { g_env : env; g_hyps : Hyps.t; g_goal : form }
@@ -117,9 +138,11 @@ type meta = < > Js_of_ocaml.Js.t
 type proof =
   { p_goals : (Handle.t, goal) Map.t
         (** A map from goal handles to goals. Contains only the opened (i.e. currently active) goals. *)
-  ; p_meta : (Handle.t, < > Js.t) Map.t ref  (** Metadata associated to each goal. *)
+  ; p_meta : (Handle.t, < > Js.t) Map.t ref
+        (** Metadata associated to each goal. *)
   ; p_db : Lemmas.t  (** The lemma database. *)
-  ; p_hm : Hidmap.hidmap  (** A map from hypothesis handle to hypothesis name. *)
+  ; p_hm : Hidmap.hidmap
+        (** A map from hypothesis handle to hypothesis name. *)
   }
 
 let mk_hyp ?(src : Handle.t option) ?(gen : int = 0) form =
@@ -133,9 +156,13 @@ let init (env : env) (hyps : form list) (goal : form) =
 
   let uid = Handle.fresh () in
   let g_hyps =
-    List.fold_left (fun hs f -> Hyps.add hs (Handle.fresh ()) (mk_hyp f)) Hyps.empty hyps
+    List.fold_left
+      (fun hs f -> Hyps.add hs (Handle.fresh ()) (mk_hyp f))
+      Hyps.empty hyps
   in
-  let goal = { g_id = uid; g_pregoal = { g_env = env; g_hyps; g_goal = goal } } in
+  let goal =
+    { g_id = uid; g_pregoal = { g_env = env; g_hyps; g_goal = goal } }
+  in
 
   { p_goals = Map.singleton uid goal
   ; p_meta = ref Map.empty
@@ -177,7 +204,9 @@ let closed (proof : proof) = Map.is_empty proof.p_goals
 let opened (proof : proof) = Map.keys proof.p_goals |> List.of_enum
 
 let byid (proof : proof) (id : Handle.t) : pregoal =
-  let goal = Option.get_exn (Map.Exceptionless.find id proof.p_goals) (InvalidGoalId id) in
+  let goal =
+    Option.get_exn (Map.Exceptionless.find id proof.p_goals) (InvalidGoalId id)
+  in
   goal.g_pregoal
 
 type subgoal = (Handle.t option * form list) list * form
@@ -214,10 +243,16 @@ module Translate = struct
     in
     hyps |> Hyps.of_list |> return
 
-  let export_goal (({ g_env; g_hyps; g_goal }, hm) : pregoal * hidmap) : Logic.goal =
-    Logic.{ g_env = of_env g_env; g_hyps = run (of_hyps g_hyps) hm; g_concl = of_form g_goal }
+  let export_goal (({ g_env; g_hyps; g_goal }, hm) : pregoal * hidmap) :
+      Logic.goal =
+    Logic.
+      { g_env = of_env g_env
+      ; g_hyps = run (of_hyps g_hyps) hm
+      ; g_concl = of_form g_goal
+      }
 
-  let import_goal (Logic.{ g_env; g_hyps; g_concl } : Logic.goal) : pregoal * hidmap =
+  let import_goal (Logic.{ g_env; g_hyps; g_concl } : Logic.goal) :
+      pregoal * hidmap =
     let g_env, g_hyps, hm =
       HandleMap.empty
       |> run
@@ -250,12 +285,14 @@ module Tactics = struct
     let meta =
       match Map.Exceptionless.find id !(pr.p_meta) with
       | None -> !(pr.p_meta)
-      | Some meta -> List.fold_left (fun map id -> Map.add id meta map) !(pr.p_meta) g_new
+      | Some meta ->
+          List.fold_left (fun map id -> Map.add id meta map) !(pr.p_meta) g_new
     in
 
     (* Remove the old goal and add the new goals. *)
     let p_goals =
-      pr.p_goals |> Map.remove id |> List.fold_right (fun sub map -> Map.add sub.g_id sub map) subs
+      pr.p_goals |> Map.remove id
+      |> List.fold_right (fun sub map -> Map.add sub.g_id sub map) subs
     in
     (* Don't forget to return the handles of the new goals. *)
     (g_new, { pr with p_goals; p_meta = ref meta })
@@ -264,13 +301,16 @@ module Tactics = struct
     let for1 (newlc, concl) =
       let subfor1 hyps (hid, newlc) =
         let hyps =
-          Option.fold (fun hyps hid -> if clear then Hyps.remove hyps hid else hyps) hyps hid
+          Option.fold
+            (fun hyps hid -> if clear then Hyps.remove hyps hid else hyps)
+            hyps hid
         in
         let hsrc = if clear then None else hid in
 
         let hyps =
           List.fold_left
-            (fun hyps newh -> Hyps.add hyps (Handle.fresh ()) (mk_hyp ?src:hsrc newh))
+            (fun hyps newh ->
+              Hyps.add hyps (Handle.fresh ()) (mk_hyp ?src:hsrc newh))
             hyps newlc
         in
 
@@ -283,14 +323,18 @@ module Tactics = struct
 
     List.map for1 subs
 
-  let add_local (goal : pregoal) ((name, ty, body) : string * Fo.type_ * Fo.expr option) : pregoal =
+  let add_local (goal : pregoal)
+      ((name, ty, body) : string * Fo.type_ * Fo.expr option) : pregoal =
     Option.map_default (Fo.Form.erecheck goal.g_env ty) () body;
 
     let g_env = Fo.Vars.push goal.g_env (name, (ty, body)) in
     let g_env = Fo.Vars.map g_env (Option.map (Fo.Form.e_shift (name, 0))) in
 
     let g_hyps =
-      Hyps.(map (fun h -> { h with h_form = Form.f_shift (name, 0) h.h_form }) goal.g_hyps)
+      Hyps.(
+        map
+          (fun h -> { h with h_form = Form.f_shift (name, 0) h.h_form })
+          goal.g_hyps)
     in
 
     let g_goal = Form.f_shift (name, 0) goal.g_goal in

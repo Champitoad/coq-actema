@@ -19,11 +19,14 @@ module Log = struct
     Pp.string_of_ppcmds pp
 
   let econstr env evd t = string_of_econstr env evd t |> str
-  let econstr_debug evd t = t |> EConstr.to_constr evd |> Constr.debug_print |> Feedback.msg_notice
+
+  let econstr_debug evd t =
+    t |> EConstr.to_constr evd |> Constr.debug_print |> Feedback.msg_notice
 
   let univ_levels evd =
     let univs : string list =
-      Evd.evar_universe_context evd |> UState.ugraph |> UGraph.domain |> Univ.Level.Set.elements
+      Evd.evar_universe_context evd
+      |> UState.ugraph |> UGraph.domain |> Univ.Level.Set.elements
       |> List.map Univ.Level.to_string
     in
     str Extlib.(List.to_string identity univs)
@@ -38,7 +41,8 @@ module Log = struct
 end
 
 let name_of_const evd t =
-  EConstr.destConst evd t |> fst |> Names.Constant.label |> Names.Label.to_string
+  EConstr.destConst evd t |> fst |> Names.Constant.label
+  |> Names.Label.to_string
 
 let name_of_inductive env evd t =
   let name, _ = EConstr.destInd evd t in
@@ -87,16 +91,19 @@ let construct_kname env evd (t : EConstr.t) : Names.KerName.t =
   let c = EConstr.destConstruct evd t |> fst in
   kname_of_constructor env c
 
-let ind_kname evd t = EConstr.destInd evd t |> fst |> fst |> Names.MutInd.canonical
+let ind_kname evd t =
+  EConstr.destInd evd t |> fst |> fst |> Names.MutInd.canonical
 
-let calltac (tacname : Names.KerName.t) (args : EConstr.constr list) : unit tactic =
+let calltac (tacname : Names.KerName.t) (args : EConstr.constr list) :
+    unit tactic =
   let open Ltac_plugin in
   let open Tacexpr in
   let open Tacinterp in
   let open Names in
   let open Locus in
   let ltac_call tac (args : glob_tactic_arg list) =
-    CAst.make @@ TacArg (TacCall (CAst.make (ArgArg (Loc.tag @@ Lazy.force tac), args)))
+    CAst.make
+    @@ TacArg (TacCall (CAst.make (ArgArg (Loc.tag @@ Lazy.force tac), args)))
   in
   let f = lazy tacname in
   let fold arg (i, vars, lfun) =
@@ -187,16 +194,27 @@ module Trm = struct
 
     (* Constructors. *)
 
-    let nil env ty = EConstr.mkApp (mkConstruct env path "list" ~constructor:1, [| ty |])
-    let cons env ty x l = EConstr.mkApp (mkConstruct env path "list" ~constructor:2, [| ty; x; l |])
+    let nil env ty =
+      EConstr.mkApp (mkConstruct env path "list" ~constructor:1, [| ty |])
+
+    let cons env ty x l =
+      EConstr.mkApp (mkConstruct env path "list" ~constructor:2, [| ty; x; l |])
 
     let pair env ty1 ty2 t1 t2 =
-      EConstr.mkApp (mkConstruct env path "prod" ~constructor:1, [| ty1; ty2; t1; t2 |])
+      EConstr.mkApp
+        (mkConstruct env path "prod" ~constructor:1, [| ty1; ty2; t1; t2 |])
 
-    let some env ty t = EConstr.mkApp (mkConstruct env path "option" ~constructor:1, [| ty; t |])
-    let none env ty = EConstr.mkApp (mkConstruct env path "option" ~constructor:2, [| ty |])
+    let some env ty t =
+      EConstr.mkApp (mkConstruct env path "option" ~constructor:1, [| ty; t |])
+
+    let none env ty =
+      EConstr.mkApp (mkConstruct env path "option" ~constructor:2, [| ty |])
+
     let zero env = mkConstruct env path "nat" ~constructor:1
-    let succ env n = EConstr.mkApp (mkConstruct env path "nat" ~constructor:2, [| n |])
+
+    let succ env n =
+      EConstr.mkApp (mkConstruct env path "nat" ~constructor:2, [| n |])
+
     let tt env = mkConstruct env path "unit" ~constructor:1
 
     (* Constructors that depend on ocaml arguments. *)
@@ -213,7 +231,9 @@ module Trm = struct
       then zero env
       else succ env (of_nat env (n - 1))
 
-    let of_list env ty cast l = List.fold_right (fun x t -> cons env ty (cast x) t) l (nil env ty)
+    let of_list env ty cast l =
+      List.fold_right (fun x t -> cons env ty (cast x) t) l (nil env ty)
+
     let natlist env = of_list env (nat env) (of_nat env)
     let boollist env = of_list env (bool env) (of_bool env)
 
@@ -223,22 +243,33 @@ module Trm = struct
 
   module Specif = struct
     let path = [ "Coq"; "Init"; "Specif" ]
-    let sigT env sigma x ty p = EConstr.mkApp (mkInd env path "sigT", [| ty; lambda sigma x ty p |])
+
+    let sigT env sigma x ty p =
+      EConstr.mkApp (mkInd env path "sigT", [| ty; lambda sigma x ty p |])
 
     let existT env sigma x ty p w t =
-      EConstr.mkApp (mkConstruct env path "sigT" ~constructor:1, [| ty; lambda sigma x ty p; w; t |])
+      EConstr.mkApp
+        ( mkConstruct env path "sigT" ~constructor:1
+        , [| ty; lambda sigma x ty p; w; t |] )
   end
 
   let add_knames =
-    let modpaths = [ [ "Coq"; "Arith"; "PeanoNat"; "Nat" ]; [ "Coq"; "Init"; "Nat" ] ] in
+    let modpaths =
+      [ [ "Coq"; "Arith"; "PeanoNat"; "Nat" ]; [ "Coq"; "Init"; "Nat" ] ]
+    in
     List.map (fun mp -> kername mp "add") modpaths
 
   let mul_knames =
-    let modpaths = [ [ "Coq"; "Arith"; "PeanoNat"; "Nat" ]; [ "Coq"; "Init"; "Nat" ] ] in
+    let modpaths =
+      [ [ "Coq"; "Arith"; "PeanoNat"; "Nat" ]; [ "Coq"; "Init"; "Nat" ] ]
+    in
     List.map (fun mp -> kername mp "mul") modpaths
 
-  let add_names : Names.Constant.t list = List.map Names.Constant.make1 add_knames
-  let mul_names : Names.Constant.t list = List.map Names.Constant.make1 mul_knames
+  let add_names : Names.Constant.t list =
+    List.map Names.Constant.make1 add_knames
+
+  let mul_names : Names.Constant.t list =
+    List.map Names.Constant.make1 mul_knames
 end
 
 module Goal = struct

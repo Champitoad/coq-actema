@@ -25,7 +25,9 @@ end = struct
       exception Found of string
     end in
     try
-      List.iter (fun tx -> tx e |> Option.may (fun msg -> raise (E.Found msg))) !translators;
+      List.iter
+        (fun tx -> tx e |> Option.may (fun msg -> raise (E.Found msg)))
+        !translators;
       None
     with E.Found msg -> Some msg
 end
@@ -48,7 +50,8 @@ let () =
   Exn.register (fun exn ->
       match exn with
       | Syntax.ParseError _ -> Some "invalid input (parse error)"
-      | DuplicatedEntry (_, name) -> Some ("duplicated entry \"" ^ name ^ "\" in goal")
+      | DuplicatedEntry (_, name) ->
+          Some ("duplicated entry \"" ^ name ^ "\" in goal")
       | TypingError -> Some "invalid goal (typing error)"
       | RecheckFailure -> Some "invalid goal (recheck failure)"
       | Proof.Tactics.TacticNotApplicable -> Some "tactic not applicable"
@@ -66,8 +69,12 @@ let ( !! ) f x =
     in
     Js.Js_error.(raise_ (of_error (new%js Js.error_constr (Js.string msg))))
 
-let ipath_of_obj obj = obj |> Js.as_string InvalidASource |> CoreLogic.IPath.of_string
-let ipath_of_array obj = obj |> Js.to_array |> Array.to_list |> List.map ipath_of_obj
+let ipath_of_obj obj =
+  obj |> Js.as_string InvalidASource |> CoreLogic.IPath.of_string
+
+let ipath_of_array obj =
+  obj |> Js.to_array |> Array.to_list |> List.map ipath_of_obj
+
 let ipath_of_opt obj = obj |> Js.Opt.to_option |> Option.map ipath_of_obj
 
 (* -------------------------------------------------------------------- *)
@@ -87,7 +94,10 @@ let rec js_proof_engine (proof : Proof.proof) =
 
     (* Return the given action as a binary, base64-encoded string *)
     method getactionb action =
-      let pr = action |> !!(Export.export_action (Proof.hidmap _self##.proof) _self##.proof) in
+      let pr =
+        action
+        |> !!(Export.export_action (Proof.hidmap _self##.proof) _self##.proof)
+      in
       js_log (Api.Logic.show_action pr);
       pr |> Fun.flip Marshal.to_string [] |> Base64.encode_string |> Js.string
 
@@ -95,7 +105,8 @@ let rec js_proof_engine (proof : Proof.proof) =
     method getmeta = Js.Opt.option (Proof.get_meta proof _self##.handle)
 
     (* Attach meta-data to the proof engine *)
-    method setmeta meta = Proof.set_meta proof _self##.handle (Js.Opt.to_option meta)
+    method setmeta meta =
+      Proof.set_meta proof _self##.handle (Js.Opt.to_option meta)
 
     (* Get all the proof actions that can be applied to the
      * goal targetted by [asource] as an array of actions.
@@ -144,12 +155,16 @@ let rec js_proof_engine (proof : Proof.proof) =
                   [ `DnD Actions.{ source; destination } ]
               | "any" ->
                   let path = ipath_of_obj asource##.path in
-                  [ `Click path; `DnD Actions.{ source = path; destination = None } ]
+                  [ `Click path
+                  ; `DnD Actions.{ source = path; destination = None }
+                  ]
               | _ -> raise InvalidASource)
           | _ -> raise InvalidASource
         and selection = ipath_of_array asource##.selection in
 
-        let asource = List.map (fun kind -> Actions.{ kind; selection }) kinds in
+        let asource =
+          List.map (fun kind -> Actions.{ kind; selection }) kinds
+        in
 
         List.flatten (List.map !!(Actions.actions _self##.proof) asource)
       in
@@ -183,7 +198,9 @@ let rec js_proof_engine (proof : Proof.proof) =
                          ; ("source", Js.Unsafe.inject (Js.string (pp src)))
                          ; ("destination", Js.Unsafe.inject (Js.string (pp dst)))
                         |]
-                  | `Ctxt -> Js.Unsafe.obj [| ("kind", Js.Unsafe.inject (Js.string "ctxt")) |]
+                  | `Ctxt ->
+                      Js.Unsafe.obj
+                        [| ("kind", Js.Unsafe.inject (Js.string "ctxt")) |]
                 in
 
                 let icon =
@@ -220,12 +237,16 @@ let rec js_proof_engine (proof : Proof.proof) =
         in
         (* Convert the selection from JS to ocaml. *)
         let selection =
-          match selection |> Js.Optdef.to_option |> Option.map ipath_of_array with
+          match
+            selection |> Js.Optdef.to_option |> Option.map ipath_of_array
+          with
           | None -> None
           | Some [] -> None
           | Some [ selection ] -> Some selection
           | Some _ ->
-              js_log "Jsapi.lemmareqb : limited to one selection. Setting selection to None.";
+              js_log
+                "Jsapi.lemmareqb : limited to one selection. Setting selection \
+                 to None.";
               None
         in
         (* Get the sub-formula pointed at by the selection. *)
@@ -236,7 +257,8 @@ let rec js_proof_engine (proof : Proof.proof) =
         in
         (* Encode the pattern and formula. *)
         ((pattern, term) : string option * Api.Logic.term option)
-        |> Fun.flip Marshal.to_string [] |> Base64.encode_string |> Js.string
+        |> Fun.flip Marshal.to_string []
+        |> Base64.encode_string |> Js.string
       in
       !!doit ()
 
@@ -245,7 +267,8 @@ let rec js_proof_engine (proof : Proof.proof) =
       (* Decode the data.
          The type annotation here is very important for unmarshaling to work. *)
       let (env, lemmas) : Api.Logic.lemmadb =
-        datab |> Js.to_string |> Base64.decode_exn |> Fun.flip Marshal.from_string 0
+        datab |> Js.to_string |> Base64.decode_exn
+        |> Fun.flip Marshal.from_string 0
       in
       (* Translate the lemmas and env to the actema format. *)
       let lemmas =
@@ -261,11 +284,13 @@ let rec js_proof_engine (proof : Proof.proof) =
       List.iter (fun lemma -> Fo.Form.recheck env lemma.Proof.l_form) lemmas;
       (* Create the lemma database. First we have to assign a handle to each lemma. *)
       let db =
-        Proof.Lemmas.extend_env env @@ Proof.Lemmas.of_list
+        Proof.Lemmas.extend_env env
+        @@ Proof.Lemmas.of_list
         @@ List.mapi (fun _ lemma -> (Handle.fresh (), lemma)) lemmas
       in
       (* Print debug info. *)
-      js_log @@ Format.sprintf "Received lemmas (count=%d)\n" (List.length lemmas);
+      js_log
+      @@ Format.sprintf "Received lemmas (count=%d)\n" (List.length lemmas);
       (*List.iter (fun (name, _) -> js_log name) lemmas;*)
       (* Load the lemmas in the database. *)
       let new_proof = Proof.set_db _self##.proof db in
@@ -281,9 +306,14 @@ let rec js_proof_engine (proof : Proof.proof) =
       |> List.map
            begin
              fun (handle, lemma) ->
-               let handle = handle |> Handle.toint |> string_of_int |> Js.string in
+               let handle =
+                 handle |> Handle.toint |> string_of_int |> Js.string
+               in
                let name = lemma.Proof.l_user |> Js.string in
-               let form = Notation.f_tostring (Proof.Lemmas.env db) lemma.l_form |> Js.string in
+               let form =
+                 Notation.f_tostring (Proof.Lemmas.env db) lemma.l_form
+                 |> Js.string
+               in
                Js.array [| handle; name; form |]
            end
       |> Array.of_list |> Js.array
@@ -300,7 +330,9 @@ let rec js_proof_engine (proof : Proof.proof) =
         |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
       in
       (* Convert the selection from JS to ocaml. *)
-      let selection = selection |> Js.Optdef.to_option |> Option.map ipath_of_array in
+      let selection =
+        selection |> Js.Optdef.to_option |> Option.map ipath_of_array
+      in
       (* Construct the filtering predicate. *)
       let pred =
         Pred.and_
@@ -313,12 +345,16 @@ let rec js_proof_engine (proof : Proof.proof) =
             match selection with
             | None | Some [] -> Pred.true_
             | Some [ selection ] ->
-                Pred.or_ (Pred.link_sfl selection) (Pred.link_drewrite selection)
-            | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
+                Pred.or_ (Pred.link_sfl selection)
+                  (Pred.link_drewrite selection)
+            | _ ->
+                failwith "Jsapi.filterlemmas: only supports a single selection."
           end
       in
       (* Filter the lemma database. *)
-      let proof = Utils.time "filter-lemmas" @@ fun () -> filter pred _self##.proof in
+      let proof =
+        Utils.time "filter-lemmas" @@ fun () -> filter pred _self##.proof
+      in
       js_proof_engine proof
   end
 
@@ -361,7 +397,9 @@ and js_subgoal parent (handle : Handle.t) =
     method tvars =
       let goal = _self##goal in
       let tvars = Vars.to_list goal.g_env in
-      let aout = List.mapi (fun i (id, x, b) -> js_tvar _self (i, (id, x, b))) tvars in
+      let aout =
+        List.mapi (fun i (id, x, b) -> js_tvar _self (i, (id, x, b))) tvars
+      in
       Js.array (Array.of_list aout)
 
     (** Return all the local hypotheses (context) as a [js_hyps array] *)
@@ -369,7 +407,8 @@ and js_subgoal parent (handle : Handle.t) =
       let goal = _self##goal in
       let hyps = List.rev (Proof.Hyps.to_list goal.g_hyps) in
 
-      Js.array (Array.of_list (List.mapi (fun i x -> js_hyps _self (i, x)) hyps))
+      Js.array
+        (Array.of_list (List.mapi (fun i x -> js_hyps _self (i, x)) hyps))
 
     (** Return the subgoal conclusion as a [js_form] *)
     method conclusion =
@@ -394,8 +433,9 @@ and js_subgoal parent (handle : Handle.t) =
         let hidmap = Proof.hidmap parent##.proof in
         let hyp_name = Hidmap.State.run (Hidmap.find hyp_handle) hidmap in
         (* Construct the ADuplicate action and encode it. *)
-        Api.Logic.ADuplicate hyp_name |> Fun.flip Marshal.to_string [] |> Base64.encode_string
-        |> Js.string
+        Api.Logic.ADuplicate hyp_name
+        |> Fun.flip Marshal.to_string []
+        |> Base64.encode_string |> Js.string
       in
       !!doit ()
 
@@ -407,8 +447,9 @@ and js_subgoal parent (handle : Handle.t) =
         let hidmap = Proof.hidmap parent##.proof in
         let hyp_name = Hidmap.State.run (Hidmap.find hyp_handle) hidmap in
         (* Construct the AClear action and encode it. *)
-        Api.Logic.AClear hyp_name |> Fun.flip Marshal.to_string [] |> Base64.encode_string
-        |> Js.string
+        Api.Logic.AClear hyp_name
+        |> Fun.flip Marshal.to_string []
+        |> Base64.encode_string |> Js.string
       in
       !!doit ()
 
@@ -420,8 +461,9 @@ and js_subgoal parent (handle : Handle.t) =
         let hidmap = Proof.hidmap parent##.proof in
         let hyp_name = Hidmap.State.run (Hidmap.find hyp_handle) hidmap in
         (* Construct the AClear action and encode it. *)
-        Api.Logic.AGeneralize hyp_name |> Fun.flip Marshal.to_string [] |> Base64.encode_string
-        |> Js.string
+        Api.Logic.AGeneralize hyp_name
+        |> Fun.flip Marshal.to_string []
+        |> Base64.encode_string |> Js.string
       in
       !!doit ()
 
@@ -434,7 +476,9 @@ and js_subgoal parent (handle : Handle.t) =
           form |> Js.to_string |> String.trim |> Io.from_string |> Io.parse_form
           |> Form.check goal.g_env |> Fo.Translate.of_form
         in
-        Api.Logic.ACut form |> Fun.flip Marshal.to_string [] |> Base64.encode_string |> Js.string
+        Api.Logic.ACut form
+        |> Fun.flip Marshal.to_string []
+        |> Base64.encode_string |> Js.string
       in
       !!doit ()
 
@@ -448,8 +492,9 @@ and js_subgoal parent (handle : Handle.t) =
         (* Recheck the lemma just to make sure. *)
         Form.recheck (Proof.Lemmas.env db) lemma.l_form;
         (* Construct the action and encode it. *)
-        Api.Logic.ALemma lemma.l_full |> Fun.flip Marshal.to_string [] |> Base64.encode_string
-        |> Js.string
+        Api.Logic.ALemma lemma.l_full
+        |> Fun.flip Marshal.to_string []
+        |> Base64.encode_string |> Js.string
       in
       !!doit ()
 
@@ -491,7 +536,8 @@ and js_subgoal parent (handle : Handle.t) =
         let name = Location.unloc name in
         let expr, ty = Fo.Translate.(of_expr expr, of_type_ ty) in
         Api.Logic.ADef (name, ty, expr)
-        |> Fun.flip Marshal.to_string [] |> Base64.encode_string |> Js.string
+        |> Fun.flip Marshal.to_string []
+        |> Base64.encode_string |> Js.string
       in
       !!doit ()
 
@@ -513,8 +559,11 @@ and js_subgoal parent (handle : Handle.t) =
       in
       js_proof_engine (!!doit ())
 
-    method getmeta = Js.Opt.option (Proof.get_meta parent##.proof _self##.handle)
-    method setmeta meta = Proof.set_meta parent##.proof _self##.handle (Js.Opt.to_option meta)
+    method getmeta =
+      Js.Opt.option (Proof.get_meta parent##.proof _self##.handle)
+
+    method setmeta meta =
+      Proof.set_meta parent##.proof _self##.handle (Js.Opt.to_option meta)
 
     method toascii =
       let funs : string list =
@@ -531,7 +580,9 @@ and js_subgoal parent (handle : Handle.t) =
         _self##context |> Js.to_array |> Array.to_list
         |> List.map (fun h -> h##toascii |> Js.to_string)
       in
-      let concl : string = _self##conclusion |> fun c -> c##toascii |> Js.to_string in
+      let concl : string =
+        _self##conclusion |> fun c -> c##toascii |> Js.to_string
+      in
 
       let to_string = List.to_string ~sep:", " ~left:"" ~right:"" identity in
       let comma =
@@ -544,14 +595,19 @@ and js_subgoal parent (handle : Handle.t) =
                else s ^ ", " ^ to_string l)
       in
 
-      Js.string (Printf.sprintf "%s; %s |- %s" (comma [ funs; vars; props ]) (to_string hyps) concl)
+      Js.string
+        (Printf.sprintf "%s; %s |- %s"
+           (comma [ funs; vars; props ])
+           (to_string hyps) concl)
 
     method tostring =
       let hyps : string list =
         _self##context |> Js.to_array |> Array.to_list
         |> List.map (fun h -> h##tostring |> Js.to_string)
       in
-      let concl : string = _self##conclusion |> fun c -> c##tostring |> Js.to_string in
+      let concl : string =
+        _self##conclusion |> fun c -> c##tostring |> Js.to_string
+      in
 
       let to_string = List.to_string ~sep:", " ~left:"" ~right:"" identity in
 
@@ -594,15 +650,20 @@ and js_hyps parent ((i, (handle, hyp)) : int * (Handle.t * Proof.hyp)) =
 
     (* Return an ASCII string representation of the enclosed formula *)
     method toascii = _self##.form##toascii
-    method getmeta = Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
+
+    method getmeta =
+      Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
 
     method setmeta meta =
-      Proof.set_meta _self##.proof##.proof _self##.handle (Js.Opt.to_option meta)
+      Proof.set_meta
+        _self##.proof##.proof
+        _self##.handle (Js.Opt.to_option meta)
   end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for a local variable                                      *)
-and js_tvar parent ((i, (handle, x, (ty, b))) : int * (Handle.t * vname * bvar)) =
+and js_tvar parent ((i, (handle, x, (ty, b))) : int * (Handle.t * vname * bvar))
+    =
   object%js (_self)
     (* back-link to the [js_subgoal] this local variable belongs to *)
     val parent = parent
@@ -658,7 +719,10 @@ and js_tvar parent ((i, (handle, x, (ty, b))) : int * (Handle.t * vname * bvar))
               match b with
               | Some b ->
                   spaced [ span [ Xml.pcdata ":=" ] ]
-                  @ [ Notation.e_tohtml ~id:(Some _self##idbody) (parent##goal).g_env b ]
+                  @ [ Notation.e_tohtml
+                        ~id:(Some _self##idbody)
+                        (parent##goal).g_env b
+                    ]
               | None -> [])
           ]
       in
@@ -681,7 +745,10 @@ and js_tvar parent ((i, (handle, x, (ty, b))) : int * (Handle.t * vname * bvar))
               match b with
               | Some b ->
                   [ mo ":=" ]
-                  @ [ Notation.e_tomathml ~id:(Some _self##idbody) (parent##goal).g_env b ]
+                  @ [ Notation.e_tomathml
+                        ~id:(Some _self##idbody)
+                        (parent##goal).g_env b
+                    ]
               | None -> [])
           ]
       in
@@ -716,10 +783,13 @@ and js_tvar parent ((i, (handle, x, (ty, b))) : int * (Handle.t * vname * bvar))
                (Notation.e_tostring (parent##goal).g_env (EVar x))
                (Notation.t_toascii (parent##goal).g_env ty))
 
-    method getmeta = Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
+    method getmeta =
+      Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
 
     method setmeta meta =
-      Proof.set_meta _self##.proof##.proof _self##.handle (Js.Opt.to_option meta)
+      Proof.set_meta
+        _self##.proof##.proof
+        _self##.handle (Js.Opt.to_option meta)
   end
 
 (* -------------------------------------------------------------------- *)
@@ -743,7 +813,8 @@ and js_form parent (source : source) (form : form) =
       let prefix = if not id then None else Some _self##.prefix in
       Js.string
         (Format.asprintf "%a" (Tyxml.Xml.pp ())
-           (Utils.Mathml.math [ Notation.f_tomathml (parent##goal).g_env ~id:prefix form ]))
+           (Utils.Mathml.math
+              [ Notation.f_tomathml (parent##goal).g_env ~id:prefix form ]))
 
     (* Return the [html] of the formula *)
     method htmltag (id : bool) =
@@ -778,7 +849,8 @@ and js_expr parent (expr : expr) =
     (* Return the [html] of the formula *)
     method htmltag =
       Js.string
-        (Format.asprintf "%a" (Tyxml.Xml.pp ()) (Notation.e_tohtml (parent##goal).g_env expr))
+        (Format.asprintf "%a" (Tyxml.Xml.pp ())
+           (Notation.e_tohtml (parent##goal).g_env expr))
 
     (* Return an UTF8 string representation of the expression *)
     method tostring = Js.string (Notation.e_tostring (parent##goal).g_env expr)
@@ -789,7 +861,8 @@ and js_expr parent (expr : expr) =
 and js_type parent (ty : type_) =
   object%js (_self)
     (* Return the raw [mathml] of the type *)
-    method rawmathml = Utils.Mathml.math [ Notation.t_tomathml (parent##goal).g_env ty ]
+    method rawmathml =
+      Utils.Mathml.math [ Notation.t_tomathml (parent##goal).g_env ty ]
 
     (* Return the raw [html] of the type *)
     method rawhtml = Notation.t_tohtml (parent##goal).g_env ty
@@ -798,10 +871,12 @@ and js_type parent (ty : type_) =
     method rawstring = Notation.t_tostring (parent##goal).g_env ty
 
     (* Return the [mathml] of the type *)
-    method mathml = Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) _self##rawmathml)
+    method mathml =
+      Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) _self##rawmathml)
 
     (* Return the [html] of the type *)
-    method html = Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) _self##rawhtml)
+    method html =
+      Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) _self##rawhtml)
 
     (* Return an UTF8 string representation of the formula *)
     method tostring = Js.string _self##rawstring
@@ -892,15 +967,20 @@ let export (name : string) : unit =
                  (fun b ->
                    if not (Js.to_bool b)
                    then ""
-                   else List.to_string ~sep:", " ~left:"" ~right:" " (Notation.f_tostring env) hyps))
+                   else
+                     List.to_string ~sep:", " ~left:"" ~right:" "
+                       (Notation.f_tostring env) hyps))
               (Notation.f_tostring env goal))
 
        (* Return a new proof engine whose goals are the base64, binary decoding of [goalsb]  *)
        method setgoalsb goalsb =
          let goals : Api.Logic.goals =
-           goalsb |> Js.to_string |> Base64.decode_exn |> Fun.flip Marshal.from_string 0
+           goalsb |> Js.to_string |> Base64.decode_exn
+           |> Fun.flip Marshal.from_string 0
          in
-         let gls, hms = goals |> !!(List.map Proof.Translate.import_goal) |> List.split in
+         let gls, hms =
+           goals |> !!(List.map Proof.Translate.import_goal) |> List.split
+         in
          let hm = List.fold_left Hidmap.union Hidmap.empty hms in
          (* Log the goals. *)
          List.iter print_goal gls;

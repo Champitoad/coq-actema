@@ -76,6 +76,13 @@ module Term : sig
     *)
     | Cst of Name.t
   [@@deriving show]
+
+  (** Smart constructor for [Term.App], ensuring that the function is not an application. *)
+  val mkApp : t -> t -> t
+
+  (** Same as [mkApp] but with multiple arguments. 
+      It also checks that the argument list is nonempty. *)
+  val mkApps : t -> t list -> t
 end
 
 (***************************************************************************************)
@@ -105,7 +112,8 @@ module Env : sig
   type t =
     { globals : Term.t Name.Map.t  (** The type of each GLOBAL variable. *)
     ; locals : Term.t Name.Map.t  (** The type of each LOCAL variable. *)
-    ; pp_info : pp_info Name.Map.t  (** The information needed to pretty-print *)
+    ; pp_info : pp_info Name.Map.t
+          (** The information needed to pretty-print *)
     }
 
   (** The empty environment. *)

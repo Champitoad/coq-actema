@@ -78,7 +78,12 @@ module List : sig
   val is_prefix : 'a list -> 'a list -> bool
 
   val to_string :
-    ?sep:string -> ?left:string -> ?right:string -> ('a -> string) -> 'a list -> string
+       ?sep:string
+    -> ?left:string
+    -> ?right:string
+    -> ('a -> string)
+    -> 'a list
+    -> string
 end = struct
   include BatList
 
@@ -104,7 +109,9 @@ end = struct
     aux [] a l
 
   let findex (type a) (check : a -> bool) (xs : a list) : int option =
-    match Exceptionless.findi (fun _ x -> check x) xs with None -> None | Some (i, _) -> Some i
+    match Exceptionless.findi (fun _ x -> check x) xs with
+    | None -> None
+    | Some (i, _) -> Some i
 
   let join (sep : 'a) =
     let rec doit acc xs =
@@ -114,13 +121,15 @@ end = struct
 
   type 'a pivot = 'a list * 'a * 'a list
 
-  let of_option (x : 'a option) : 'a list = match x with None -> [] | Some x -> [ x ]
+  let of_option (x : 'a option) : 'a list =
+    match x with None -> [] | Some x -> [ x ]
 
   let pivoti (f : int -> 'a -> bool) =
     let rec aux i pre s =
       match s with
       | [] -> invalid_arg "List.pivoti"
-      | x :: s -> if f i x then (List.rev pre, x, s) else aux (i + 1) (x :: pre) s
+      | x :: s ->
+          if f i x then (List.rev pre, x, s) else aux (i + 1) (x :: pre) s
     in
     fun (s : 'a list) -> aux 0 [] s
 
@@ -137,9 +146,13 @@ end = struct
           if not progress then raise TopoFailure;
           aux acc [] later false
       | x :: xs, _ ->
-          let ok = List.for_all (fun dep -> exists (fun y -> key y = dep) acc) (deps x) in
+          let ok =
+            List.for_all (fun dep -> exists (fun y -> key y = dep) acc) (deps x)
+          in
 
-          if ok then aux (x :: acc) later xs true else aux acc (x :: later) xs progress
+          if ok
+          then aux (x :: acc) later xs true
+          else aux acc (x :: later) xs progress
     in
 
     fun (xs : a list) ->
@@ -148,7 +161,9 @@ end = struct
 
   let find_map_opt (f : 'a -> 'b option) =
     let rec doit xs =
-      match xs with [] -> None | x :: xs -> ( match f x with None -> doit xs | Some v -> Some v)
+      match xs with
+      | [] -> None
+      | x :: xs -> ( match f x with None -> doit xs | Some v -> Some v)
     in
     fun xs -> doit xs
 
@@ -199,16 +214,22 @@ end = struct
   let codomain (_, l) = Map.keys l |> List.of_enum
 
   let kdiff (r1, _) (r2, _) =
-    let r = r1 |> Map.filter (fun k _ -> not (Map.exists (fun k' _ -> k = k') r2)) in
+    let r =
+      r1 |> Map.filter (fun k _ -> not (Map.exists (fun k' _ -> k = k') r2))
+    in
     let l = r |> Map.enum |> Enum.map (fun (x, y) -> (y, x)) |> Map.of_enum in
     (r, l)
 
   let vdiff (_, l1) (_, l2) =
-    let l = l1 |> Map.filter (fun k _ -> not (Map.exists (fun k' _ -> k = k') l2)) in
+    let l =
+      l1 |> Map.filter (fun k _ -> not (Map.exists (fun k' _ -> k = k') l2))
+    in
     let r = l |> Map.enum |> Enum.map (fun (x, y) -> (y, x)) |> Map.of_enum in
     (r, l)
 
-  let of_enum e = (Map.of_enum e, Map.of_enum (e |> Enum.map (fun (x, y) -> (y, x))))
+  let of_enum e =
+    (Map.of_enum e, Map.of_enum (e |> Enum.map (fun (x, y) -> (y, x))))
+
   let of_seq s = (Map.of_seq s, Map.of_seq (s |> Seq.map (fun (x, y) -> (y, x))))
 end
 
@@ -271,7 +292,10 @@ end = struct
   let pr ?(doit = true) c = if doit then Format.sprintf "(%s)" c else c
 
   let spaced ?(left = true) ?(right = true) c =
-    Format.sprintf "%s%s%s" (if left then " " else "") c (if right then " " else "")
+    Format.sprintf "%s%s%s"
+      (if left then " " else "")
+      c
+      (if right then " " else "")
 end
 
 open Tyxml
