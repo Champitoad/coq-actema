@@ -3,6 +3,7 @@ Require Import ssreflect.
 Require Import Coq.Classes.RelationClasses.
 Require Import Coq.Classes.Morphisms.
 
+About or.
 
 Inductive ll :=
   | lnil : ll

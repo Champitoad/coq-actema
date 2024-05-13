@@ -74,6 +74,20 @@ module Pred = struct
     in
     doit
 
+  (** [fresh_evar ~basename ()] generates a fresh name for an
+        existential variable, based on an optional [basename].
+  
+        We choose by convention to name existential variables with a leading '?'.
+        This ensures freshness by avoiding clashes with variables names input
+        by the user, by the definition of identifiers in the lexer. This also
+        means that every new existential variable must be instanciated through
+        this function. *)
+  let fresh_evar =
+    let evar_name_counter = ref (-1) in
+    fun ?(basename = "") () ->
+      incr evar_name_counter;
+      "?" ^ basename ^ string_of_int !evar_name_counter
+
   (** This module implements unification for subformula linking. *)
   module PreUnif = struct
     open Form
@@ -143,7 +157,7 @@ module Pred = struct
       match (pol, term) with
       | Polarity.Pos, `F (FBind (`Forall, x, _, f)) | Polarity.Neg, `F (FBind (`Exist, x, _, f)) ->
           get >>= fun { deps; rnm; subst } ->
-          let z = EVars.fresh () in
+          let z = fresh_evar () in
           let exs = Subst.fold (fun acc (x, t) -> if t = Sflex then x :: acc else acc) [] subst in
           let deps = List.fold_left (fun deps y -> Deps.add_edge deps y z) deps exs in
           let rnm = (z, x) :: rnm in
@@ -152,7 +166,7 @@ module Pred = struct
           return (pol, `F f)
       | Polarity.Neg, `F (FBind (`Forall, x, _, f)) | Polarity.Pos, `F (FBind (`Exist, x, _, f)) ->
           get >>= fun ({ rnm; subst; _ } as st) ->
-          let z = EVars.fresh () in
+          let z = fresh_evar () in
           let rnm = (z, x) :: rnm in
           let subst = Subst.push z Sflex subst in
           put { st with rnm; subst } >>= fun _ ->
@@ -250,109 +264,6 @@ module Pred = struct
             [ `Subform (s1, s2) ]
         | _ -> []
       with Invalid_argument _ -> []
-
-  (*let wf_subform_old ?(drewrite = false) : lpred =
-    let open Form in
-    let open PreUnif in
-    let is_eq_operand proof (p : IPath.t) =
-      try
-        let eq_sub = List.(remove_at (length p.sub - 1) p.sub) in
-        let eq_path = { p with sub = eq_sub } in
-        let _, _, (_, t) = IPath.destr proof eq_path in
-        match t with `F (FPred ("_EQ", _)) -> true | _ -> false
-      with Invalid_argument _ -> false
-    in
-
-    fun proof (src, dst) ->
-      let goal, item_src, (sub_src, t_src) = IPath.destr proof src in
-      let _, item_dst, (sub_dst, t_dst) = IPath.destr proof dst in
-
-      try
-        let f1 = form_of_item item_src in
-        let f2 = form_of_item item_dst in
-
-        let p1 = Polarity.of_item item_src in
-        let p2 = Polarity.of_item item_dst in
-
-        let sub1 = sub_src in
-        let sub2 = sub_dst in
-
-        let deps, sp1, st1, rnm1, s1, sp2, st2, rnm2, s2 =
-          let open State in
-          run
-            begin
-              traverse (p1, `F f1) sub1 >>= fun (sp1, sf1) ->
-              get >>= fun st1 ->
-              put { st1 with rnm = []; subst = Subst.empty } >>= fun _ ->
-              traverse (p2, `F f2) sub2 >>= fun (sp2, sf2) ->
-              get >>= fun st2 ->
-              return (st2.deps, sp1, sf1, st1.rnm, st1.subst, sp2, sf2, st2.rnm, st2.subst)
-            end
-            { deps = Deps.empty; rnm = []; subst = Subst.empty }
-        in
-
-        let s1 = Subst.aslist s1 in
-        let s2 = Subst.aslist s2 in
-        let s = Subst.oflist (s1 @ s2) in
-
-        let s =
-          begin
-            match (st1, st2) with
-            (* Subformula linking *)
-            | `F f1, `F f2 when not drewrite -> begin
-                (* Check that the two subformulas have opposite polarities. *)
-                match (sp1, sp2) with
-                | Pos, Neg | Neg, Pos | Sup, _ | _, Sup ->
-                    (* Unify the two subformulas. *)
-                    f_unify goal.g_pregoal.g_env LEnv.empty s [ (f1, f2) ]
-                | _ -> None
-              end
-            (* Deep rewrite *)
-            | `E e1, `E e2
-              when drewrite
-                   &&
-                   let env = goal.g_pregoal.g_env in
-                   let ty1 = einfer (IPath.env proof src) (expr_of_term t_src) in
-                   let ty2 = einfer (IPath.env proof dst) (expr_of_term t_dst) in
-                   Form.(t_equal env ty1 ty2) ->
-                let eq1, eq2 = pair_map (is_eq_operand proof) (src, dst) in
-                begin
-                  match ((sp1, eq1), (sp2, eq2)) with
-                  | (Neg, true), _ | _, (Neg, true) ->
-                      e_unify goal.g_pregoal.g_env LEnv.empty s [ (e1, e2) ]
-                  | _ -> None
-                end
-            | _ -> None
-          end
-        in
-
-        match s with
-        | Some s when acyclic (Deps.subst deps s) ->
-            let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
-
-            let rename rnm1 rnm2 =
-              List.map
-                begin
-                  fun (x, tag) ->
-                    let get_name x rnm = Option.default x (List.assoc_opt x rnm) in
-                    let x = get_name x rnm1 in
-                    let tag =
-                      let rec rename = function
-                        | EVar (x, i) -> EVar (get_name x rnm2, i)
-                        | EFun (f, es) -> EFun (f, List.map rename es)
-                      in
-                      match tag with Sbound e -> Sbound (rename e) | _ -> tag
-                    in
-                    (x, tag)
-                end
-            in
-
-            let s1 = s1 |> rename rnm1 rnm2 |> List.rev |> Subst.oflist in
-            let s2 = s2 |> rename rnm2 rnm1 |> List.rev |> Subst.oflist in
-
-            [ `Subform (s1, s2) ]
-        | _ -> []
-      with Invalid_argument _ -> []*)
 
   let opposite_pol_formulas : lpred =
    fun proof (src, dst) ->

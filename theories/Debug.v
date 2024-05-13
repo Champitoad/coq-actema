@@ -1,6 +1,8 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
+About plus.
+
 Inductive nlist := 
   | nnil : nlist
   | ncons : nat -> nlist -> nlist.

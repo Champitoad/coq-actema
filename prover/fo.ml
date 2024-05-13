@@ -1052,50 +1052,6 @@ end = struct
 end
 
 (* -------------------------------------------------------------------- *)
-module EVars : sig
-  val fresh : ?basename:name -> unit -> name
-  val push : env -> name option * type_ -> name * env
-  val exists : env -> vname -> bool
-  val get : env -> vname -> type_ option
-  val remove : env -> vname -> env
-  val all : env -> (name, type_ list) Map.t
-end = struct
-  let evar_name_counter = ref (-1)
-
-  (** [fresh ~basename ()] generates a fresh name for an
-      existential variable, based on an optional [basename].
-
-      We choose by convention to name existential variables with a leading '?'.
-      This ensures freshness by avoiding clashes with variables names input
-      by the user, by the definition of identifiers in the lexer. This also
-      means that every new existential variable must be instanciated through
-      this function. *)
-  let fresh ?(basename = "") () =
-    incr evar_name_counter;
-    "?" ^ basename ^ string_of_int !evar_name_counter
-
-  let push (env : env) ((name, ty) : name option * type_) =
-    let name = fresh ?basename:name () in
-    ( name
-    , { env with
-        env_evar = Map.modify_opt name (fun bds -> Some (ty :: Option.default [] bds)) env.env_evar
-      } )
-
-  let get (env : env) ((name, idx) : vname) =
-    let bds = Map.find_default [] name env.env_evar in
-    List.nth_opt bds idx
-
-  let exists (env : env) (x : vname) = Option.is_some (get env x)
-
-  let remove (env : env) ((name, idx) : vname) =
-    let bds = Map.find_default [] name env.env_evar in
-    let bds = List.remove_at idx bds in
-    { env with env_evar = Map.add name bds env.env_evar }
-
-  let all (env : env) = env.env_evar
-end
-
-(* -------------------------------------------------------------------- *)
 exception RecheckFailure
 exception TypingError
 
