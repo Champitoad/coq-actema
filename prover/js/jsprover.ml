@@ -810,7 +810,9 @@ and js_type parent (ty : type_) =
 (** Print a single goal in Actema format (for debug purposes). *)
 let print_goal (Proof.{ g_env; g_hyps; g_goal } : Proof.pregoal) : unit =
   (* Conclusion. *)
-  js_log @@ Format.sprintf "GOAL %s\n" (show_form g_goal);
+  let goal_html = Notation.f_tohtml ~id:None g_env g_goal in
+  js_log @@ Format.asprintf "GOAL HTML :\n%a\n" (Tyxml.Xml.pp ()) goal_html
+(*js_log @@ Format.sprintf "GOAL %s\n" (show_form g_goal);
   (* Hypotheses. *)
   List.iter
     begin
@@ -850,7 +852,7 @@ let print_goal (Proof.{ g_env; g_hyps; g_goal } : Proof.pregoal) : unit =
       fun name bvars ->
         js_log @@ Format.sprintf "VAR %s ---> %s\n" name ([%derive.show: bvar list] bvars)
     end
-    g_env.env_var
+    g_env.env_var*)
 
 (* -------------------------------------------------------------------- *)
 let export (name : string) : unit =
@@ -901,7 +903,7 @@ let export (name : string) : unit =
          let gls, hms = goals |> !!(List.map Proof.Translate.import_goal) |> List.split in
          let hm = List.fold_left Hidmap.union Hidmap.empty hms in
          (* Log the goals. *)
-         (*List.iter print_goal gls;*)
+         List.iter print_goal gls;
          (* Create a new proof engine. *)
          js_proof_engine (!!(Proof.ginit hm) gls)
     end)

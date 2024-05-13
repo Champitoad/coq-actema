@@ -245,6 +245,12 @@ Qed.
 
 (* I leave the textual proofs in the comments *)
 
+(* This crashes the Coq tactics and I have not been able 
+   to find a smaller example that still fails. *)
+(*Lemma p_test (h : forall l1 l2, perm l1 l2 -> perm l2 l3 -> perm l1 l3) :
+  forall a l1, perm l1 l1 -> perm l1 (lcons a l1).
+  actema. *)
+
 Lemma p_cons : forall a l1 l2,
     perm l1 l2 -> perm (lcons a l1) (lcons a l2).
   actema.

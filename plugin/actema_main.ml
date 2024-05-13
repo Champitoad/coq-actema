@@ -153,6 +153,67 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
       ^ Extlib.List.to_string ~sep:"." Names.Id.to_string dirs
       ^ " " ^ Names.Id.to_string id*)
 
+let isReflexiveInstance goal (cname, (cbody, _)) =
+  let sigma = Goal.sigma goal in
+  let ty = EConstr.of_constr cbody.Declarations.const_type in
+  if EConstr.isApp sigma ty
+  then
+    let head, args = EConstr.destApp sigma ty in
+    if EConstr.isConst sigma head
+    then
+      let name, _ = EConstr.destConst sigma head in
+      let target =
+        Names.Constant.make1 @@ kername [ "Coq"; "Classes"; "RelationClasses" ] "Reflexive"
+      in
+      Names.Constant.UserOrd.equal name target
+    else false
+  else false
+
+let print_instance goal (inst : Typeclasses.instance) : unit =
+  let body =
+    match inst.is_impl with
+    | Names.GlobRef.ConstRef name -> Environ.lookup_constant name (Goal.env goal)
+    | _ ->
+        failwith
+        @@ Format.sprintf "%s is not a constant !"
+             (Pp.string_of_ppcmds @@ Names.GlobRef.print inst.is_impl)
+  in
+  Log.printf "Instance {\n  class = %s\n  impl = %s\n  body = %s\n}"
+    (Pp.string_of_ppcmds @@ Names.GlobRef.print inst.is_class)
+    (Pp.string_of_ppcmds @@ Names.GlobRef.print inst.is_impl)
+    (Pp.string_of_ppcmds @@ Constr.debug_print body.const_type)
+
 let test_tac () : unit tactic =
-  let var = EConstr.mkVar @@ Names.Id.of_string "n" in
-  Induction.induction false (Some true) var None None
+  (*Goal.enter
+    begin
+      fun goal ->
+        let env_constants = (Environ.Globals.view (Goal.env goal).env_globals).constants in
+        let constants =
+          List.filter (isReflexiveInstance goal) (Names.Cmap_env.bindings env_constants)
+        in
+        (* Log info about the constants. *)
+        List.iter
+          begin
+            fun (cname, (cbody, _)) ->
+              let ty = cbody.Declarations.const_type in
+              Log.printf "\nFound constant %s :\n" (Names.Constant.to_string cname);
+              Log.econstr_debug (Goal.sigma goal) (EConstr.of_constr ty)
+          end
+          constants;
+        Tacticals.tclIDTAC
+    end*)
+  Goal.enter
+    begin
+      fun goal ->
+        let target =
+          (*Names.Constant.make1 @@ kername [ "Coq"; "Classes"; "RelationClasses" ] "Reflexive"*)
+          Names.Constant.make1 @@ kername [ "Coq"; "Classes"; "Morphisms" ] "Proper"
+        in
+        let instances = Typeclasses.instances @@ Names.GlobRef.ConstRef target in
+        begin
+          match instances with
+          | None -> Log.str "Not a class."
+          | Some instances -> List.iter (print_instance goal) instances
+        end;
+        Tacticals.tclIDTAC
+    end

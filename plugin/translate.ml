@@ -681,11 +681,6 @@ module Export = struct
   let constant_lemmas ({ env = coq_env; evd } as e : destenv) : Logic.lemma list State.t =
     let g_consts =
       (Environ.Globals.view coq_env.env_globals).constants |> Names.Cmap_env.bindings
-      (*|> List.filter begin fun (cname, _) ->
-            let target = Names.Constant.make1 (kername ["Actema"; "Test"] "my_add0") in
-            Names.Constant.CanOrd.equal cname target
-         end*)
-      (*|> List.take 100*)
     in
     State.fold
       begin
@@ -730,7 +725,6 @@ module Export = struct
                ind_body.Declarations.mind_user_lc |> Array.to_list
                |> List.mapi (fun j ty -> (ind_body, (ind_name, j + 1), ty))
            end
-      (*|> List.take 100*)
     in
     State.fold
       begin
