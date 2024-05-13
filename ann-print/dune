@@ -1,0 +1,4 @@
+(library
+ (name ann_print)
+ (public_name coq-actema.ann-print)
+ (libraries tyxml))
