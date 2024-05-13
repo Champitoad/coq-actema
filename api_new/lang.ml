@@ -63,28 +63,24 @@ end
 (** Environments *)
 
 module Env = struct
+  module StringMap = Map.Make (String)
+
   type pp_info = { symbol : string; position : [ `Prefix | `Infix | `Suffix ] }
   [@@deriving show]
 
   type t =
     { globals : Term.t Name.Map.t
-    ; locals : Term.t Name.Map.t
-    ; pp_info : pp_info Name.Map.t
+    ; locals : (Name.t * Term.t) list
+    ; pp_info_by_name : pp_info Name.Map.t
+    ; pp_info_by_symbol : pp_info StringMap.t
     }
 
   let empty =
     { globals = Name.Map.empty
-    ; locals = Name.Map.empty
-    ; pp_info = Name.Map.empty
+    ; locals = []
+    ; pp_info_by_name = Name.Map.empty
+    ; pp_info_by_symbol = StringMap.empty
     }
 
-  let union env1 env2 =
-    let check_binding _key value1 value2 =
-      assert (value1 = value2);
-      Some value1
-    in
-    { globals = Name.Map.union check_binding env1.globals env2.globals
-    ; locals = Name.Map.union check_binding env1.locals env2.locals
-    ; pp_info = Name.Map.union check_binding env1.pp_info env2.pp_info
-    }
+  let enter x ty env = { env with locals = (x, ty) :: env.locals }
 end

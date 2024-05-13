@@ -5,6 +5,8 @@ Require Import ssreflect.
 Context (Socrates : nat).
 Context (Mortal Human : nat -> Prop).
 
+Check (forall x : nat, forall x : bool, x = true).
+
 Lemma Aristoteles (hm : forall x, Human x -> Mortal x) 
   (hh : Human Socrates) : Mortal Socrates.
     actema_force.

@@ -54,7 +54,9 @@ module Term : sig
     (* [Prod x A B] is the dependent product [forall x : A, B].
        [A] is the type of [x], and [x] can appear as a variable [Var x] in [body]. *)
     | Prod of Name.t * t * t
-    (* [Cst c] is a global constant. It's type can be found in the environment.
+    (* [Cst c] is a global constant. Its type can be found in the environment.
+       Contrary to bound variables, constants should be uniquely identified by their string.
+
        Examples of constants could be :
        - [nat] the inductive type of natural numbers.
        - [add] the addition on natural numbers.
@@ -89,11 +91,7 @@ end
 (** Environments. *)
 
 module Env : sig
-  (** Some variables require special formatting when pretty-printed. 
-      This applies to global variables of course, but also to local variables. 
-
-      For instance if a local variable ("x", 42) shadows another local variable ("x", 25),
-      we might want to print ("x", 42) as "x0" or "x1" or something instead of simply "x". *)
+  (** Some global variables require special formatting when pretty-printed. *)
   type pp_info =
     { symbol : string
           (** The symbol to use to print the constant. For instance we might want to 
@@ -111,15 +109,20 @@ module Env : sig
       - Pretty-print terms. *)
   type t =
     { globals : Term.t Name.Map.t  (** The type of each GLOBAL variable. *)
-    ; locals : Term.t Name.Map.t  (** The type of each LOCAL variable. *)
-    ; pp_info : pp_info Name.Map.t
-          (** The information needed to pretty-print *)
+    ; locals : (Name.t * Term.t) list
+          (** The name and type of each LOCAL variable. 
+              The first variable in the list is the most recently bound. *)
+    ; pp_info_by_name : pp_info Name.Map.t
+          (** The information needed to pretty-print a global variable,
+              indexed by name. *)
+    ; pp_info_by_symbol : pp_info Map.Make(String).t
+          (** The information needed to pretty-print a global variable,
+              indexed by symbol. *)
     }
 
   (** The empty environment. *)
   val empty : t
 
-  (** [Env.union e1 e2] takes the union of [e1] and [e2]. This assumes that the information
-      contained in [e1] and [e2] is the same for common variables. *)
-  val union : t -> t -> t
+  (** Add a local variable to an environment. *)
+  val enter : Name.t -> Term.t -> t -> t
 end
