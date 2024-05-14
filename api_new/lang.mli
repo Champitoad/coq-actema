@@ -107,6 +107,13 @@ module Term : sig
   val mkLambda : Name.t -> t -> t -> t
   val mkProd : Name.t -> t -> t -> t
   val mkCst : Name.t -> t
+
+  (** We include functions for generating arbitrary terms.
+      These are used mainly for testing. *)
+  module Gen : sig
+    (** Generate arbitrary terms (not necessarily well-typed). *)
+    val simple : t QCheck2.Gen.t
+  end
 end
 
 (***************************************************************************************)

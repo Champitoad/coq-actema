@@ -2,3 +2,8 @@
  (name test)
  (modules test)
  (libraries coq-actema.api-new))
+
+(test
+ (name notation_tests)
+ (modules notation_tests)
+ (libraries qcheck-core qcheck-alcotest coq-actema.api-new))
