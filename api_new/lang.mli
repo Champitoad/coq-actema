@@ -6,41 +6,56 @@
 (** Names *)
 
 module Name : sig
-  (** A name uniquely identifies a variable (local or global).
-    
-      It contains the variable name (string) and also a unique tag (int). 
-      The tag is used as a unique identifier, i.e. no two variables share the same tag. 
-      This is mainly for efficiency reasons, i.e. to avoid comparing potentially long strings,
-      but it also makes implementing unification more convenient.
-      
-      The default pretty-printer provided is for debug purposes only (it includes the tag). 
-      For showing names to the user in the frontend, use [Name.str] instead. *)
-  type t [@@deriving show]
+  (** A name uniquely identifies a variable (local or global). It is essentially a
+      wrapper around a string, but provides more efficient comparison functions by hashing 
+      the string. Names are used pervasively in Actema so we provide an efficient and
+      encapsulated implementation. *)
+  type t
 
-  (** Get the string representation of a variable. 
-      This does NOT include the variable's tag, i.e. different variables can yield the same string. *)
-  val str : t -> string
-
-  (** Create a variable with the given name and a fresh unique tag. *)
+  (** Create a variable with the given name. This is a pure function. *)
   val make : string -> t
 
-  (** Compare variables, using the variable's tag. *)
+  (** Get the string representation of a variable. *)
+  val show : t -> string
+
+  (** Pretty-print a variable. *)
+  val pp : Format.formatter -> t -> unit
+
+  (** Compare variables efficiently. *)
   val compare : t -> t -> int
 
-  (** Test for equality between variables, using the variable's tag. *)
+  (** Test for equality between variables efficiently. *)
   val equal : t -> t -> bool
 
-  (** Maps with names as keys. *)
+  (** Get the hash of the name. This is O(1). *)
+  val hash : t -> int
+
+  (** Maps. *)
   module Map : Map.S with type key = t
+
+  (** Hashtables. This is more efficient than (t, _) Hashtbl.t. *)
+  module Hashtbl : Hashtbl.S with type key = t
+
+  (** A dummy name. This is used when translating Coq terms 
+      that cannot be represented in Actema. *)
+  val dummy : t
+
+  (** Coq's logical conjunction [and_ : Prop -> Prop -> Prop]. *)
+  val and_ : t
+
+  (** Coq's logical disjunction [or_ : Prop -> Prop -> Prop]. *)
+  val or_ : t
 end
 
 (***************************************************************************************)
 (** Terms *)
 
 module Term : sig
-  (** A grammar for a small dependently-typed language. *)
-  type t =
-    (* [Var v] is a local variable bound by a lambda abstraction or a dependent product. *)
+  (** A grammar for a small dependently-typed language. 
+      This is a private type : use the smart constructors provided below to build terms. *)
+  type t = private
+    (* [Var v] is a local variable bound by a lambda abstraction or a dependent product.
+       It refers to the most recently bound variable with its name. *)
     | Var of Name.t
     (* [App f [x1; ...; xn]] represents the application [f x1 ... xn].
        We maintain the invariant that [f] itself is not an application,
@@ -79,12 +94,19 @@ module Term : sig
     | Cst of Name.t
   [@@deriving show]
 
+  val mkVar : Name.t -> t
+
   (** Smart constructor for [Term.App], ensuring that the function is not an application. *)
   val mkApp : t -> t -> t
 
   (** Same as [mkApp] but with multiple arguments. 
       It also checks that the argument list is nonempty. *)
   val mkApps : t -> t list -> t
+
+  val mkArrow : t -> t -> t
+  val mkLambda : Name.t -> t -> t -> t
+  val mkProd : Name.t -> t -> t -> t
+  val mkCst : Name.t -> t
 end
 
 (***************************************************************************************)
@@ -108,21 +130,16 @@ module Env : sig
       - Type check terms.
       - Pretty-print terms. *)
   type t =
-    { globals : Term.t Name.Map.t  (** The type of each GLOBAL variable. *)
-    ; locals : (Name.t * Term.t) list
-          (** The name and type of each LOCAL variable. 
-              The first variable in the list is the most recently bound. *)
-    ; pp_info_by_name : pp_info Name.Map.t
-          (** The information needed to pretty-print a global variable,
-              indexed by name. *)
-    ; pp_info_by_symbol : pp_info Map.Make(String).t
-          (** The information needed to pretty-print a global variable,
-              indexed by symbol. *)
+    { constants : Term.t Name.Map.t
+          (** The type of each constant, indexed by name. *)
+    ; pp_info : pp_info Name.Map.t
+          (** The information needed to pretty-print a constant, indexed by name. *)
     }
 
   (** The empty environment. *)
   val empty : t
 
-  (** Add a local variable to an environment. *)
-  val enter : Name.t -> Term.t -> t -> t
+  (** [Env.add_constant name ty env] adds the constant [name] with type [ty] 
+      to the environment [env]. This does not add any pp information for [name]. *)
+  val add_constant : Name.t -> Term.t -> t -> t
 end

@@ -26,9 +26,9 @@ let paren x =
 
 (** Get the formatting information for a name. *)
 let name_info env name =
-  match Name.Map.find_opt name env.Env.pp_info_by_name with
+  match Name.Map.find_opt name env.Env.pp_info with
   | Some info -> info
-  | None -> { symbol = Name.str name; position = `Prefix }
+  | None -> { symbol = Name.show name; position = `Prefix }
 
 (** Pretty-print a global variable using its symbol. *)
 let pp_global env name =
@@ -36,10 +36,10 @@ let pp_global env name =
   Pp.string info.symbol
 
 (** Pretty-print a local variable. *)
-let pp_local env name = Pp.string @@ Name.str name
+let pp_local env name = Pp.string @@ Name.show name
 
 (** Pretty-print a binder. *)
-let pp_binder env name = Pp.string @@ Name.str name
+let pp_binder env name = Pp.string @@ Name.show name
 
 (** [pp_term env path t] pretty-prints the term [t]. 
     The argument [path] keeps track of the path to the term [t], 
@@ -54,7 +54,7 @@ let rec pp_term env path (t : Term.t) : annot Pp.doc =
     | Lambda (name, ty, body) ->
         let pp_binder = string "fun" ^+^ pp_binder env name ^+^ string ":" in
         let pp_ty = pp_term env (0 :: path) ty ^+^ string "=>" in
-        let pp_body = pp_term (Env.enter name ty env) (1 :: path) body in
+        let pp_body = pp_term env (1 :: path) body in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
     | Arrow (t1, t2) ->
         (* We might or might not need to add parentheses around [t1]. *)
@@ -70,7 +70,7 @@ let rec pp_term env path (t : Term.t) : annot Pp.doc =
     | Prod (name, ty, body) ->
         let pp_binder = string "forall" ^+^ pp_binder env name ^+^ string ":" in
         let pp_ty = pp_term env (0 :: path) ty ^^ string "," in
-        let pp_body = pp_term (Env.enter name ty env) (1 :: path) body in
+        let pp_body = pp_term env (1 :: path) body in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
     | App (f, args) ->
         (* Applications are a bit tricky : we have to check if the function is a constant,

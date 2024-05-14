@@ -52,4 +52,6 @@
   (alcotest
    (>= 1.7.0))
   (alcotest-js
-   (>= 1.7.0))))
+   (>= 1.7.0))
+  (qcheck-alcotest
+   (>= 0.21.3))))
