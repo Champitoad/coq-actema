@@ -30,10 +30,10 @@ module Name : sig
   (** Get the hash of the name. This is O(1). *)
   val hash : t -> int
 
-  (** Maps. *)
-  module Map : Map.S with type key = t
+  (** A few modules on Names. *)
 
-  (** Hashtables. This is more efficient than (t, _) Hashtbl.t. *)
+  module Set : Set.S with type elt = t
+  module Map : Map.S with type key = t
   module Hashtbl : Hashtbl.S with type key = t
 
   (** A dummy name. This is used when translating Coq terms 
@@ -70,7 +70,6 @@ module Term : sig
        [A] is the type of [x], and [x] can appear as a variable [Var x] in [body]. *)
     | Prod of Name.t * t * t
     (* [Cst c] is a global constant. Its type can be found in the environment.
-       Contrary to bound variables, constants should be uniquely identified by their string.
 
        Examples of constants could be :
        - [nat] the inductive type of natural numbers.
@@ -82,16 +81,18 @@ module Term : sig
        Notable constants used in Actema (see names.mli for a list) :
        - Logical connectives [and], [or], etc.
        - The existential quantifier [ex].
-       - The type of propositions [Prop].
-       - [Type] the equivalent of Coq's [Type u].
-
-       Note that the Actema language cannot distinguish between universe levels :
-       this means that some terms might unify in Actema but not in Coq.
-       This is okay because Coq always checks we do the right thing. The alternative would
-       be to work with a Type hierarchy in Actema, which seems like a painful effort
-       for such little gain.
     *)
     | Cst of Name.t
+      (* We have two sorts : Prop and Type, with the following typing judgements :
+         |- Prop : Type
+         |- Type : Type
+
+         Note that the Actema language cannot distinguish between universe levels :
+         this means that some terms might unify in Actema but not in Coq.
+         This is okay because Coq always checks we do the right thing. The alternative would
+         be to work with a Type hierarchy in Actema, which seems like a painful effort
+         for such little gain. *)
+    | Sort of [ `Prop | `Type ]
   [@@deriving show]
 
   val mkVar : Name.t -> t
@@ -107,6 +108,9 @@ module Term : sig
   val mkLambda : Name.t -> t -> t -> t
   val mkProd : Name.t -> t -> t -> t
   val mkCst : Name.t -> t
+  val mkProp : t
+  val mkType : t
+  val mkSort : [ `Prop | `Type ] -> t
 
   (** We include functions for generating arbitrary terms.
       These are used mainly for testing. *)
@@ -149,4 +153,32 @@ module Env : sig
   (** [Env.add_constant name ty env] adds the constant [name] with type [ty] 
       to the environment [env]. This does not add any pp information for [name]. *)
   val add_constant : Name.t -> Term.t -> t -> t
+end
+
+(***************************************************************************************)
+(** Term utility functions. *)
+
+module TermUtils : sig
+  (** [subst name u t] replaces every free occurence of [Var name] by the term [u] 
+      in the term [t]. *)
+  val subst : Name.t -> Term.t -> Term.t -> Term.t
+
+  (** [free_vars t] computes the set of free variables in [t]. *)
+  val free_vars : Term.t -> Name.Set.t
+end
+
+(***************************************************************************************)
+(** Typing. *)
+
+module Typing : sig
+  exception TypingError
+
+  (** [check env t] checks that [t] is well-typed, and returns the 
+      type of [t] or raises a typing error. If you already know [t] is well-typed 
+      use [typeof env t] instead. *)
+  val check : Env.t -> Term.t -> Term.t
+
+  (** [typeof env t] gets the type of the term [t]. 
+      This assumes that [t] is well-typed, and is faster than [check env t]. *)
+  val typeof : Env.t -> Term.t -> Term.t
 end

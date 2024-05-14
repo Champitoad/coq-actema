@@ -14,6 +14,12 @@ module Name = struct
   let equal n1 n2 = n1.hsh = n2.hsh && n1.str = n2.str
   let compare n1 n2 = compare n1 n2
 
+  module Set = Set.Make (struct
+    type nonrec t = t
+
+    let compare = compare
+  end)
+
   module Map = Map.Make (struct
     type nonrec t = t
 
@@ -45,6 +51,7 @@ module Term = struct
     | Arrow of t * t
     | Prod of Name.t * t * t
     | Cst of Name.t
+    | Sort of [ `Prop | `Type ]
   [@@deriving show]
 
   let mkVar name = Var name
@@ -62,6 +69,9 @@ module Term = struct
   let mkArrow left right = Arrow (left, right)
   let mkProd name ty body = Prod (name, ty, body)
   let mkCst name = Cst name
+  let mkProp = Sort `Prop
+  let mkType = Sort `Type
+  let mkSort s = Sort s
 
   module Gen = struct
     open QCheck2
@@ -76,12 +86,18 @@ module Term = struct
       let* k = Gen.(0 -- n) in
       Gen.return (k, n - k)
 
-    (** Generate a term with exactly [n] nodes interior nodes 
-        (i.e. not counting variables and constants). *)
+    (** Generate a term with exactly [n] interior nodes 
+        (i.e. not counting variables, constants or sorts). *)
     let rec simple_sized n : t Gen.t =
       let open Gen in
       if n <= 0
-      then oneof [ mkVar <$> gen_name; mkCst <$> gen_name ]
+      then
+        oneof
+          [ mkVar <$> gen_name
+          ; mkCst <$> gen_name
+          ; Gen.return mkProp
+          ; Gen.return mkType
+          ]
       else
         let* n1, n2 = split_nat (n - 1) in
         oneof
@@ -108,4 +124,136 @@ module Env = struct
 
   let add_constant name ty env =
     { env with constants = Name.Map.add name ty env.constants }
+end
+
+(***************************************************************************************)
+(** Term utility functions. *)
+
+module TermUtils = struct
+  (** [acc] is the list of free variables already found. 
+      [bound] is the list of variables bound above [t]. *)
+  let rec free_vars_rec (acc : Name.t list) (bound : Name.t list) (t : Term.t) :
+      Name.t list =
+    match (t : Term.t) with
+    | Var v -> if List.mem v bound then acc else v :: acc
+    | Cst _ | Sort _ -> acc
+    | App (f, args) ->
+        List.fold_left (fun acc t -> free_vars_rec acc bound t) acc (f :: args)
+    | Arrow (t1, t2) ->
+        let acc = free_vars_rec acc bound t1 in
+        let acc = free_vars_rec acc bound t2 in
+        acc
+    | Lambda (x, ty, body) | Prod (x, ty, body) ->
+        let acc = free_vars_rec acc bound ty in
+        let acc = free_vars_rec acc (x :: bound) body in
+        acc
+
+  let free_vars t = Name.Set.of_list @@ free_vars_rec [] [] t
+
+  let rec subst name u t =
+    match (t : Term.t) with
+    | Var v -> if Name.equal v name then u else Term.mkVar v
+    | Cst _ | Sort _ -> t
+    | App (f, args) ->
+        Term.mkApps (subst name u f) (List.map (subst name u) args)
+    | Lambda (x, ty, body) ->
+        if Name.equal name x
+        then Term.mkLambda x (subst name u ty) body
+        else Term.mkLambda x (subst name u ty) (subst name u body)
+    | Prod (x, ty, body) ->
+        if Name.equal name x
+        then Term.mkProd x (subst name u ty) body
+        else Term.mkProd x (subst name u ty) (subst name u body)
+    | Arrow (a, b) -> Term.mkArrow (subst name u a) (subst name u b)
+end
+
+(***************************************************************************************)
+(** Typing. *)
+
+module Typing = struct
+  (** See the error messages in [pp_typeError] for an explanation of 
+      the different error cases. *)
+  type typeError =
+    | UnknownVar of Name.t
+    | UnknownCst of Name.t
+    | ExpectedType of Term.t * Term.t * Term.t
+    | ExpectedFunction of Term.t * Term.t
+    | ExpectedSort of Term.t * Term.t
+
+  let pp_typeError fmt err =
+    match err with
+    | UnknownVar v -> Format.fprintf fmt "Unbound variable\n%a" Name.pp v
+    | UnknownCst c -> Format.fprintf fmt "Unbound constant\n%a" Name.pp c
+    | ExpectedType (term, actual_ty, expected_ty) ->
+        Format.fprintf fmt
+          "The term\n%a\nhas type\n%a\nbut a term of type\n%a\nwas expected"
+          Term.pp term Term.pp actual_ty Term.pp expected_ty
+    | ExpectedFunction (term, ty) ->
+        Format.fprintf fmt
+          "The term\n%a\nhas type\n%a\nbut a function type was expected" Term.pp
+          term Term.pp ty
+    | ExpectedSort (term, ty) ->
+        Format.fprintf fmt
+          "The term\n%a\nhas type\n%a\nbut a sort (Type or Prop) was expected"
+          Term.pp term Term.pp ty
+
+  exception TypingError of typeError
+
+  (** There is no need for unification here :
+      all binders are annotated with the type of the bound variable. *)
+  let rec check_rec env vars t : Term.t =
+    match (t : Term.t) with
+    | Var v -> begin
+        match List.assoc_opt v vars with
+        | None -> raise @@ TypingError (UnknownVar v)
+        | Some ty -> ty
+      end
+    | Cst c -> begin
+        match Name.Map.find_opt c env.Env.constants with
+        | None -> raise @@ TypingError (UnknownCst c)
+        | Some ty -> ty
+      end
+    | Sort _ -> Sort `Type
+    | Lambda (v, ty, body) ->
+        let _ = check_rec env vars ty in
+        let body_ty = check_rec env ((v, ty) :: vars) body in
+        (* Depending on whether [v] appears in [body_ty],
+           this is a dependent or non-dependent product. *)
+        if Name.Set.mem v (TermUtils.free_vars body_ty)
+        then Term.mkProd v ty body_ty
+        else Term.mkArrow ty body_ty
+    | App (f, args) -> List.fold_left (check_app env vars) f args
+    | Arrow (a, b) -> begin
+        let a_ty = check_rec env vars a in
+        let b_ty = check_rec env vars b in
+        match (a_ty, b_ty) with
+        | Sort _, Sort _ -> b_ty
+        | Sort _, _ -> raise @@ TypingError (ExpectedSort (b, b_ty))
+        | _, _ -> raise @@ TypingError (ExpectedSort (a, a_ty))
+      end
+    | Prod (x, a, b) -> begin
+        let a_ty = check_rec env vars a in
+        let b_ty = check_rec env ((x, a_ty) :: vars) b in
+        match (a_ty, b_ty) with
+        | Sort _, Sort _ -> b_ty
+        | Sort _, _ -> raise @@ TypingError (ExpectedSort (b, b_ty))
+        | _, _ -> raise @@ TypingError (ExpectedSort (a, a_ty))
+      end
+
+  (** Type-check an application with a single argument. *)
+  and check_app env vars f arg =
+    let f_ty = check_rec env vars f in
+    let arg_ty = check_rec env vars arg in
+    match f_ty with
+    | Arrow (a, b) ->
+        if arg_ty = a
+        then b
+        else raise @@ TypingError (ExpectedType (arg, arg_ty, a))
+    | Prod (x, a, b) ->
+        if arg_ty = a
+        then TermUtils.subst x arg b
+        else raise @@ TypingError (ExpectedType (arg, arg_ty, a))
+    | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
+
+  let check env t = check_rec env [] t
 end

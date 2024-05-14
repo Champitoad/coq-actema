@@ -51,6 +51,8 @@ let rec pp_term env path (t : Term.t) : annot Pp.doc =
     match t with
     | Var name -> pp_local env name
     | Cst name -> pp_global env name
+    | Sort `Prop -> string "Prop"
+    | Sort `Type -> string "Type"
     | Lambda (name, ty, body) ->
         let pp_binder = string "fun" ^+^ pp_binder env name ^+^ string ":" in
         let pp_ty = pp_term env (0 :: path) ty ^+^ string "=>" in
