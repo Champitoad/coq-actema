@@ -105,6 +105,11 @@ module Term : sig
   val mkApps : t -> t list -> t
 
   val mkArrow : t -> t -> t
+
+  (** [mkArrows [t1; ...; tn]] constructs the arrow [t1 -> ... -> tn]. 
+      It assumes that the list is nonempty (i.e. n >= 1). *)
+  val mkArrows : t list -> t
+
   val mkLambda : Name.t -> t -> t -> t
   val mkProd : Name.t -> t -> t -> t
   val mkCst : Name.t -> t
@@ -171,7 +176,9 @@ end
 (** Typing. *)
 
 module Typing : sig
-  exception TypingError
+  type typeError [@@deriving show]
+
+  exception TypingError of typeError
 
   (** [check env t] checks that [t] is well-typed, and returns the 
       type of [t] or raises a typing error. If you already know [t] is well-typed 

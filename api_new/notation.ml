@@ -109,11 +109,13 @@ let rec pp_term env path (t : Term.t) : annot Pp.doc =
 (***************************************************************************************)
 (** Backend-specific code. *)
 
-let term_to_string ?(width = 40) env t : string =
+let default_width = 50
+
+let term_to_string ?(width = default_width) env t : string =
   assert (0 <= width);
   PpString.pp ~width (pp_term env [] t)
 
-let term_to_xml ?(width = 40) env t : Xml.elt =
+let term_to_xml ?(width = default_width) env t : Xml.elt =
   assert (0 <= width);
   let xml = PpXml.pp ~width (pp_term env [] t) in
   match xml with

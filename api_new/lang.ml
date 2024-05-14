@@ -66,7 +66,13 @@ module Term = struct
     match f with App (f, f_args) -> App (f, f_args @ args) | _ -> App (f, args)
 
   let mkLambda name ty body = Lambda (name, ty, body)
-  let mkArrow left right = Arrow (left, right)
+  let mkArrow t1 t2 = Arrow (t1, t2)
+
+  let mkArrows ts =
+    match List.rev ts with
+    | [] -> failwith "Term.mkArrows : got an empty list."
+    | t :: ts -> List.fold_right mkArrow (List.rev ts) t
+
   let mkProd name ty body = Prod (name, ty, body)
   let mkCst name = Cst name
   let mkProp = Sort `Prop
@@ -197,6 +203,8 @@ module Typing = struct
           "The term\n%a\nhas type\n%a\nbut a sort (Type or Prop) was expected"
           Term.pp term Term.pp ty
 
+  let show_typeError err = Format.asprintf "%a" pp_typeError err
+
   exception TypingError of typeError
 
   (** There is no need for unification here :
@@ -222,7 +230,11 @@ module Typing = struct
         if Name.Set.mem v (TermUtils.free_vars body_ty)
         then Term.mkProd v ty body_ty
         else Term.mkArrow ty body_ty
-    | App (f, args) -> List.fold_left (check_app env vars) f args
+    | App (f, args) ->
+        let _res, res_ty =
+          List.fold_left (check_app env vars) (f, check_rec env vars f) args
+        in
+        res_ty
     | Arrow (a, b) -> begin
         let a_ty = check_rec env vars a in
         let b_ty = check_rec env vars b in
@@ -233,27 +245,28 @@ module Typing = struct
       end
     | Prod (x, a, b) -> begin
         let a_ty = check_rec env vars a in
-        let b_ty = check_rec env ((x, a_ty) :: vars) b in
+        let b_ty = check_rec env ((x, a) :: vars) b in
         match (a_ty, b_ty) with
         | Sort _, Sort _ -> b_ty
         | Sort _, _ -> raise @@ TypingError (ExpectedSort (b, b_ty))
         | _, _ -> raise @@ TypingError (ExpectedSort (a, a_ty))
       end
 
-  (** Type-check an application with a single argument. *)
-  and check_app env vars f arg =
-    let f_ty = check_rec env vars f in
+  (** Type-check an application with a single argument. 
+      It takes as argument (and returns) a pair [term, type_]. *)
+  and check_app env vars (f, f_ty) arg =
     let arg_ty = check_rec env vars arg in
     match f_ty with
     | Arrow (a, b) ->
         if arg_ty = a
-        then b
+        then (Term.mkApp f arg, b)
         else raise @@ TypingError (ExpectedType (arg, arg_ty, a))
     | Prod (x, a, b) ->
         if arg_ty = a
-        then TermUtils.subst x arg b
+        then (Term.mkApp f arg, TermUtils.subst x arg b)
         else raise @@ TypingError (ExpectedType (arg, arg_ty, a))
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
 
   let check env t = check_rec env [] t
+  let typeof env t = failwith "TODO"
 end
