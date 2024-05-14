@@ -22,7 +22,7 @@ let words (str : string) : string list =
     except for whitespace. *)
 let test_pp_term_string =
   Test.make ~name:"pp_term_string"
-    (Gen.triple Term.Gen.simple Gen.small_nat Gen.small_nat)
+    (Gen.triple TermGen.simple Gen.small_nat Gen.small_nat)
     ~print:(Print.triple Term.show Print.int Print.int)
     begin
       fun (t, w1, w2) ->

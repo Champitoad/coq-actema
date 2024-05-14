@@ -116,13 +116,6 @@ module Term : sig
   val mkProp : t
   val mkType : t
   val mkSort : [ `Prop | `Type ] -> t
-
-  (** We include functions for generating arbitrary terms.
-      These are used mainly for testing. *)
-  module Gen : sig
-    (** Generate arbitrary terms (not necessarily well-typed). *)
-    val simple : t QCheck2.Gen.t
-  end
 end
 
 (***************************************************************************************)
@@ -188,4 +181,19 @@ module Typing : sig
   (** [typeof env t] gets the type of the term [t]. 
       This assumes that [t] is well-typed, and is faster than [check env t]. *)
   val typeof : Env.t -> Term.t -> Term.t
+end
+
+(** This module defines functions for generating arbitrary terms.
+    These are used mainly for testing. *)
+module TermGen : sig
+  open QCheck2
+
+  (** Generate arbitrary terms (not necessarily well-typed or well-scoped). *)
+  val simple : Term.t Gen.t
+
+  (** Generate terms which are well-scoped. *)
+  val scoped : Env.t -> Term.t Gen.t
+
+  (** Generate arbitrary terms which are well-scoped and well-typed. *)
+  val typed : Env.t -> Term.t QCheck2.Gen.t
 end

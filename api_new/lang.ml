@@ -78,43 +78,6 @@ module Term = struct
   let mkProp = Sort `Prop
   let mkType = Sort `Type
   let mkSort s = Sort s
-
-  module Gen = struct
-    open QCheck2
-
-    let ( let* ) = Gen.bind
-
-    let gen_name : Name.t Gen.t =
-      Gen.(map Name.make @@ string_size ~gen:printable (1 -- 20))
-
-    let split_nat n : (int * int) Gen.t =
-      assert (n >= 0);
-      let* k = Gen.(0 -- n) in
-      Gen.return (k, n - k)
-
-    (** Generate a term with exactly [n] interior nodes 
-        (i.e. not counting variables, constants or sorts). *)
-    let rec simple_sized n : t Gen.t =
-      let open Gen in
-      if n <= 0
-      then
-        oneof
-          [ mkVar <$> gen_name
-          ; mkCst <$> gen_name
-          ; Gen.return mkProp
-          ; Gen.return mkType
-          ]
-      else
-        let* n1, n2 = split_nat (n - 1) in
-        oneof
-          [ mkLambda <$> gen_name <*> simple_sized n1 <*> simple_sized n2
-          ; mkProd <$> gen_name <*> simple_sized n1 <*> simple_sized n2
-          ; mkArrow <$> simple_sized n1 <*> simple_sized n2
-          ; mkApp <$> simple_sized n1 <*> simple_sized n2
-          ]
-
-    let simple : t Gen.t = Gen.sized simple_sized
-  end
 end
 
 (***************************************************************************************)
@@ -269,4 +232,100 @@ module Typing = struct
 
   let check env t = check_rec env [] t
   let typeof env t = failwith "TODO"
+end
+
+module TermGen = struct
+  open QCheck2
+
+  let ( let* ) = Gen.bind
+  let gen_letter = Gen.(Char.chr <$> oneof [ 65 -- 90; 97 -- 122 ])
+
+  let gen_name : Name.t Gen.t =
+    Gen.(map Name.make @@ string_size ~gen:gen_letter (1 -- 5))
+
+  let split_nat n : (int * int) Gen.t =
+    assert (n >= 0);
+    let* k = Gen.(0 -- n) in
+    Gen.return (k, n - k)
+
+  (** Generate a term with exactly [n] interior nodes 
+      (i.e. not counting variables, constants or sorts). *)
+  let rec simple_sized n : Term.t Gen.t =
+    let open Gen in
+    let open Term in
+    if n <= 0
+    then
+      oneof
+        [ mkVar <$> gen_name
+        ; mkCst <$> gen_name
+        ; Gen.return mkProp
+        ; Gen.return mkType
+        ]
+    else
+      let* n1, n2 = split_nat (n - 1) in
+      oneof
+        [ mkLambda <$> gen_name <*> simple_sized n1 <*> simple_sized n2
+        ; mkProd <$> gen_name <*> simple_sized n1 <*> simple_sized n2
+        ; mkArrow <$> simple_sized n1 <*> simple_sized n2
+        ; mkApp <$> simple_sized n1 <*> simple_sized n2
+        ]
+
+  let simple : Term.t Gen.t = Gen.sized simple_sized
+
+  (*let rec scoped_sized env bound n : Term.t option Gen.t =
+    let open Gen in
+    let open Term in
+    if n <= 0
+    then
+      (* Generate a leaf term. *)
+      let gen_var =
+        if bound = []
+        then return None
+        else
+          let+ b = oneofl bound in
+          Some (mkVar b)
+      in
+      let gen_cst =
+        let+ name, _ = oneofl (Name.Map.bindings env.Env.constants) in
+        Some (mkCst name)
+      in
+      frequency
+        [ (5, gen_var)
+        ; (5, gen_cst)
+        ; (1, Gen.return @@ Some mkProp)
+        ; (1, Gen.return @@ Some mkType)
+        ]
+    else
+      (* Generate a term with children. *)
+      let* n1, n2 = split_nat (n - 1) in
+      let gen_lambda =
+        let* x = gen_name in
+        mkLambda x <$> scoped_sized env bound n1
+        <*> scoped_sized env (x :: bound) n2
+      in
+      let gen_prod =
+        let* x = gen_name in
+        mkProd x <$> scoped_sized env bound n1
+        <*> scoped_sized env (x :: bound) n2
+      in
+      let gen_arrow =
+        mkArrow <$> scoped_sized env bound n1 <*> scoped_sized env bound n2
+      in
+      let gen_app =
+        mkApp <$> scoped_sized env bound n1 <*> scoped_sized env bound n2
+      in
+      frequency [ (1, gen_lambda); (1, gen_prod); (1, gen_arrow); (4, gen_app) ]*)
+
+  let scoped env = Gen.sized @@ scoped_sized env []
+
+  let typed_sized env vars ty n : Term.t Gen.t =
+    let open Gen in
+    let open Term in
+    if n <= 0 then oneof [ mkVar <$> oneofl vars ] else failwith "todo"
+
+  let typed env =
+    (* First choose a random (not too complex) type. *)
+    let ty = failwith "todo" in
+    (* Generate a term with this type. *)
+    Gen.sized @@ typed_sized env [] ty
 end

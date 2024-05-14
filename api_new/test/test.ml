@@ -15,8 +15,11 @@ let () =
     |> Env.add_constant le Term.(mkArrows [ mkCst nat; mkCst nat; mkProp ])
   in
 
-  (* Term. *)
-  let a = Name.make "a" in
+  let term = QCheck2.Gen.generate1 @@ TermGen.scoped env in
+  Format.printf "%s\n" @@ Notation.term_to_string env term
+
+(* Term. *)
+(*let a = Name.make "a" in
   let b = Name.make "b" in
   let t =
     Term.(
@@ -34,3 +37,4 @@ let () =
     let ty = Typing.check env t in
     Format.printf "%s\n" (Notation.term_to_string env ty)
   with Typing.TypingError err -> Format.printf "%a\n" Typing.pp_typeError err
+*)

@@ -62,13 +62,13 @@ let rec pp_term env path (t : Term.t) : annot Pp.doc =
         (* We might or might not need to add parentheses around [t1]. *)
         let pp_t1 =
           match t1 with
-          | Var _ | Cst _ | App _ -> pp_term env (0 :: path) t1
+          | Var _ | Cst _ | App _ | Sort _ -> pp_term env (0 :: path) t1
           | _ -> paren @@ pp_term env (0 :: path) t1
         in
         (* We don't need parentheses around [t2]. *)
         let pp_t2 = pp_term env (1 :: path) t2 in
         (* Combine the results. *)
-        (pp_t1 ^+^ string "->") ^/^ pp_t2
+        (pp_t1 ^+^ string "->") ^//^ pp_t2
     | Prod (name, ty, body) ->
         let pp_binder = string "forall" ^+^ pp_binder env name ^+^ string ":" in
         let pp_ty = pp_term env (0 :: path) ty ^^ string "," in
@@ -96,7 +96,7 @@ let rec pp_term env path (t : Term.t) : annot Pp.doc =
              begin
                fun i (t : Term.t) ->
                  match t with
-                 | Var _ | Cst _ -> pp_term env (i :: path) t
+                 | Var _ | Cst _ | Sort _ -> pp_term env (i :: path) t
                  | _ -> paren @@ pp_term env (i :: path) t
              end
         |> flow (break 1)
