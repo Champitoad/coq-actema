@@ -117,13 +117,15 @@ let rec pp_term env path ctx (t : Term.t) : annot Pp.doc =
 
 let default_width = 50
 
-let term_to_string ?(width = default_width) env t : string =
+let term_to_string ?(width = default_width) ?(ctx = Context.empty) env t :
+    string =
   assert (0 <= width);
-  PpString.pp ~width (pp_term env [] Context.empty t)
+  PpString.pp ~width (pp_term env [] ctx t)
 
-let term_to_xml ?(width = default_width) env t : Xml.elt =
+let term_to_xml ?(width = default_width) ?(ctx = Context.empty) env t : Xml.elt
+    =
   assert (0 <= width);
-  let xml = PpXml.pp ~width (pp_term env [] Context.empty t) in
+  let xml = PpXml.pp ~width (pp_term env [] ctx t) in
   match xml with
   | [ element ] -> element
   | _ ->

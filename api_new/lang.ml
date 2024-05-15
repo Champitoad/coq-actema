@@ -136,16 +136,21 @@ module TermUtils = struct
 
   let lift_free n t = lift 0 n t
 
-  let rec subst k u t =
-    match (t : Term.t) with
-    | Var i when i = k -> u
-    | Var i when i >= k -> Term.mkVar (i - 1)
-    | Var _ | Cst _ | Sort _ -> t
-    | Lambda (x, ty, body) ->
-        Term.mkLambda x (subst k u ty) (subst (k + 1) u body)
-    | Prod (x, ty, body) -> Term.mkProd x (subst k u ty) (subst (k + 1) u body)
-    | Arrow (t1, t2) -> Term.mkArrow (subst k u t1) (subst k u t2)
-    | App (f, args) -> Term.mkApps (subst k u f) (List.map (subst k u) args)
+  let subst k u t =
+    let rec loop depth k u t =
+      match (t : Term.t) with
+      | Var i when i = k -> lift_free depth u
+      | Var i when i >= k -> Term.mkVar (i - 1)
+      | Var _ | Cst _ | Sort _ -> t
+      | Lambda (x, ty, body) ->
+          Term.mkLambda x (loop depth k u ty) (loop (depth + 1) (k + 1) u body)
+      | Prod (x, ty, body) ->
+          Term.mkProd x (loop depth k u ty) (loop (depth + 1) (k + 1) u body)
+      | Arrow (t1, t2) -> Term.mkArrow (loop depth k u t1) (loop depth k u t2)
+      | App (f, args) ->
+          Term.mkApps (loop depth k u f) (List.map (loop depth k u) args)
+    in
+    loop 0 k u t
 
   (** [acc] is the list of free variables already found. 
       [depth] is the current depth (number of binders traversed). *)

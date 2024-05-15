@@ -16,9 +16,15 @@ let print_term = Notation.term_to_string Env.test_env
 
 let print_context ctx =
   let bindings =
-    List.map (Print.pair Name.show print_term) @@ Context.to_list ctx
+    List.map (Print.pair Name.show Term.show) @@ Context.to_list ctx
   in
   "[" ^ String.concat ", " bindings ^ "]"
+
+let print_term_in_context (ctx, term, ty) =
+  (Print.triple print_context
+     (Notation.term_to_string Env.test_env ~ctx)
+     print_term)
+    (ctx, term, ty)
 
 (******************************************************************************)
 (** Random term generation tests. *)
@@ -45,8 +51,7 @@ let test_weakening =
 (** Test the substitution lemma. *)
 let test_substitution =
   Test.make ~name:"substitution-lemma" term_in_context
-    ~print:(Print.triple print_context print_term print_term)
-    ~count:10000
+    ~print:print_term_in_context ~count:10000
     begin
       fun (ctx, term, ty) ->
         QCheck2.assume (Context.size ctx > 0);
