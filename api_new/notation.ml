@@ -71,7 +71,11 @@ let rec pp_term env path (t : Term.t) : annot Pp.doc =
         (pp_t1 ^+^ string "->") ^//^ pp_t2
     | Prod (name, ty, body) ->
         let pp_binder = string "forall" ^+^ pp_binder env name ^+^ string ":" in
-        let pp_ty = pp_term env (0 :: path) ty ^^ string "," in
+        let pp_ty =
+          match ty with
+          | Prod _ -> paren (pp_term env (0 :: path) ty) ^^ string ","
+          | _ -> pp_term env (0 :: path) ty ^^ string ","
+        in
         let pp_body = pp_term env (1 :: path) body in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
     | App (f, args) ->

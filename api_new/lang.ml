@@ -100,14 +100,14 @@ module Env = struct
     let open Term in
     let nat = mkCst @@ Name.make "nat" in
     let constants =
-      [ ("true", mkProp)
-      ; ("false", mkProp)
+      [ ("True", mkProp)
+      ; ("False", mkProp)
       ; ("or", mkArrows [ mkProp; mkProp; mkProp ])
       ; ("and", mkArrows [ mkProp; mkProp; mkProp ])
       ; ("not", mkArrow mkProp mkProp)
-      ; ("nat", mkArrows [ mkProp; mkProp; mkProp ])
-      ; ("zero", nat)
-      ; ("succ", mkArrow nat nat)
+      ; ("nat", mkType)
+      ; ("Zero", nat)
+      ; ("Succ", mkArrow nat nat)
       ; ("plus", mkArrows [ nat; nat; nat ])
       ; ("mult", mkArrows [ nat; nat; nat ])
       ; ("le", mkArrows [ nat; nat; mkProp ])
@@ -174,20 +174,20 @@ module Typing = struct
 
   let pp_typeError fmt err =
     match err with
-    | UnknownVar v -> Format.fprintf fmt "Unbound variable\n%a" Name.pp v
-    | UnknownCst c -> Format.fprintf fmt "Unbound constant\n%a" Name.pp c
+    | UnknownVar v -> Format.fprintf fmt "Unbound variable\n%s" (Name.show v)
+    | UnknownCst c -> Format.fprintf fmt "Unbound constant\n%s" (Name.show c)
     | ExpectedType (term, actual_ty, expected_ty) ->
         Format.fprintf fmt
-          "The term\n%a\nhas type\n%a\nbut a term of type\n%a\nwas expected"
-          Term.pp term Term.pp actual_ty Term.pp expected_ty
+          "The term\n%s\nhas type\n%s\nbut a term of type\n%s\nwas expected"
+          (Term.show term) (Term.show actual_ty) (Term.show expected_ty)
     | ExpectedFunction (term, ty) ->
         Format.fprintf fmt
-          "The term\n%a\nhas type\n%a\nbut a function type was expected" Term.pp
-          term Term.pp ty
+          "The term\n%s\nhas type\n%s\nbut a function type was expected"
+          (Term.show term) (Term.show ty)
     | ExpectedSort (term, ty) ->
         Format.fprintf fmt
-          "The term\n%a\nhas type\n%a\nbut a sort (Type or Prop) was expected"
-          Term.pp term Term.pp ty
+          "The term\n%s\nhas type\n%s\nbut a sort (Type or Prop) was expected"
+          (Term.show term) (Term.show ty)
 
   let show_typeError err = Format.asprintf "%a" pp_typeError err
 
@@ -266,8 +266,9 @@ module TermGen = struct
 
   let gen_letter = Gen.(Char.chr <$> oneof [ 65 -- 90; 97 -- 122 ])
 
+  (** We choose small names so that collisions are more likely. *)
   let gen_name : Name.t Gen.t =
-    Gen.(map Name.make @@ string_size ~gen:gen_letter (1 -- 5))
+    Gen.(map Name.make @@ string_size ~gen:gen_letter (1 -- 3))
 
   let gen_sort : Term.t Gen.t = Gen.oneofl [ Term.mkProp; Term.mkType ]
 
@@ -275,12 +276,14 @@ module TermGen = struct
     assert (n >= 0);
     Gen.(0 -- n >|= fun k -> (k, n - k))
 
-  (** [get_names ty [(name_1, ty_1); ... ; (name_k; ty_k)]] returns the list of all 
-      names which have type [ty]. *)
-  let get_names (ty : Term.t) (names : (Name.t * Term.t) list) : Name.t list =
-    List.filter_map
-      (fun (name, name_ty) -> if ty = name_ty then Some name else None)
-      names
+  let split_list_at n xs =
+    let rec loop n acc xs =
+      match xs with
+      | _ when n <= 0 -> (List.rev acc, xs)
+      | [] -> (List.rev acc, xs)
+      | x :: xs -> loop (n - 1) (x :: acc) xs
+    in
+    loop n [] xs
 
   (*************************************************************************************)
   (** Simple term generation. *)
@@ -335,6 +338,18 @@ module TermGen = struct
   (*************************************************************************************)
   (** Well-typed term generation. *)
 
+  (** [vars_by_type ty bound free] returns the names of all variables which have type [ty].
+      It takes shadowing into account. *)
+  let vars_by_type (ty : Term.t) ~bound ~free =
+    let rec loop prev acc = function
+      | [] -> List.rev acc
+      | (v, vty) :: next ->
+          if vty = ty && not (List.mem v prev)
+          then loop (v :: prev) (v :: acc) next
+          else loop (v :: prev) acc next
+    in
+    (loop [] [] bound, loop (List.map fst bound) [] free)
+
   (** We use a backtracking generator. *)
   let rec typed_rec (env : Env.t) (free : (Name.t * Term.t) list)
       (bound : (Name.t * Term.t) list) (n : int) (ty : Term.t) : Term.t BGen.t =
@@ -342,11 +357,15 @@ module TermGen = struct
     let open Term in
     if n <= 0
     then
-      (* Get the list of local variables that have the right type. *)
-      let free_vars = get_names ty free in
-      let bound_vars = get_names ty bound in
+      (* Get the list of local variables that have the right type.
+         We take care to remove variables that are shadowed. *)
+      let bound_vars, free_vars = vars_by_type ty ~free ~bound in
       (* Get the list of constants that have the right type. *)
-      let consts = get_names ty @@ Name.Map.bindings env.Env.constants in
+      let consts =
+        List.filter_map
+          (fun (c, cty) -> if cty = ty then Some c else None)
+          (Name.Map.bindings env.Env.constants)
+      in
       frequency
         [ (3, mkVar <$> oneofl free_vars)
         ; (3, mkVar <$> oneofl bound_vars)
@@ -392,23 +411,28 @@ module TermGen = struct
       let gen_app = fail () in
       frequency [ (1, gen_lambda); (1, gen_prod); (1, gen_arrow); (4, gen_app) ]
 
-  (** Generate a name and a type for a variable binding. *)
-  let gen_binding env =
+  let context env =
     let open Gen in
-    let* name = gen_name in
-    (* For the type we need something that is :
-       - not too slow to compute.
-       - simple and realistic so that it is likely to occur in generated programs.
-       I went for the heuristic of using the type of a constant that is in the environment. *)
-    let* ty = snd <$> oneofl @@ Name.Map.bindings env.Env.constants in
-    return (name, ty)
+    small_list
+      begin
+        let* name = gen_name in
+        (* For the type we need something that is :
+           - not too slow to compute.
+           - simple and realistic so that it is likely to occur in generated programs.
+           I went for the heuristic of using the type of a constant that is in the environment. *)
+        let* ty =
+          frequency
+            [ (3, snd <$> oneofl @@ Name.Map.bindings env.Env.constants)
+            ; (1, gen_sort)
+            ]
+        in
+        return (name, ty)
+      end
 
-  let typed ~closed env ty : Term.t Gen.t =
+  let typed ?(context = []) env ty : Term.t Gen.t =
     let open Gen in
-    (* Generating big terms is slow, so we cap the size to a relatively low number. *)
-    let* n = 0 -- 30 in
-    (* Choose an initial context to start generating from. *)
-    let* free = if closed then return [] else list @@ gen_binding env in
+    (* Generating big terms can be slow, we can't increase the size too much. *)
+    let* n = 0 -- 50 in
     (* Generate the term. *)
-    BGen.run @@ typed_rec env free [] n ty
+    BGen.run @@ typed_rec env context [] n ty
 end

@@ -203,8 +203,13 @@ module TermGen : sig
       The flag [closed] controls whether we allow terms with free variables or not. *)
   val simple : closed:bool -> Env.t -> Term.t Gen.t
 
-  (** [typed ~closed env ty] generates arbitrary terms of type [ty] in environment [env]. 
+  (** [typed ?context env ty] generates arbitrary terms of type [ty] in environment [env]. 
       The terms use only the constants defined in [env]. 
-      The flag [closed] controls whether we allow terms with free variables or not. *)
-  val typed : closed:bool -> Env.t -> Term.t -> Term.t Gen.t
+      The argument [context] defines which free variables we can use (by default [context]
+      is empty i.e. we generate closed terms). *)
+  val typed : ?context:(Name.t * Term.t) list -> Env.t -> Term.t -> Term.t Gen.t
+
+  (** [context env] generates a typing context in [env]. 
+      This can be fed to [typed] to generate open terms. *)
+  val context : Env.t -> (Name.t * Term.t) list Gen.t
 end
