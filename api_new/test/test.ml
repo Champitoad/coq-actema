@@ -2,21 +2,13 @@ open Api_new
 open Lang
 
 let () =
-  (* Env. *)
-  let or_ = Name.make "or" in
-  let not_ = Name.make "not" in
-  let nat = Name.make "nat" in
-  let le = Name.make "le" in
-  let env =
-    Env.empty
-    |> Env.add_constant or_ Term.(mkArrows [ mkProp; mkProp; mkProp ])
-    |> Env.add_constant not_ Term.(mkArrow mkProp mkProp)
-    |> Env.add_constant nat Term.mkType
-    |> Env.add_constant le Term.(mkArrows [ mkCst nat; mkCst nat; mkProp ])
+  let term =
+    QCheck2.Gen.generate1 @@ TermGen.typed ~closed:true Env.test_env Term.mkProp
   in
-
-  let term = QCheck2.Gen.generate1 @@ TermGen.scoped env in
-  Format.printf "%s\n" @@ Notation.term_to_string env term
+  let ty = Typing.check Env.test_env term in
+  Format.printf "%s\n\n%s\n"
+    (Notation.term_to_string Env.test_env term)
+    (Notation.term_to_string Env.test_env ty)
 
 (* Term. *)
 (*let a = Name.make "a" in

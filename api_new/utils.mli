@@ -62,5 +62,11 @@ module BGen : sig
 
     (** Let-style monad bind. *)
     val ( let* ) : 'a t -> ('a -> 'b t) -> 'b t
+
+    (** Infix monad bind. *)
+    val ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t
+
+    (** Infix monad bind, with arguments reversed. *)
+    val ( =<< ) : ('a -> 'b t) -> 'a t -> 'b t
   end
 end

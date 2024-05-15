@@ -41,5 +41,8 @@ module BGen = struct
       let* f = f in
       let* a = a in
       return (f a)
+
+    let ( >>= ) = bind
+    let ( =<< ) f a = bind a f
   end
 end

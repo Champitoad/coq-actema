@@ -148,6 +148,9 @@ module Env : sig
   (** The empty environment. *)
   val empty : t
 
+  (** An environment containing a few constants. Used for testing. *)
+  val test_env : t
+
   (** [Env.add_constant name ty env] adds the constant [name] with type [ty] 
       to the environment [env]. This does not add any pp information for [name]. *)
   val add_constant : Name.t -> Term.t -> t -> t
@@ -173,31 +176,35 @@ module Typing : sig
 
   exception TypingError of typeError
 
-  (** [check env t] checks that [t] is well-typed, and returns the 
-      type of [t] or raises a typing error. If you already know [t] is well-typed 
-      use [typeof env t] instead. *)
-  val check : Env.t -> Term.t -> Term.t
+  (** [check ?context env t] checks that [t] is well-typed, and returns the 
+      type of [t] or raises a typing error. 
+      The argument [context] gives the type of the free variables of [t] 
+      (by default [context] is empty and [t] is assumed to be closed).
+      
+      If you already know [t] is well-typed use [typeof ?context env t] instead. *)
+  val check : ?context:(Name.t * Term.t) list -> Env.t -> Term.t -> Term.t
 
-  (** [typeof env t] gets the type of the term [t]. 
+  (** [typeof ?context env t] gets the type of the term [t]. 
       This assumes that [t] is well-typed, and is faster than [check env t]. *)
-  val typeof : Env.t -> Term.t -> Term.t
+  val typeof : ?context:(Name.t * Term.t) list -> Env.t -> Term.t -> Term.t
 end
 
 (** This module defines functions for generating arbitrary terms. 
     These are used mainly for testing. 
     
-    The algorithm to generate terms is inspired by : 
+    The algorithm to generate typed terms is inspired by : 
       Testing an Optimising Compiler by Generating Random Lambda Terms
       https://www.cse.chalmers.se/~russo/publications_files/AST2011.pdf *)
 module TermGen : sig
   open QCheck2
 
-  (** Generate arbitrary terms (not necessarily well-typed or well-scoped). *)
-  val simple : Term.t Gen.t
+  (** [simple ~closed env] generates arbitrary terms, not necessarily well-typed.
+      The terms use only the constants defined in [env]. 
+      The flag [closed] controls whether we allow terms with free variables or not. *)
+  val simple : closed:bool -> Env.t -> Term.t Gen.t
 
-  (** Generate terms which are well-scoped. *)
-  val scoped : Env.t -> Term.t Gen.t
-
-  (** Generate arbitrary terms which are well-scoped and well-typed. *)
-  val typed : Env.t -> Term.t QCheck2.Gen.t
+  (** [typed ~closed env ty] generates arbitrary terms of type [ty] in environment [env]. 
+      The terms use only the constants defined in [env]. 
+      The flag [closed] controls whether we allow terms with free variables or not. *)
+  val typed : closed:bool -> Env.t -> Term.t -> Term.t Gen.t
 end

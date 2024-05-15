@@ -4,6 +4,6 @@
  (libraries coq-actema.api-new))
 
 (test
- (name notation_tests)
- (modules notation_tests)
+ (name lang_tests)
+ (modules lang_tests)
  (libraries qcheck-core qcheck-alcotest coq-actema.api-new))

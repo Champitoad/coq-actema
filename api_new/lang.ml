@@ -95,6 +95,27 @@ module Env = struct
 
   let add_constant name ty env =
     { env with constants = Name.Map.add name ty env.constants }
+
+  let test_env =
+    let open Term in
+    let nat = mkCst @@ Name.make "nat" in
+    let constants =
+      [ ("true", mkProp)
+      ; ("false", mkProp)
+      ; ("or", mkArrows [ mkProp; mkProp; mkProp ])
+      ; ("and", mkArrows [ mkProp; mkProp; mkProp ])
+      ; ("not", mkArrow mkProp mkProp)
+      ; ("nat", mkArrows [ mkProp; mkProp; mkProp ])
+      ; ("zero", nat)
+      ; ("succ", mkArrow nat nat)
+      ; ("plus", mkArrows [ nat; nat; nat ])
+      ; ("mult", mkArrows [ nat; nat; nat ])
+      ; ("le", mkArrows [ nat; nat; mkProp ])
+      ]
+    in
+    List.fold_left
+      (fun env (name, ty) -> add_constant (Name.make name) ty env)
+      empty constants
 end
 
 (***************************************************************************************)
@@ -232,8 +253,8 @@ module Typing = struct
         else raise @@ TypingError (ExpectedType (arg, arg_ty, a))
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
 
-  let check env t = check_rec env [] t
-  let typeof env t = failwith "TODO"
+  let check ?(context = []) env t = check_rec env context t
+  let typeof ?context env t = failwith "TODO"
 end
 
 (***************************************************************************************)
@@ -241,98 +262,153 @@ end
 
 module TermGen = struct
   open QCheck2
+  open BGen.Syntax
 
-  let ( let* ) = Gen.bind
   let gen_letter = Gen.(Char.chr <$> oneof [ 65 -- 90; 97 -- 122 ])
 
   let gen_name : Name.t Gen.t =
     Gen.(map Name.make @@ string_size ~gen:gen_letter (1 -- 5))
 
+  let gen_sort : Term.t Gen.t = Gen.oneofl [ Term.mkProp; Term.mkType ]
+
   let split_nat n : (int * int) Gen.t =
     assert (n >= 0);
-    let* k = Gen.(0 -- n) in
-    Gen.return (k, n - k)
+    Gen.(0 -- n >|= fun k -> (k, n - k))
+
+  (** [get_names ty [(name_1, ty_1); ... ; (name_k; ty_k)]] returns the list of all 
+      names which have type [ty]. *)
+  let get_names (ty : Term.t) (names : (Name.t * Term.t) list) : Name.t list =
+    List.filter_map
+      (fun (name, name_ty) -> if ty = name_ty then Some name else None)
+      names
 
   (*************************************************************************************)
-  (** Simple terms. *)
-
-  (** Generate a term with exactly [n] interior nodes 
-      (i.e. not counting variables, constants or sorts). *)
-  let rec simple_sized n : Term.t Gen.t =
-    let open Gen in
-    let open Term in
-    if n <= 0
-    then
-      oneof
-        [ mkVar <$> gen_name
-        ; mkCst <$> gen_name
-        ; Gen.return mkProp
-        ; Gen.return mkType
-        ]
-    else
-      let* n1, n2 = split_nat (n - 1) in
-      oneof
-        [ mkLambda <$> gen_name <*> simple_sized n1 <*> simple_sized n2
-        ; mkProd <$> gen_name <*> simple_sized n1 <*> simple_sized n2
-        ; mkArrow <$> simple_sized n1 <*> simple_sized n2
-        ; mkApp <$> simple_sized n1 <*> simple_sized n2
-        ]
-
-  let simple : Term.t Gen.t = Gen.sized simple_sized
-
-  (*************************************************************************************)
-  (** Well-scoped terms. *)
+  (** Simple term generation. *)
 
   (** We use a backtracking generator here. *)
-  let rec scoped_sized env bound n : Term.t BGen.t =
+  let rec simple_rec env free bound n : Term.t BGen.t =
     let open BGen in
-    let open BGen.Syntax in
     let open Term in
     if n <= 0
     then
       (* Generate a leaf term. *)
       frequency
-        [ (5, mkVar <$> oneofl bound)
+        [ (3, mkVar <$> oneofl bound)
+        ; (3, mkVar <$> oneofl free)
         ; (5, mkCst <$> (fst <$> oneofl (Name.Map.bindings env.Env.constants)))
-        ; (1, return mkProp)
-        ; (1, return mkType)
+        ; (1, lift gen_sort)
         ]
     else
       (* Generate a term with children. *)
       let* n1, n2 = lift @@ split_nat (n - 1) in
       let gen_lambda =
         let* x = lift gen_name in
-        mkLambda x <$> scoped_sized env bound n1
-        <*> scoped_sized env (x :: bound) n2
+        mkLambda x
+        <$> simple_rec env free bound n1
+        <*> simple_rec env free (x :: bound) n2
       in
       let gen_prod =
         let* x = lift gen_name in
-        mkProd x <$> scoped_sized env bound n1
-        <*> scoped_sized env (x :: bound) n2
+        mkProd x
+        <$> simple_rec env free bound n1
+        <*> simple_rec env free (x :: bound) n2
       in
       let gen_arrow =
-        mkArrow <$> scoped_sized env bound n1 <*> scoped_sized env bound n2
+        mkArrow
+        <$> simple_rec env free bound n1
+        <*> simple_rec env free bound n2
       in
       let gen_app =
-        mkApp <$> scoped_sized env bound n1 <*> scoped_sized env bound n2
+        mkApp <$> simple_rec env free bound n1 <*> simple_rec env free bound n2
       in
       frequency [ (1, gen_lambda); (1, gen_prod); (1, gen_arrow); (4, gen_app) ]
 
-  let scoped env =
-    Gen.sized @@ fun n ->
-    scoped_sized env [] n |> BGen.run_opt |> Gen.map Option.get
+  let simple ~closed env : Term.t Gen.t =
+    let open Gen in
+    (* This is quite fast, we can afford to generate large terms. *)
+    let* n = 0 -- 100 in
+    (* Generate the set of free variables we will choose from. *)
+    let* free = if closed then return [] else list gen_name in
+    (* Run the algorithm. *)
+    BGen.run @@ simple_rec env free [] n
 
   (*************************************************************************************)
-  (** Well-typed terms. *)
+  (** Well-typed term generation. *)
 
-  let typed_sized env vars ty n : Term.t Gen.t =
-    let open Gen in
+  (** We use a backtracking generator. *)
+  let rec typed_rec (env : Env.t) (free : (Name.t * Term.t) list)
+      (bound : (Name.t * Term.t) list) (n : int) (ty : Term.t) : Term.t BGen.t =
+    let open BGen in
     let open Term in
-    if n <= 0 then oneof [ mkVar <$> oneofl vars ] else failwith "todo"
+    if n <= 0
+    then
+      (* Get the list of local variables that have the right type. *)
+      let free_vars = get_names ty free in
+      let bound_vars = get_names ty bound in
+      (* Get the list of constants that have the right type. *)
+      let consts = get_names ty @@ Name.Map.bindings env.Env.constants in
+      frequency
+        [ (3, mkVar <$> oneofl free_vars)
+        ; (3, mkVar <$> oneofl bound_vars)
+        ; (5, mkCst <$> oneofl consts)
+        ; (1, cond (ty = Sort `Type) @@ lift gen_sort)
+        ]
+    else
+      (* Generate a term with children. *)
+      let* n1, n2 = lift @@ split_nat (n - 1) in
+      let gen_lambda =
+        (* We can only generate a lambda if [ty] is an arrow or dependent product. *)
+        match ty with
+        | Arrow (ty1, ty2) ->
+            let* x = lift gen_name in
+            mkLambda x ty1
+            <$> typed_rec env free ((x, ty1) :: bound) (n - 1) ty2
+        | Prod (y, ty1, ty2) ->
+            let* x = lift gen_name in
+            (* Replace [y] by [x] in [ty2]. *)
+            let ty2 = TermUtils.subst y (mkVar x) ty2 in
+            mkLambda x ty1
+            <$> typed_rec env free ((x, ty1) :: bound) (n - 1) ty2
+        | _ -> fail ()
+      in
+      let gen_prod =
+        (* We can generate a dependent product it [ty] is a sort (Prop or Type). *)
+        match ty with
+        | Sort _ ->
+            let* x = lift gen_name in
+            let* x_ty = typed_rec env free bound n1 =<< lift gen_sort in
+            mkProd x x_ty <$> typed_rec env free ((x, x_ty) :: bound) n2 ty
+        | _ -> fail ()
+      in
+      let gen_arrow =
+        (* We can generate an arrow if [ty] is a sort (Prop or Type). *)
+        match ty with
+        | Sort _ ->
+            mkArrow
+            <$> (typed_rec env free bound n1 =<< lift gen_sort)
+            <*> typed_rec env free bound n2 ty
+        | _ -> fail ()
+      in
+      let gen_app = fail () in
+      frequency [ (1, gen_lambda); (1, gen_prod); (1, gen_arrow); (4, gen_app) ]
 
-  let typed env =
-    (* First choose a random (not too complex) type. *)
-    let ty = failwith "todo" in
-    (* Generate a term with this type. *)
-    Gen.sized @@ typed_sized env [] ty
+  (** Generate a name and a type for a variable binding. *)
+  let gen_binding env =
+    let open Gen in
+    let* name = gen_name in
+    (* For the type we need something that is :
+       - not too slow to compute.
+       - simple and realistic so that it is likely to occur in generated programs.
+       I went for the heuristic of using the type of a constant that is in the environment. *)
+    let* ty = snd <$> oneofl @@ Name.Map.bindings env.Env.constants in
+    return (name, ty)
+
+  let typed ~closed env ty : Term.t Gen.t =
+    let open Gen in
+    (* Generating big terms is slow, so we cap the size to a relatively low number. *)
+    let* n = 0 -- 30 in
+    (* Choose an initial context to start generating from. *)
+    let* free = if closed then return [] else list @@ gen_binding env in
+    (* Generate the term. *)
+    BGen.run @@ typed_rec env free [] n ty
 end

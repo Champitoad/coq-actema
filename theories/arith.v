@@ -1,7 +1,6 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
-
 Lemma add_comm :
   forall n m, n + m = m + n.
 Proof.
