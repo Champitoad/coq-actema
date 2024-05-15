@@ -47,7 +47,7 @@ end
 
 module Term = struct
   type t =
-    | Var of Name.t
+    | Var of int
     | App of t * t list
     | Lambda of Name.t * t * t
     | Arrow of t * t
@@ -56,7 +56,9 @@ module Term = struct
     | Sort of [ `Prop | `Type ]
   [@@deriving show]
 
-  let mkVar name = Var name
+  let mkVar n =
+    assert (n >= 0);
+    Var n
 
   let mkApp f arg =
     match f with
@@ -122,41 +124,68 @@ end
 (** Term utility functions. *)
 
 module TermUtils = struct
-  (** [acc] is the list of free variables already found. 
-      [bound] is the list of variables bound above [t]. *)
-  let rec free_vars_rec (acc : Name.t list) (bound : Name.t list) (t : Term.t) :
-      Name.t list =
+  let rec lift k n t =
     match (t : Term.t) with
-    | Var v -> if List.mem v bound then acc else v :: acc
+    | Var i when i >= k -> Term.mkVar (i + n)
+    | Var _ | Cst _ | Sort _ -> t
+    | Lambda (x, ty, body) ->
+        Term.mkLambda x (lift k n ty) (lift (k + 1) n body)
+    | Prod (x, ty, body) -> Term.mkProd x (lift k n ty) (lift (k + 1) n body)
+    | Arrow (t1, t2) -> Term.mkArrow (lift k n t1) (lift k n t2)
+    | App (f, args) -> Term.mkApps (lift k n f) (List.map (lift k n) args)
+
+  let lift_free n t = lift 0 n t
+
+  let rec subst k u t =
+    match (t : Term.t) with
+    | Var i when i = k -> u
+    | Var i when i >= k -> Term.mkVar (i - 1)
+    | Var _ | Cst _ | Sort _ -> t
+    | Lambda (x, ty, body) ->
+        Term.mkLambda x (subst k u ty) (subst (k + 1) u body)
+    | Prod (x, ty, body) -> Term.mkProd x (subst k u ty) (subst (k + 1) u body)
+    | Arrow (t1, t2) -> Term.mkArrow (subst k u t1) (subst k u t2)
+    | App (f, args) -> Term.mkApps (subst k u f) (List.map (subst k u) args)
+
+  (** [acc] is the list of free variables already found. 
+      [depth] is the current depth (number of binders traversed). *)
+  let rec free_vars_rec (acc : int list) (depth : int) (t : Term.t) : int list =
+    match (t : Term.t) with
+    | Var n -> if n >= depth then (n - depth) :: acc else acc
     | Cst _ | Sort _ -> acc
     | App (f, args) ->
-        List.fold_left (fun acc t -> free_vars_rec acc bound t) acc (f :: args)
+        List.fold_left (fun acc t -> free_vars_rec acc depth t) acc (f :: args)
     | Arrow (t1, t2) ->
-        let acc = free_vars_rec acc bound t1 in
-        let acc = free_vars_rec acc bound t2 in
+        let acc = free_vars_rec acc depth t1 in
+        let acc = free_vars_rec acc depth t2 in
         acc
     | Lambda (x, ty, body) | Prod (x, ty, body) ->
-        let acc = free_vars_rec acc bound ty in
-        let acc = free_vars_rec acc (x :: bound) body in
+        let acc = free_vars_rec acc depth ty in
+        let acc = free_vars_rec acc (depth + 1) body in
         acc
 
-  let free_vars t = Name.Set.of_list @@ free_vars_rec [] [] t
+  let free_vars t = IntSet.of_list @@ free_vars_rec [] 0 t
+end
 
-  let rec subst name u t =
-    match (t : Term.t) with
-    | Var v -> if Name.equal v name then u else Term.mkVar v
-    | Cst _ | Sort _ -> t
-    | App (f, args) ->
-        Term.mkApps (subst name u f) (List.map (subst name u) args)
-    | Lambda (x, ty, body) ->
-        if Name.equal name x
-        then Term.mkLambda x (subst name u ty) body
-        else Term.mkLambda x (subst name u ty) (subst name u body)
-    | Prod (x, ty, body) ->
-        if Name.equal name x
-        then Term.mkProd x (subst name u ty) body
-        else Term.mkProd x (subst name u ty) (subst name u body)
-    | Arrow (a, b) -> Term.mkArrow (subst name u a) (subst name u b)
+(***************************************************************************************)
+(** Typing contexts. *)
+
+module Context = struct
+  type t = (Name.t * Term.t) list
+
+  let empty = []
+  let size ctx = List.length ctx
+  let push name ty ctx = (name, ty) :: ctx
+  let pop ctx = match ctx with [] -> None | _ :: ctx -> Some ctx
+  let get i ctx = List.nth_opt ctx i
+
+  let get_by_type ty ctx =
+    ctx
+    |> List.mapi (fun i (_, ty') -> if ty = ty' then Some i else None)
+    |> List.filter_map Fun.id
+
+  let to_list ctx = ctx
+  let of_list ctx = ctx
 end
 
 (***************************************************************************************)
@@ -166,16 +195,16 @@ module Typing = struct
   (** See the error messages in [pp_typeError] for an explanation of 
       the different error cases. *)
   type typeError =
-    | UnknownVar of Name.t
-    | UnknownCst of Name.t
+    | UnboundVar of int
+    | UnboundCst of Name.t
     | ExpectedType of Term.t * Term.t * Term.t
     | ExpectedFunction of Term.t * Term.t
     | ExpectedSort of Term.t * Term.t
 
   let pp_typeError fmt err =
     match err with
-    | UnknownVar v -> Format.fprintf fmt "Unbound variable\n%s" (Name.show v)
-    | UnknownCst c -> Format.fprintf fmt "Unbound constant\n%s" (Name.show c)
+    | UnboundVar n -> Format.fprintf fmt "Unbound variable\n%d" n
+    | UnboundCst c -> Format.fprintf fmt "Unbound constant\n%s" (Name.show c)
     | ExpectedType (term, actual_ty, expected_ty) ->
         Format.fprintf fmt
           "The term\n%s\nhas type\n%s\nbut a term of type\n%s\nwas expected"
@@ -195,43 +224,45 @@ module Typing = struct
 
   (** There is no need for unification here :
       all binders are annotated with the type of the bound variable. *)
-  let rec check_rec env vars t : Term.t =
+  let rec check_rec env (ctx : Context.t) t : Term.t =
     match (t : Term.t) with
-    | Var v -> begin
-        match List.assoc_opt v vars with
-        | None -> raise @@ TypingError (UnknownVar v)
-        | Some ty -> ty
+    | Var n -> begin
+        match Context.get n ctx with
+        | None -> raise @@ TypingError (UnboundVar n)
+        | Some (_, ty) -> ty
       end
     | Cst c -> begin
         match Name.Map.find_opt c env.Env.constants with
-        | None -> raise @@ TypingError (UnknownCst c)
+        | None -> raise @@ TypingError (UnboundCst c)
         | Some ty -> ty
       end
     | Sort _ -> Sort `Type
-    | Lambda (v, ty, body) ->
-        let _ = check_rec env vars ty in
-        let body_ty = check_rec env ((v, ty) :: vars) body in
-        (* Depending on whether [v] appears in [body_ty],
+    | Lambda (x, ty, body) ->
+        let _ = check_rec env ctx ty in
+        let body_ty = check_rec env (Context.push x ty ctx) body in
+        (* Depending on whether [x] appears in [body_ty],
            this is a dependent or non-dependent product. *)
-        if Name.Set.mem v (TermUtils.free_vars body_ty)
-        then Term.mkProd v ty body_ty
-        else Term.mkArrow ty body_ty
+        if IntSet.mem 0 (TermUtils.free_vars body_ty)
+        then Term.mkProd x ty body_ty
+        else
+          (* We remove a binder so we lower the body type by 1. *)
+          Term.mkArrow ty (TermUtils.lift_free (-1) body_ty)
     | App (f, args) ->
         let _res, res_ty =
-          List.fold_left (check_app env vars) (f, check_rec env vars f) args
+          List.fold_left (check_app env ctx) (f, check_rec env ctx f) args
         in
         res_ty
     | Arrow (a, b) -> begin
-        let a_ty = check_rec env vars a in
-        let b_ty = check_rec env vars b in
+        let a_ty = check_rec env ctx a in
+        let b_ty = check_rec env ctx b in
         match (a_ty, b_ty) with
         | Sort _, Sort _ -> b_ty
         | Sort _, _ -> raise @@ TypingError (ExpectedSort (b, b_ty))
         | _, _ -> raise @@ TypingError (ExpectedSort (a, a_ty))
       end
     | Prod (x, a, b) -> begin
-        let a_ty = check_rec env vars a in
-        let b_ty = check_rec env ((x, a) :: vars) b in
+        let a_ty = check_rec env ctx a in
+        let b_ty = check_rec env (Context.push x a ctx) b in
         match (a_ty, b_ty) with
         | Sort _, Sort _ -> b_ty
         | Sort _, _ -> raise @@ TypingError (ExpectedSort (b, b_ty))
@@ -240,8 +271,8 @@ module Typing = struct
 
   (** Type-check an application with a single argument. 
       It takes as argument (and returns) a pair [term, type_]. *)
-  and check_app env vars (f, f_ty) arg =
-    let arg_ty = check_rec env vars arg in
+  and check_app env ctx (f, f_ty) arg =
+    let arg_ty = check_rec env ctx arg in
     match f_ty with
     | Arrow (a, b) ->
         if arg_ty = a
@@ -249,11 +280,11 @@ module Typing = struct
         else raise @@ TypingError (ExpectedType (arg, arg_ty, a))
     | Prod (x, a, b) ->
         if arg_ty = a
-        then (Term.mkApp f arg, TermUtils.subst x arg b)
+        then (Term.mkApp f arg, TermUtils.subst 0 arg b)
         else raise @@ TypingError (ExpectedType (arg, arg_ty, a))
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
 
-  let check ?(context = []) env t = check_rec env context t
+  let check ?(context = Context.empty) env t = check_rec env context t
   let typeof ?context env t = failwith "TODO"
 end
 
@@ -285,16 +316,24 @@ module TermGen = struct
     in
     loop n [] xs
 
+  let range ofs len = List.init len (fun i -> i + ofs)
+
   (*************************************************************************************)
   (** Simple term generation. *)
 
-  (** We use a backtracking generator here. *)
-  let rec simple_rec env free bound n : Term.t BGen.t =
+  (** We use a backtracking generator here. 
+      The context [ctx_free] is for variables that are free in the resulting term,
+      and [ctx_bound] is for variables that are bound in the resulting term.
+      The typing information in [ctx_bound] and [ctx_free] is irrelevant : we use only the names. *)
+  let rec simple_rec env ctx_bound ctx_free n : Term.t BGen.t =
     let open BGen in
     let open Term in
     if n <= 0
     then
       (* Generate a leaf term. *)
+      let bound_size = Context.size ctx_bound in
+      let bound = range 0 bound_size in
+      let free = range bound_size (Context.size ctx_free) in
       frequency
         [ (3, mkVar <$> oneofl bound)
         ; (3, mkVar <$> oneofl free)
@@ -307,22 +346,24 @@ module TermGen = struct
       let gen_lambda =
         let* x = lift gen_name in
         mkLambda x
-        <$> simple_rec env free bound n1
-        <*> simple_rec env free (x :: bound) n2
+        <$> simple_rec env ctx_bound ctx_free n1
+        <*> simple_rec env (Context.push x Term.mkType ctx_bound) ctx_free n2
       in
       let gen_prod =
         let* x = lift gen_name in
         mkProd x
-        <$> simple_rec env free bound n1
-        <*> simple_rec env free (x :: bound) n2
+        <$> simple_rec env ctx_bound ctx_free n1
+        <*> simple_rec env (Context.push x Term.mkType ctx_bound) ctx_free n2
       in
       let gen_arrow =
         mkArrow
-        <$> simple_rec env free bound n1
-        <*> simple_rec env free bound n2
+        <$> simple_rec env ctx_bound ctx_free n1
+        <*> simple_rec env ctx_bound ctx_free n2
       in
       let gen_app =
-        mkApp <$> simple_rec env free bound n1 <*> simple_rec env free bound n2
+        mkApp
+        <$> simple_rec env ctx_bound ctx_free n1
+        <*> simple_rec env ctx_bound ctx_free n2
       in
       frequency [ (1, gen_lambda); (1, gen_prod); (1, gen_arrow); (4, gen_app) ]
 
@@ -331,35 +372,34 @@ module TermGen = struct
     (* This is quite fast, we can afford to generate large terms. *)
     let* n = 0 -- 100 in
     (* Generate the set of free variables we will choose from. *)
-    let* free = if closed then return [] else list gen_name in
+    let* ctx =
+      if closed
+      then return Context.empty
+      else
+        let+ names = small_list gen_name in
+        List.fold_left
+          (fun ctx n -> Context.push n Term.mkType ctx)
+          Context.empty names
+    in
     (* Run the algorithm. *)
-    BGen.run @@ simple_rec env free [] n
+    BGen.run @@ simple_rec env Context.empty ctx n
 
   (*************************************************************************************)
   (** Well-typed term generation. *)
 
-  (** [vars_by_type ty bound free] returns the names of all variables which have type [ty].
-      It takes shadowing into account. *)
-  let vars_by_type (ty : Term.t) ~bound ~free =
-    let rec loop prev acc = function
-      | [] -> List.rev acc
-      | (v, vty) :: next ->
-          if vty = ty && not (List.mem v prev)
-          then loop (v :: prev) (v :: acc) next
-          else loop (v :: prev) acc next
-    in
-    (loop [] [] bound, loop (List.map fst bound) [] free)
-
   (** We use a backtracking generator. *)
-  let rec typed_rec (env : Env.t) (free : (Name.t * Term.t) list)
-      (bound : (Name.t * Term.t) list) (n : int) (ty : Term.t) : Term.t BGen.t =
+  let rec typed_rec (env : Env.t) ctx_bound ctx_free (n : int) (ty : Term.t) :
+      Term.t BGen.t =
     let open BGen in
     let open Term in
     if n <= 0
     then
-      (* Get the list of local variables that have the right type.
-         We take care to remove variables that are shadowed. *)
-      let bound_vars, free_vars = vars_by_type ty ~free ~bound in
+      (* Get the list of local variables that have the right type. *)
+      let bound = Context.get_by_type ty ctx_bound in
+      let free =
+        Context.get_by_type ty ctx_free
+        |> List.map (Int.add @@ Context.size ctx_bound)
+      in
       (* Get the list of constants that have the right type. *)
       let consts =
         List.filter_map
@@ -367,8 +407,8 @@ module TermGen = struct
           (Name.Map.bindings env.Env.constants)
       in
       frequency
-        [ (3, mkVar <$> oneofl free_vars)
-        ; (3, mkVar <$> oneofl bound_vars)
+        [ (3, mkVar <$> oneofl free)
+        ; (3, mkVar <$> oneofl bound)
         ; (5, mkCst <$> oneofl consts)
         ; (1, cond (ty = Sort `Type) @@ lift gen_sort)
         ]
@@ -381,13 +421,15 @@ module TermGen = struct
         | Arrow (ty1, ty2) ->
             let* x = lift gen_name in
             mkLambda x ty1
-            <$> typed_rec env free ((x, ty1) :: bound) (n - 1) ty2
+            <$> typed_rec env
+                  (Context.push x ty1 ctx_bound)
+                  ctx_free (n - 1) ty2
         | Prod (y, ty1, ty2) ->
             let* x = lift gen_name in
-            (* Replace [y] by [x] in [ty2]. *)
-            let ty2 = TermUtils.subst y (mkVar x) ty2 in
             mkLambda x ty1
-            <$> typed_rec env free ((x, ty1) :: bound) (n - 1) ty2
+            <$> typed_rec env
+                  (Context.push x ty1 ctx_bound)
+                  ctx_free (n - 1) ty2
         | _ -> fail ()
       in
       let gen_prod =
@@ -395,8 +437,9 @@ module TermGen = struct
         match ty with
         | Sort _ ->
             let* x = lift gen_name in
-            let* x_ty = typed_rec env free bound n1 =<< lift gen_sort in
-            mkProd x x_ty <$> typed_rec env free ((x, x_ty) :: bound) n2 ty
+            let* x_ty = typed_rec env ctx_bound ctx_free n1 =<< lift gen_sort in
+            mkProd x x_ty
+            <$> typed_rec env (Context.push x x_ty ctx_bound) ctx_free n2 ty
         | _ -> fail ()
       in
       let gen_arrow =
@@ -404,8 +447,8 @@ module TermGen = struct
         match ty with
         | Sort _ ->
             mkArrow
-            <$> (typed_rec env free bound n1 =<< lift gen_sort)
-            <*> typed_rec env free bound n2 ty
+            <$> (typed_rec env ctx_bound ctx_free n1 =<< lift gen_sort)
+            <*> typed_rec env ctx_bound ctx_free n2 ty
         | _ -> fail ()
       in
       let gen_app = fail () in
@@ -425,7 +468,8 @@ module TermGen = struct
 
   let context env =
     let open Gen in
-    small_list @@ pair gen_name (simple_type env)
+    let+ bindings = small_list @@ pair gen_name (simple_type env) in
+    Context.of_list bindings
 
   let typed ?(context = []) ?ty env =
     let open Gen in

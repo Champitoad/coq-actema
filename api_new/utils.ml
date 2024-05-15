@@ -1,3 +1,6 @@
+module IntSet = Set.Make (Int)
+module StringMap = Map.Make (String)
+
 module BGen = struct
   open QCheck2
 

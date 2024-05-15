@@ -2,6 +2,8 @@
     We call this the Actema language to distinguish it from the language used by Coq.
     It is the which creates Actema terms (from Coq terms). *)
 
+open Utils
+
 (***************************************************************************************)
 (** Names *)
 
@@ -54,9 +56,9 @@ module Term : sig
   (** A grammar for a small dependently-typed language. 
       This is a private type : use the smart constructors provided below to build terms. *)
   type t = private
-    (* [Var v] is a local variable bound by a lambda abstraction or a dependent product.
-       It refers to the most recently bound variable with its name. *)
-    | Var of Name.t
+    (* [Var n] is a local variable bound by a lambda abstraction or a dependent product.
+       The integer [n] is a de Bruijn index, starting at 0. *)
+    | Var of int
     (* [App f [x1; ...; xn]] represents the application [f x1 ... xn].
        We maintain the invariant that [f] itself is not an application,
        and that the argument list is not empty. *)
@@ -95,7 +97,7 @@ module Term : sig
     | Sort of [ `Prop | `Type ]
   [@@deriving show]
 
-  val mkVar : Name.t -> t
+  val mkVar : int -> t
 
   (** Smart constructor for [Term.App], ensuring that the function is not an application. *)
   val mkApp : t -> t -> t
@@ -161,12 +163,50 @@ end
 (** Term utility functions. *)
 
 module TermUtils : sig
-  (** [subst name u t] replaces every free occurence of [Var name] by the term [u] 
+  (** [lift k n t] adds [n] to every free variable in [t] that is at index at least [k].
+      [n] can be negative. *)
+  val lift : int -> int -> Term.t -> Term.t
+
+  (** [lift_free n t] adds [n] to every free variable in [t]. 
+      [n] can be negative. *)
+  val lift_free : int -> Term.t -> Term.t
+
+  (** [subst k u t] replaces every occurence of the free variable [k] by the term [u] 
       in the term [t]. *)
-  val subst : Name.t -> Term.t -> Term.t -> Term.t
+  val subst : int -> Term.t -> Term.t -> Term.t
 
   (** [free_vars t] computes the set of free variables in [t]. *)
-  val free_vars : Term.t -> Name.Set.t
+  val free_vars : Term.t -> IntSet.t
+end
+
+(***************************************************************************************)
+(** Typing contexts. *)
+
+module Context : sig
+  (** A typing context contains the name and type of the free variables in a term.
+      Conceptually it is a stack of [(name, ty)], but may be implemented more efficiently. *)
+  type t
+
+  (** The empty typing context. *)
+  val empty : t
+
+  (** [size ctx] returns the number of bindings in [ctx]. *)
+  val size : t -> int
+
+  val to_list : t -> (Name.t * Term.t) list
+  val of_list : (Name.t * Term.t) list -> t
+
+  (** [push name ty ctx] adds the variable with name [name] and type [ty] to the context [ctx]. *)
+  val push : Name.t -> Term.t -> t -> t
+
+  (** [pop ctx] removes the most recent binding (i.e. at index 0) from [ctx]. *)
+  val pop : t -> t option
+
+  (** [get n ctx] returns the name and type of the n-th variable in [ctx]. *)
+  val get : int -> t -> (Name.t * Term.t) option
+
+  (** [get_by_type ty ctx] returns the list of all the variables that have type [ty] in [ctx]. *)
+  val get_by_type : Term.t -> t -> int list
 end
 
 (***************************************************************************************)
@@ -183,11 +223,11 @@ module Typing : sig
       (by default [context] is empty and [t] is assumed to be closed).
       
       If you already know [t] is well-typed use [typeof ?context env t] instead. *)
-  val check : ?context:(Name.t * Term.t) list -> Env.t -> Term.t -> Term.t
+  val check : ?context:Context.t -> Env.t -> Term.t -> Term.t
 
   (** [typeof ?context env t] gets the type of the term [t]. 
       This assumes that [t] is well-typed, and is faster than [check env t]. *)
-  val typeof : ?context:(Name.t * Term.t) list -> Env.t -> Term.t -> Term.t
+  val typeof : ?context:Context.t list -> Env.t -> Term.t -> Term.t
 end
 
 (** This module defines functions for generating arbitrary terms. 
@@ -212,12 +252,9 @@ module TermGen : sig
       The argument [context] defines which free variables we can use (by default [context]
       is empty i.e. we generate closed terms). *)
   val typed :
-       ?context:(Name.t * Term.t) list
-    -> ?ty:Term.t
-    -> Env.t
-    -> (Term.t * Term.t) Gen.t
+    ?context:Context.t -> ?ty:Term.t -> Env.t -> (Term.t * Term.t) Gen.t
 
   (** [context env] generates a typing context in [env]. 
       This can be fed to [typed] to generate open terms. *)
-  val context : Env.t -> (Name.t * Term.t) list Gen.t
+  val context : Env.t -> Context.t Gen.t
 end

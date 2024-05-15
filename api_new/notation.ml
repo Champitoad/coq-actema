@@ -45,38 +45,40 @@ let pp_binder env name = Pp.string @@ Name.show name
     The argument [path] keeps track of the path to the term [t], 
     and is used to annotate the Xml divs of each subterm. 
     Initially [path] should be empty. *)
-let rec pp_term env path (t : Term.t) : annot Pp.doc =
+let rec pp_term env path ctx (t : Term.t) : annot Pp.doc =
   let open Pp in
   let content =
     match t with
-    | Var name -> pp_local env name
+    | Var v ->
+        let name, _ = Option.get @@ Context.get v ctx in
+        pp_local env name
     | Cst name -> pp_global env name
     | Sort `Prop -> string "Prop"
     | Sort `Type -> string "Type"
     | Lambda (name, ty, body) ->
         let pp_binder = string "fun" ^+^ pp_binder env name ^+^ string ":" in
-        let pp_ty = pp_term env (0 :: path) ty ^+^ string "=>" in
-        let pp_body = pp_term env (1 :: path) body in
+        let pp_ty = pp_term env (0 :: path) ctx ty ^+^ string "=>" in
+        let pp_body = pp_term env (1 :: path) (Context.push name ty ctx) body in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
     | Arrow (t1, t2) ->
         (* We might or might not need to add parentheses around [t1]. *)
         let pp_t1 =
           match t1 with
-          | Var _ | Cst _ | App _ | Sort _ -> pp_term env (0 :: path) t1
-          | _ -> paren @@ pp_term env (0 :: path) t1
+          | Var _ | Cst _ | App _ | Sort _ -> pp_term env (0 :: path) ctx t1
+          | _ -> paren @@ pp_term env (0 :: path) ctx t1
         in
         (* We don't need parentheses around [t2]. *)
-        let pp_t2 = pp_term env (1 :: path) t2 in
+        let pp_t2 = pp_term env (1 :: path) ctx t2 in
         (* Combine the results. *)
         (pp_t1 ^+^ string "->") ^//^ pp_t2
     | Prod (name, ty, body) ->
         let pp_binder = string "forall" ^+^ pp_binder env name ^+^ string ":" in
         let pp_ty =
           match ty with
-          | Prod _ -> paren (pp_term env (0 :: path) ty) ^^ string ","
-          | _ -> pp_term env (0 :: path) ty ^^ string ","
+          | Prod _ -> paren (pp_term env (0 :: path) ctx ty) ^^ string ","
+          | _ -> pp_term env (0 :: path) ctx ty ^^ string ","
         in
-        let pp_body = pp_term env (1 :: path) body in
+        let pp_body = pp_term env (1 :: path) (Context.push name ty ctx) body in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
     | App (f, args) ->
         (* Applications are a bit tricky : we have to check if the function is a constant,
@@ -100,8 +102,8 @@ let rec pp_term env path (t : Term.t) : annot Pp.doc =
              begin
                fun i (t : Term.t) ->
                  match t with
-                 | Var _ | Cst _ | Sort _ -> pp_term env (i :: path) t
-                 | _ -> paren @@ pp_term env (i :: path) t
+                 | Var _ | Cst _ | Sort _ -> pp_term env (i :: path) ctx t
+                 | _ -> paren @@ pp_term env (i :: path) ctx t
              end
         |> flow (break 1)
   in
@@ -117,11 +119,11 @@ let default_width = 50
 
 let term_to_string ?(width = default_width) env t : string =
   assert (0 <= width);
-  PpString.pp ~width (pp_term env [] t)
+  PpString.pp ~width (pp_term env [] Context.empty t)
 
 let term_to_xml ?(width = default_width) env t : Xml.elt =
   assert (0 <= width);
-  let xml = PpXml.pp ~width (pp_term env [] t) in
+  let xml = PpXml.pp ~width (pp_term env [] Context.empty t) in
   match xml with
   | [ element ] -> element
   | _ ->

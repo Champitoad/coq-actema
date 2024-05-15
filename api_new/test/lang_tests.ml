@@ -13,7 +13,12 @@ let term_in_context =
   return (context, term, ty)
 
 let print_term = Notation.term_to_string Env.test_env
-let print_context = Print.list (Print.pair Name.show print_term)
+
+let print_context ctx =
+  let bindings =
+    List.map (Print.pair Name.show print_term) @@ Context.to_list ctx
+  in
+  "[" ^ String.concat ", " bindings ^ "]"
 
 (******************************************************************************)
 (** Random term generation tests. *)
@@ -23,7 +28,7 @@ let test_typed_gen =
   Test.make ~name:"typed_term_gen" term_in_context
     ~print:(Print.triple print_context print_term print_term)
     begin
-      fun (context, term, ty) -> Typing.check ~context Env.test_env term = ty
+      fun (ctx, term, ty) -> Typing.check ~context:ctx Env.test_env term = ty
     end
 
 (** Test weakening. *)
@@ -32,9 +37,9 @@ let test_weakening =
     (Gen.pair (TermGen.context Env.test_env) (TermGen.typed Env.test_env))
     ~print:(Print.pair print_context (Print.pair print_term print_term))
     begin
-      fun (context, (term, ty)) ->
+      fun (ctx, (term, ty)) ->
         Typing.check Env.test_env term = ty
-        && Typing.check ~context Env.test_env term = ty
+        && Typing.check ~context:ctx Env.test_env term = ty
     end
 
 (** Test the substitution lemma. *)
@@ -43,14 +48,15 @@ let test_substitution =
     ~print:(Print.triple print_context print_term print_term)
     ~count:10000
     begin
-      fun (context, term, ty) ->
-        QCheck2.assume (context <> []);
-        let v, v_ty = List.hd context in
-        let context = List.tl context in
+      fun (ctx, term, ty) ->
+        QCheck2.assume (Context.size ctx > 0);
+        let _, v_ty = Option.get @@ Context.get 0 ctx in
+        let ctx = Option.get @@ Context.pop ctx in
         let term', _ =
-          Gen.generate1 (TermGen.typed ~context ~ty:v_ty Env.test_env)
+          Gen.generate1 (TermGen.typed ~context:ctx ~ty:v_ty Env.test_env)
         in
-        Typing.check ~context Env.test_env (TermUtils.subst v term' term) = ty
+        Typing.check ~context:ctx Env.test_env (TermUtils.subst 0 term' term)
+        = ty
     end
 
 (******************************************************************************)
@@ -77,7 +83,7 @@ let words (str : string) : string list =
 let test_pp_term_string =
   Test.make ~name:"pp_term_string"
     (Gen.triple
-       (TermGen.simple ~closed:false Env.test_env)
+       (TermGen.simple ~closed:true Env.test_env)
        Gen.small_nat Gen.small_nat)
     ~print:(Print.triple Term.show Print.int Print.int)
     begin

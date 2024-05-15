@@ -4,7 +4,7 @@ open Lang
 let () =
   (* Term. *)
   let g = Name.make "x" in
-  let term = Term.(mkProd g (mkCst (Name.make "nat")) (mkVar g)) in
+  let term = Term.(mkProd g (mkCst (Name.make "nat")) (mkVar 0)) in
   Format.printf "TERM\n%s\n" (Notation.term_to_string Env.test_env term);
   (* Type. *)
   try
