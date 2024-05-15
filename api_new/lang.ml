@@ -411,28 +411,39 @@ module TermGen = struct
       let gen_app = fail () in
       frequency [ (1, gen_lambda); (1, gen_prod); (1, gen_arrow); (4, gen_app) ]
 
+  (** Generate a simple type in [env]. *)
+  let simple_type env =
+    let open Gen in
+    (* For the type we need something that is :
+       - not too slow to compute.
+       - simple and realistic so that it is likely to occur in generated programs.
+       I went for the heuristic of using the type of a constant that is in the environment. *)
+    frequency
+      [ (3, snd <$> oneofl @@ Name.Map.bindings env.Env.constants)
+      ; (1, gen_sort)
+      ]
+
   let context env =
     let open Gen in
-    small_list
-      begin
-        let* name = gen_name in
-        (* For the type we need something that is :
-           - not too slow to compute.
-           - simple and realistic so that it is likely to occur in generated programs.
-           I went for the heuristic of using the type of a constant that is in the environment. *)
-        let* ty =
-          frequency
-            [ (3, snd <$> oneofl @@ Name.Map.bindings env.Env.constants)
-            ; (1, gen_sort)
-            ]
-        in
-        return (name, ty)
-      end
+    small_list @@ pair gen_name (simple_type env)
 
-  let typed ?(context = []) env ty : Term.t Gen.t =
+  let typed ?(context = []) ?ty env =
     let open Gen in
-    (* Generating big terms can be slow, we can't increase the size too much. *)
-    let* n = 0 -- 50 in
-    (* Generate the term. *)
-    BGen.run @@ typed_rec env context [] n ty
+    match ty with
+    | None ->
+        (* Choose a size.*)
+        let* n = 0 -- 5 in
+        (* Choose a target type. We have to be careful to choose an inhabited type. *)
+        let* ty = match ty with Some ty -> return ty | None -> gen_sort in
+        (* Generate a term. *)
+        let* term = BGen.run @@ typed_rec env context [] n ty in
+        return (term, ty)
+    | Some ty ->
+        BGen.run
+          begin
+            let open BGen.Syntax in
+            let* n = BGen.lift Gen.(0 -- 10) in
+            let+ term = typed_rec env context [] n ty in
+            (term, ty)
+          end
 end

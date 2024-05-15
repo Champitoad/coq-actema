@@ -9,8 +9,7 @@ open QCheck2
 let term_in_context =
   let open Gen in
   let* context = TermGen.context Env.test_env in
-  let ty = Term.mkProp in
-  let* term = TermGen.typed ~context Env.test_env ty in
+  let* term, ty = TermGen.typed ~context Env.test_env in
   return (context, term, ty)
 
 let print_term = Notation.term_to_string Env.test_env
@@ -19,32 +18,40 @@ let print_context = Print.list (Print.pair Name.show print_term)
 (******************************************************************************)
 (** Random term generation tests. *)
 
-(** Test that the well-typed term generator indeed produces well-typed terms,
-    on closed terms. *)
-let test_typed_gen_closed =
-  Test.make ~name:"typed_term_gen_closed"
-    (TermGen.typed Env.test_env Term.mkProp)
-    ~print:print_term
-    begin
-      fun t -> Typing.check Env.test_env t = Term.mkProp
-    end
-
-(** Test that the well-typed term generator indeed produces well-typed terms,
-    on open terms. *)
-let test_typed_gen_open =
-  Test.make ~name:"typed_term_gen_open" term_in_context
+(** Test that the well-typed term generator indeed produces well-typed terms. *)
+let test_typed_gen =
+  Test.make ~name:"typed_term_gen" term_in_context
     ~print:(Print.triple print_context print_term print_term)
-    ~count:10000
     begin
       fun (context, term, ty) -> Typing.check ~context Env.test_env term = ty
     end
 
 (** Test weakening. *)
-(*let test_weakening =
-  Test.make ~name:"weakening" (Gen.pair (TermGen.typed test_env Term.mkProp) )
-    ~print:Term.show
-    begin fun t ->
-    end*)
+let test_weakening =
+  Test.make ~name:"weakening"
+    (Gen.pair (TermGen.context Env.test_env) (TermGen.typed Env.test_env))
+    ~print:(Print.pair print_context (Print.pair print_term print_term))
+    begin
+      fun (context, (term, ty)) ->
+        Typing.check Env.test_env term = ty
+        && Typing.check ~context Env.test_env term = ty
+    end
+
+(** Test the substitution lemma. *)
+let test_substitution =
+  Test.make ~name:"substitution-lemma" term_in_context
+    ~print:(Print.triple print_context print_term print_term)
+    ~count:10000
+    begin
+      fun (context, term, ty) ->
+        QCheck2.assume (context <> []);
+        let v, v_ty = List.hd context in
+        let context = List.tl context in
+        let term', _ =
+          Gen.generate1 (TermGen.typed ~context ~ty:v_ty Env.test_env)
+        in
+        Typing.check ~context Env.test_env (TermUtils.subst v term' term) = ty
+    end
 
 (******************************************************************************)
 (** Notation tests. *)
@@ -86,8 +93,10 @@ let test_pp_term_string =
 let () =
   Alcotest.run "Actema Lang Tests"
     [ ( "generator-tests"
+      , List.map QCheck_alcotest.to_alcotest [ test_typed_gen ] )
+    ; ( "typing-tests"
       , List.map QCheck_alcotest.to_alcotest
-          [ test_typed_gen_closed; test_typed_gen_open ] )
+          [ test_weakening; test_substitution ] )
     ; ( "notation-tests"
       , List.map QCheck_alcotest.to_alcotest [ test_pp_term_string ] )
     ]

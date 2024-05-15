@@ -148,7 +148,8 @@ module Env : sig
   (** The empty environment. *)
   val empty : t
 
-  (** An environment containing a few constants. Used for testing. *)
+  (** An environment containing a few constants. Used for testing.
+      We assume that the types of the constants are well-typed. *)
   val test_env : t
 
   (** [Env.add_constant name ty env] adds the constant [name] with type [ty] 
@@ -203,11 +204,18 @@ module TermGen : sig
       The flag [closed] controls whether we allow terms with free variables or not. *)
   val simple : closed:bool -> Env.t -> Term.t Gen.t
 
-  (** [typed ?context env ty] generates arbitrary terms of type [ty] in environment [env]. 
+  (** [typed ?context ?ty env] generates pairs [(term, ty)] where [term] has type 
+      [ty] in environment [env]. 
       The terms use only the constants defined in [env]. 
+      The argument [ty] is used to fix the type of the generated terms (by default it is
+      chosen at random).
       The argument [context] defines which free variables we can use (by default [context]
       is empty i.e. we generate closed terms). *)
-  val typed : ?context:(Name.t * Term.t) list -> Env.t -> Term.t -> Term.t Gen.t
+  val typed :
+       ?context:(Name.t * Term.t) list
+    -> ?ty:Term.t
+    -> Env.t
+    -> (Term.t * Term.t) Gen.t
 
   (** [context env] generates a typing context in [env]. 
       This can be fed to [typed] to generate open terms. *)
