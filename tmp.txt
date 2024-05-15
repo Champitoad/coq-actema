@@ -1,4 +1,0 @@
-
-(pC, Type)
-(G, Prop)
-(forall G : pC, G) -> False
