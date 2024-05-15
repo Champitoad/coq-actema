@@ -1,3 +1,5 @@
+open Utils
+
 (***************************************************************************************)
 (** Names *)
 
@@ -234,6 +236,9 @@ module Typing = struct
   let typeof env t = failwith "TODO"
 end
 
+(***************************************************************************************)
+(** Random term generation. *)
+
 module TermGen = struct
   open QCheck2
 
@@ -247,6 +252,9 @@ module TermGen = struct
     assert (n >= 0);
     let* k = Gen.(0 -- n) in
     Gen.return (k, n - k)
+
+  (*************************************************************************************)
+  (** Simple terms. *)
 
   (** Generate a term with exactly [n] interior nodes 
       (i.e. not counting variables, constants or sorts). *)
@@ -272,39 +280,33 @@ module TermGen = struct
 
   let simple : Term.t Gen.t = Gen.sized simple_sized
 
-  (*let rec scoped_sized env bound n : Term.t option Gen.t =
-    let open Gen in
+  (*************************************************************************************)
+  (** Well-scoped terms. *)
+
+  (** We use a backtracking generator here. *)
+  let rec scoped_sized env bound n : Term.t BGen.t =
+    let open BGen in
+    let open BGen.Syntax in
     let open Term in
     if n <= 0
     then
       (* Generate a leaf term. *)
-      let gen_var =
-        if bound = []
-        then return None
-        else
-          let+ b = oneofl bound in
-          Some (mkVar b)
-      in
-      let gen_cst =
-        let+ name, _ = oneofl (Name.Map.bindings env.Env.constants) in
-        Some (mkCst name)
-      in
       frequency
-        [ (5, gen_var)
-        ; (5, gen_cst)
-        ; (1, Gen.return @@ Some mkProp)
-        ; (1, Gen.return @@ Some mkType)
+        [ (5, mkVar <$> oneofl bound)
+        ; (5, mkCst <$> (fst <$> oneofl (Name.Map.bindings env.Env.constants)))
+        ; (1, return mkProp)
+        ; (1, return mkType)
         ]
     else
       (* Generate a term with children. *)
-      let* n1, n2 = split_nat (n - 1) in
+      let* n1, n2 = lift @@ split_nat (n - 1) in
       let gen_lambda =
-        let* x = gen_name in
+        let* x = lift gen_name in
         mkLambda x <$> scoped_sized env bound n1
         <*> scoped_sized env (x :: bound) n2
       in
       let gen_prod =
-        let* x = gen_name in
+        let* x = lift gen_name in
         mkProd x <$> scoped_sized env bound n1
         <*> scoped_sized env (x :: bound) n2
       in
@@ -314,9 +316,14 @@ module TermGen = struct
       let gen_app =
         mkApp <$> scoped_sized env bound n1 <*> scoped_sized env bound n2
       in
-      frequency [ (1, gen_lambda); (1, gen_prod); (1, gen_arrow); (4, gen_app) ]*)
+      frequency [ (1, gen_lambda); (1, gen_prod); (1, gen_arrow); (4, gen_app) ]
 
-  let scoped env = Gen.sized @@ scoped_sized env []
+  let scoped env =
+    Gen.sized @@ fun n ->
+    scoped_sized env [] n |> BGen.run_opt |> Gen.map Option.get
+
+  (*************************************************************************************)
+  (** Well-typed terms. *)
 
   let typed_sized env vars ty n : Term.t Gen.t =
     let open Gen in

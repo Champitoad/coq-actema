@@ -183,8 +183,12 @@ module Typing : sig
   val typeof : Env.t -> Term.t -> Term.t
 end
 
-(** This module defines functions for generating arbitrary terms.
-    These are used mainly for testing. *)
+(** This module defines functions for generating arbitrary terms. 
+    These are used mainly for testing. 
+    
+    The algorithm to generate terms is inspired by : 
+      Testing an Optimising Compiler by Generating Random Lambda Terms
+      https://www.cse.chalmers.se/~russo/publications_files/AST2011.pdf *)
 module TermGen : sig
   open QCheck2
 
