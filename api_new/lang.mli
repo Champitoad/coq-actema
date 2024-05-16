@@ -192,6 +192,11 @@ module Env : sig
   (** The empty environment. *)
   val empty : t
 
+  (** [union env1 env2] takes the union of [env1] and [env2].
+      This assumes that the two environments contain the same information for the constants 
+      that appear in both. *)
+  val union : t -> t -> t
+
   (** An environment containing a few constants. Used for testing.
       We assume that the types of the constants are well-typed. *)
   val test_env : t

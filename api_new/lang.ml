@@ -110,6 +110,12 @@ module Env = struct
 
   let empty = { constants = Name.Map.empty; pp_info = Name.Map.empty }
 
+  let union env1 env2 =
+    let check_binding name v1 v2 = if v1 = v2 then Some v1 else assert false in
+    { constants = Name.Map.union check_binding env1.constants env2.constants
+    ; pp_info = Name.Map.union check_binding env1.pp_info env2.pp_info
+    }
+
   let add_constant name ty ?pp env =
     let env = { env with constants = Name.Map.add name ty env.constants } in
     match pp with

@@ -1,3 +1,4 @@
+open Batteries
 module IntSet : Set.S with type elt = int
 module StringMap : Map.S with type key = string
 
@@ -72,4 +73,23 @@ module BGen : sig
     (** Infix monad bind, with arguments reversed. *)
     val ( =<< ) : ('a -> 'b t) -> 'a t -> 'b t
   end
+end
+
+(** This module implements bijections between finite sets, i.e. bi-directional maps. *)
+module BiMap : sig
+  type ('a, 'b) t
+
+  val bindings : ('a, 'b) t -> ('a * 'b) list
+  val empty : ('a, 'b) t
+  val inverse : ('a, 'b) t -> ('b, 'a) t
+  val add : 'a -> 'b -> ('a, 'b) t -> ('a, 'b) t
+  val remove : 'a -> ('a, 'b) t -> ('a, 'b) t
+  val union : ('a, 'b) t -> ('a, 'b) t -> ('a, 'b) t
+  val find : 'a -> ('a, 'b) t -> 'b
+  val find_opt : 'a -> ('a, 'b) t -> 'b option
+  val domain : ('a, 'b) t -> 'a list
+  val codomain : ('a, 'b) t -> 'b list
+  val kdiff : ('a, 'b) t -> ('a, 'b) t -> ('a, 'b) t
+  val vdiff : ('a, 'b) t -> ('a, 'b) t -> ('a, 'b) t
+  val of_seq : ('a * 'b) Seq.t -> ('a, 'b) t
 end

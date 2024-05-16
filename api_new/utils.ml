@@ -1,3 +1,4 @@
+open Batteries
 module IntSet = Set.Make (Int)
 module StringMap = Map.Make (String)
 
@@ -48,4 +49,42 @@ module BGen = struct
     let ( >>= ) = bind
     let ( =<< ) f a = bind a f
   end
+end
+
+module BiMap = struct
+  type ('a, 'b) t = ('a, 'b) Map.t * ('b, 'a) Map.t
+
+  let bindings (r, _) = Map.bindings r
+  let empty = (Map.empty, Map.empty)
+  let inverse (r, l) = (l, r)
+  let add k v (r, l) = (Map.add k v r, Map.add v k l)
+
+  let remove k (r, l) =
+    let v = Map.find k r in
+    (Map.remove k r, Map.remove v l)
+
+  let union (r1, l1) (r2, l2) = (Map.union r1 r2, Map.union l1 l2)
+  let find k (r, _) = Map.find k r
+  let find_opt k (r, _) = Map.find_opt k r
+  let domain (r, _) = Map.keys r |> List.of_enum
+  let codomain (_, l) = Map.keys l |> List.of_enum
+
+  let kdiff (r1, _) (r2, _) =
+    let r =
+      r1 |> Map.filter (fun k _ -> not (Map.exists (fun k' _ -> k = k') r2))
+    in
+    let l = r |> Map.enum |> Enum.map (fun (x, y) -> (y, x)) |> Map.of_enum in
+    (r, l)
+
+  let vdiff (_, l1) (_, l2) =
+    let l =
+      l1 |> Map.filter (fun k _ -> not (Map.exists (fun k' _ -> k = k') l2))
+    in
+    let r = l |> Map.enum |> Enum.map (fun (x, y) -> (y, x)) |> Map.of_enum in
+    (r, l)
+
+  let of_enum e =
+    (Map.of_enum e, Map.of_enum (e |> Enum.map (fun (x, y) -> (y, x))))
+
+  let of_seq s = (Map.of_seq s, Map.of_seq (s |> Seq.map (fun (x, y) -> (y, x))))
 end
