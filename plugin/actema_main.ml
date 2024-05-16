@@ -1,7 +1,6 @@
 open Proofview
-open Translate
 open CoqUtils
-open Api
+open Api_new
 
 (* -------------------------------------------------------------------- *)
 (** The actema tactic *)
@@ -9,20 +8,20 @@ open Api
 type proof = (int * Logic.action) list
 
 (** Export each coq goal to Actema. *)
-let export_goals () : Logic.goals tactic =
+let export_goals () : Logic.pregoal list tactic =
   let open PVMonad in
   let* coq_goals_tacs = Goal.goals in
   Stdlib.List.fold_right
     begin
       fun coq_goal_tac acc ->
         let* coq_goal = coq_goal_tac in
-        let goal, _ = Export.goal coq_goal peano in
+        let goal = Translate.translate_goal coq_goal in
         let* goals = acc in
         return (goal :: goals)
     end
     coq_goals_tacs (return [])
 
-let get_user_action (goals : Logic.goals) : Client.action =
+let get_user_action (goals : Logic.pregoal list) : Client.action =
   if goals = []
   then begin
     Lwt_main.run (Client.send_qed ());
@@ -129,8 +128,8 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
   Goal.enter
     begin
       fun coq_goal ->
-        let goal, _ = Export.goal coq_goal peano in
-        let id = (action_name, (goal.g_hyps, goal.g_concl)) in
+        let goal = Translate.translate_goal coq_goal in
+        let id = (action_name, (goal.g_hyps, goal.g_goal)) in
         let interactive () =
           let* prf = interactive_proof () in
           Storage.save_proof id prf;

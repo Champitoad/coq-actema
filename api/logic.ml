@@ -130,5 +130,5 @@ type action =
     (* DnD action for instantiating a quantifier *)
 [@@deriving show]
 
-(* An action identifier is a pair of an abstract goal and an arbitrary string identifier *)
+(* An action identifier is a pair of an arbitrary string identifier and an abstract goal. *)
 type aident = string * lgoal [@@deriving show]

@@ -57,7 +57,7 @@ module Lemmas : sig
 end
 
 (** A single pregoal. *)
-type pregoal = { g_env : Env.t; g_hyps : hyp list; g_goal : Term.t }
+type pregoal = { g_env : Env.t; g_hyps : hyp list; g_concl : Term.t }
 
 (** A goal is a pregoal together with a handle. *)
 type goal = { g_id : int; g_pregoal : pregoal }
@@ -125,3 +125,39 @@ module Path : sig
   (** Set the [sub] parts of a path to the empty list. *)
   val erase_sub : t -> t
 end
+
+(***************************************************************************************)
+(** Actions *)
+
+(* Trace of a subformula linking, from which the list of rewrite rules to apply
+   can be reconstructed *)
+type choice = int * (Context.t * Context.t * Term.t) option [@@deriving show]
+type itrace = choice list [@@deriving show]
+
+type action =
+  | AId (* The empty action which does nothing *)
+  | ADuplicate of Name.t (* Duplicate a hypothesis. *)
+  | AClear of Name.t (* Clear a hypothesis. *)
+  | ADef of (Name.t * Term.t * Term.t) (* Introduction of a local definition *)
+  | AIntro of int
+    (* Click on a conclusion.
+       The [int] indicates which introduction rule to use (0, 1, 2, etc.).
+       Usually it is [0], but for instance when the conclusion is a disjunction
+       it can be [0] to choose the left side or [1] to choose the right side. *)
+  | AExact of Name.t (* Proof by assumption *)
+  | AElim of (Name.t * int) (* Click on a hypothesis *)
+  | AInd of Name.t (* Simple induction on a variable (of inductive type). *)
+  | ASimpl of Path.t (* Simplify contextual action *)
+  | ARed of Path.t (* Unfold contextual action *)
+  | AIndt of Path.t (* Induction on a variable deep in the goal. *)
+  | ACase of Path.t (* Case contextual action *)
+  | ACut of Term.t (* Click on +hyp button *)
+  | AGeneralize of Name.t
+    (* Generalization of a hypothesis. This uses [generalize dependent]. *)
+  | ALink of (Path.t * Path.t * itrace) (* DnD action for subformula linking *)
+  | AInstantiate of (Term.t * Path.t)
+    (* DnD action for instantiating a quantifier *)
+[@@deriving show]
+
+(* An action identifier is a pair of an arbitrary string identifier and an abstract goal. *)
+type aident = string * hyp list * Term.t [@@deriving show]

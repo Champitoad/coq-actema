@@ -3,14 +3,14 @@
     (written by Benjamin Werner, see folder theories/) for more complex actions
     such as DnD actions. *)
 
-open Api
+open Api_new
 open Proofview
 
 (** Contains the unsupported action and a short error message. *)
 exception UnsupportedAction of Logic.action * string
 
 exception UnexpectedDnD
-exception InvalidPath of Logic.ipath
+exception InvalidPath of Logic.Path.t
 
 (** Execute a single action. The integer is the index of the subgoal the action takes place in. *)
 val execute : int * Logic.action -> unit tactic

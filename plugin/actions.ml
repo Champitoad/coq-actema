@@ -10,7 +10,7 @@ exception UnexpectedDnD
 exception InvalidPath of Logic.ipath
 
 (* -------------------------------------------------------------------- *)
-(** * Importing Actema actions as Coq tac²tics *)
+(** * Importing Actema actions as Coq tactics *)
 
 (* let kname = kername ["Actema"; "DnD"] *)
 let kname = kername [ "Actema"; "HOL" ]

@@ -202,7 +202,7 @@ end
 (** Typing contexts. *)
 
 module Context = struct
-  type t = (Name.t * Term.t) list
+  type t = (Name.t * Term.t) list [@@deriving show]
 
   let empty = []
   let size ctx = List.length ctx

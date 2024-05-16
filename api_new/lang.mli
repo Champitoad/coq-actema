@@ -235,7 +235,7 @@ end
 module Context : sig
   (** A typing context contains the name and type of the free variables in a term.
       Conceptually it is a stack of [(name, ty)], but may be implemented more efficiently. *)
-  type t
+  type t [@@deriving show]
 
   (** The empty typing context. *)
   val empty : t
