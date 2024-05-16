@@ -1,5 +1,4 @@
 open Api_new
-open Lang
 open CoqUtils
 
 (** The imperative state maintained by the translating algorithm. 
@@ -7,11 +6,12 @@ open CoqUtils
 type state =
   { coq_env : Environ.env
   ; sigma : Evd.evar_map
-  ; mutable env : Env.t
+  ; mutable env : Lang.Env.t
         (** The actema environment which contains the constants translated so far. *)
   }
 
 let predefined =
+  let open Lang in
   [ (Name.dummy, Env.default_pp_info "😬")
   ; (Name.nat, Env.default_pp_info "ℕ")
   ; (Name.and_, Env.{ symbol = "∧"; implicit_args = []; position = Infix })
@@ -26,6 +26,7 @@ let predefined =
 
 (** [get_pp_info name] returns the pretty-printing information for [name]. *)
 let get_pp_info =
+  let open Lang in
   let predefined = Hashtbl.of_seq @@ List.to_seq predefined in
   fun name ->
     match Hashtbl.find_opt predefined name with
@@ -38,7 +39,8 @@ let get_pp_info =
         Env.default_pp_info symbol
 
 (** Recursively translate a Coq term to an Actema term.*)
-let rec translate_term state (t : EConstr.t) : Term.t =
+let rec translate_term state (t : EConstr.t) : Lang.Term.t =
+  let open Lang in
   if EConstr.isRel state.sigma t
   then
     (* Local variable. *)
@@ -133,7 +135,8 @@ let rec translate_term state (t : EConstr.t) : Term.t =
 (** Constants (i.e. Coq constants, constructors, inductives) need special care. 
     We have to check if we've already seen this constant, and if not 
     we have to translate the constant's type. *)
-and handle_cst state (name : Name.t) (ty : EConstr.t) =
+and handle_cst state (name : Lang.Name.t) (ty : EConstr.t) =
+  let open Lang in
   match Name.Map.find_opt name state.env.constants with
   | Some _ -> Term.mkCst name
   | None ->
@@ -143,3 +146,43 @@ and handle_cst state (name : Name.t) (ty : EConstr.t) =
       let pp = get_pp_info name in
       state.env <- Env.add_constant name ty ~pp state.env;
       Term.mkCst name
+
+let translate_goal coq_goal : Logic.pregoal =
+  (* Create an initial state. *)
+  let state =
+    { coq_env = Goal.env coq_goal
+    ; sigma = Goal.sigma coq_goal
+    ; env = Lang.Env.empty
+    }
+  in
+  (* Translate the conclusion. *)
+  let concl = translate_term state (Goal.concl coq_goal) in
+  (* Translate the hypotheses and variables. *)
+  let hyps =
+    List.filter_map
+      begin
+        fun decl ->
+          let name =
+            Context.Named.Declaration.get_id decl
+            |> Names.Id.to_string |> Lang.Name.make
+          in
+          let ty =
+            decl |> Context.Named.Declaration.get_type |> EConstr.of_constr
+          in
+          let sort = Retyping.get_sort_of state.coq_env state.sigma ty in
+          let ty = translate_term state ty in
+          (* Don't forget to add the constant to the actema environment. *)
+          let pp = Lang.Env.default_pp_info (Lang.Name.show name) in
+          state.env <- Lang.Env.add_constant name ty ~pp state.env;
+          (* If this is a hypothesis, add it to the list. *)
+          if EConstr.ESorts.is_prop state.sigma sort
+          then
+            (* This is a hypothesis. *)
+            Some Logic.{ h_src = Some name; h_gen = 0; h_form = ty }
+          else (* This is a variable. *)
+            None
+      end
+      (Environ.named_context state.coq_env)
+  in
+  (* Construct the actema pregoal. *)
+  Logic.{ g_env = state.env; g_hyps = hyps; g_goal = concl }

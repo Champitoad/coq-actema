@@ -2,61 +2,35 @@ open Lang
 open Utils
 open Batteries
 
-(***************************************************************************************)
-(** Handles *)
-
-module Handle = struct
-  type t = int [@@deriving show]
-
-  let compare = Int.compare
-
-  let fresh =
-    (* not mt-safe *)
-    let count = ref (-1) in
-    fun () ->
-      incr count;
-      !count
-
-  let ofint (i : int) : t = i
-  let toint (t : t) : int = t
-  let eq = (( = ) : t -> t -> bool)
-
-  module Map = Map.Make (struct
-    type nonrec t = t
-
-    let compare = compare
-  end)
-end
-
-exception InvalidGoalId of Handle.t
-exception InvalidHyphId of Handle.t
-exception InvalidLemmaId of Handle.t
+exception InvalidGoalName of Name.t
+exception InvalidHyphName of Name.t
+exception InvalidLemmaName of Name.t
 
 (***************************************************************************************)
 (** Items *)
 
 (** A single hypothesis. *)
-type hyp = { h_src : Handle.t option; h_gen : int; h_form : Term.t }
+type hyp = { h_src : Name.t option; h_gen : int; h_form : Term.t }
 [@@deriving show]
 
 (** A module to handle collections of hypotheses. *)
 module Hyps = struct
   (** A list of hypotheses, each with a handle. *)
-  type t = (Handle.t * hyp) list
+  type t = (Name.t * hyp) list
 
   let empty : t = []
 
-  let byid (hyps : t) (id : Handle.t) =
-    Option.get_exn (List.Exceptionless.assoc id hyps) (InvalidHyphId id)
+  let byid (hyps : t) (id : Name.t) =
+    Option.get_exn (List.Exceptionless.assoc id hyps) (InvalidHyphName id)
 
-  let add (hyps : t) (id : Handle.t) (h : hyp) : t =
+  let add (hyps : t) (id : Name.t) (h : hyp) : t =
     assert (Option.is_none (List.Exceptionless.assoc id hyps));
     (id, h) :: hyps
 
-  let remove (hyps : t) (id : Handle.t) : t =
-    List.filter (fun (x, _) -> not (Handle.eq x id)) hyps
+  let remove (hyps : t) (id : Name.t) : t =
+    List.filter (fun (x, _) -> not (Name.equal x id)) hyps
 
-  let move (hyps : t) (from : Handle.t) (before : Handle.t option) =
+  let move (hyps : t) (from : Name.t) (before : Name.t option) =
     let tg = byid hyps from in
     let hyps = remove hyps from in
 
@@ -65,8 +39,10 @@ module Hyps = struct
     | Some before ->
         let pos, _ =
           Option.get_exn
-            (List.Exceptionless.findi (fun _ (x, _) -> Handle.eq x before) hyps)
-            (InvalidHyphId before)
+            (List.Exceptionless.findi
+               (fun _ (x, _) -> Name.equal x before)
+               hyps)
+            (InvalidHyphName before)
         in
         let post, pre = List.split_at (1 + pos) hyps in
         post @ ((from, tg) :: pre)
@@ -81,14 +57,14 @@ module Hyps = struct
   let diff (hs1 : t) (hs2 : t) =
     hs1
     |> List.filter (fun (id, _) ->
-           not (List.exists (fun (id', _) -> Handle.eq id id') hs2))
+           not (List.exists (fun (id', _) -> Name.equal id id') hs2))
 
   let to_list (hyps : t) = hyps
   let of_list (hyps : t) = hyps
 end
 
 (** A single lemma. *)
-type lemma = { l_full : Name.t; l_user : string; l_form : Term.t }
+type lemma = { l_full : Name.t; l_user : Name.t; l_form : Term.t }
 [@@deriving show]
 
 (** A module to handle a collection of lemmas together with an environment to type the lemmas.
@@ -96,9 +72,9 @@ type lemma = { l_full : Name.t; l_user : string; l_form : Term.t }
 module Lemmas = struct
   (** Abstract type of a collection of lemmas. It consists in a map from the lemma handle 
       to the lemma statement and (user-facing) name, and an environment to type the lemmas. *)
-  type t = { db_env : Env.t; db_map : lemma Handle.Map.t }
+  type t = { db_env : Env.t; db_map : lemma Name.Map.t }
 
-  let empty = { db_env = Env.empty; db_map = Handle.Map.empty }
+  let empty = { db_env = Env.empty; db_map = Name.Map.empty }
 
   let extend_env env lemmas =
     { lemmas with db_env = Env.union lemmas.db_env env }
@@ -106,37 +82,36 @@ module Lemmas = struct
   let env lemmas = lemmas.db_env
 
   let byid lemmas id =
-    Option.get_exn (Handle.Map.find_opt id lemmas.db_map) (InvalidLemmaId id)
+    Option.get_exn (Name.Map.find_opt id lemmas.db_map) (InvalidLemmaName id)
 
-  let add lemmas id l =
-    { lemmas with db_map = Handle.Map.add id l lemmas.db_map }
+  let add lemmas id l = { lemmas with db_map = Name.Map.add id l lemmas.db_map }
 
   let remove lemmas id =
-    { lemmas with db_map = Handle.Map.remove id lemmas.db_map }
+    { lemmas with db_map = Name.Map.remove id lemmas.db_map }
 
-  let ids lemmas = Handle.Map.keys lemmas.db_map |> List.of_enum
-  let map f lemmas = { lemmas with db_map = Handle.Map.map f lemmas.db_map }
-  let iter f lemmas = Handle.Map.iter (fun _ -> f) lemmas.db_map
+  let ids lemmas = Name.Map.bindings lemmas.db_map |> List.map fst
+  let map f lemmas = { lemmas with db_map = Name.Map.map f lemmas.db_map }
+  let iter f lemmas = Name.Map.iter (fun _ -> f) lemmas.db_map
 
   let filter pred lemmas =
-    { lemmas with db_map = Handle.Map.filter (fun _ -> pred) lemmas.db_map }
+    { lemmas with db_map = Name.Map.filter (fun _ -> pred) lemmas.db_map }
 
-  let to_list lemmas = Handle.Map.bindings lemmas.db_map
+  let to_list lemmas = Name.Map.bindings lemmas.db_map
 
   let of_list ls =
-    { db_env = Env.empty; db_map = Handle.Map.of_seq @@ List.to_seq ls }
+    { db_env = Env.empty; db_map = Name.Map.of_seq @@ List.to_seq ls }
 end
 
 (** A single pregoal. *)
 type pregoal = { g_env : Env.t; g_hyps : hyp list; g_goal : Term.t }
 
 (** A goal is a pregoal together with a handle. *)
-type goal = { g_id : Handle.t; g_pregoal : pregoal }
+type goal = { g_id : int; g_pregoal : pregoal }
 
 (** An item in a goal. *)
 type item =
   | Concl of Term.t  (** Conclusion. *)
-  | Hyp of Handle.t * hyp  (** Hypothesis. *)
+  | Hyp of Name.t * hyp  (** Hypothesis. *)
   | Var of Name.t * Term.t * Term.t option  (** Variable. *)
 [@@deriving show]
 

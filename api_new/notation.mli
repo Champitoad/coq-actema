@@ -1,4 +1,4 @@
-(** This module handles pretty-printing terms to string/xml. *)
+(** This module handles pretty-printing of terms to string/xml. *)
 
 open Lang
 open Tyxml

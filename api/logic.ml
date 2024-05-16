@@ -73,10 +73,6 @@ type goal = { g_env : env; g_hyps : hyp list; g_concl : form } [@@deriving show]
 type goals = goal list [@@deriving show]
 type lgoal = hyp list * form [@@deriving show]
 
-(* Abstract goal, without the signature *)
-type agoal = { a_vars : varenv; a_hyps : hyp list; a_concl : form }
-[@@deriving show]
-
 (* A lemma has a "user name" : the name we display to the user,
    and a "full name" : a potentially not very readable encoding
    of its name (but still useful for debug purposes).
