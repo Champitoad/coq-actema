@@ -11,6 +11,32 @@ type state =
         (** The actema environment which contains the constants translated so far. *)
   }
 
+(** [get_pp_info name] returns the pretty-printing information for [name]. *)
+let get_pp_info =
+  let predefined =
+    Hashtbl.of_seq
+    @@ List.to_seq
+         [ (Name.dummy, Env.{ symbol = "😬"; position = `Prefix })
+         ; (Name.nat, Env.{ symbol = "ℕ"; position = `Prefix })
+         ; (Name.and_, Env.{ symbol = "∧"; position = `Infix })
+         ; (Name.or_, Env.{ symbol = "∨"; position = `Infix })
+         ; (Name.not, Env.{ symbol = "¬"; position = `Prefix })
+         ; (Name.true_, Env.{ symbol = "⊤"; position = `Prefix })
+         ; (Name.false_, Env.{ symbol = "⊥"; position = `Prefix })
+         ; (Name.add, Env.{ symbol = "+"; position = `Infix })
+         ; (Name.mul, Env.{ symbol = "⋅"; position = `Infix })
+         ]
+  in
+  fun name ->
+    match Hashtbl.find_opt predefined name with
+    | Some pp -> pp
+    | None ->
+        (* For an ordinary constant, we simply remove the module path.
+           For instance [Coq.Init.Datatypes.nat] is pretty-printed as [nat]. *)
+        let parts = String.split_on_char '.' (Name.show name) in
+        let symbol = List.nth parts (List.length parts - 1) in
+        Env.{ symbol; position = `Prefix }
+
 (** Recursively translate a Coq term to an Actema term.*)
 let rec translate_term state (t : EConstr.t) : Term.t =
   if EConstr.isRel state.sigma t
@@ -114,5 +140,6 @@ and handle_cst state (name : Name.t) (ty : EConstr.t) =
       (* This is the first time we see this constant : we have to translate its type
          and add the constant to the actema environment. *)
       let ty = translate_term state ty in
-      state.env <- Env.add_constant name ty state.env;
+      let pp = get_pp_info name in
+      state.env <- Env.add_constant name ty ~pp state.env;
       Term.mkCst name

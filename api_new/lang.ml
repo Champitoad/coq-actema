@@ -38,8 +38,19 @@ module Name = struct
   (** We use a special symbol [!] to ensure this is distinct from any Coq identifiers. *)
   let dummy = make "!dummy"
 
+  let nat = make "Coq.Init.Datatypes.nat"
+  let list = make "Coq.Init.Datatypes.list"
   let and_ = make "Coq.Init.Logic.and"
   let or_ = make "Coq.Init.Logic.or"
+  let not = make "Coq.Init.Logic.not"
+  let ex = make "Coq.Init.Logic.ex"
+  let zero = make "Coq.Init.Datatypes.O"
+  let succ = make "Coq.Init.Datatypes.S"
+  let eq = make "Coq.Init.Logic.eq"
+  let true_ = make "Coq.Init.Logic.True"
+  let false_ = make "Coq.Init.Logic.False"
+  let add = make "Coq.Init.Nat.add"
+  let mul = make "Coq.Init.Nat.mul"
 end
 
 (***************************************************************************************)
@@ -95,8 +106,11 @@ module Env = struct
 
   let empty = { constants = Name.Map.empty; pp_info = Name.Map.empty }
 
-  let add_constant name ty env =
-    { env with constants = Name.Map.add name ty env.constants }
+  let add_constant name ty ?pp env =
+    let env = { env with constants = Name.Map.add name ty env.constants } in
+    match pp with
+    | None -> env
+    | Some pp -> { env with pp_info = Name.Map.add name pp env.pp_info }
 
   let test_env =
     let open Term in

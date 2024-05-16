@@ -4,7 +4,8 @@ Require Import Coq.Classes.RelationClasses.
 Require Import Coq.Classes.Morphisms.
 
 
-Lemma test : 0 = S 0.
+
+Lemma test : forall x, x = 2 + 0 * 3 \/ True.
 test_tac.
 
 About eq.

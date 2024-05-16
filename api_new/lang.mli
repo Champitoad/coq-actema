@@ -38,15 +38,47 @@ module Name : sig
   module Map : Map.S with type key = t
   module Hashtbl : Hashtbl.S with type key = t
 
+  (** We define the names of a few Coq constants that are handled in a special way. *)
+
   (** A dummy name. This is used when translating Coq terms 
       that cannot be represented in Actema. *)
   val dummy : t
+
+  (** Coq's inductive [nat : Type]. *)
+  val nat : t
+
+  (** Coq's inductive [list : Type -> Type]. *)
+  val list : t
 
   (** Coq's logical conjunction [and_ : Prop -> Prop -> Prop]. *)
   val and_ : t
 
   (** Coq's logical disjunction [or_ : Prop -> Prop -> Prop]. *)
   val or_ : t
+
+  (** Coq's logical negation [not : Prop -> Prop]. *)
+  val not : t
+
+  (** Coq's inductive [ex : forall A : Type, (A -> Prop) -> Prop]. *)
+  val ex : t
+
+  (** Coq's constructor [O : nat]. *)
+  val zero : t
+
+  (** Coq's constructor [S : nat -> nat]. *)
+  val succ : t
+
+  (** Coq's constant [add : nat -> nat -> nat]. *)
+  val add : t
+
+  (** Coq's constant [mul : nat -> nat -> nat]. *)
+  val mul : t
+
+  (** Coq's inductive [True : Prop]. *)
+  val true_ : t
+
+  (** Coq's inductive [False : Prop]. *)
+  val false_ : t
 end
 
 (***************************************************************************************)
@@ -158,8 +190,8 @@ module Env : sig
   val test_env : t
 
   (** [Env.add_constant name ty env] adds the constant [name] with type [ty] 
-      to the environment [env]. This does not add any pp information for [name]. *)
-  val add_constant : Name.t -> Term.t -> t -> t
+      to the environment [env]. *)
+  val add_constant : Name.t -> Term.t -> ?pp:pp_info -> t -> t
 end
 
 (***************************************************************************************)
