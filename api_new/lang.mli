@@ -128,7 +128,10 @@ module Env : sig
   type pp_info =
     { symbol : string
           (** The symbol to use to print the constant. For instance we might want to 
-              print [Coq.Init.Peano.plus] as [+]. By default we print a name [n] as [n]. *)
+              print [Coq.Init.Peano.plus] as [+]. By default we print a name [n] as [n]. 
+              
+              Contrary to names, symbols can contain special characters.
+              Look in lexerl.mll and parser.mly for an exact syntax. *)
     ; position : [ `Prefix | `Infix | `Suffix ]
           (** The position of the constant with respect to its arguments.
               [`Infix] only makes sense for binary functions.

@@ -3,6 +3,12 @@ Require Import ssreflect.
 Require Import Coq.Classes.RelationClasses.
 Require Import Coq.Classes.Morphisms.
 
+
+Lemma test : 0 = S 0.
+test_tac.
+
+About eq.
+
 Check (forall nat : Prop, nat).
 
 Inductive ll :=

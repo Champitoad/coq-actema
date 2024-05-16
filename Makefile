@@ -13,9 +13,9 @@ build:
 
 test: build
 # Run the regular Ocaml tests.
-	dune runtest
+	dune runtest -f
 # Run the Ocaml tests that use Js_of_ocaml.
-	dune build @runtest-js
+	dune build @runtest-js -f
 
 clean:
 	dune clean

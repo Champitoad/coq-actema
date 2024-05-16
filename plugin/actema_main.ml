@@ -191,39 +191,28 @@ let print_instance goal (inst : Typeclasses.instance) : unit =
     (Pp.string_of_ppcmds @@ Constr.debug_print body.const_type)
 
 let test_tac () : unit tactic =
-  (*Goal.enter
-    begin
-      fun goal ->
-        let env_constants = (Environ.Globals.view (Goal.env goal).env_globals).constants in
-        let constants =
-          List.filter (isReflexiveInstance goal) (Names.Cmap_env.bindings env_constants)
-        in
-        (* Log info about the constants. *)
-        List.iter
-          begin
-            fun (cname, (cbody, _)) ->
-              let ty = cbody.Declarations.const_type in
-              Log.printf "\nFound constant %s :\n" (Names.Constant.to_string cname);
-              Log.econstr_debug (Goal.sigma goal) (EConstr.of_constr ty)
-          end
-          constants;
-        Tacticals.tclIDTAC
-    end*)
+  let open Translate_new in
+  let open Api_new in
+  let open Lang in
   Goal.enter
     begin
       fun goal ->
-        let target =
-          (*Names.Constant.make1 @@ kername [ "Coq"; "Classes"; "RelationClasses" ] "Reflexive"*)
-          Names.Constant.make1
-          @@ kername [ "Coq"; "Classes"; "Morphisms" ] "Proper"
+        let concl = Goal.concl goal in
+        let state =
+          { coq_env = Goal.env goal; sigma = Goal.sigma goal; env = Env.empty }
         in
-        let instances =
-          Typeclasses.instances @@ Names.GlobRef.ConstRef target
-        in
-        begin
-          match instances with
-          | None -> Log.str "Not a class."
-          | Some instances -> List.iter (print_instance goal) instances
-        end;
+        let term = translate_term state concl in
+        let env = state.env in
+        (* Print the env. *)
+        Log.printf "ENV";
+        List.iter (fun (name, ty) ->
+            Log.printf "%s : %s" (Name.show name)
+              (Notation.term_to_string env ty))
+        @@ Name.Map.bindings env.constants;
+        (* Print the term. *)
+        Log.printf "TERM %s" (Notation.term_to_string env term);
+        (* Type check the term in Actema and print its type. *)
+        let ty = Typing.check env term in
+        Log.printf "TYPE %s" (Notation.term_to_string env ty);
         Tacticals.tclIDTAC
     end

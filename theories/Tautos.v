@@ -5,22 +5,23 @@ Require Import ssreflect.
 Context (Socrates : nat).
 Context (Mortal Human : nat -> Prop).
 
-Check (forall x : nat, forall x : bool, x = true).
-
 Lemma Aristoteles (hm : forall x, Human x -> Mortal x) 
   (hh : Human Socrates) : Mortal Socrates.
-    actema_force.
-Qed.
+    test_tac.
+Admitted.
 
 Parameter Rich : nat -> Prop.
 Parameter mother : nat -> nat.
 Parameter h : nat.
+
+About nat.
 
 Lemma eduk1 :
   (forall x : nat, ~Rich(x) -> Rich(mother(x))) ->
   (forall x : nat,  ~Rich(mother(mother(x))) \/ ~Rich(x))->
   False.
 Proof.
+  test_tac.
   intros.
   set john := h.
   actema.
