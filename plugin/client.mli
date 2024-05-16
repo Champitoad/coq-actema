@@ -1,6 +1,7 @@
 (* This file defines the HTTP protocol used to communicate between
    the plugin (http client) and the frontend (http server). *)
-open Api
+open Api_new
+open Lang
 
 exception ActemaError of string
 exception UnsupportedRequestMethod of string
@@ -13,7 +14,7 @@ type action =
   | Done
   | Undo
   | Redo
-  | Lemmas of string option * Logic.term option
+  | Lemmas of string option * Term.t option
       (** The frontend asks the plugin for a list of lemmas.
           The parameters are used to perform a pre-selection of lemmas : 
           - The string is a pattern to match against the lemma name.
@@ -23,10 +24,10 @@ type action =
 val send_qed : unit -> unit Lwt.t
 
 (** Send the goals to the frontend, and receive an action as response. *)
-val send_goals : Logic.goals -> action Lwt.t
+val send_goals : Logic.goal list -> action Lwt.t
 
 (** Send a set of lemmas to the frontend, and receive an action as response. *)
-val send_lemmas : Logic.lemma list -> Logic.env -> action Lwt.t
+val send_lemmas : Logic.lemma list -> Env.t -> action Lwt.t
 
 (** Tell the frontend that an error occured in the plugin,
     and receive an (empty) response. *)

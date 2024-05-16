@@ -9,7 +9,6 @@ type proof = (int * Logic.action) list
 
 (** Export each coq goal to Actema. *)
 let export_goals () : Logic.goal list tactic =
-  let mapi = List.mapi in
   let open PVMonad in
   let* coq_goals_tacs = Goal.goals in
   let* pregoals =
@@ -23,9 +22,26 @@ let export_goals () : Logic.goal list tactic =
       end
       coq_goals_tacs (return [])
   in
-  return @@ mapi (fun i pgoal -> Logic.{ g_id = i; g_pregoal = pgoal }) pregoals
+  return
+  @@ Stdlib.List.mapi
+       (fun i pgoal -> Logic.{ g_id = i; g_pregoal = pgoal })
+       pregoals
 
-let get_user_action (goals : Logic.pregoal list) : Client.action =
+let export_lemmas () : (Logic.lemma list * Lang.Env.t) tactic =
+  let open PVMonad in
+  let* coq_goals_tacs = Goal.goals in
+  Stdlib.List.fold_right
+    begin
+      fun coq_goal_tac acc ->
+        let* coq_goal = coq_goal_tac in
+        let* lemmas, sign = acc in
+        let new_lemmas, new_env = Translate.lemmas coq_goal in
+        return (new_lemmas @ lemmas, new_env)
+    end
+    coq_goals_tacs
+    (return ([], Lang.Env.empty))
+
+let get_user_action (goals : Logic.goal list) : Client.action =
   if goals = []
   then begin
     Lwt_main.run (Client.send_qed ());
@@ -46,7 +62,7 @@ let interactive_proof () : proof tactic =
   (* At the start of the proof, translate the lemmas to the API format.
      TODO : cache this in a file so that only new/changed lemmas (since the last actema command)
      are translated. *)
-  let* lemmas, lemmas_env = Lemmas.export () in
+  let* lemmas, lemmas_env = export_lemmas () in
 
   (* This is the main loop of the plugin, where we handle all actions
      given by the frontend. *)
@@ -78,13 +94,6 @@ let interactive_proof () : proof tactic =
       match act with
       (* We received a lemma request : send the lemmas and get the next action again. *)
       | Lemmas (pattern, term) ->
-          (* Pre-select the lemmas. *)
-          let lemmas =
-            lemmas
-            |> Option.default Fun.id (Option.map Lemmas.preselect_name pattern)
-            |> Option.default Fun.id
-                 (Option.map Lemmas.preselect_selection term)
-          in
           (* Send the lemmas to the server. *)
           let act = Lwt_main.run @@ Client.send_lemmas lemmas lemmas_env in
           (* Handle the next action. *)
@@ -132,8 +141,8 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
   Goal.enter
     begin
       fun coq_goal ->
-        let goal = Translate.translate_goal coq_goal in
-        let id = (action_name, (goal.g_hyps, goal.g_goal)) in
+        let goal = Translate.goal coq_goal in
+        let id = (action_name, goal.g_hyps, goal.g_concl) in
         let interactive () =
           let* prf = interactive_proof () in
           Storage.save_proof id prf;
@@ -146,52 +155,6 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
           | Some prf -> Actions.execute_list prf
           | _ -> interactive ()
     end
-
-(*let rec print_modpath mpath =
-  match mpath with
-  | Names.ModPath.MPdot (mpath, label) ->
-      print_modpath mpath ^ " DOT " ^ Names.Label.to_string label
-  | Names.ModPath.MPfile dirpath ->
-      let dirs = List.rev @@ Names.DirPath.repr dirpath in
-      "MPfile " ^ Extlib.List.to_string ~sep:"." Names.Id.to_string dirs
-  | Names.ModPath.MPbound bid ->
-      let _, id, dirpath = Names.MBId.repr bid in
-      let dirs = List.rev @@ Names.DirPath.repr dirpath in
-      "MPbound "
-      ^ Extlib.List.to_string ~sep:"." Names.Id.to_string dirs
-      ^ " " ^ Names.Id.to_string id*)
-
-let isReflexiveInstance goal (cname, (cbody, _)) =
-  let sigma = Goal.sigma goal in
-  let ty = EConstr.of_constr cbody.Declarations.const_type in
-  if EConstr.isApp sigma ty
-  then
-    let head, args = EConstr.destApp sigma ty in
-    if EConstr.isConst sigma head
-    then
-      let name, _ = EConstr.destConst sigma head in
-      let target =
-        Names.Constant.make1
-        @@ kername [ "Coq"; "Classes"; "RelationClasses" ] "Reflexive"
-      in
-      Names.Constant.UserOrd.equal name target
-    else false
-  else false
-
-let print_instance goal (inst : Typeclasses.instance) : unit =
-  let body =
-    match inst.is_impl with
-    | Names.GlobRef.ConstRef name ->
-        Environ.lookup_constant name (Goal.env goal)
-    | _ ->
-        failwith
-        @@ Format.sprintf "%s is not a constant !"
-             (Pp.string_of_ppcmds @@ Names.GlobRef.print inst.is_impl)
-  in
-  Log.printf "Instance {\n  class = %s\n  impl = %s\n  body = %s\n}"
-    (Pp.string_of_ppcmds @@ Names.GlobRef.print inst.is_class)
-    (Pp.string_of_ppcmds @@ Names.GlobRef.print inst.is_impl)
-    (Pp.string_of_ppcmds @@ Constr.debug_print body.const_type)
 
 let test_tac () : unit tactic =
   Goal.enter

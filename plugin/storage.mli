@@ -16,7 +16,7 @@
     context but in different modules/sections/proofs have different identifiers,
     but for now we dispense from such complexity (maybe experience will prove
     that it is necessary in the future). *)
-open Api
+open Api_new
 
 (** A trace of actema actions. *)
 type proof = (int * Logic.action) list

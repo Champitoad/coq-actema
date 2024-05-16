@@ -1,7 +1,8 @@
 open Cohttp
 open Cohttp_lwt_unix
 open Lwt.Syntax
-open Api
+open Api_new
+open Lang
 
 exception ActemaError of string
 exception UnsupportedRequestMethod of string
@@ -14,7 +15,7 @@ type action =
   | Done
   | Undo
   | Redo
-  | Lemmas of string option * Logic.term option
+  | Lemmas of string option * Term.t option
 
 (** The IP address of the frontend (server). *)
 let addr =
@@ -56,7 +57,7 @@ let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t
   | 253 -> Lwt.return Redo
   | 254 ->
       (* The frontend requested a list of lemmas. *)
-      let (pattern, selection) : string option * Logic.term option =
+      let (pattern, selection) : string option * Term.t option =
         body |> Base64.decode_exn |> Fun.flip Marshal.from_string 0
       in
       Lwt.return @@ Lemmas (pattern, selection)
@@ -64,7 +65,7 @@ let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t
   | 550 -> raise (ActemaError body)
   | _ -> raise (UnsupportedHttpResponseCode code)
 
-let send_lemmas (lemmas : Logic.lemma list) (env : Logic.env) : action Lwt.t =
+let send_lemmas (lemmas : Logic.lemma list) (env : Env.t) : action Lwt.t =
   (* Send request with lemmas and environment. *)
   let datab =
     (env, lemmas) |> Fun.flip Marshal.to_string [] |> Base64.encode_string
@@ -73,7 +74,7 @@ let send_lemmas (lemmas : Logic.lemma list) (env : Logic.env) : action Lwt.t =
   (* Handle the response. *)
   receive_action resp body
 
-let send_goals (goals : Logic.goals) : action Lwt.t =
+let send_goals (goals : Logic.goal list) : action Lwt.t =
   (* Send request with goals. *)
   let goalsb = goals |> Fun.flip Marshal.to_string [] |> Base64.encode_string in
   let req = make_req "action" goalsb in
