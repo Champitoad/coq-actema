@@ -227,6 +227,9 @@ module TermUtils : sig
 
   (** [free_vars t] computes the set of free variables in [t]. *)
   val free_vars : Term.t -> IntSet.t
+
+  (** [constants t] computes the set of constants used in [t]. *)
+  val constants : Term.t -> Name.Set.t
 end
 
 (***************************************************************************************)

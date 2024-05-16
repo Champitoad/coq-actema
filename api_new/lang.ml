@@ -196,6 +196,22 @@ module TermUtils = struct
         acc
 
   let free_vars t = IntSet.of_list @@ free_vars_rec [] 0 t
+
+  let rec constants_rec acc t =
+    match (t : Term.t) with
+    | Cst c -> c :: acc
+    | Var _ | Sort _ -> acc
+    | App (f, args) -> List.fold_left constants_rec acc (f :: args)
+    | Arrow (t1, t2) ->
+        let acc = constants_rec acc t1 in
+        let acc = constants_rec acc t2 in
+        acc
+    | Lambda (x, ty, body) | Prod (x, ty, body) ->
+        let acc = constants_rec acc ty in
+        let acc = constants_rec acc body in
+        acc
+
+  let constants t = Name.Set.of_list @@ constants_rec [] t
 end
 
 (***************************************************************************************)

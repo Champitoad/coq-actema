@@ -8,18 +8,22 @@ open Api_new
 type proof = (int * Logic.action) list
 
 (** Export each coq goal to Actema. *)
-let export_goals () : Logic.pregoal list tactic =
+let export_goals () : Logic.goal list tactic =
+  let mapi = List.mapi in
   let open PVMonad in
   let* coq_goals_tacs = Goal.goals in
-  Stdlib.List.fold_right
-    begin
-      fun coq_goal_tac acc ->
-        let* coq_goal = coq_goal_tac in
-        let goal = Translate.translate_goal coq_goal in
-        let* goals = acc in
-        return (goal :: goals)
-    end
-    coq_goals_tacs (return [])
+  let* pregoals =
+    Stdlib.List.fold_right
+      begin
+        fun coq_goal_tac acc ->
+          let* coq_goal = coq_goal_tac in
+          let goal = Translate.goal coq_goal in
+          let* goals = acc in
+          return (goal :: goals)
+      end
+      coq_goals_tacs (return [])
+  in
+  return @@ mapi (fun i pgoal -> Logic.{ g_id = i; g_pregoal = pgoal }) pregoals
 
 let get_user_action (goals : Logic.pregoal list) : Client.action =
   if goals = []

@@ -1,5 +1,6 @@
 open Api_new
 open CoqUtils
+open Extlib
 
 (** The imperative state maintained by the translating algorithm. 
     We could use a state monad instead, but come on this is Ocaml not Haskell. *)
@@ -8,6 +9,12 @@ type state =
   ; sigma : Evd.evar_map
   ; mutable env : Lang.Env.t
         (** The actema environment which contains the constants translated so far. *)
+  }
+
+let initial_state coq_goal =
+  { coq_env = Goal.env coq_goal
+  ; sigma = Goal.sigma coq_goal
+  ; env = Lang.Env.empty
   }
 
 let predefined =
@@ -37,6 +44,9 @@ let get_pp_info =
         let parts = String.split_on_char '.' (Name.show name) in
         let symbol = List.nth parts (List.length parts - 1) in
         Env.default_pp_info symbol
+
+(***********************************************************************************)
+(** Translate terms. *)
 
 (** Recursively translate a Coq term to an Actema term.
     This is essentially a big match statement. *)
@@ -148,14 +158,19 @@ and handle_cst state (name : Lang.Name.t) (ty : EConstr.t) =
       state.env <- Env.add_constant name ty ~pp state.env;
       Term.mkCst name
 
-let translate_goal coq_goal : Logic.pregoal =
+let econstr coq_goal t =
   (* Create an initial state. *)
-  let state =
-    { coq_env = Goal.env coq_goal
-    ; sigma = Goal.sigma coq_goal
-    ; env = Lang.Env.empty
-    }
-  in
+  let state = initial_state coq_goal in
+  (* Translate the term. *)
+  let res = translate_term state t in
+  (res, state.env)
+
+(***********************************************************************************)
+(** Translate goals. *)
+
+let goal coq_goal : Logic.pregoal =
+  (* Create an initial state. *)
+  let state = initial_state coq_goal in
   (* Translate the conclusion. *)
   let concl = translate_term state (Goal.concl coq_goal) in
   (* Translate the hypotheses and variables. *)
@@ -187,3 +202,120 @@ let translate_goal coq_goal : Logic.pregoal =
   in
   (* Construct the actema pregoal. *)
   Logic.{ g_env = state.env; g_hyps = hyps; g_concl = concl }
+
+(***********************************************************************************)
+(** Translate lemmas. *)
+
+(** Split a module path into a directory path and the rest. *)
+let rec split_mpath mpath =
+  match mpath with
+  | Names.ModPath.MPfile dirpath ->
+      (List.rev_map Names.Id.to_string (Names.DirPath.repr dirpath), [])
+  | Names.ModPath.MPdot (mpath, label) ->
+      let dirpath, rest = split_mpath mpath in
+      (dirpath, rest @ [ Names.Label.to_string label ])
+  | Names.ModPath.MPbound _ ->
+      (* Functor arguments are not supported (yet). *)
+      raise @@ Invalid_argument "split_mpath"
+
+(** Encode the full name of a lemma. *)
+let encode_lemma_name (name : Names.Constant.t) : string option =
+  try
+    let dirpath, modpath = split_mpath @@ Names.Constant.modpath name in
+    let res =
+      Format.sprintf "C%s/%s/%s"
+        (List.to_string ~sep:"." ~left:"" ~right:"" Fun.id dirpath)
+        (List.to_string ~sep:"." ~left:"" ~right:"" Fun.id modpath)
+        (Names.Label.to_string @@ Names.Constant.label name)
+    in
+    Some res
+  with Invalid_argument _ -> None
+
+(** Encode the name of an inductive constructor that we want to use as a lemma. *)
+let encode_constructor_name (name : Names.Construct.t) : string option =
+  try
+    let (name, i), j = name in
+    let dirpath, modpath = split_mpath @@ Names.MutInd.modpath name in
+    let res =
+      Format.sprintf "I%s/%s/%s/%d/%d"
+        (List.to_string ~sep:"." ~left:"" ~right:"" Fun.id dirpath)
+        (List.to_string ~sep:"." ~left:"" ~right:"" Fun.id modpath)
+        (Names.Label.to_string @@ Names.MutInd.label name)
+        i j
+    in
+    Some res
+  with Invalid_argument _ -> None
+
+(** Collect all the lemmas from coq_env.env_globals.constants we can translate to Actema. *)
+let constant_lemmas state : Logic.lemma list =
+  let open Lang in
+  (Environ.Globals.view state.coq_env.env_globals).constants
+  |> Names.Cmap_env.bindings
+  |> List.filter_map
+       begin
+         fun (id, (ckey, _)) ->
+           (* First check whether we can encode the lemma name. *)
+           match encode_lemma_name id with
+           | None -> None
+           | Some l_full ->
+               let l_user =
+                 id |> Names.Constant.label |> Names.Label.to_string
+                 |> Name.make
+               in
+               let ty = ckey.Declarations.const_type |> EConstr.of_constr in
+               let l_form = translate_term state ty in
+
+               (* Check we did indeed manage to translate the lemma.
+                  Discard the lemma if it is not the case. *)
+               if Name.Set.mem Name.dummy (TermUtils.constants l_form)
+               then None
+               else Some Logic.{ l_user; l_full = Name.make l_full; l_form }
+       end
+
+(** Collect all the lemmas from coq_env.env_globals.inductives we can translate to Actema. *)
+let constructor_lemmas state : Logic.lemma list =
+  let open Lang in
+  (* Get the list of all mutual inductives. *)
+  (Environ.Globals.view state.coq_env.env_globals).inductives
+  |> Names.Mindmap_env.bindings
+  (* Get the list of all inductives.
+     Inductives in a block are indexed starting at 0. *)
+  |> List.concat_map
+       begin
+         fun (mind_name, (mind_body, _)) ->
+           List.init mind_body.Declarations.mind_ntypes @@ fun i ->
+           ((mind_name, i), mind_body.Declarations.mind_packets.(i))
+       end
+  (* Get the list of all inductive constructors (with their type).
+     Constructors in an inductive are indexed starting at 1. *)
+  |> List.concat_map
+       begin
+         fun (ind_name, ind_body) ->
+           ind_body.Declarations.mind_user_lc |> Array.to_list
+           |> List.mapi (fun j ty -> (ind_body, (ind_name, j + 1), ty))
+       end
+  |> List.filter_map
+       begin
+         fun (ind_body, cname, ctype) ->
+           (* First check whether we can encode the constructor name. *)
+           match encode_constructor_name cname with
+           | None -> None
+           | Some l_full ->
+               let _, j = cname in
+               let l_user =
+                 ind_body.Declarations.mind_consnames.(j - 1)
+                 |> Names.Id.to_string |> Name.make
+               in
+               let l_form = translate_term state @@ EConstr.of_constr ctype in
+               (* Check we did indeed manage to translate the constructor's type.
+                  Discard the lemma if it is not the case. *)
+               if Name.Set.mem Name.dummy @@ TermUtils.constants l_form
+               then None
+               else Some Logic.{ l_user; l_full = Name.make l_full; l_form }
+       end
+
+let lemmas coq_goal : Logic.lemma list * Lang.Env.t =
+  let state = initial_state coq_goal in
+  let l1 = constant_lemmas state in
+  let l2 = constructor_lemmas state in
+  (l1 @ l2, state.env)
