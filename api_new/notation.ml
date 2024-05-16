@@ -24,11 +24,26 @@ let paren ?(doit = true) x =
   let open Pp in
   if doit then char '(' ^^ x ^^ char ')' else x
 
+(** [filter_args implicits args] filters out the implicit arguments in [args]. *)
+let filter_args implicits args =
+  let rec loop implicits args kept i =
+    match (args, implicits) with
+    | arg :: args, imp :: implicits ->
+        if i = imp
+        then loop implicits args kept (i + 1)
+        else loop (imp :: implicits) args (arg :: kept) (i + 1)
+    | _, [] ->
+        (* All the remaining arguments are explicit. *) List.rev kept @ args
+    | [], _ :: _ ->
+        (* There are remaining implicits but no more args. *) assert false
+  in
+  loop (List.sort Int.compare implicits) args [] 0
+
 (** Get the formatting information for a name. *)
 let name_info env name =
   match Name.Map.find_opt name env.Env.pp_info with
   | Some info -> info
-  | None -> { symbol = Name.show name; position = `Prefix }
+  | None -> Env.default_pp_info (Name.show name)
 
 (** Pretty-print a global variable using its symbol. *)
 let pp_global env name =
@@ -107,11 +122,12 @@ let rec pp_term env path ctx (t : Term.t) : annot Pp.doc =
           match f with
           | Cst name ->
               let info = name_info env name in
+              let args = filter_args info.implicit_args args in
               begin
                 match (info.position, args) with
-                | `Prefix, args -> f :: args
-                | `Infix, [ arg1; arg2 ] -> [ arg1; f; arg2 ]
-                | `Suffix, [ arg ] -> [ arg; f ]
+                | Prefix, args -> f :: args
+                | Infix, [ arg1; arg2 ] -> [ arg1; f; arg2 ]
+                | Suffix, [ arg ] -> [ arg; f ]
                 | _ -> assert false
               end
           | _ -> f :: args

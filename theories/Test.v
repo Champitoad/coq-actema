@@ -3,8 +3,6 @@ Require Import ssreflect.
 Require Import Coq.Classes.RelationClasses.
 Require Import Coq.Classes.Morphisms.
 
-
-
 Lemma test : forall x, x = 2 + 0 * 3 \/ True.
 test_tac.
 

@@ -38,6 +38,7 @@ module Name = struct
   (** We use a special symbol [!] to ensure this is distinct from any Coq identifiers. *)
   let dummy = make "!dummy"
 
+  let eq = make "Coq.Init.Logic.eq"
   let nat = make "Coq.Init.Datatypes.nat"
   let list = make "Coq.Init.Datatypes.list"
   let and_ = make "Coq.Init.Logic.and"
@@ -99,7 +100,10 @@ end
 (** Environments *)
 
 module Env = struct
-  type pp_info = { symbol : string; position : [ `Prefix | `Infix | `Suffix ] }
+  type pp_pos = Prefix | Infix | Suffix [@@deriving show]
+
+  type pp_info =
+    { symbol : string; implicit_args : int list; position : pp_pos }
   [@@deriving show]
 
   type t = { constants : Term.t Name.Map.t; pp_info : pp_info Name.Map.t }
@@ -111,6 +115,8 @@ module Env = struct
     match pp with
     | None -> env
     | Some pp -> { env with pp_info = Name.Map.add name pp env.pp_info }
+
+  let default_pp_info symbol = { symbol; implicit_args = []; position = Prefix }
 
   let test_env =
     let open Term in

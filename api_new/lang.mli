@@ -44,6 +44,9 @@ module Name : sig
       that cannot be represented in Actema. *)
   val dummy : t
 
+  (** Coq's inductive [(=) : forall A : Type, A -> A -> Prop]. *)
+  val eq : t
+
   (** Coq's inductive [nat : Type]. *)
   val nat : t
 
@@ -156,19 +159,23 @@ end
 (** Environments. *)
 
 module Env : sig
+  (** Where to print a constant with respect to its arguments. 
+      [Infix] only makes sense for functions that have two explicit arguments.
+      [Suffix] only makes sense for functions that have one explicit argument.
+      [Prefix] is always valid, and is what is used by default. *)
+  type pp_pos = Prefix | Infix | Suffix [@@deriving show]
+
   (** Some global variables require special formatting when pretty-printed. *)
   type pp_info =
     { symbol : string
           (** The symbol to use to print the constant. For instance we might want to 
-              print [Coq.Init.Peano.plus] as [+]. By default we print a name [n] as [n]. 
-              
-              Contrary to names, symbols can contain special characters.
-              Look in lexerl.mll and parser.mly for an exact syntax. *)
-    ; position : [ `Prefix | `Infix | `Suffix ]
-          (** The position of the constant with respect to its arguments.
-              [`Infix] only makes sense for binary functions.
-              [`Suffix] only makes sense for unary functions.
-              [`Prefix] is always valid, and is what is used by default. *)
+              print [Coq.Init.Peano.plus] as [+]. *)
+    ; implicit_args : int list
+          (** The indices of the implicit arguments of the constant.
+              Implicit arguments are not printed, and are always before explicit arguments.  
+              For instance the polymorphic equality [eq : forall A : Type, A -> A -> Prop] 
+              has an implicit argument at index [0]. *)
+    ; position : pp_pos
     }
   [@@deriving show]
 
@@ -192,6 +199,9 @@ module Env : sig
   (** [Env.add_constant name ty env] adds the constant [name] with type [ty] 
       to the environment [env]. *)
   val add_constant : Name.t -> Term.t -> ?pp:pp_info -> t -> t
+
+  (** [default_pp_info symbol] prints [symbol] in prefix position with no implicit arguments. *)
+  val default_pp_info : string -> pp_info
 end
 
 (***************************************************************************************)

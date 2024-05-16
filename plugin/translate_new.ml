@@ -11,22 +11,22 @@ type state =
         (** The actema environment which contains the constants translated so far. *)
   }
 
+let predefined =
+  [ (Name.dummy, Env.default_pp_info "😬")
+  ; (Name.nat, Env.default_pp_info "ℕ")
+  ; (Name.and_, Env.{ symbol = "∧"; implicit_args = []; position = Infix })
+  ; (Name.or_, Env.{ symbol = "∨"; implicit_args = []; position = Infix })
+  ; (Name.not, Env.default_pp_info "¬")
+  ; (Name.true_, Env.default_pp_info "⊤")
+  ; (Name.false_, Env.default_pp_info "⊥")
+  ; (Name.add, Env.{ symbol = "+"; implicit_args = []; position = Infix })
+  ; (Name.mul, Env.{ symbol = "⋅"; implicit_args = []; position = Infix })
+  ; (Name.eq, Env.{ symbol = "="; implicit_args = [ 0 ]; position = Infix })
+  ]
+
 (** [get_pp_info name] returns the pretty-printing information for [name]. *)
 let get_pp_info =
-  let predefined =
-    Hashtbl.of_seq
-    @@ List.to_seq
-         [ (Name.dummy, Env.{ symbol = "😬"; position = `Prefix })
-         ; (Name.nat, Env.{ symbol = "ℕ"; position = `Prefix })
-         ; (Name.and_, Env.{ symbol = "∧"; position = `Infix })
-         ; (Name.or_, Env.{ symbol = "∨"; position = `Infix })
-         ; (Name.not, Env.{ symbol = "¬"; position = `Prefix })
-         ; (Name.true_, Env.{ symbol = "⊤"; position = `Prefix })
-         ; (Name.false_, Env.{ symbol = "⊥"; position = `Prefix })
-         ; (Name.add, Env.{ symbol = "+"; position = `Infix })
-         ; (Name.mul, Env.{ symbol = "⋅"; position = `Infix })
-         ]
-  in
+  let predefined = Hashtbl.of_seq @@ List.to_seq predefined in
   fun name ->
     match Hashtbl.find_opt predefined name with
     | Some pp -> pp
@@ -35,7 +35,7 @@ let get_pp_info =
            For instance [Coq.Init.Datatypes.nat] is pretty-printed as [nat]. *)
         let parts = String.split_on_char '.' (Name.show name) in
         let symbol = List.nth parts (List.length parts - 1) in
-        Env.{ symbol; position = `Prefix }
+        Env.default_pp_info symbol
 
 (** Recursively translate a Coq term to an Actema term.*)
 let rec translate_term state (t : EConstr.t) : Term.t =
