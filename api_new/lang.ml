@@ -44,6 +44,7 @@ module Name = struct
   let and_ = make "Coq.Init.Logic.and"
   let or_ = make "Coq.Init.Logic.or"
   let not = make "Coq.Init.Logic.not"
+  let equiv = make "Coq.Init.Logic.iff"
   let ex = make "Coq.Init.Logic.ex"
   let zero = make "Coq.Init.Datatypes.O"
   let succ = make "Coq.Init.Datatypes.S"
@@ -94,6 +95,27 @@ module Term = struct
   let mkProp = Sort `Prop
   let mkType = Sort `Type
   let mkSort s = Sort s
+end
+
+(***************************************************************************************)
+(** Typing contexts. *)
+
+module Context = struct
+  type t = (Name.t * Term.t) list [@@deriving show]
+
+  let empty = []
+  let size ctx = List.length ctx
+  let push name ty ctx = (name, ty) :: ctx
+  let pop ctx = match ctx with [] -> None | _ :: ctx -> Some ctx
+  let get i ctx = List.nth_opt ctx i
+
+  let get_by_type ty ctx =
+    ctx
+    |> List.mapi (fun i (_, ty') -> if ty = ty' then Some i else None)
+    |> List.filter_map Fun.id
+
+  let to_list ctx = ctx
+  let of_list ctx = ctx
 end
 
 (***************************************************************************************)
@@ -150,6 +172,8 @@ end
 (** Term utility functions. *)
 
 module TermUtils = struct
+  exception InvalidSubtermPath of Term.t * int list
+
   let rec lift k n t =
     match (t : Term.t) with
     | Var i when i >= k -> Term.mkVar (i + n)
@@ -212,27 +236,36 @@ module TermUtils = struct
         acc
 
   let constants t = Name.Set.of_list @@ constants_rec [] t
-end
 
-(***************************************************************************************)
-(** Typing contexts. *)
+  let rec subterm_rec exn ctx t sub : Context.t * Term.t =
+    match sub with
+    | [] -> (ctx, t)
+    | idx :: sub -> begin
+        match (t : Term.t) with
+        | Var _ | Cst _ | Sort _ -> raise exn
+        | App (f, args) ->
+            if idx = 0
+            then subterm_rec exn ctx f sub
+            else if 1 <= idx && idx <= List.length args
+            then subterm_rec exn ctx (List.nth args (idx - 1)) sub
+            else raise exn
+        | Lambda (x, ty, body) | Prod (x, ty, body) ->
+            if idx = 0
+            then subterm_rec exn ctx ty sub
+            else if idx = 1
+            then subterm_rec exn (Context.push x ty ctx) body sub
+            else raise exn
+        | Arrow (t1, t2) ->
+            if idx = 0
+            then subterm_rec exn ctx t1 sub
+            else if idx = 1
+            then subterm_rec exn ctx t2 sub
+            else raise exn
+      end
 
-module Context = struct
-  type t = (Name.t * Term.t) list [@@deriving show]
-
-  let empty = []
-  let size ctx = List.length ctx
-  let push name ty ctx = (name, ty) :: ctx
-  let pop ctx = match ctx with [] -> None | _ :: ctx -> Some ctx
-  let get i ctx = List.nth_opt ctx i
-
-  let get_by_type ty ctx =
-    ctx
-    |> List.mapi (fun i (_, ty') -> if ty = ty' then Some i else None)
-    |> List.filter_map Fun.id
-
-  let to_list ctx = ctx
-  let of_list ctx = ctx
+  let subterm t sub =
+    let exn = InvalidSubtermPath (t, sub) in
+    subterm_rec exn Context.empty t sub
 end
 
 (***************************************************************************************)

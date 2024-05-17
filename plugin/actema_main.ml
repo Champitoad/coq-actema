@@ -142,7 +142,7 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
     begin
       fun coq_goal ->
         let goal = Translate.goal coq_goal in
-        let id = (action_name, goal.g_hyps, goal.g_concl) in
+        let id = (action_name, Logic.Hyps.to_list goal.g_hyps, goal.g_concl) in
         let interactive () =
           let* prf = interactive_proof () in
           Storage.save_proof id prf;

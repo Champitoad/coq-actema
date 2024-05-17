@@ -62,6 +62,9 @@ module Name : sig
   (** Coq's logical negation [not : Prop -> Prop]. *)
   val not : t
 
+  (** Coq's logical equivalence [equiv : Prop -> Prop -> Prop]. *)
+  val equiv : t
+
   (** Coq's inductive [ex : forall A : Type, (A -> Prop) -> Prop]. *)
   val ex : t
 
@@ -155,6 +158,40 @@ module Term : sig
   val mkSort : [ `Prop | `Type ] -> t
 end
 
+(** [InvalidSubtermPath (t, sub)] indicates that the term [t] has no 
+    subterm at path [sub]. *)
+exception InvalidSubtermPath of Term.t * int list
+
+(***************************************************************************************)
+(** Typing contexts. *)
+
+module Context : sig
+  (** A typing context contains the name and type of the free variables in a term.
+        Conceptually it is a stack of [(name, ty)], but may be implemented more efficiently. *)
+  type t [@@deriving show]
+
+  (** The empty typing context. *)
+  val empty : t
+
+  (** [size ctx] returns the number of bindings in [ctx]. *)
+  val size : t -> int
+
+  val to_list : t -> (Name.t * Term.t) list
+  val of_list : (Name.t * Term.t) list -> t
+
+  (** [push name ty ctx] adds the variable with name [name] and type [ty] to the context [ctx]. *)
+  val push : Name.t -> Term.t -> t -> t
+
+  (** [pop ctx] removes the most recent binding (i.e. at index 0) from [ctx]. *)
+  val pop : t -> t option
+
+  (** [get n ctx] returns the name and type of the n-th variable in [ctx]. *)
+  val get : int -> t -> (Name.t * Term.t) option
+
+  (** [get_by_type ty ctx] returns the list of all the variables that have type [ty] in [ctx]. *)
+  val get_by_type : Term.t -> t -> int list
+end
+
 (***************************************************************************************)
 (** Environments. *)
 
@@ -230,36 +267,11 @@ module TermUtils : sig
 
   (** [constants t] computes the set of constants used in [t]. *)
   val constants : Term.t -> Name.Set.t
-end
 
-(***************************************************************************************)
-(** Typing contexts. *)
-
-module Context : sig
-  (** A typing context contains the name and type of the free variables in a term.
-      Conceptually it is a stack of [(name, ty)], but may be implemented more efficiently. *)
-  type t [@@deriving show]
-
-  (** The empty typing context. *)
-  val empty : t
-
-  (** [size ctx] returns the number of bindings in [ctx]. *)
-  val size : t -> int
-
-  val to_list : t -> (Name.t * Term.t) list
-  val of_list : (Name.t * Term.t) list -> t
-
-  (** [push name ty ctx] adds the variable with name [name] and type [ty] to the context [ctx]. *)
-  val push : Name.t -> Term.t -> t -> t
-
-  (** [pop ctx] removes the most recent binding (i.e. at index 0) from [ctx]. *)
-  val pop : t -> t option
-
-  (** [get n ctx] returns the name and type of the n-th variable in [ctx]. *)
-  val get : int -> t -> (Name.t * Term.t) option
-
-  (** [get_by_type ty ctx] returns the list of all the variables that have type [ty] in [ctx]. *)
-  val get_by_type : Term.t -> t -> int list
+  (** [subterm t sub] returns the subterm of [t] at path [sub] 
+      together with its local context. 
+      Raises [InvalidSubtermPath] if [sub] is not a valid path in [t]. *)
+  val subterm : Term.t -> int list -> Context.t * Term.t
 end
 
 (***************************************************************************************)

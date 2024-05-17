@@ -8,6 +8,7 @@ module BIO = BatIO
 module Lexing = BatLexing
 module String = BatString
 include BatPervasives
+module IntMap = Map.Make (Int)
 
 (* -------------------------------------------------------------------- *)
 
@@ -231,27 +232,6 @@ end = struct
     (Map.of_enum e, Map.of_enum (e |> Enum.map (fun (x, y) -> (y, x))))
 
   let of_seq s = (Map.of_seq s, Map.of_seq (s |> Seq.map (fun (x, y) -> (y, x))))
-end
-
-(* -------------------------------------------------------------------- *)
-type uid = int
-
-module Uid : sig
-  include Map.OrderedType
-
-  val fresh : unit -> uid
-end
-with type t = int = struct
-  type t = int
-
-  let compare = Int.compare
-
-  let fresh : unit -> uid =
-    (* not mt-safe *)
-    let count = ref (-1) in
-    fun () ->
-      incr count;
-      !count
 end
 
 (* -------------------------------------------------------------------- *)

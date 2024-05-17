@@ -6,8 +6,10 @@
     instead of returning a list of [choice] to the plugin, we would return 
     a link and a pair of substitutions. Not sure it is worth the effort though. *)
 
+open Api_new
+open Lang
+open Logic
 open Link
-open Fo
 
 (** A [choice] corresponds to a single choice of rule. 
     
@@ -19,20 +21,20 @@ open Fo
     
     The optional argument is used for binders, to indicate whether the bound variable is instantiated,
     and if yes with what expression (which depends on the variables bound above in each linked formula). *)
-type choice = int * (LEnv.lenv * LEnv.lenv * expr) option
+type choice = int * (Context.t * Context.t * Term.t) option
 
 (** An [itrace] is the list of all choices we made in a deep interaction. *)
 type itrace = choice list
 
 (** Convert a [choice] to a [string]. *)
-val show_choice : env -> choice -> string
+val show_choice : Env.t -> choice -> string
 
-(** Convert a [itrace] to a [string]. *)
-val show_itrace : env -> itrace -> string
+(** Convert an [itrace] to a [string]. *)
+val show_itrace : Env.t -> itrace -> string
 
 (** [dlink] stands for deep linking, and implements the deep interaction phase
     à la Chaudhuri for intuitionistic logic (i.e. ).
     The list of rules and explanations are available in :
         "A Drag-and-Drop Proof Tactic"
         http://www.lix.polytechnique.fr/Labo/Pablo.DONATO/papers/cpp-article.pdf *)
-val dlink : link -> Form.Subst.subst * Form.Subst.subst -> Proof.proof -> itrace
+val dlink : link -> Form.Subst.subst * Form.Subst.subst -> Proof.t -> itrace

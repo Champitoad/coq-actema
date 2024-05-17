@@ -1,6 +1,8 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
+About iff.
+
 Definition x := 3.
 
 About plus.

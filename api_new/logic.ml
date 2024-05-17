@@ -2,7 +2,7 @@ open Lang
 open Utils
 open Batteries
 
-exception InvalidGoalName of Name.t
+exception InvalidGoalId of int
 exception InvalidHyphName of Name.t
 exception InvalidLemmaName of Name.t
 
@@ -10,8 +10,7 @@ exception InvalidLemmaName of Name.t
 (** Items *)
 
 (** A single hypothesis. *)
-type hyp = { h_src : Name.t option; h_gen : int; h_form : Term.t }
-[@@deriving show]
+type hyp = { h_name : Name.t; h_gen : int; h_form : Term.t } [@@deriving show]
 
 (** A module to handle collections of hypotheses. *)
 module Hyps = struct
@@ -59,8 +58,8 @@ module Hyps = struct
     |> List.filter (fun (id, _) ->
            not (List.exists (fun (id', _) -> Name.equal id id') hs2))
 
-  let to_list (hyps : t) = hyps
-  let of_list (hyps : t) = hyps
+  let to_list (hyps : t) = List.map snd hyps
+  let of_list hyps : t = List.map (fun h -> (h.h_name, h)) hyps
 end
 
 (** A single lemma. *)
@@ -103,7 +102,7 @@ module Lemmas = struct
 end
 
 (** A single pregoal. *)
-type pregoal = { g_env : Env.t; g_hyps : hyp list; g_concl : Term.t }
+type pregoal = { g_env : Env.t; g_hyps : Hyps.t; g_concl : Term.t }
 
 (** A goal is a pregoal together with a handle. *)
 type goal = { g_id : int; g_pregoal : pregoal }

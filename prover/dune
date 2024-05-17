@@ -1,16 +1,11 @@
 (include_subdirs no)
 
-(ocamllex lexer)
-
-(menhir
- (modules parser)
- (flags --explain --inspection --table --dump))
-
 (library
  (name prover)
  (public_name coq-actema.prover)
  (libraries
   coq-actema.api
+  coq-actema.api-new
   lwt
   menhirLib
   batteries.unthreaded

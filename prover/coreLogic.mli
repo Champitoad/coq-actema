@@ -1,129 +1,99 @@
 (** This module defines some core utilities to manipulate proofs 
     and perform formula linking & interaction. It includes :
-    - The notion of path (module [IPath]) in a term. 
-    - The notion of polarity (module [Polarity]) of a (sub)formula. 
-    - Some term manipulation functions. These could probably moved to a
-      more appropriate place, such as fo.ml probably. *)
+    - The notion of proof (module [Proof]) which is the main state of the prover. 
+    - Utility functions on paths in a term (module [PathUtils]). 
+    - The notion of polarity of a (sub)formula (module [Polarity]). 
+*)
 
-open Fo
+open Api_new
+open Lang
+open Logic
 
 exception InvalidSubFormPath of int list
 exception InvalidSubExprPath of int list
+exception SubgoalNotOpened of int
 
-(** An item in a goal. *)
-type item =
-  [ `C of form  (** Conclusion. *)
-  | `H of Handle.t * Proof.hyp  (** Hypothesis. *)
-  | `V of vname * bvar  (** Variable. *) ]
-[@@deriving show]
+(** This module defines the core datastructure used in the prover : the proof state.
+    The proof contains the list of active goals (along with their hypotheses, conclusion, environment)
+    and some additional bookkeeping information. *)
+module Proof : sig
+  exception TacticNotApplicable
 
-(** This module defines paths to items. 
-    A path can point to : 
-    - A subterm of the conclusion. 
-    - A subterm of a hypothesis. 
-    - A variable definition : either to the head (variable name) or a subterm of the definition's body. 
-    A path points to an item in a specific goal. *)
-module IPath : sig
-  (** What kind of object does a path point to ? *)
-  type pkind = [ `Hyp | `Concl | `Var of [ `Head | `Body ] ] [@@deriving show]
+  (** Abstract type of a proof state. *)
+  type t
 
-  (** What object does a path point to ?
-      Depending on the [kind], the [handle] is :
-      - For [`Concl], it is always [0].
-      - For [`Hyp], it is the index of the corresponding hypothesis in the goal.
-      - For [`Var], it is the index of the corresponding variable binding in the goal's environment. *)
-  type ctxt = { kind : pkind; handle : int } [@@deriving show]
+  (** Metadata associated to a goal. *)
+  type meta = < > Js_of_ocaml.Js.t
 
-  (** A path to a subterm of an item. 
-      As an example, consider the goal : 
-        [x := 4, y := 3 * x + 2, x + 3 * y = 0 |- x = 0]    
-      Assuming this is the goal with index 0, possible paths include :
-      - [{ root = 0 ; ctxt = { kind = `Concl ; handle = 0 } ; sub = [0] }] 
-        which points to the variable [x] in the conclusion.
-      - [{ root = 0 ; ctxt = { kind = `Var `Body ; handle = 1 } ; sub = [0] }] 
-        which points to the expression [3 * x] in the definition of [y].
-      - [{ root = 0 ; ctxt = { kind = `Var `Head ; handle = 0 } ; sub = [] }] 
-        which points to the variable name [x] in the definition of [x].
-  *)
-  type t =
-    { root : int  (** The index of the goal we point to. *)
-    ; ctxt : ctxt  (** The object we point to. *)
-    ; sub : int list  (** The position in the term we point to. *)
-    }
-  [@@deriving show]
+  (** Create a fresh proof that contains some goals. *)
+  val init : goal list -> t
 
-  (** The [string] argument contains the path (encoded as text). *)
-  exception InvalidPath of string
+  (** Test whether the proof has some remaining active goals. *)
+  val closed : t -> bool
 
-  (** Create a new path. *)
-  val make : ?ctxt:ctxt -> ?sub:int list -> int -> t
+  (** Return a list of all active goals in the proof. *)
+  val opened : t -> int list
 
-  (** Destruct a path, i.e. get all the information relevant to a path. *)
-  val destr : Proof.proof -> t -> Proof.goal * item * (Utils.uid list * term)
+  (** Retrieve an active goal by its handle. *)
+  val byid : t -> int -> pregoal
 
-  (** Decode a path encoded as a string. *)
-  val of_string : string -> t
+  (** Get the lemma database. *)
+  val get_db : t -> Lemmas.t
 
-  (** Encode a path to a string. *)
-  val to_string : t -> string
+  (** Set the lemma database. *)
+  val set_db : t -> Lemmas.t -> t
 
-  (** [IPath.subpath p1 p2] checks whether [p1] is a subpath of [p2]. *)
-  val subpath : t -> t -> bool
+  (** Attach metadata to a goal. *)
+  val set_meta : t -> int -> meta option -> unit
 
-  (** Set the [sub] parts of a path to the empty list. *)
-  val erase_sub : t -> t
+  (** Get the metadata attached to a goal. *)
+  val get_meta : t -> int -> meta option
 
-  (** Make a path to the (root of the) conclusion of a goal. *)
-  val to_concl : Proof.goal -> t
+  (** A set of (basic) functions that modify a proof. *)
 
-  (** Return the goal that contains the path. *)
-  val goal : Proof.proof -> t -> Proof.goal
+  (** In a proof, replace a goal by a list of pregoals. 
+      Returns the handles of the goals freshly created and the new proof state.
+      BEWARE: after calling [xprogress], any [Path.t] into the replaced goal will become invalid 
+      (i.e. the [root] field of the [Path.t] will point to a closed goal). *)
+  (*val xprogress : t -> int -> pregoal list -> int list * t
 
-  (** Return the identifer of the goal that contains the path. *)
-  val gid : Proof.proof -> t -> Handle.t
+    (** Add a local definition (in a given goal). *)
+    val add_local_def : t -> goal_id:int -> Name.t * Term.t * Term.t -> t*)
 
-  (** Return the subterm pointed at by the path. *)
-  val term : Proof.proof -> t -> term
+  (** Move a hypothesis BEFORE another hypothesis. *)
+  val move : t -> goal_id:int -> hyp_name:Name.t -> dest_name:Name.t option -> t
 
-  (** Given that the path points to a subterm [t], return the environment that is valid at [t] 
-      (i.e. contains local variables bound by quantifiers above [t]). *)
-  val env : Proof.proof -> t -> env
+  (** Get all the introduction variants (in a given goal). *)
+  val ivariants : t -> goal_id:int -> string list
+
+  (** Get all the elimination variants of a given hypothesis (in a given goal). *)
+  val evariants : t -> goal_id:int -> hyp_name:Name.t -> string list
 end
 
-(** Extract the formula of a hypothesis or conclusion. 
-    Raises [Invalid_argument] if the item is a variable. *)
-val form_of_item : item -> form
+(** Utilities for the module [Logic.Path]. *)
+module PathUtils : sig
+  (** Make a path to the (root of the) conclusion of a goal. *)
+  val to_concl : goal -> Path.t
 
-(** Extract the expression of a variable. 
-    Raises [Invalid_argument] if the item is not a variable, 
-    or if the variable has no body. *)
-val expr_of_item : ?where:[< `Body | `Head > `Body ] -> item -> expr
+  (** Destruct a path, i.e. get all the information relevant to a path. *)
+  val destr : Path.t -> Proof.t -> goal * item * Context.t * Term.t
 
-val term_of_item : ?where:[< `Body | `Head > `Body ] -> item -> term
-val direct_subterm : term -> int -> term
-val subterm : term -> int list -> term
-val modify_direct_subterm : (term -> term) -> term -> int -> term
+  (** Return the goal that contains the path. *)
+  val goal : Path.t -> Proof.t -> goal
 
-val modify_subterm :
-     ('a -> term -> term)
-  -> (int -> term -> 'a -> 'a)
-  -> 'a
-  -> term
-  -> int list
-  -> term
+  (** Return the identifer of the goal that contains the path. *)
+  val gid : Path.t -> Proof.t -> int
 
-(** [rewrite_subterm_all env red res t sub] rewrites all occurrences of [red]
-      in the subterm of [t] at subpath [sub] into [res], shifting variables in
-      [red] and [res] whenever a binder is encountered along the path. *)
-val rewrite_subterm_all : env -> term -> term -> term -> int list -> term
+  (** Return the item that a path point to. *)
+  val item : Path.t -> Proof.t -> item
 
-(** [rewrite_subterm res t sub] rewrites the subterm of [t] at subpath
-            [sub] into [res], shifting variables in [res] whenever a binder is
-            encountered along the path. *)
-val rewrite_subterm : term -> term -> int list -> term
+  (** Return the subterm pointed at by the path. *)
+  val term : Path.t -> Proof.t -> Term.t
 
-val subform : form -> int list -> form
-val subexpr : term -> int list -> expr
+  (** Given that the path points to a subterm [t], return the context that is valid at [t] 
+      (i.e. contains local variables bound by quantifiers above [t]). *)
+  val ctx : Path.t -> Proof.t -> Context.t
+end
 
 (** A subformula can either have a positive polarity [Pos], a negative polarity
     [Neg], or a superposition [Sup] of both.
@@ -136,33 +106,30 @@ val subexpr : term -> int list -> expr
     negative, and C and D can be either, depending on the way the user chooses
     to rewrite the equivalence. This coincides with the standard linear logic
     reading of equivalence as the additive conjunction of both directions of an
-    implication. *)
+    implication. 
+    
+    A subexpression (i.e. a subterm of type other than Prop) has the same polarity as
+    the subformula that contains it. *)
 module Polarity : sig
   (** A polarity : positive, negative or superposed (i.e. both positive and negative). *)
   type t = Pos | Neg | Sup [@@deriving show]
 
-  (** [Polarity.opp p] returns the opposite polarity of [p].
+  (** [opp p] returns the opposite polarity of [p].
       [Sup] is mapped to itself. *)
   val opp : t -> t
 
-  (** [Polarity.direct_subform_pol (p, f) i] returns the [i]th direct subformula of [f]
-      together with its polarity, given that [f]'s polarity is [p] *)
-  val of_direct_subform : t * form -> int -> t * form
+  (** [of_subterm (p, t) sub] returns the subterm of [t] at path [sub] together
+      with its polarity and context, given that [t]'s polarity is [p].
+      Raises [InvalidSubtermPath] if [sub] does not point to a valid subterm in [t]. *)
+  val of_subterm : t * Term.t -> int list -> t * Context.t * Term.t
 
-  (** Assumes both the term and its subterm are formulas, and calls [Polarity.of_direct_subform]. *)
-  val of_direct_subterm : t * term -> int -> t * term
+  (** [neg_count t sub] counts the number of negations in [t] along path [sub] *)
+  val neg_count : Term.t -> int list -> int
 
-  (** [Polarity.subform_pol (p, f) sub] returns the subformula of [f] at path [sub] together
-      with its polarity, given that [f]'s polarity is [p] *)
-  val of_subform : t * form -> int list -> t * Fo.form
-
-  (** [Polarity.neg_count f sub] counts the number of negations in [f] along path [sub] *)
-  val neg_count : form -> int list -> int
-
-  (** [Polarity.of_item it] returns the polarity of the item [it]. Does not raise exceptions. *)
+  (** [of_item it] returns the polarity of the item [it]. *)
   val of_item : item -> t
 
-  (** [Polarity.of_ipath proof p] returns the polarity of the subformula
-      at path [p] in [proof]. Raises an exception if [p] does not point to a formula. *)
-  val of_ipath : Proof.proof -> IPath.t -> t
+  (** [of_ipath proof path] returns the polarity of the subterm at path [path] in [proof]. 
+      Raises an anomaly if [path] points to variable (head or body). *)
+  val of_ipath : Proof.t -> Path.t -> t
 end

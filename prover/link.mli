@@ -36,16 +36,18 @@
        Choosing an order for the rules is important as the rewrite system 
        is non-confluent (see the paper "A drag and drop proof tactic"). *)
 
+open Api_new
+open Lang
+open Logic
 open CoreLogic
-open Fo
 
 (** A link is simply a pair of a source path and destination path.
     You are NOT supposed to link two subterms of a same item. *)
-type link = IPath.t * IPath.t [@@deriving show]
+type link = Path.t * Path.t [@@deriving show]
 
 (** A hyperlink relaxes the constraint that there is only one source and one destination.
     You are NOT supposed to link two subterms of a same item. *)
-type hyperlink = IPath.t list * IPath.t list [@@deriving show]
+type hyperlink = Path.t list * Path.t list [@@deriving show]
 
 (** An action to perform after linking has been checked.
 
@@ -55,15 +57,15 @@ type hyperlink = IPath.t list * IPath.t list [@@deriving show]
     In order to unify the linked subterms, some of these variables 
     have to be substituted [Sbound _], and others have no constraint [Sflex]. *)
 type linkaction =
-  [ `Nothing
-  | `Both of linkaction * linkaction
-  | `Subform of Form.Subst.subst * Form.Subst.subst
-    (** Subformula linking. This includes deep rewrites. *)
-  | `Instantiate of expr * IPath.t
-  | `Rewrite of expr * expr * IPath.t list
-    (** Rewrite expression [e1] into [e2] at several paths. *)
-  | `Fold of vname * IPath.t list
-  | `Unfold of vname * IPath.t list ]
+  | Nothing
+  | Both of linkaction * linkaction
+  | Subform of Form.Subst.subst * Form.Subst.subst
+      (** Subformula linking. This includes deep rewrites. *)
+  | Instantiate of Term.t * Path.t
+  | Rewrite of Term.t * Term.t * Path.t list
+      (** Rewrite expression [e1] into [e2] at several paths. *)
+  | Fold of Name.t * Path.t list
+  | Unfold of Name.t * Path.t list
 [@@deriving show]
 
 (** Lift a link into a hyperlink. *)
@@ -82,10 +84,10 @@ val remove_nothing : linkaction -> linkaction option
     [`Nothing] to indicate membership, or the empty list to indicate absence thereof. *)
 module Pred : sig
   (** A link predicate. *)
-  type lpred = Proof.proof -> link -> linkaction list
+  type lpred = Proof.t -> link -> linkaction list
 
   (** A hyperlink predicate. *)
-  type hlpred = Proof.proof -> hyperlink -> linkaction list
+  type hlpred = Proof.t -> hyperlink -> linkaction list
 
   (** [search_linkactions hlp proof (src, dst)] returns all links between
       subterms of [src] and [dst] in [proof] that can interact according to
@@ -97,10 +99,10 @@ module Pred : sig
       and whose destinations (resp. sources) are subterms of [dst] (resp.
       [src]). *)
   val search_linkactions :
-       ?fixed_srcs:IPath.t list
-    -> ?fixed_dsts:IPath.t list
+       ?fixed_srcs:Path.t list
+    -> ?fixed_dsts:Path.t list
     -> hlpred
-    -> Proof.proof
+    -> Proof.t
     -> link
     -> (hyperlink * linkaction list) list
 

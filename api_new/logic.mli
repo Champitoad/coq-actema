@@ -1,6 +1,6 @@
 open Lang
 
-exception InvalidGoalName of Name.t
+exception InvalidGoalId of int
 exception InvalidHyphName of Name.t
 exception InvalidLemmaName of Name.t
 
@@ -8,8 +8,7 @@ exception InvalidLemmaName of Name.t
 (** Items *)
 
 (** A single hypothesis. *)
-type hyp = { h_src : Name.t option; h_gen : int; h_form : Term.t }
-[@@deriving show]
+type hyp = { h_name : Name.t; h_gen : int; h_form : Term.t } [@@deriving show]
 
 (** A module to handle collections of hypotheses. *)
 module Hyps : sig
@@ -24,8 +23,8 @@ module Hyps : sig
   val ids : t -> Name.t list
   val map : (hyp -> hyp) -> t -> t
   val iter : (hyp -> unit) -> t -> unit
-  val to_list : t -> (Name.t * hyp) list
-  val of_list : (Name.t * hyp) list -> t
+  val to_list : t -> hyp list
+  val of_list : hyp list -> t
 end
 
 (** A single lemma. *)
@@ -57,7 +56,7 @@ module Lemmas : sig
 end
 
 (** A single pregoal. *)
-type pregoal = { g_env : Env.t; g_hyps : hyp list; g_concl : Term.t }
+type pregoal = { g_env : Env.t; g_hyps : Hyps.t; g_concl : Term.t }
 
 (** A goal is a pregoal together with a handle. *)
 type goal = { g_id : int; g_pregoal : pregoal }
@@ -66,7 +65,9 @@ type goal = { g_id : int; g_pregoal : pregoal }
 type item =
   | Concl of Term.t  (** Conclusion. *)
   | Hyp of Name.t * hyp  (** Hypothesis. *)
-  | Var of Name.t * Term.t * Term.t option  (** Variable. *)
+  | Var of Name.t * Term.t * Term.t option
+      (** Variable. The first term is the variable's type, 
+          the second (optional) term is the variable's body. *)
 [@@deriving show]
 
 (***************************************************************************************)
@@ -79,30 +80,24 @@ type item =
       - A variable definition : either to the head (variable name) or a subterm of the definition's body.
       A path points to an item in a specific goal. *)
 module Path : sig
-  (** What kind of object does a path point to ? *)
-  type kind = Hyp | Concl | Var of [ `Head | `Body ] [@@deriving show]
-
-  (** What object does a path point to ?
-        Depending on the [kind], the [handle] is :
-        - For [Concl], it is always [0].
-        - For [Hyp], it is the index of the corresponding hypothesis in the goal.
-        - For [Var], it is the index of the corresponding variable binding in the goal's environment. *)
-  type ctxt = { kind : kind; handle : int } [@@deriving show]
+  (** What object does a path point to ? *)
+  type kind = Hyp of Name.t | Concl | VarHead of Name.t | VarBody of Name.t
+  [@@deriving show]
 
   (** A path to a subterm of an item.
-        As an example, consider the goal :
-          [x := 4, y := 3 * x + 2, x + 3 * y = 0 |- x = 0]
-        Assuming this is the goal with index 0, possible paths include :
-        - [{ root = 0 ; ctxt = { kind = `Concl ; handle = 0 } ; sub = [0] }]
-          which points to the variable [x] in the conclusion.
-        - [{ root = 0 ; ctxt = { kind = `Var `Body ; handle = 1 } ; sub = [0] }]
-          which points to the expression [3 * x] in the definition of [y].
-        - [{ root = 0 ; ctxt = { kind = `Var `Head ; handle = 0 } ; sub = [] }]
-          which points to the variable name [x] in the definition of [x].
+      As an example, consider the goal :
+        [x := 4, y := 3 * x + 2, x + 3 * y = 0 |- x = 0]
+      Assuming this is the goal with index 0, possible paths include :
+      - [{ goal = 0 ; kind = Concl } ; sub = [2] }]
+        which points to the variable [x] in the conclusion.
+      - [{ goal = 0 ; kind = VarBody "y" ; sub = [1] }]
+        which points to the expression [3 * x] in the definition of [y].
+      - [{ goal = 0 ; kind = VarHead "x" ; sub = [] }]
+        which points to the variable name [x] in the definition of [x].
     *)
   type t =
-    { root : int  (** The index of the goal we point to. *)
-    ; ctxt : ctxt  (** The object we point to. *)
+    { goal : int  (** The index of the goal we point to. *)
+    ; kind : kind  (** The object we point to. *)
     ; sub : int list  (** The position in the term we point to. *)
     }
   [@@deriving show]
@@ -110,8 +105,8 @@ module Path : sig
   (** The [string] argument contains the path (encoded as text). *)
   exception InvalidPath of string
 
-  (** [make ?ctxt ?sub root] creates a new path in the subgoal with index [root]. *)
-  val make : ?ctxt:ctxt -> ?sub:int list -> int -> t
+  (** [make ?kind ?sub goal] creates a new path in the subgoal with index [goal]. *)
+  val make : ?kind:kind -> ?sub:int list -> int -> t
 
   (** Decode a path encoded as a string. *)
   val of_string : string -> t
