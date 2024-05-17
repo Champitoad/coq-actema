@@ -5,10 +5,11 @@ open Lang
 type sitem = Sbound of Term.t | Sflex
 type 'a eqns = ('a * 'a) list
 
-(** Substitutions. *)
+(** Substitutions are essentially mappings from variable names to sitems. *)
 module Subst : sig
   type t
 
+  (** [UnboundVariable name subst] means that [name] is not bound in [subst]. *)
   exception UnboundVariable of Name.t * t
 
   val empty : t

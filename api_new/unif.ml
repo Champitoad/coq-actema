@@ -6,32 +6,31 @@ type 'a eqns = ('a * 'a) list
 module Subst = struct
   type subst = (Name.t * sitem) list
 
+  exception UnboundVariable of Name.t * subst
+
   let empty = []
   let is_empty subst = subst = []
   let aslist (s : subst) : _ list = s
   let oflist (s : _ list) : subst = s
   let fold = List.fold_left
 
-  let rec get_tag ((n, i) as x : vname) (s : subst) =
+  let rec get_tag (n : Name.t) (s : subst) : sitem option =
     match s with
     | [] -> None
-    | (m, tag) :: s when n = m ->
-        if i = 0 then Some tag else get_tag (n, i - 1) s
-    | _ :: s -> get_tag x s
+    | (m, tag) :: _ when Name.equal n m -> Some tag
+    | _ :: s -> get_tag n s
 
-  let flex (x : vname) (s : subst) = get_tag x s = Some Sflex
+  let flex (x : Name.t) (s : subst) = get_tag x s = Some Sflex
 
-  let bound (x : vname) (s : subst) =
+  let bound (x : Name.t) (s : subst) =
     match get_tag x s with Some (Sbound _) -> true | _ -> false
 
-  exception UnboundVariable of vname * subst
-
-  let fetch (x : vname) (s : subst) =
+  let fetch (x : Name.t) (s : subst) =
     match get_tag x s with
     | Some (Sbound e) -> e
     | _ -> raise (UnboundVariable (x, s))
 
-  let rec add ((n, i) as x : vname) (e : expr) : subst -> subst = function
+  let rec add (n : Name.t) (bound : Term.t) : subst -> subst = function
     | [] -> failwith "Subst.add [1]"
     | (m, t) :: s when n <> m -> (m, t) :: add x e s
     | (m, t) :: s when n = m && i > 0 -> (m, t) :: add (n, i - 1) e s
