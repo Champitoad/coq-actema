@@ -1,6 +1,6 @@
 (** This module translates Coq term into Actema terms. *)
 
-open Api_new
+open Api
 open CoqUtils
 open Lang
 

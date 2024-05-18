@@ -1,6 +1,6 @@
 (** This module defines functions to manipulate the lemma database. *)
 
-open Api_new
+open Api
 open Logic
 open CoreLogic
 

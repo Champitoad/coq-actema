@@ -4,8 +4,8 @@
 ; (modules parser))
 
 (library
- (name api_new)
- (public_name coq-actema.api-new)
+ (name api)
+ (public_name coq-actema.api)
  (libraries
   coq-actema.ann-print
   qcheck-core

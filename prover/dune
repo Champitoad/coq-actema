@@ -4,7 +4,7 @@
  (name prover)
  (public_name coq-actema.prover)
  (libraries
-  coq-actema.api-new
+  coq-actema.api
   lwt
   menhirLib
   batteries.unthreaded

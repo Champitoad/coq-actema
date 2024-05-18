@@ -1,6 +1,6 @@
 (*open Translate
   open Extlib*)
-open Api_new
+open Api
 open Proofview
 open CoqUtils
 

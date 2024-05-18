@@ -1,6 +1,6 @@
 (* This file defines the HTTP protocol used to communicate between
    the plugin (http client) and the frontend (http server). *)
-open Api_new
+open Api
 open Lang
 
 exception ActemaError of string

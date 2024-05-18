@@ -6,7 +6,7 @@
     instead of returning a list of [choice] to the plugin, we would return 
     a link and a pair of substitutions. Not sure it is worth the effort though. *)
 
-(*open Api_new
+(*open Api
   open Lang
   open Link
   open CoreLogic

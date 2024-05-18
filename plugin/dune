@@ -7,7 +7,7 @@
   coq-core.tactics
   cohttp-lwt-unix
   sha
-  coq-actema.api-new
+  coq-actema.api
   batteries))
 
 ; This will let Dune know about Coq's .mlg grammar files.

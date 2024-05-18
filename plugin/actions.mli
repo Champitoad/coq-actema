@@ -3,7 +3,7 @@
     (written by Benjamin Werner, see folder theories/) for more complex actions
     such as DnD actions. *)
 
-open Api_new
+open Api
 open Proofview
 
 (** Contains the unsupported action and a short error message. *)

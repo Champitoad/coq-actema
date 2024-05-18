@@ -1,6 +1,6 @@
 open Proofview
 open CoqUtils
-open Api_new
+open Api
 
 (* -------------------------------------------------------------------- *)
 (** The actema tactic *)
@@ -161,7 +161,7 @@ let test_tac () : unit tactic =
     begin
       fun goal ->
         (*let open Translate_new in
-          let open Api_new in
+          let open Api in
           let open Lang in
           let concl = Goal.concl goal in
                   let state =
