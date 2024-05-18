@@ -7,7 +7,6 @@
   coq-core.tactics
   cohttp-lwt-unix
   sha
-  coq-actema.api
   coq-actema.api-new
   batteries))
 

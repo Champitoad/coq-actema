@@ -194,14 +194,14 @@ let goal coq_goal : Logic.pregoal =
           if EConstr.ESorts.is_prop state.sigma sort
           then
             (* This is a hypothesis. *)
-            Some Logic.{ h_src = Some name; h_gen = 0; h_form = ty }
+            Some Logic.{ h_name = name; h_gen = 0; h_form = ty }
           else (* This is a variable. *)
             None
       end
       (Environ.named_context state.coq_env)
   in
   (* Construct the actema pregoal. *)
-  Logic.{ g_env = state.env; g_hyps = hyps; g_concl = concl }
+  Logic.{ g_env = state.env; g_hyps = Hyps.of_list hyps; g_concl = concl }
 
 (***********************************************************************************)
 (** Translate lemmas. *)

@@ -1,32 +1,30 @@
 (** This module implements unification on terms. *)
-
+(*
 open Lang
 
-type sitem = Sbound of Term.t | Sflex
-type 'a eqns = ('a * 'a) list
-
-(** Substitutions are essentially mappings from variable names to sitems. *)
+(** Substitutions represent partial functions from variables 
+    (represented as de Bruijn indices) to terms.  *)
 module Subst : sig
   type t
 
-  (** [UnboundVariable name subst] means that [name] is not bound in [subst]. *)
-  exception UnboundVariable of Name.t * t
-
   val empty : t
   val is_empty : t -> bool
-  val aslist : t -> (Name.t * sitem) list
-  val oflist : (Name.t * sitem) list -> t
-  val fold : ('a -> Name.t * sitem -> 'a) -> 'a -> Name.t -> 'a
-  val add : Name.t -> Term.t -> t -> t
-  val push : Name.t -> sitem -> t -> t
-  val fetch : Name.t -> t -> Term.t
-  val get_tag : Name.t -> t -> sitem option
-  val is_complete : t -> bool
-  val f_apply1 : Name.t -> Term.t -> Term.t -> Term.t
-  val f_iter : t -> int -> Term.t -> Term.t
-  val f_apply : t -> Term.t -> Term.t
+  val is_bound : int -> t -> bool
+  val can_bind : int -> Term.t -> t -> bool
+  val bind : int -> Term.t -> t -> t
+  val fetch : int -> t -> t option
+  val apply : t -> Term.t -> Term.t
+
+  (** Can also lower if int < 0. *)
+  val lift : int -> t -> t
+
+  (** This assumes that [n] --> [t] implies that [free_vars t > n]. *)
   val close : t -> t
-  val to_string : t -> string
 end
 
-val unify : Env.t -> Context.t -> Subst.t -> Term.t eqns -> Subst.t option
+(** [unify env ctx subst t1 t2] performs unification on [t1] and [t2]. 
+    The terms [t1] and [t2] have free variables in [ctx]. 
+    The initial substitution [subst] can be used to forbid unification 
+    to substitute some variables. *)
+val unify : Env.t -> Context.t -> Subst.t -> Term.t -> Term.t -> Subst.t option
+*)

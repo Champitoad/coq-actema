@@ -59,7 +59,7 @@ type hyperlink = Path.t list * Path.t list [@@deriving show]
 type linkaction =
   | Nothing
   | Both of linkaction * linkaction
-  | Subform of Form.Subst.subst * Form.Subst.subst
+  | Subform (*of Form.Subst.subst * Form.Subst.subst*)
       (** Subformula linking. This includes deep rewrites. *)
   | Instantiate of Term.t * Path.t
   | Rewrite of Term.t * Term.t * Path.t list

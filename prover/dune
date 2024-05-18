@@ -4,7 +4,6 @@
  (name prover)
  (public_name coq-actema.prover)
  (libraries
-  coq-actema.api
   coq-actema.api-new
   lwt
   menhirLib

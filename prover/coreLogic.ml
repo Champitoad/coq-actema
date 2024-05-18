@@ -4,6 +4,10 @@ open Lang
 open Logic
 open Js_of_ocaml
 
+exception InvalidSubFormPath of int list
+exception InvalidSubExprPath of int list
+exception SubgoalNotOpened of int
+
 module Proof = struct
   type meta = < > Js_of_ocaml.Js.t
 
@@ -40,7 +44,7 @@ module Proof = struct
   let get_db (proof : t) = proof.p_db
   let set_db (proof : t) (db : Lemmas.t) = { proof with p_db = db }
 
-  let set_meta (proof : proof) (goal_id : int) (meta : meta option) : unit =
+  let set_meta (proof : t) (goal_id : int) (meta : meta option) : unit =
     match meta with
     | None -> proof.p_meta := IntMap.remove goal_id !(proof.p_meta)
     | Some meta -> proof.p_meta := IntMap.add goal_id meta !(proof.p_meta)
@@ -112,8 +116,8 @@ module Proof = struct
     | Arrow _ | Prod _ | Lambda _ -> [ "intro" ]
     | _ -> []
 
-  let evariants proof ~goal_id ~hyp_id =
-    match (Hyps.byid (byid proof goal_id).g_hyps hyp_id).h_form with
+  let evariants proof ~goal_id ~hyp_name =
+    match (Hyps.byid (byid proof goal_id).g_hyps hyp_name).h_form with
     | App (Cst name, _) ->
         if name = Name.eq
         then [ "rewrite->"; "rewrite<-" ]
@@ -135,9 +139,9 @@ module Proof = struct
     | Arrow _ -> [ "apply" ]
     | _ -> []
 
-  let move proof ~goal_id ~hyp_id ~dest_id =
+  let move proof ~goal_id ~hyp_name ~dest_name =
     let goal = byid proof goal_id in
-    let hyps = Hyps.move goal.g_hyps hyp_id dest_id in
+    let hyps = Hyps.move goal.g_hyps hyp_name dest_name in
 
     snd @@ xprogress proof goal_id [ { goal with g_hyps = hyps } ]
 end
@@ -184,7 +188,7 @@ module PathUtils = struct
     let _, _, ctx, _ = destr path proof in
     ctx
 
-  let to_concl Proof.{ g_id; _ } = Path.make g_id
+  let to_concl { g_id; _ } = Path.make g_id
 end
 
 (* -------------------------------------------------------------------- *)

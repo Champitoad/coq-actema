@@ -1,4 +1,4 @@
-open Fo
+(*open Fo
 open CoreLogic
 open Link
 open Utils
@@ -332,3 +332,4 @@ let actions (proof : Proof.proof) (p : asource) : aoutput list =
     end
   | `DnD dnd -> dnd_actions (dnd, p.selection) proof
   | `Ctxt -> ctxt_actions p.selection proof
+ *)

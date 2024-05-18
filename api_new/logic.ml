@@ -1,5 +1,4 @@
 open Lang
-open Utils
 open Batteries
 
 exception InvalidGoalId of int
@@ -118,26 +117,35 @@ type item =
 (** Paths *)
 
 module Path = struct
-  type kind = Hyp | Concl | Var of [ `Head | `Body ] [@@deriving show]
-  type ctxt = { kind : kind; handle : int } [@@deriving show]
-  type t = { root : int; ctxt : ctxt; sub : int list } [@@deriving show]
+  type kind = Hyp of Name.t | Concl | VarHead of Name.t | VarBody of Name.t
+  [@@deriving show]
+
+  type t = { goal : int; kind : kind; sub : int list } [@@deriving show]
 
   exception InvalidPath of string
 
-  let pkind_codes : (kind, string) BiMap.t =
-    List.fold_left
-      (fun m (a, b) -> BiMap.add a b m)
-      BiMap.empty
-      [ (Hyp, "H"); (Concl, "C"); (Var `Head, "Vh"); (Var `Body, "Vb") ]
+  let make ?(kind = Concl) ?(sub : int list = []) (goal : int) =
+    { goal; kind; sub }
 
-  let string_of_pkind : kind -> string = fun x -> BiMap.find x pkind_codes
+  let string_of_kind = function
+    | Hyp _ -> "H"
+    | Concl -> "C"
+    | VarHead _ -> "Vh"
+    | VarBody _ -> "Vb"
 
-  let pkind_of_string : string -> kind =
-   fun x -> BiMap.find x (BiMap.inverse pkind_codes)
+  let name_of_kind = function
+    | Hyp name -> name
+    | Concl -> Name.make ""
+    | VarHead name -> name
+    | VarBody name -> name
 
-  let make ?(ctxt : ctxt = { kind = Concl; handle = 0 }) ?(sub : int list = [])
-      (root : int) =
-    { root; ctxt; sub }
+  let kind_of_string kind_str name_str =
+    match kind_str with
+    | "H" -> Hyp (Name.make name_str)
+    | "C" -> Concl
+    | "Vh" -> VarHead (Name.make name_str)
+    | "Vb" -> VarBody (Name.make name_str)
+    | _ -> failwith "Logic.kind_of_string: invalid path tag"
 
   let to_string (p : t) =
     let pp_sub =
@@ -145,20 +153,20 @@ module Path = struct
         ~pp_sep:(fun fmt () -> Format.fprintf fmt "/")
         Format.pp_print_int
     in
-    Format.asprintf "%d/%s#%d:%a" p.root
-      (string_of_pkind p.ctxt.kind)
-      p.ctxt.handle pp_sub p.sub
+    Format.asprintf "%d/%s#%s:%a" p.goal (string_of_kind p.kind)
+      (Name.show @@ name_of_kind p.kind)
+      pp_sub p.sub
 
   let of_string (str : string) =
-    let root, ({ handle; _ } as ctxt), sub =
+    let goal, kind, sub =
       try
-        Scanf.sscanf str "%d/%s@#%d:%s" (fun x1 x2 x3 x4 ->
-            (x1, { kind = pkind_of_string x2; handle = x3 }, x4))
-      with Scanf.Scan_failure _ | Not_found | End_of_file ->
+        Scanf.sscanf str "%d/%s@#%s@:%s" (fun x1 x2 x3 x4 ->
+            (x1, kind_of_string x2 x3, x4))
+      with Scanf.Scan_failure _ | Failure _ | End_of_file ->
         raise (Invalid_argument str)
     in
 
-    if root < 0 || handle < 0 then raise (InvalidPath str);
+    if goal < 0 then raise (InvalidPath str);
 
     let sub =
       let sub = if sub = "" then [] else String.split_on_char '/' sub in
@@ -168,7 +176,7 @@ module Path = struct
 
     if List.exists (fun x -> x < 0) sub then raise (InvalidPath str);
 
-    { root; ctxt; sub }
+    { goal; kind; sub }
 
   let rec is_prefix (xs : 'a list) (pr : 'a list) =
     match (xs, pr) with
@@ -177,13 +185,13 @@ module Path = struct
     | _, _ -> false
 
   let subpath p sp =
-    p.root = sp.root
-    && p.ctxt.handle = sp.ctxt.handle
-    && (p.ctxt.kind = sp.ctxt.kind
-       || (p.ctxt.kind = Var `Head && sp.ctxt.kind = Var `Body))
-    && is_prefix sp.sub p.sub
+    (*p.goal = sp.goal && p.kind = sp.kind
+      && (p.ctxt.kind = sp.ctxt.kind
+         || (p.ctxt.kind = Var `Head && sp.ctxt.kind = Var `Body))
+      && is_prefix sp.sub p.sub*)
+    failwith "subpath: todo"
 
-  let erase_sub { root; ctxt; _ } = { root; ctxt; sub = [] }
+  let erase_sub path = { path with sub = [] }
 end
 
 (***************************************************************************************)

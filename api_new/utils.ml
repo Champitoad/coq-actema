@@ -1,5 +1,6 @@
 open Batteries
 module IntSet = Set.Make (Int)
+module IntMap = Map.Make (Int)
 module StringMap = Map.Make (String)
 
 module BGen = struct

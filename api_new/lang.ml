@@ -97,6 +97,8 @@ module Term = struct
   let mkSort s = Sort s
 end
 
+exception InvalidSubtermPath of Term.t * int list
+
 (***************************************************************************************)
 (** Typing contexts. *)
 

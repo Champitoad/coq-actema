@@ -1,5 +1,6 @@
 open Batteries
 module IntSet : Set.S with type elt = int
+module IntMap : Map.S with type key = int
 module StringMap : Map.S with type key = string
 
 (** This module implements Backtraking random generators. 
