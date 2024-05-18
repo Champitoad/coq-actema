@@ -29,11 +29,13 @@
    -o
    jsprover.js.bc
    -package
-   menhirLib,batteries.unthreaded,tyxml,lwt,ocamlgraph,js_of_ocaml,base64
+   menhirLib,batteries.unthreaded,tyxml,lwt,ocamlgraph,js_of_ocaml,base64,qcheck-core,coq-actema.ann-print
    -linkpkg
    ../../api/api.cma
    -linkpkg
    ../../prover/prover.cma
+   -linkpkg
+   ../../ann-print/ann_print.cma
    .jsprover.eobjs/byte/dune__exe__Jsprover.cmo)))
 
 (rule
