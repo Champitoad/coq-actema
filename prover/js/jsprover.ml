@@ -780,19 +780,19 @@ and js_term parent (goal_id : int) (kind : [ `C | `H of Name.t ])
     (term : Term.t) =
   object%js (_self)
     (* Return the [html] of the term. *)
-    method html = _self##htmltag
-
-    (* Return the [html] of the term. *)
-    method htmltag =
+    method html =
       let path =
         match kind with
         | `H name -> Logic.Path.make ~kind:(Hyp name) goal_id
         | `C -> Logic.Path.make ~kind:Concl goal_id
       in
-      Js.string
-        (Format.asprintf "%a" (Tyxml.Xml.pp ())
-           (Notation.term_to_xml path (parent##goal).Logic.g_env term))
-    (*(Notation.term_to_xml (parent##goal).Logic.g_env ~prefix term))*)
+      let xml =
+        Notation.term_to_xml ~width:20 path (parent##goal).Logic.g_env term
+      in
+      (* For some reason the frontend requires us to wrap the term
+         in an additional span. *)
+      let xml = Tyxml.Xml.node "span" [ xml ] in
+      Js.string @@ Format.asprintf "%a" (Tyxml.Xml.pp ()) xml
 
     (* Return an UTF8 string representation of the term. *)
     method tostring =
