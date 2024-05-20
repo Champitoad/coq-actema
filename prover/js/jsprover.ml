@@ -12,7 +12,7 @@ exception InvalidASource
 
 (** Exception raised when the user tries to move (i.e. reorder) a local variable. 
     It is only allowed to move hypotheses. *)
-(*exception MoveOnlyHyps of string*)
+exception MoveOnlyHyps of string
 
 (* -------------------------------------------------------------------- *)
 module Exn : sig
@@ -60,8 +60,8 @@ let () =
           | TypingError -> Some "invalid goal (typing error)"
           | RecheckFailure -> Some "invalid goal (recheck failure)"
           | Proof.Tactics.TacticNotApplicable -> Some "tactic not applicable"*)
-        (*| MoveOnlyHyps name ->
-            Some ("Reordering variables is not supported : " ^ name)*)
+        | MoveOnlyHyps name ->
+            Some ("Reordering variables is not supported : " ^ name)
         | Typing.TypingError err ->
             Some ("Invalid goal (typing error)\n" ^ Typing.show_typeError err)
         | _ -> None
@@ -534,19 +534,20 @@ and js_subgoal parent (handle : int) =
         Raises [InvalidHyphName] if [from] is not a hypothesis (for instance if it is a local variable). *)
     method movehyp from before =
       let doit () =
-        parent##.proof
-        (*let from = Name.make from in
-          let before = Option.map Name.make @@ Js.Opt.to_option before in
-          js_log @@ Format.sprintf "Moving hyp: %s\n" (Name.show from);
-          let subgoal = Proof.byid parent##.proof _self##.handle in
-          (* Check that [from] is a hypothesis. *)
-          let is_hypothesis = List.mem from (Logic.Hyps.ids subgoal.g_hyps) in
-          if is_hypothesis
-          then
-            (* Actually move the hypothesis. *)
-            Proof.move parent##.proof ~goal_id:_self##.handle ~hyp_name:from
-              ~dest_name:before
-          else raise @@ MoveOnlyHyps (Name.show from)*)
+        let from = Name.make from in
+        let before = Option.map Name.make @@ Js.Opt.to_option before in
+        js_log
+        @@ Format.sprintf "Moving hyp [%s] to [%s]\n" (Name.show from)
+             (Option.to_string Name.show before);
+        let subgoal = Proof.byid parent##.proof _self##.handle in
+        (* Check that [from] is a hypothesis. *)
+        let is_hypothesis = List.mem from (Logic.Hyps.ids subgoal.g_hyps) in
+        if is_hypothesis
+        then
+          (* Actually move the hypothesis. *)
+          Proof.move parent##.proof ~goal_id:_self##.handle ~hyp_name:from
+            ~dest_name:before
+        else raise @@ MoveOnlyHyps (Name.show from)
       in
       js_proof_engine (!!doit ())
 
@@ -614,7 +615,7 @@ and js_hyps parent (goal_id : int) (pos : int) (hyp : Logic.hyp) =
     val parent = parent
 
     (* the handle (UID) of the hypothesis *)
-    val handle = Name.show hyp.h_name
+    val handle = Js.string @@ Name.show hyp.h_name
 
     (* the handle (UID) of the parent hypothesis *)
     val phandle = Js.Opt.option @@ Some (Name.show hyp.h_name)

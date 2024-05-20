@@ -12,6 +12,8 @@
  (libraries coq-actema.prover coq-actema.api js_of_ocaml)
  (package coq-actema)
  (modes js byte)
+ (flags
+  (:standard -w -38))
  (preprocess
   (pps js_of_ocaml-ppx lwt_ppx ppx_deriving.show)))
 

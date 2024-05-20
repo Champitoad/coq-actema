@@ -133,7 +133,7 @@ export default {
             return this.lemmaSearchText;
         },
 
-        // Callback invoked when iser clicks on an entry in the lemma list.
+        // Callback invoked when user clicks on an entry in the lemma list.
         addLemma: async function (lemma) {
             this.$parent.sendLemma(this.goal, lemma.handle);
         },

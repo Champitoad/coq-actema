@@ -940,12 +940,11 @@ export default {
 
                         if (fromHandle !== dropBeforeHandle) {
                             this.setToHypothesisZone();
-                            let fromHandleId = parseInt(fromHandle);
-                            let dropBeforeHandleId =
+                            let dropBeforeHandleOpt =
                                 dropBeforeHandle === "last"
                                     ? null
-                                    : parseInt(dropBeforeHandle);
-                            this.moveHyp(fromHandleId, dropBeforeHandleId);
+                                    : dropBeforeHandle;
+                            this.moveHyp(fromHandle, dropBeforeHandleOpt);
                         }
                     } else {
                         this.dropToCorrectZone();
