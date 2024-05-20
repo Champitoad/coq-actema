@@ -801,8 +801,11 @@ and js_term parent (goal_id : int) (kind : [ `C | `H of Name.t ])
 
 (** Print a single goal in Actema format (for debug purposes). *)
 let print_goal (Logic.{ g_id; g_pregoal = goal } : Logic.goal) : unit =
-  (* Print the env. *)
-  js_log "ENV\n";
+  let xml = Notation.term_to_xml (Logic.Path.make 0) goal.g_env goal.g_concl in
+  js_log @@ Format.asprintf "%a\n" (Tyxml.Xml.pp ()) xml
+
+(* Print the env. *)
+(*js_log "ENV\n";
   List.iter
     begin
       fun (name, ty) ->
@@ -824,7 +827,7 @@ let print_goal (Logic.{ g_id; g_pregoal = goal } : Logic.goal) : unit =
   (* Print the conclusion. *)
   js_log
   @@ Format.sprintf "GOAL\n%s\n"
-       (Notation.term_to_string goal.g_env goal.g_concl)
+       (Notation.term_to_string goal.g_env goal.g_concl)*)
 
 (* -------------------------------------------------------------------- *)
 let export (name : string) : unit =
