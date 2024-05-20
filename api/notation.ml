@@ -71,7 +71,8 @@ let rec get_nat_constant (t : Term.t) : int =
   | App (f, [ arg ]) when f = Term.mkCst Name.succ -> get_nat_constant arg + 1
   | _ -> assert false
 
-let extend i (path : Path.t) = { path with sub = i :: path.sub }
+let extend i (path : Path.t) : Path.t = { path with sub = i :: path.sub }
+let reverse (path : Path.t) : Path.t = { path with sub = List.rev path.sub }
 
 (** [pp_term env path t] pretty-prints the term [t]. 
     The argument [path] keeps track of the path to the term [t], 
@@ -155,7 +156,8 @@ let rec pp_term env (path : Path.t) ctx (t : Term.t) : annot Pp.doc =
         |> flow (break 1)
   in
   (* Wrap the term in a span which holds the path to the term. *)
-  span ~attribs:[ Xml.string_attrib "id" (Path.to_string path) ] content
+  let path_str = Path.to_string @@ reverse path in
+  span ~attribs:[ Xml.string_attrib "id" path_str ] content
 
 (***************************************************************************************)
 (** Backend-specific code. *)
