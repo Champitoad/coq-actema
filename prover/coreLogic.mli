@@ -77,13 +77,13 @@ module Proof : sig
   (** A set of (basic) functions that modify a proof. *)
 
   (** In a proof, replace a goal by a list of pregoals. 
-      Returns the handles of the goals freshly created and the new proof state.
+      Returns the indices of the goals freshly created and the new proof state.
       BEWARE: after calling [xprogress], any [Path.t] into the replaced goal will become invalid 
-      (i.e. the [root] field of the [Path.t] will point to a closed goal). *)
-  (*val xprogress : t -> int -> pregoal list -> int list * t
+      (i.e. the [goal] field of the [Path.t] will point to a closed goal). *)
+  val xprogress : t -> int -> pregoal list -> int list * t
 
-    (** Add a local definition (in a given goal). *)
-    val add_local_def : t -> goal_id:int -> Name.t * Term.t * Term.t -> t*)
+  (** Add a local definition (in a given goal). *)
+  (*val add_local_def : t -> goal_id:int -> Name.t * Term.t * Term.t -> t*)
 
   (** Move a hypothesis BEFORE another hypothesis. *)
   val move : t -> goal_id:int -> hyp_name:Name.t -> dest_name:Name.t option -> t
@@ -94,6 +94,8 @@ module Proof : sig
   (** Get all the elimination variants of a given hypothesis (in a given goal). *)
   val evariants : t -> goal_id:int -> hyp_name:Name.t -> string list
 end
+
+(********************************************************************************)
 
 (** Utilities for the module [Logic.Path]. *)
 module PathUtils : sig
@@ -119,6 +121,8 @@ module PathUtils : sig
       (i.e. contains local variables bound by quantifiers above [t]). *)
   val ctx : Path.t -> Proof.t -> Context.t
 end
+
+(********************************************************************************)
 
 (** A subformula can either have a positive polarity [Pos], a negative polarity
     [Neg], or a superposition [Sup] of both.
@@ -155,6 +159,6 @@ module Polarity : sig
   val of_item : item -> t
 
   (** [of_ipath proof path] returns the polarity of the subterm at path [path] in [proof]. 
-      Raises an anomaly if [path] points to variable (head or body). *)
+      Raises an anomaly if [path] points to a variable (head or body). *)
   val of_ipath : Proof.t -> Path.t -> t
 end

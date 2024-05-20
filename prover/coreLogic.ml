@@ -94,36 +94,39 @@ module Proof = struct
 
   exception TacticNotApplicable
 
-  let xprogress (pr : t) (id : int) (subs : pregoal list) =
-    failwith "Proof.xprogress : todo"
-  (*(* Promote the pregoals to actual goals. *)
-    let subs =
-      let for1 sub =
-        let hyps = Hyps.bump sub.g_hyps in
-        let sub = { sub with g_hyps = hyps } in
-        { g_id = Handle.fresh (); g_pregoal = sub }
+  let xprogress (proof : t) (goal_id : int) (pregoals : pregoal list) =
+    (* Get the maximum goal index currently in use. *)
+    let max_id = proof.p_goals |> IntMap.keys |> List.of_enum |> List.max in
+    (* Choose a goal id for each pregoal. *)
+    let subgoals =
+      let for1 i subgoal =
+        let hyps = Hyps.bump subgoal.g_hyps in
+        let sub = { subgoal with g_hyps = hyps } in
+        { g_id = max_id + i + 1; g_pregoal = sub }
       in
-      List.map for1 subs
+      List.mapi for1 pregoals
     in
+    let new_ids = List.map (fun x -> x.g_id) subgoals in
 
-    (* The handles of the new goals. *)
-    let g_new = List.map (fun x -> x.g_id) subs in
-
-    (* The new goals get the same metadata as the old goal. *)
-    let meta =
-      match Map.Exceptionless.find id !(pr.p_meta) with
-      | None -> !(pr.p_meta)
+    (* The new subgoals get the same metadata as the old goal. *)
+    let p_goal_meta =
+      match get_goal_meta proof ~goal_id with
+      | None -> !(proof.p_goal_meta)
       | Some meta ->
-          List.fold_left (fun map id -> Map.add id meta map) !(pr.p_meta) g_new
+          List.fold_left
+            (fun map id -> IntMap.add id meta map)
+            !(proof.p_goal_meta) new_ids
     in
 
     (* Remove the old goal and add the new goals. *)
     let p_goals =
-      pr.p_goals |> Map.remove id
-      |> List.fold_right (fun sub map -> Map.add sub.g_id sub map) subs
+      proof.p_goals |> IntMap.remove goal_id
+      |> List.fold_right
+           (fun subgoal map -> IntMap.add subgoal.g_id subgoal map)
+           subgoals
     in
-    (* Don't forget to return the handles of the new goals. *)
-    (g_new, { pr with p_goals; p_meta = ref meta })*)
+    (* Don't forget to return the indices of the new goals. *)
+    (new_ids, { proof with p_goals; p_goal_meta = ref p_goal_meta })
 
   let ivariants proof ~goal_id =
     match (byid proof goal_id).g_concl with

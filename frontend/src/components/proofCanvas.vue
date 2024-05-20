@@ -773,7 +773,7 @@ export default {
         },
 
         onDropPredicate(e) {
-            var handle = parseInt(e.dataTransfer.getData("handle"));
+            var handle = e.dataTransfer.getData("handle");
             var deltaX = parseInt(e.dataTransfer.getData("deltaX"));
             var deltaY = parseInt(e.dataTransfer.getData("deltaY"));
 

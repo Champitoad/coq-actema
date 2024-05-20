@@ -86,12 +86,6 @@ let ipath_of_array obj =
 
 let ipath_of_opt obj = obj |> Js.Opt.to_option |> Option.map ipath_of_obj
 
-(*let fresh_handle =
-  let handle = ref 42424242 in
-  fun () ->
-    handle := !handle + 1;
-    !handle*)
-
 (* -------------------------------------------------------------------- *)
 let rec js_proof_engine (proof : Proof.t) =
   object%js (_self)
