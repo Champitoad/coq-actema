@@ -12,7 +12,11 @@ module IntMap = Map.Make (Int)
 
 (* -------------------------------------------------------------------- *)
 
+(** You should use this instead of Format.printf or Printf.printf to log
+    messages from the prover (or else the messages might not get displayed). *)
 let js_log s = Js_of_ocaml.(Firebug.console##log (Js.string s))
+
+let js_log_object obj = Js_of_ocaml.(Firebug.console##log obj)
 
 (** Time the execution of a function and print the measured duration. *)
 let time (label : string) (f : unit -> 'a) : 'a =
@@ -24,10 +28,7 @@ let time (label : string) (f : unit -> 'a) : 'a =
 
 (* -------------------------------------------------------------------- *)
 
-(** You should use this instead of Format.printf or Printf.printf to log
-    messages from the prover (or else the messages might not get displayed). *)
 let fst_map f (x, y) = (f x, y)
-
 let snd_map f (x, y) = (x, f y)
 let pair_map f (x, y) = (f x, f y)
 
@@ -232,35 +233,6 @@ end = struct
     (Map.of_enum e, Map.of_enum (e |> Enum.map (fun (x, y) -> (y, x))))
 
   let of_seq s = (Map.of_seq s, Map.of_seq (s |> Seq.map (fun (x, y) -> (y, x))))
-end
-
-(* -------------------------------------------------------------------- *)
-module Disposable : sig
-  type 'a t
-
-  exception Disposed
-
-  val create : ?cb:('a -> unit) -> 'a -> 'a t
-  val get : 'a t -> 'a
-  val dispose : 'a t -> unit
-end = struct
-  type 'a t = (('a -> unit) option * 'a) option ref
-
-  exception Disposed
-
-  let get (p : 'a t) = match !p with None -> raise Disposed | Some (_, x) -> x
-
-  let dispose (p : 'a t) =
-    let do_dispose p = match p with Some (Some cb, x) -> cb x | _ -> () in
-
-    let oldp = !p in
-    p := None;
-    do_dispose oldp
-
-  let create ?(cb : ('a -> unit) option) (x : 'a) =
-    let r = ref (Some (cb, x)) in
-    Gc.finalise (fun r -> dispose r) r;
-    r
 end
 
 (* -------------------------------------------------------------------- *)

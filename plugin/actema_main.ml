@@ -160,25 +160,20 @@ let test_tac () : unit tactic =
   Goal.enter
     begin
       fun goal ->
-        (*let open Translate_new in
-          let open Api in
-          let open Lang in
-          let concl = Goal.concl goal in
-                  let state =
-                    { coq_env = Goal.env goal; sigma = Goal.sigma goal; env = Env.empty }
-                  in
-                  let term = translate_term state concl in
-                  let env = state.env in
-                  (* Print the env. *)
-                  Log.printf "ENV";
-                  List.iter (fun (name, ty) ->
-                      Log.printf "%s : %s" (Name.show name)
-                        (Notation.term_to_string env ty))
-                  @@ Name.Map.bindings env.constants;
-                  (* Print the term. *)
-                  Log.printf "TERM %s" (Notation.term_to_string env term);
-                  (* Type check the term in Actema and print its type. *)
-                  let ty = Typing.check env term in
-                  Log.printf "TYPE %s" (Notation.term_to_string env ty);*)
+        let open Api in
+        let open Lang in
+        let concl = CoqUtils.Goal.concl goal in
+        let term, env = Translate.econstr goal concl in
+        (* Print the env. *)
+        Log.printf "ENV";
+        List.iter (fun (name, ty) ->
+            Log.printf "%s : %s" (Name.show name)
+              (Notation.term_to_string env ty))
+        @@ Name.Map.bindings env.constants;
+        (* Print the term. *)
+        Log.printf "TERM %s" (Notation.term_to_string env term);
+        (* Type check the term in Actema and print its type. *)
+        let ty = Typing.check env term in
+        Log.printf "TYPE %s" (Notation.term_to_string env ty);
         Tacticals.tclIDTAC
     end

@@ -50,15 +50,15 @@ export default {
         },
 
         toHTML: function () {
-            return this.predicate.form.html();
+            return this.predicate.term.html();
         },
 
         toString: function () {
-            return this.predicate.form.tostring();
+            return this.predicate.term.tostring();
         },
 
         toMathML: function () {
-            return this.predicate.form.mathml();
+            return this.predicate.term.mathml();
         },
 
         setMetadata: function (metadata) {

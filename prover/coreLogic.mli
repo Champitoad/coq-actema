@@ -22,7 +22,7 @@ module Proof : sig
   (** Abstract type of a proof state. *)
   type t
 
-  (** Metadata associated to a goal. *)
+  (** Metadata associated to a proof/goal/hypothesis. *)
   type meta = < > Js_of_ocaml.Js.t
 
   (** Create a fresh proof that contains some goals. *)
@@ -43,12 +43,37 @@ module Proof : sig
   (** Set the lemma database. *)
   val set_db : t -> Lemmas.t -> t
 
+  (********************************************************************************)
+  (** The JS frontend can attach metadata (arbitrary JS objects) to the proof, 
+      to a specific subgoal, or to a specific hypothesis. Examples of metadata include :
+      - the currently active subgoal. 
+      - the coordinates of a hypothesis on screen.
+      
+      The prover doesn't care about what this information is exactly : we handle it as 
+      abstract metadata. 
+      
+      The handling of metadata here is imperative. I (Mathis) have no idea why this is (ask Pablo),
+      but changing it to a functional style would be a lot of refactoring. *)
+
+  (** Attach metadata to the proof. *)
+  val set_proof_meta : t -> meta option -> unit
+
+  (** Get the metadata attached to the proof. *)
+  val get_proof_meta : t -> meta option
+
   (** Attach metadata to a goal. *)
-  val set_meta : t -> int -> meta option -> unit
+  val set_goal_meta : t -> goal_id:int -> meta option -> unit
 
   (** Get the metadata attached to a goal. *)
-  val get_meta : t -> int -> meta option
+  val get_goal_meta : t -> goal_id:int -> meta option
 
+  (** Attach metadata to a hypothesis. *)
+  val set_hyp_meta : t -> goal_id:int -> hyp_name:Name.t -> meta option -> unit
+
+  (** Get the metadata attached to a hypothesis. *)
+  val get_hyp_meta : t -> goal_id:int -> hyp_name:Name.t -> meta option
+
+  (********************************************************************************)
   (** A set of (basic) functions that modify a proof. *)
 
   (** In a proof, replace a goal by a list of pregoals. 

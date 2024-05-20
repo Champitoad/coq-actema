@@ -105,7 +105,8 @@ module Path : sig
   (** The [string] argument contains the path (encoded as text). *)
   exception InvalidPath of string
 
-  (** [make ?kind ?sub goal] creates a new path in the subgoal with index [goal]. *)
+  (** [make ?kind ?sub goal] creates a new path in the subgoal with index [goal].
+      By default [kind] is [Concl] and [sub] is [[]].  *)
   val make : ?kind:kind -> ?sub:int list -> int -> t
 
   (** Decode a path encoded as a string. *)

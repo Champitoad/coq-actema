@@ -607,8 +607,10 @@ export default {
                 this.proofState = null;
             } else {
                 try {
+                    console.log("Setting proof state");
+                    console.log(proofState);
                     // set the current active tab since the prover doesn't transmit root metadata on apply()
-                    proofState.setmeta({ activeSubgoal: this.getActiveSubgoal() });
+                    //proofState.setmeta({ activeSubgoal: this.getActiveSubgoal() });
                     window.goal = this.proofState = proofState;
                     this.addToHistory(this.proofState);
                     this.resetSelection();

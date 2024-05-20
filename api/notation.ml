@@ -1,4 +1,5 @@
 open Lang
+open Logic
 open Tyxml
 open Ann_print
 module StringMap = Map.Make (String)
@@ -70,11 +71,12 @@ let rec get_nat_constant (t : Term.t) : int =
   | App (f, [ arg ]) when f = Term.mkCst Name.succ -> get_nat_constant arg + 1
   | _ -> assert false
 
+let extend i (path : Path.t) = { path with sub = i :: path.sub }
+
 (** [pp_term env path t] pretty-prints the term [t]. 
     The argument [path] keeps track of the path to the term [t], 
-    and is used to annotate the Xml divs of each subterm. 
-    Initially [path] should be empty. *)
-let rec pp_term env path ctx (t : Term.t) : annot Pp.doc =
+    and is used to annotate the Xml divs of each subterm. *)
+let rec pp_term env (path : Path.t) ctx (t : Term.t) : annot Pp.doc =
   let open Pp in
   let content =
     match t with
@@ -91,8 +93,10 @@ let rec pp_term env path ctx (t : Term.t) : annot Pp.doc =
     | Sort `Type -> string "Type"
     | Lambda (name, ty, body) ->
         let pp_binder = string "fun" ^+^ pp_binder env name ^+^ string ":" in
-        let pp_ty = pp_term env (0 :: path) ctx ty ^+^ utf8string "⇒" in
-        let pp_body = pp_term env (1 :: path) (Context.push name ty ctx) body in
+        let pp_ty = pp_term env (extend 0 path) ctx ty ^+^ utf8string "⇒" in
+        let pp_body =
+          pp_term env (extend 1 path) (Context.push name ty ctx) body
+        in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
     | Arrow (t1, t2) ->
         (* We might or might not need to add parentheses around [t1]. *)
@@ -102,18 +106,20 @@ let rec pp_term env path ctx (t : Term.t) : annot Pp.doc =
           | _ when is_nat_constant t1 -> false
           | _ -> true
         in
-        let pp_t1 = paren ~doit @@ pp_term env (0 :: path) ctx t1 in
+        let pp_t1 = paren ~doit @@ pp_term env (extend 0 path) ctx t1 in
         (* We don't need parentheses around [t2]. *)
-        let pp_t2 = pp_term env (1 :: path) ctx t2 in
+        let pp_t2 = pp_term env (extend 1 path) ctx t2 in
         (* Combine the results. *)
         (pp_t1 ^+^ utf8string "→") ^//^ pp_t2
     | Prod (name, ty, body) ->
         let pp_binder = utf8string "∀" ^+^ pp_binder env name ^+^ string ":" in
         let doit = match ty with Prod _ -> true | _ -> false in
         let pp_ty =
-          paren ~doit (pp_term env (0 :: path) ctx ty) ^^ string ","
+          paren ~doit (pp_term env (extend 0 path) ctx ty) ^^ string ","
         in
-        let pp_body = pp_term env (1 :: path) (Context.push name ty ctx) body in
+        let pp_body =
+          pp_term env (extend 1 path) (Context.push name ty ctx) body
+        in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
     | App (f, args) ->
         (* Applications are a bit tricky : we have to check if the function is a constant,
@@ -144,14 +150,12 @@ let rec pp_term env path ctx (t : Term.t) : annot Pp.doc =
                    | _ when is_nat_constant t -> false
                    | _ -> true
                  in
-                 paren ~doit @@ pp_term env (i :: path) ctx t
+                 paren ~doit @@ pp_term env (extend i path) ctx t
              end
         |> flow (break 1)
   in
   (* Wrap the term in a span which holds the path to the term. *)
-  (* TODO : format the path correctly. *)
-  let path_str = String.concat "," @@ List.map string_of_int path in
-  span ~attribs:[ Xml.string_attrib "id" path_str ] content
+  span ~attribs:[ Xml.string_attrib "id" (Path.to_string path) ] content
 
 (***************************************************************************************)
 (** Backend-specific code. *)
@@ -161,12 +165,14 @@ let default_width = 50
 let term_to_string ?(width = default_width) ?(ctx = Context.empty) env t :
     string =
   assert (0 <= width);
-  PpString.pp ~width (pp_term env [] ctx t)
+  (* The path doesn't matter when printing to a string. *)
+  let dummy_path = Path.make 0 in
+  PpString.pp ~width (pp_term env dummy_path ctx t)
 
-let term_to_xml ?(width = default_width) ?(ctx = Context.empty) env t : Xml.elt
-    =
+let term_to_xml ?(width = default_width) ?(ctx = Context.empty) path env t :
+    Xml.elt =
   assert (0 <= width);
-  let xml = PpXml.pp ~width (pp_term env [] ctx t) in
+  let xml = PpXml.pp ~width (pp_term env path ctx t) in
   match xml with
   | [ element ] -> element
   | _ ->

@@ -88,7 +88,8 @@ let rec translate_term state (t : EConstr.t) : Lang.Term.t =
         (* Translate the type and body. *)
         let ty = translate_term state ty in
         let body = translate_term state body in
-        Term.mkArrow ty body
+        (* We removed a binder over [body], so lower all its free variables by 1. *)
+        Term.mkArrow ty (TermUtils.lift_free (-1) body)
     | Name _ ->
         (* Dependent product. *)
         let name =

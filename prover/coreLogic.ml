@@ -8,14 +8,23 @@ exception InvalidSubFormPath of int list
 exception InvalidSubExprPath of int list
 exception SubgoalNotOpened of int
 
+module IntNameMap = Map.Make (struct
+  type t = int * Name.t
+
+  let compare = Stdlib.compare
+end)
+
 module Proof = struct
-  type meta = < > Js_of_ocaml.Js.t
+  type meta = < > Js.t
 
   type t =
     { p_goals : goal IntMap.t
           (** A map from goal handles to goals. 
               Contains only the opened (i.e. currently active) goals. *)
-    ; p_meta : < > Js.t IntMap.t ref  (** Metadata associated to each goal. *)
+    ; p_meta : meta option ref  (** Metadata associated to the proof. *)
+    ; p_goal_meta : meta IntMap.t ref  (** Metadata associated to each goal. *)
+    ; p_hyp_meta : meta IntNameMap.t ref
+          (** Metadata associated to each hypothesis. *)
     ; p_db : Lemmas.t  (** The lemma database. *)
     }
 
@@ -39,18 +48,38 @@ module Proof = struct
           IntMap.add g.g_id g p_goals)
         IntMap.empty goals
     in
-    { p_goals; p_meta = ref IntMap.empty; p_db = Lemmas.empty }
+    { p_goals
+    ; p_meta = ref None
+    ; p_goal_meta = ref IntMap.empty
+    ; p_hyp_meta = ref IntNameMap.empty
+    ; p_db = Lemmas.empty
+    }
 
   let get_db (proof : t) = proof.p_db
   let set_db (proof : t) (db : Lemmas.t) = { proof with p_db = db }
+  let set_proof_meta proof meta : unit = proof.p_meta := meta
+  let get_proof_meta proof : meta option = !(proof.p_meta)
 
-  let set_meta (proof : t) (goal_id : int) (meta : meta option) : unit =
+  let set_goal_meta proof ~goal_id meta : unit =
     match meta with
-    | None -> proof.p_meta := IntMap.remove goal_id !(proof.p_meta)
-    | Some meta -> proof.p_meta := IntMap.add goal_id meta !(proof.p_meta)
+    | None -> proof.p_goal_meta := IntMap.remove goal_id !(proof.p_goal_meta)
+    | Some meta ->
+        proof.p_goal_meta := IntMap.add goal_id meta !(proof.p_goal_meta)
 
-  let get_meta (proof : t) (goal_id : int) : meta option =
-    IntMap.find_opt goal_id !(proof.p_meta)
+  let get_goal_meta proof ~goal_id : meta option =
+    IntMap.find_opt goal_id !(proof.p_goal_meta)
+
+  let set_hyp_meta proof ~goal_id ~hyp_name meta : unit =
+    match meta with
+    | None ->
+        proof.p_hyp_meta :=
+          IntNameMap.remove (goal_id, hyp_name) !(proof.p_hyp_meta)
+    | Some meta ->
+        proof.p_hyp_meta :=
+          IntNameMap.add (goal_id, hyp_name) meta !(proof.p_hyp_meta)
+
+  let get_hyp_meta proof ~goal_id ~hyp_name : meta option =
+    IntNameMap.find_opt (goal_id, hyp_name) !(proof.p_hyp_meta)
 
   let closed (proof : t) = IntMap.is_empty proof.p_goals
   let opened (proof : t) = IntMap.keys proof.p_goals |> List.of_enum
