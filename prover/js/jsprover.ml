@@ -781,13 +781,21 @@ and js_term parent (goal_id : int) (kind : [ `C | `H of Name.t ])
   object%js (_self)
     (* Return the [html] of the term. *)
     method html =
+      (* Get the path to the term. *)
       let path =
         match kind with
         | `H name -> Logic.Path.make ~kind:(Hyp name) goal_id
         | `C -> Logic.Path.make ~kind:Concl goal_id
       in
-
-      (* EXPERIMENTAL *)
+      (* Pretty-print the term to xml. *)
+      let xml =
+        Notation.term_to_xml ~width:10 path (parent##goal).Logic.g_env term
+      in
+      (* For some reason the frontend requires us to :
+         - wrap every string (pcdata) in a span.
+         - wrap the whole term in a span.
+         The frontend being in a horrible state, we comply
+         and don't touch to the javascript code. *)
       let open Tyxml in
       let span ?(a = []) elt = Xml.node ~a "span" [ elt ] in
       let rec add_spans elt =
@@ -801,22 +809,10 @@ and js_term parent (goal_id : int) (kind : [ `C | `H of Name.t ])
         | Node (tag, attribs, elts) ->
             Xml.node tag ~a:attribs (List.map add_spans elts)
       in
-      let xml =
-        Notation.term_to_xml ~width:10 path (parent##goal).Logic.g_env term
-      in
-
-      (* For some reason the frontend requires us to wrap the whole term
-         in an additional span. *)
       let xml = span @@ add_spans xml in
-      let str = Format.asprintf "%a" (Tyxml.Xml.pp ()) xml in
-      (*js_log @@ Format.sprintf "BEFORE:%s\n" str;
-        let str =
-          String.replace_chars
-            (function '\n' -> "&#xA;" | c -> String.make 1 c)
-            str
-        in*)
-      (*js_log @@ Format.sprintf "XML:\n%s\n" str;*)
-      Js.string str
+      (* Pretty-print the xml to a string. This will then be used
+         by the javascript code. *)
+      Js.string @@ Format.asprintf "%a" (Tyxml.Xml.pp ()) xml
 
     (* Return an UTF8 string representation of the term. *)
     method tostring =
