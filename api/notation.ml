@@ -153,7 +153,7 @@ let rec pp_term env (path : Path.t) ctx (t : Term.t) : annot Pp.doc =
                  in
                  paren ~doit @@ pp_term env (extend i path) ctx t
              end
-        |> flow (break 1)
+        |> flow (ifflat space (nest 2 hardline))
   in
   (* Wrap the term in a span which holds the path to the term. *)
   let path_str = Path.to_string @@ reverse path in

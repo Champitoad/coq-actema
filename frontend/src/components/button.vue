@@ -11,6 +11,8 @@
 
 .pi-btn {
     /* border-radius: 2px!important; */
+    display: flex;
+    justify-content: start;
     opacity: 0.8;
     font-weight: bold;
     border-width: 2px;
@@ -32,8 +34,11 @@
 }
 
 .pi-btn span {
-    line-height: 1.6em;
-    display: inline-block;
+    text-align: left;
+    justify-content: start;
+    line-height: 1.2em;
+    //display: inline-block;
+    display: inline;
     font-size: 20px;
     font-family: "Computer Modern Sans", sans-serif;
     height: 100%;

@@ -98,9 +98,9 @@ li .pi-expression.in-work-zone {
 
 .overflow-container {
     overflow-x: hidden;
-    width: calc(100% - 80px);
+    width: auto;
     display: inline-block;
-    height: 44px;
+    height: auto;
 }
 </style>
 

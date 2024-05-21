@@ -51,8 +51,8 @@ export default {
 
         toHTML: function () {
             let html = this.predicate.term.html();
-            return html;
-            //return html.split(/\r?\n/).join("<br>");;
+            // We have to replace newlines in the HTML by <br> tags.
+            return html.split(/\r?\n/).join("<br/>");;
         },
 
         toString: function () {
