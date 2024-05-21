@@ -802,7 +802,7 @@ and js_term parent (goal_id : int) (kind : [ `C | `H of Name.t ])
             Xml.node tag ~a:attribs (List.map add_spans elts)
       in
       let xml =
-        Notation.term_to_xml ~width:10 path (parent##goal).Logic.g_env term
+        Notation.term_to_xml ~width:100 path (parent##goal).Logic.g_env term
       in
 
       (* For some reason the frontend requires us to wrap the term
