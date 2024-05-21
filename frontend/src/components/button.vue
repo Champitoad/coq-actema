@@ -85,6 +85,13 @@ span.MathJax {
     overflow: hidden;
 }
 
+span {
+    // Preserve whitespace (i.e. spaces and newlines) in spans.
+    // This way the prover can output literal spaces instead of Xml entites &nbsp;
+    // and similarly for newlines.
+    white-space: pre;
+}
+
 .math {
     padding-top: 5px;
     padding-bottom: 5px;

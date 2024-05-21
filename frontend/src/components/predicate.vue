@@ -50,7 +50,8 @@ export default {
         },
 
         toHTML: function () {
-            return this.predicate.term.html();
+            let html = this.predicate.term.html();
+            return html.split(/\r?\n/).join("<br>");;
         },
 
         toString: function () {

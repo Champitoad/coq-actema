@@ -786,13 +786,37 @@ and js_term parent (goal_id : int) (kind : [ `C | `H of Name.t ])
         | `H name -> Logic.Path.make ~kind:(Hyp name) goal_id
         | `C -> Logic.Path.make ~kind:Concl goal_id
       in
-      let xml =
-        Notation.term_to_xml ~width:20 path (parent##goal).Logic.g_env term
+
+      (* EXPERIMENTAL *)
+      let open Tyxml in
+      let span ?(a = []) elt = Xml.node ~a "span" [ elt ] in
+      let rec add_spans elt =
+        match Xml.content elt with
+        | Empty -> Xml.empty ()
+        | Comment str -> Xml.comment str
+        | EncodedPCDATA str -> span @@ Xml.encodedpcdata str
+        | PCDATA str -> span @@ Xml.pcdata str
+        | Entity str -> span @@ Xml.entity str
+        | Leaf (tag, attribs) -> Xml.leaf tag ~a:attribs
+        | Node (tag, attribs, elts) ->
+            Xml.node tag ~a:attribs (List.map add_spans elts)
       in
+      let xml =
+        Notation.term_to_xml ~width:10 path (parent##goal).Logic.g_env term
+      in
+
       (* For some reason the frontend requires us to wrap the term
          in an additional span. *)
-      let xml = Tyxml.Xml.node "span" [ xml ] in
-      Js.string @@ Format.asprintf "%a" (Tyxml.Xml.pp ()) xml
+      let xml = span @@ add_spans xml in
+      let str = Format.asprintf "%a" (Tyxml.Xml.pp ()) xml in
+      (*js_log @@ Format.sprintf "BEFORE:%s\n" str;
+        let str =
+          String.replace_chars
+            (function '\n' -> "&#xA;" | c -> String.make 1 c)
+            str
+        in*)
+      js_log @@ Format.sprintf "XML:\n%s\n" str;
+      Js.string str
 
     (* Return an UTF8 string representation of the term. *)
     method tostring =
