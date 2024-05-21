@@ -787,9 +787,12 @@ and js_term parent (goal_id : int) (kind : [ `C | `H of Name.t ])
         | `H name -> Logic.Path.make ~kind:(Hyp name) goal_id
         | `C -> Logic.Path.make ~kind:Concl goal_id
       in
-      (* Pretty-print the term to xml. *)
+      (* Pretty-print the term to xml.
+         We choose an arbitrary width here : in the future we could
+         make it so this method takes the width as input, so that
+         the javascript code decides which width to use. *)
       let xml =
-        Notation.term_to_xml ~width:10 path (parent##goal).Logic.g_env term
+        Notation.term_to_xml ~width:50 path (parent##goal).Logic.g_env term
       in
       (* For some reason the frontend requires us to :
          - wrap every string (pcdata) in a span.

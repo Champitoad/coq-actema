@@ -3,7 +3,7 @@ Require Import ssreflect.
 Require Import Coq.Classes.RelationClasses.
 Require Import Coq.Classes.Morphisms.
 
-Lemma test : forall x, x = 2 + 0 * 3 \/ True.
+Lemma test : forall long_name, long_name = 2 + long_name * 3 \/ True.
 actema_force.
 
 Inductive ll :=
