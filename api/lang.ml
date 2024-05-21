@@ -367,7 +367,9 @@ module Typing = struct
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
 
   let check ?(context = Context.empty) env t = check_rec env context t
-  let typeof ?context env t = failwith "TODO"
+
+  (** TODO: actually makes this faster. *)
+  let typeof ?(context = Context.empty) env t = check ~context env t
 end
 
 (***************************************************************************************)

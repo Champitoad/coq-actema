@@ -779,7 +779,7 @@ and js_hyps parent (goal_id : int) (pos : int) (hyp : Logic.hyp) =
 and js_term parent (goal_id : int) (kind : [ `C | `H of Name.t ])
     (term : Term.t) =
   object%js (_self)
-    (* Return the [html] of the term. *)
+    (** Return the html of the term. *)
     method html =
       (* Get the path to the term. *)
       let path =

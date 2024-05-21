@@ -5,6 +5,38 @@ exception InvalidHyphName of Name.t
 exception InvalidLemmaName of Name.t
 
 (***************************************************************************************)
+(** First-order terms. *)
+
+(** Extracting the first-order structure of terms. *)
+module FirstOrder : sig
+  (** This type represents a term and gives us additional information about 
+      its first-order head connective. *)
+  type t =
+    | FExpr of Term.t (* An arbitrary term that is not of type [Prop]. *)
+    | FProp of Term.t (* An arbitrary term of type [Prop]. *)
+    | FTrue
+    | FFalse
+    | FNot of Term.t
+    | FAnd of Term.t * Term.t
+    | FOr of Term.t * Term.t
+    | FImpl of Term.t * Term.t
+    | FForall of Name.t * Term.t * Term.t
+    | FExist of Name.t * Term.t * Term.t
+
+  (** [of_term env t] destructs the term [t] into an element of the 
+      inductive type [t]. 
+      For instance the term [forall x : nat, x = x + 1 \/ P] gets destructed into
+      [FForall (x, nat, x = x + 1 \/ P)]. 
+      This is not recursive : you have to manually destruct [x = x + 1 \/ P] into 
+      [FOr (x = x + 1, FProp P)] if you need it. *)
+  val of_term : Env.t -> Term.t -> t
+
+  (** [to_term fo] is the inverse of [term_to_fo]. It takes an element of the inductive type 
+      [t] and reconstructs the term that it represents. *)
+  val to_term : Env.t -> t -> Term.t
+end
+
+(***************************************************************************************)
 (** Items *)
 
 (** A single hypothesis. *)
