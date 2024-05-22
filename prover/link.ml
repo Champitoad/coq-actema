@@ -3,23 +3,14 @@ open Api
 open Lang
 open Logic
 open CoreLogic
+open Utils
 
 type link = Path.t * Path.t [@@deriving show]
 type hyperlink = Path.t list * Path.t list [@@deriving show]
 
 module IntGraph = Graph.Persistent.Digraph.Concrete (Int)
 
-type sitem =
-  | (* This variable is rigid : it cannot be substituted.
-       In other terms it NOT a unification variable. *)
-    SRigid
-  | (* This variable is flexible : it can be substituted.
-       In other it is a unification variable that has not been instantiated. *)
-    SFlex
-  | (* This variable is a unification variable that has been substituted.
-       The term can still contain more [SFlex] of [Sbound] variables. *)
-    SBound of Term.t
-[@@deriving show]
+type sitem = SRigid | SFlex | SBound of Term.t [@@deriving show]
 
 let print_mapping fmt map =
   let bindings =
@@ -64,8 +55,107 @@ let rec remove_nothing action =
 (*******************************************************************************************)
 (* Unifying terms. *)
 
-(** [unify_fast ] *)
-let rec unify_fast 
+(** [var] and [term] both live at level [depth], whereas [subst] always lives at level [0]. *)
+let unify_cond depth subst var term : bool =
+  let fvars = TermUtils.free_vars term in
+  (* [var] has to be a free variable. *)
+  var >= depth
+  (* [var] has to be an Sflex variable. *)
+  && IntMap.find (var - depth) subst.mapping = SFlex
+  (* [term] must only use variables that are free in the original [t1] or [t2]. *)
+  && (IntSet.is_empty fvars || IntSet.min_elt fvars >= depth)
+  && (* [term] must not use any variables that are defined below [var].
+        This also checks that [var] is not free in [term]. *)
+  begin
+    if var - depth < subst.n_free_1
+    then
+      (* [var] is free in the original [t1]. *)
+      IntSet.is_empty fvars || IntSet.min_elt fvars > var
+    else
+      (* [var] is free in the original [t2]. *)
+      let fvars = snd @@ IntSet.split_lt (subst.n_free_1 + depth) fvars in
+      IntSet.is_empty fvars || IntSet.min_elt fvars > var
+  end
+
+let expand_cond depth subst var : bool =
+  (* [var] has to be a free variable. *)
+  var >= depth
+  (* [var] has to be bound in [subst]. *)
+  && match IntMap.find var subst.mapping with SBound _ -> true | _ -> false
+
+(** This does not deal with subst.deps. *)
+let rec unify_rec depth (subst : subst) ((t1, t2) : Term.t * Term.t) :
+    subst option =
+  let open Option.Syntax in
+  (* Apply the subsitution to [v]. *)
+  let do_expand v t : subst option =
+    match IntMap.find (v - depth) subst.mapping with
+    | SBound t' -> unify_rec depth subst (t, t')
+    | _ -> assert false
+  in
+  (* Add a mapping [v --> SBound t] to the substitution. *)
+  let do_unify v t : subst option =
+    (* Lower [v] and [t] from level [depth] to level [0]. *)
+    let v = v - depth in
+    let t = TermUtils.lift_free (-depth) t in
+    (* Extend the substitution's mapping. *)
+    let subst =
+      { subst with mapping = IntMap.add v (SBound t) subst.mapping }
+    in
+    Some subst
+  in
+  match (t1, t2) with
+  (* Trivial cases. *)
+  | Var v1, Var v2 when v1 = v2 -> Some subst
+  | Sort s1, Sort s2 when s1 = s2 -> Some subst
+  | Cst c1, Cst c2 when Name.equal c1 c2 -> Some subst
+  (* Expand a variable that is in the substitution. *)
+  | Var v, t when expand_cond depth subst v -> do_expand v t
+  | t, Var v when expand_cond depth subst v -> do_expand v t
+  (* Add a mapping to the substitution. *)
+  | Var v, t when unify_cond depth subst v t -> do_unify v t
+  | t, Var v when unify_cond depth subst v t -> do_unify v t
+  (* Recursive cases. *)
+  | App (f1, args1), App (f2, args2) when List.length args1 = List.length args2
+    ->
+      foldM (unify_rec depth) subst @@ List.combine (f1 :: args1) (f2 :: args2)
+  | Lambda (x1, ty1, body1), Lambda (x2, ty2, body2)
+  | Prod (x1, ty1, body1), Prod (x2, ty2, body2) ->
+      let* subst = unify_rec depth subst (ty1, ty2) in
+      let* subst = unify_rec (depth + 1) subst (body1, body2) in
+      Some subst
+  | Arrow (a1, b1), Arrow (a2, b2) ->
+      let* subst = unify_rec depth subst (a1, a2) in
+      let* subst = unify_rec depth subst (b1, b2) in
+      Some subst
+  (* We failed to unify. *)
+  | _ -> None
+
+let build_deps (subst : subst) : subst =
+  let n1 = subst.n_free_1 in
+  let n2 = subst.n_free_2 in
+  let all_vars = List.init (n1 + n2) Fun.id in
+  (* Start from the empty graph. *)
+  let deps = IntGraph.empty in
+  (* Add a vertex for each free variable. *)
+  let deps = List.fold_left IntGraph.add_vertex deps all_vars in
+  (* Add edges for bound variables. *)
+  let deps =
+    List.fold_left
+      begin
+        fun deps i ->
+          (* Check if i is bound in [subst]. *)
+          match IntMap.find i subst.mapping with
+          | SBound term ->
+              (* Add an edge i -> j for each free variable j of [term]. *)
+              IntSet.fold
+                (fun j deps -> IntGraph.add_edge deps i j)
+                (TermUtils.free_vars term) deps
+          | _ -> deps
+      end
+      deps all_vars
+  in
+  { subst with deps }
 
 (*******************************************************************************************)
 (* Link predicates. *)

@@ -81,7 +81,9 @@ type subst =
   ; (* The number of free variables of [t2] (before lifting [t2]). *)
     n_free_2 : int
   ; (* The actual substitution. It maps the free variables of the common context
-       to terms that depend on these free variables. *)
+       to terms that depend on these free variables.
+
+       The domain of the mapping should be [0 ... n_free_1 + n_free_2 - 1]. *)
     mapping : sitem IntMap.t
   ; (* A graph on the variables of the common context.
        An edge [i -> j] means that variable [i] depends on variable [j], i.e.

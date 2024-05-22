@@ -42,16 +42,24 @@ let ( /> ) (x : 'a option) (f : 'a -> 'b) = BatOption.map f x
 let ueta (f : unit -> 'a) : 'b -> 'a = fun _ -> f ()
 
 (* -------------------------------------------------------------------- *)
-module Option : sig
-  include module type of BatOption
-
-  val fold : ('a -> 'b -> 'a) -> 'a -> 'b option -> 'a
-  val to_string : ('a -> string) -> 'a option -> string
-end = struct
+module Option = struct
   include BatOption
 
   let fold f acc = function None -> acc | Some v -> f acc v
   let to_string pp = map_default pp "None"
+
+  module Syntax = struct
+    let ( <$> ) = Option.map
+    let ( let+ ) = Option.map
+    let ( >>= ) = Option.bind
+    let ( let* ) = Option.bind
+
+    let foldM (f : 'acc -> 'a -> 'acc option) (acc : 'acc) (xs : 'a list) :
+        'acc option =
+      List.fold_left
+        (fun acc x -> match acc with None -> None | Some acc -> f acc x)
+        (Some acc) xs
+  end
 end
 
 (* -------------------------------------------------------------------- *)
