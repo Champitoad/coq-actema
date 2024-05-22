@@ -36,6 +36,7 @@
        Choosing an order for the rules is important as the rewrite system 
        is non-confluent (see the paper "A drag and drop proof tactic"). *)
 
+open Utils
 open Api
 open Lang
 open Logic
@@ -49,18 +50,55 @@ type link = Path.t * Path.t [@@deriving show]
     You are NOT supposed to link two subterms of a same item. *)
 type hyperlink = Path.t list * Path.t list [@@deriving show]
 
-(** An action to perform after linking has been checked.
+(** Graphs with integer vertices. *)
 
-    The substitutions in [`Subform] deserve some explanation : they contain the variables 
-    that are instantiable (i.e. are bound by a [forall] with negative polarity or [exist] 
-    with positive polarity) in the two linked subterms.
-    In order to unify the linked subterms, some of these variables 
-    have to be substituted [Sbound _], and others have no constraint [Sflex]. *)
+module IntGraph : Graph.Sig.P
+
+(** An item in a substitution's mapping. *)
+type sitem =
+  | (* This variable is rigid : it cannot be substituted.
+       In other terms it NOT a unification variable. *)
+    SRigid
+  | (* This variable is flexible : it can be substituted.
+       In other it is a unification variable that has not been instantiated. *)
+    SFlex
+  | (* This variable is a unification variable that has been substituted.
+       The term can still contain more [SFlex] of [Sbound] variables. *)
+    SBound of Term.t
+[@@deriving show]
+
+(** A subtitution is the result of unifying the two sides of a link [(t1, t2)].
+    For practical reasons I chose to work with de Bruijn indices directly instead of 
+    using explicit unification variables.
+
+    When unifying [t1] and [t2], the free variables of [t2] are "lifted" above those of [t1],
+    i.e. we add [n_free_1] to each free variable of [t2]. 
+    This way we can see [t1] and [t2] as living in a "common context" 
+    that has [n_free_1] + [n_free_2] variables. *)
+type subst =
+  { (* The number of free variables of [t1]. *)
+    n_free_1 : int
+  ; (* The number of free variables of [t2] (before lifting [t2]). *)
+    n_free_2 : int
+  ; (* The actual substitution. It maps the free variables of the common context
+       to terms that depend on these free variables. *)
+    mapping : sitem IntMap.t
+  ; (* A graph on the variables of the common context.
+       An edge [i -> j] means that variable [i] depends on variable [j], i.e.
+       that [j] is in the free variables of [mapping[i]].
+
+       In a well-formed substitution, this graph is acyclic.
+       Moreover a topological sort of the graph should give an interleaving of
+       the free variables of [t1] and [t2]. *)
+    deps : IntGraph.t
+  }
+[@@deriving show]
+
+(** An action to perform after linking has been checked. *)
 type linkaction =
   | Nothing
   | Both of linkaction * linkaction
-  | Subform (*of Form.Subst.subst * Form.Subst.subst*)
-      (** Subformula linking. This includes deep rewrites. *)
+  | Subform of subst  (** Subformula linking. This includes deep rewrites. *)
   | Instantiate of Term.t * Path.t
   | Rewrite of Term.t * Term.t * Path.t list
       (** Rewrite expression [e1] into [e2] at several paths. *)

@@ -7,17 +7,40 @@ open CoreLogic
 type link = Path.t * Path.t [@@deriving show]
 type hyperlink = Path.t list * Path.t list [@@deriving show]
 
-(** This is a hack : I needed to do this because [@opaque] in [linkaction] would not work.*)
-(*type subst =
-    (Form.Subst.subst
-    [@printer
-      fun fmt subst -> Format.fprintf fmt "%s" (Form.Subst.to_string subst)])
-  [@@deriving show]*)
+module IntGraph = Graph.Persistent.Digraph.Concrete (Int)
+
+type sitem =
+  | (* This variable is rigid : it cannot be substituted.
+       In other terms it NOT a unification variable. *)
+    SRigid
+  | (* This variable is flexible : it can be substituted.
+       In other it is a unification variable that has not been instantiated. *)
+    SFlex
+  | (* This variable is a unification variable that has been substituted.
+       The term can still contain more [SFlex] of [Sbound] variables. *)
+    SBound of Term.t
+[@@deriving show]
+
+let print_mapping fmt map =
+  let bindings =
+    IntMap.bindings map
+    |> List.map (fun (var, item) ->
+           Format.sprintf "(%d, %s)" var (show_sitem item))
+  in
+  Format.fprintf fmt "[%s]" (String.concat "," bindings)
+
+type subst =
+  { n_free_1 : int
+  ; n_free_2 : int
+  ; mapping : sitem IntMap.t [@printer print_mapping]
+  ; deps : IntGraph.t [@opaque]
+  }
+[@@deriving show]
 
 type linkaction =
   | Nothing
   | Both of linkaction * linkaction
-  | Subform (*of subst * subst*)
+  | Subform of subst
   | Instantiate of Term.t * Path.t
   | Rewrite of Term.t * Term.t * Path.t list
   | Fold of Name.t * Path.t list
@@ -37,6 +60,12 @@ let rec remove_nothing action =
       | Some left, Some right -> Some (Both (left, right))
     end
   | _ -> Some action
+
+(*******************************************************************************************)
+(* Unifying terms. *)
+
+(** [unify_fast ] *)
+let rec unify_fast 
 
 (*******************************************************************************************)
 (* Link predicates. *)
@@ -63,184 +92,6 @@ module Pred = struct
    fun p1 p2 pr lnk ->
     let actions = p1 pr lnk in
     if not (List.is_empty actions) then actions else p2 pr lnk
-
-  let string_of_linkaction proof = failwith "string_of_linkaction: todo"
-  (*let rec doit = function
-      | Nothing -> "⊥"
-      | Both (a, a') -> Printf.sprintf "(%s, %s)" (doit a) (doit a')
-      | Subform _ -> "SubFormulaLinking"
-      | Instantiate _ -> "Instantiate"
-      | Rewrite (red, res, tgts) ->
-          Printf.sprintf "%s[%s ~> %s]"
-            (List.to_string ~sep:", " ~left:"{" ~right:"}"
-               (fun p ->
-                 let Proof.{ g_pregoal; _ }, _, (_, t) = IPath.destr proof p in
-                 Notation.tostring g_pregoal.g_env t)
-               tgts)
-            red res
-    in
-    doit*)
-
-  (** [fresh_evar ~basename ()] generates a fresh name for an
-        existential variable, based on an optional [basename].
-  
-        We choose by convention to name existential variables with a leading '?'.
-        This ensures freshness by avoiding clashes with variables names input
-        by the user, by the definition of identifiers in the lexer. This also
-        means that every new existential variable must be instanciated through
-        this function. *)
-  (*let fresh_evar =
-      let evar_name_counter = ref (-1) in
-      fun ?(basename = "") () ->
-        incr evar_name_counter;
-        "?" ^ basename ^ string_of_int !evar_name_counter
-
-    (** This module implements unification for subformula linking. *)
-    module PreUnif = struct
-      open Form
-
-      module Deps = struct
-        include Graph.Persistent.Digraph.Concrete (Name)
-
-        let subst (deps : t) (s : Subst.subst) : t =
-          (* For each item [x := e] in the substitution *)
-          Subst.fold
-            begin
-              fun deps (x, tag) ->
-                let fvs = match tag with Sbound e -> e_vars e | Sflex -> [] in
-                (* For each variable [y] depending on [x] *)
-                try
-                  fold_succ
-                    begin
-                      fun y deps ->
-                        (* For each variable [z] occurring in [e] *)
-                        List.fold_left
-                          begin
-                            fun deps (z, _) ->
-                              (* Add an edge stating that [y] depends on [z] *)
-                              add_edge deps z y
-                          end
-                          deps fvs
-                    end
-                    deps x deps
-                with Invalid_argument _ -> deps
-            end
-            deps s
-      end
-
-      module TraverseDeps = Graph.Traverse.Dfs (Deps)
-
-      let acyclic = not <<| TraverseDeps.has_cycle
-
-      module Env = struct
-        (** While traversing formulas in search for targets to unify, we need to
-             record and update multiple informations handling the first-order content
-             of the proof. We do so with a record of the form
-
-               [{deps; rnm; subst}]
-
-             where:
-
-             - [deps] is a directed graph recording the dependency relation between
-               existential and eigenvariables, in the same spirit of the dependency
-               relation of expansion trees.
-
-             - [rnm] is an association list, where each item [(z, x)] maps a fresh name
-               [z] to the variable [x] it renames. Indeed, to avoid name clashes between
-               bound variables of [f1] and [f2] during unification, we give them temporary
-               fresh names, which are reverted to the original names with [rnm] when
-               producing the final substitution for each formula.
-
-             - [subst] is the substitution that will be fed to unification, in which we
-               record existential variables in [Sflex] entries.
-         *)
-        type t = { deps : Deps.t; rnm : (name * name) list; subst : Subst.subst }
-      end
-
-      module State = Monad.State (Env)
-
-      let traverse_aux (pol, term) i : (Polarity.t * term) State.t =
-        let open State in
-        match (pol, term) with
-        | Polarity.Pos, `F (FBind (`Forall, x, _, f))
-        | Polarity.Neg, `F (FBind (`Exist, x, _, f)) ->
-            get >>= fun { deps; rnm; subst } ->
-            let z = fresh_evar () in
-            let exs =
-              Subst.fold
-                (fun acc (x, t) -> if t = Sflex then x :: acc else acc)
-                [] subst
-            in
-            let deps =
-              List.fold_left (fun deps y -> Deps.add_edge deps y z) deps exs
-            in
-            let rnm = (z, x) :: rnm in
-            put { deps; rnm; subst } >>= fun _ ->
-            let f = Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f in
-            return (pol, `F f)
-        | Polarity.Neg, `F (FBind (`Forall, x, _, f))
-        | Polarity.Pos, `F (FBind (`Exist, x, _, f)) ->
-            get >>= fun ({ rnm; subst; _ } as st) ->
-            let z = fresh_evar () in
-            let rnm = (z, x) :: rnm in
-            let subst = Subst.push z Sflex subst in
-            put { st with rnm; subst } >>= fun _ ->
-            let f = Form.Subst.f_apply1 (x, 0) (EVar (z, 0)) f in
-            return (pol, `F f)
-        | _ -> return (Polarity.of_direct_subterm (pol, term) i)
-
-      let traverse = State.fold traverse_aux
-    end
-
-    type tres =
-      { term : term
-            (** This term is the RENAMED term (it is not IPath.term proof path). *)
-      ; rename : (name * name) list
-      ; subst : subst
-      }
-
-    (** Traverse both sides of a link, and collect some information used for unifying.
-          Assumes both sides of the link point to a hypothesis or the conclusion. *)
-    let traverse_link proof (src, dst) : PreUnif.Deps.t * tres * tres =
-      let _, item_src, (sub_src, _) = IPath.destr proof src in
-      let _, item_dst, (sub_dst, _) = IPath.destr proof dst in
-      let f_src = form_of_item item_src in
-      let f_dst = form_of_item item_dst in
-
-      let p_src = Polarity.of_item item_src in
-      let p_dst = Polarity.of_item item_dst in
-
-      let open PreUnif in
-      let open State in
-      run
-        begin
-          traverse (p_src, `F f_src) sub_src >>= fun (_, sf1) ->
-          get >>= fun st1 ->
-          put { st1 with rnm = []; subst = Form.Subst.empty } >>= fun _ ->
-          traverse (p_dst, `F f_dst) sub_dst >>= fun (_, sf2) ->
-          get >>= fun st2 ->
-          return
-            ( st2.deps
-            , { term = sf1; rename = st1.rnm; subst = st1.subst }
-            , { term = sf2; rename = st2.rnm; subst = st2.subst } )
-        end
-        { deps = Deps.empty; rnm = []; subst = Form.Subst.empty }
-
-    let rename (rnm1 : (name * name) list) (rnm2 : (name * name) list) =
-      List.map
-        begin
-          fun (x, tag) ->
-            let get_name x rnm = Option.default x (List.assoc_opt x rnm) in
-            let x = get_name x rnm1 in
-            let tag =
-              let rec rename = function
-                | EVar (x, i) -> EVar (get_name x rnm2, i)
-                | EFun (f, es) -> EFun (f, List.map rename es)
-              in
-              match tag with Sbound e -> Sbound (rename e) | _ -> tag
-            in
-            (x, tag)
-        end*)
 
   let unifiable : lpred = failwith "unifiable : todo"
   (*let open Form in
