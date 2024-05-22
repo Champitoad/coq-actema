@@ -265,9 +265,9 @@ module TermUtils = struct
             else raise exn
       end
 
-  let subterm t sub =
+  let subterm ?(context = Context.empty) t sub =
     let exn = InvalidSubtermPath (t, sub) in
-    subterm_rec exn Context.empty t sub
+    subterm_rec exn context t sub
 end
 
 (***************************************************************************************)

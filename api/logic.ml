@@ -5,53 +5,53 @@ exception InvalidGoalId of int
 exception InvalidHyphName of Name.t
 exception InvalidLemmaName of Name.t
 
-(***************************************************************************************)
-(** First-order terms. *)
+(*(***************************************************************************************)
+  (** First-order terms. *)
 
-module FirstOrder = struct
-  type t =
-    | FExpr of Term.t (* An arbitrary term that is not a [Prop]. *)
-    | FProp of Term.t (* An arbitrary term of type [Prop]. *)
-    | FTrue
-    | FFalse
-    | FNot of Term.t
-    | FAnd of Term.t * Term.t
-    | FOr of Term.t * Term.t
-    | FImpl of Term.t * Term.t
-    | FForall of Name.t * Term.t * Term.t
-    | FExist of Name.t * Term.t * Term.t
+  module FirstOrder = struct
+    type bkind = Forall | Exist
+    type conn = True | False | Not | Or | And | Impl | Equiv
 
-  let to_term _env fo : Term.t =
-    let open Term in
-    match fo with
-    | FExpr t | FProp t -> t
-    | FTrue -> mkCst Name.true_
-    | FFalse -> mkCst Name.false_
-    | FNot t -> mkApp (mkCst Name.not) t
-    | FAnd (t1, t2) -> mkApps (mkCst Name.and_) [ t1; t2 ]
-    | FOr (t1, t2) -> mkApps (mkCst Name.or_) [ t1; t2 ]
-    | FImpl (t1, t2) -> mkArrow t1 t2
-    | FForall (x, ty, body) -> mkProd x ty body
-    | FExist (x, ty, body) -> mkApps (mkCst Name.ex) [ ty; mkLambda x ty body ]
+    type t =
+      | FExpr of Term.t (* An arbitrary term that is not of type [Prop]. *)
+      | FProp of Term.t (* An arbitrary term of type [Prop]. *)
+      | FConn of conn * Term.t list
+      | FBind of bkind * Name.t * Term.t * Term.t
 
-  let of_term env (t : Term.t) : t =
-    match t with
-    (* Detect expressions first. *)
-    | _ when Typing.typeof env t <> Term.mkProp -> FExpr t
-    (* Anything below is a Prop. *)
-    | Cst true_ when Name.equal true_ Name.true_ -> FTrue
-    | Cst false_ when Name.equal false_ Name.false_ -> FFalse
-    | App (Cst not, [ arg ]) when Name.equal not Name.not -> FNot arg
-    | App (Cst and_, [ arg1; arg2 ]) when Name.equal and_ Name.and_ ->
-        FAnd (arg1, arg2)
-    | App (Cst or_, [ arg1; arg2 ]) when Name.equal or_ Name.or_ ->
-        FOr (arg1, arg2)
-    | Arrow (t1, t2) -> FImpl (t1, t2)
-    | Prod (x, ty, body) -> FForall (x, ty, body)
-    | App (Cst ex, [ ty; Lambda (x, _, body) ]) when Name.equal ex Name.ex ->
-        FExist (x, ty, body)
-    | _ -> FProp t
-end
+    let to_term fo : Term.t =
+      let open Term in
+      match fo with
+      | FExpr t | FProp t -> t
+      | FConn (True, []) -> mkCst Name.true_
+      | FConn (False, []) -> mkCst Name.false_
+      | FConn (Not, [ t ]) -> mkApp (mkCst Name.not) t
+      | FConn (And, [ t1; t2 ]) -> mkApps (mkCst Name.and_) [ t1; t2 ]
+      | FConn (Or, [ t1; t2 ]) -> mkApps (mkCst Name.or_) [ t1; t2 ]
+      | FConn (Impl, [ t1; t2 ]) -> mkArrow t1 t2
+      | FConn (Equiv, [ t1; t2 ]) -> mkApps (mkCst Name.equiv) [ t1; t2 ]
+      | FBind (Forall, x, ty, body) -> mkProd x ty body
+      | FBind (Exist, x, ty, body) ->
+          mkApps (mkCst Name.ex) [ ty; mkLambda x ty body ]
+      | FConn _ -> assert false
+
+    let of_term env (t : Term.t) : t =
+      match t with
+      (* Detect expressions first. *)
+      | _ when Typing.typeof env t <> Term.mkProp -> FExpr t
+      (* Anything below is a Prop. *)
+      | Cst true_ when Name.equal true_ Name.true_ -> FConn (True, [])
+      | Cst false_ when Name.equal false_ Name.false_ -> FConn (False, [])
+      | App (Cst not, [ arg ]) when Name.equal not Name.not -> FConn (Not, [ arg ])
+      | App (Cst and_, [ arg1; arg2 ]) when Name.equal and_ Name.and_ ->
+          FAnd (arg1, arg2)
+      | App (Cst or_, [ arg1; arg2 ]) when Name.equal or_ Name.or_ ->
+          FOr (arg1, arg2)
+      | Arrow (t1, t2) -> FImpl (t1, t2)
+      | Prod (x, ty, body) -> FForall (x, ty, body)
+      | App (Cst ex, [ ty; Lambda (x, _, body) ]) when Name.equal ex Name.ex ->
+          FExist (x, ty, body)
+      | _ -> FProp t
+  end*)
 
 (***************************************************************************************)
 (** Items *)

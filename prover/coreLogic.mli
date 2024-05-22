@@ -147,10 +147,10 @@ module Polarity : sig
       [Sup] is mapped to itself. *)
   val opp : t -> t
 
-  (** [of_subterm (p, t) sub] returns the subterm of [t] at path [sub] together
-      with its polarity and context, given that [t]'s polarity is [p].
+  (** [of_subterm pol t sub] returns the subterm of [t] at path [sub] together
+      with its polarity and context, given that [t]'s polarity is [pol].
       Raises [InvalidSubtermPath] if [sub] does not point to a valid subterm in [t]. *)
-  val of_subterm : t * Term.t -> int list -> t * Context.t * Term.t
+  val of_subterm : t -> Term.t -> int list -> t * Context.t * Term.t
 
   (** [neg_count t sub] counts the number of negations in [t] along path [sub] *)
   val neg_count : Term.t -> int list -> int

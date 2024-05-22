@@ -231,37 +231,106 @@ module Polarity = struct
 
   let opp = function Pos -> Neg | Neg -> Pos | Sup -> Sup
 
-  let rec of_subterm_rec exn pol ctx t sub : t * Context.t * Term.t =
+  (** [is_logical_conn name] tests whether [name] corresponds to a logical connector. *)
+  let is_logical_conn name : bool =
+    List.exists (Name.equal name)
+      [ Name.and_; Name.or_; Name.not; Name.equiv; Name.true_; Name.false_ ]
+
+  (** This assumes that [t] has type [Prop]. *)
+  let rec of_subterm_rec exn (pol : t) context t sub : t * (Context.t * Term.t)
+      =
     match sub with
-    | [] -> (pol, ctx, t)
+    | [] -> (pol, (context, t))
     | idx :: sub -> begin
         match (t : Term.t) with
+        (* Invalid terms at this point. *)
         | Var _ | Cst _ | Sort _ -> raise exn
-        | App (f, args) ->
-            if idx = 0
-            then of_subterm_rec exn pol ctx f sub
-            else if 1 <= idx && idx <= List.length args
-            then of_subterm_rec exn pol ctx (List.nth args (idx - 1)) sub
-            else raise exn
-        | Lambda (x, ty, body) | Prod (x, ty, body) ->
-            if idx = 0
-            then of_subterm_rec exn (opp pol) ctx ty sub
-            else if idx = 1
-            then of_subterm_rec exn pol (Context.push x ty ctx) body sub
-            else raise exn
-        | Arrow (t1, t2) ->
-            if idx = 0
-            then of_subterm_rec exn (opp pol) ctx t1 sub
-            else if idx = 1
-            then of_subterm_rec exn pol ctx t2 sub
-            else raise exn
+        (* Traverse a [not]. *)
+        | App (Cst f, [ arg ]) when Name.equal f Name.not && idx = 1 ->
+            of_subterm_rec exn (opp pol) context arg sub
+        (* Implication. *)
+        | Arrow (t1, t2) -> begin
+            match idx with
+            | 0 -> of_subterm_rec exn (opp pol) context t1 sub
+            | 1 -> of_subterm_rec exn pol context t2 sub
+            | _ -> raise exn
+          end
+        (* Equivalence. *)
+        | App (Cst f, [ t1; t2 ]) when Name.equal f Name.equiv && idx = 1 ->
+            of_subterm_rec exn Sup context t1 sub
+        | App (Cst f, [ t1; t2 ]) when Name.equal f Name.equiv && idx = 2 ->
+            of_subterm_rec exn Sup context t2 sub
+        (* Any other logical connector. *)
+        | App (Cst c, args) when is_logical_conn c -> begin
+            match idx with
+            | 0 when sub = [] -> (pol, (context, Term.mkCst c))
+            | i when 1 <= i && i <= List.length args ->
+                of_subterm_rec exn pol context (List.at args (i - 1)) sub
+            | _ -> raise exn
+          end
+        (* Anpther application (not a logical connector) : stop counting negations. *)
+        | App _ -> (pol, TermUtils.subterm ~context t (idx :: sub))
+        (* Products. *)
+        | Prod (x, ty, body) -> begin
+            match idx with
+            | 0 -> (pol, TermUtils.subterm ~context ty sub)
+            | 1 -> of_subterm_rec exn pol (Context.push x ty context) body sub
+            | _ -> raise exn
+          end
+        (* Lambdas are not of type Prop. *)
+        | Lambda _ -> raise exn
       end
 
-  let of_subterm (pol, term) sub : t * Context.t * Term.t =
+  let of_subterm pol term sub : t * Context.t * Term.t =
     let exn = InvalidSubtermPath (term, sub) in
-    of_subterm_rec exn pol Context.empty term sub
+    let pol, (ctx, t) = of_subterm_rec exn pol Context.empty term sub in
+    (pol, ctx, t)
 
-  let neg_count term sub : int = failwith "neg_count: todo"
+  (** This assumes that [t] has type [Prop]. *)
+  let rec neg_count_rec exn (negs : int) context t sub :
+      int * (Context.t * Term.t) =
+    match sub with
+    | [] -> (negs, (context, t))
+    | idx :: sub -> begin
+        match (t : Term.t) with
+        (* Invalid terms at this point. *)
+        | Var _ | Cst _ | Sort _ -> raise exn
+        (* Traverse a [not]. *)
+        | App (Cst f, [ arg ]) when Name.equal f Name.not && idx = 1 ->
+            neg_count_rec exn (negs + 1) context arg sub
+        (* Implication. *)
+        | Arrow (t1, t2) -> begin
+            match idx with
+            | 0 -> neg_count_rec exn (negs + 1) context t1 sub
+            | 1 -> neg_count_rec exn negs context t2 sub
+            | _ -> raise exn
+          end
+        (* Any other logical connector. *)
+        | App (Cst c, args) when is_logical_conn c -> begin
+            match idx with
+            | 0 when sub = [] -> (negs, (context, Term.mkCst c))
+            | i when 1 <= i && i <= List.length args ->
+                neg_count_rec exn negs context (List.at args (i - 1)) sub
+            | _ -> raise exn
+          end
+        (* Anpther application (not a logical connector) : stop counting negations. *)
+        | App _ -> (negs, TermUtils.subterm ~context t (idx :: sub))
+        (* Products. *)
+        | Prod (x, ty, body) -> begin
+            match idx with
+            | 0 -> (negs, TermUtils.subterm ~context ty sub)
+            | 1 -> neg_count_rec exn negs (Context.push x ty context) body sub
+            | _ -> raise exn
+          end
+        (* Lambdas are not of type Prop. *)
+        | Lambda _ -> raise exn
+      end
+
+  let neg_count term sub : int =
+    let exn = InvalidSubtermPath (term, sub) in
+    let negs, _ = neg_count_rec exn 0 Context.empty term sub in
+    negs
+
   let of_item item : t = match item with Concl _ -> Pos | Var _ | Hyp _ -> Neg
 
   let of_ipath proof path : t =
@@ -271,6 +340,6 @@ module Polarity = struct
       | Concl f -> (Pos, f)
       | Var _ -> failwith "Polarity.of_ipath : path points to a variable."
     in
-    let pol, _, _ = of_subterm (pol, form) path.sub in
+    let pol, _, _ = of_subterm pol form path.sub in
     pol
 end

@@ -268,10 +268,11 @@ module TermUtils : sig
   (** [constants t] computes the set of constants used in [t]. *)
   val constants : Term.t -> Name.Set.t
 
-  (** [subterm t sub] returns the subterm of [t] at path [sub] 
-      together with its local context. 
+  (** [subterm ?context t sub] returns the subterm of [t] at path [sub] 
+      together with its local context. The argument [context] gives the initial
+      context that [t] lives in : by default it is [Context.empty].
       Raises [InvalidSubtermPath] if [sub] is not a valid path in [t]. *)
-  val subterm : Term.t -> int list -> Context.t * Term.t
+  val subterm : ?context:Context.t -> Term.t -> int list -> Context.t * Term.t
 end
 
 (***************************************************************************************)
