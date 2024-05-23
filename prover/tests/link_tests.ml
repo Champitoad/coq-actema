@@ -365,43 +365,50 @@ let test_unif_2 () =
       && is_rigid subst 4 && is_flex subst 5
   | _ -> false
 
-(*let test_unif_3 () =
+let test_unif_3 () =
+  let open Term in
   let hlpred = Link.Pred.(lift unifiable) in
   let hyp =
-    forall "x" tnat @@ forall "l1" tlist @@ exist "l2" tlist
-    @@ FPred
-         ( "perm"
-         , [ EFun ("cons", [ var "x"; var "l1" ])
-           ; EFun ("cons", [ var "x"; var "l2" ])
-           ] )
+    forall "x" nat @@ forall "l1" list_nat @@ exist "l2" list_nat
+    @@ mkApps perm_nat
+         [ mkApps cons_nat [ mkVar 2; mkVar 1 ]
+         ; mkApps cons_nat [ mkVar 2; mkVar 0 ]
+         ]
   in
   let concl =
-    exist "x" tnat @@ forall "l1" tlist
-    @@ FConn
-         ( `Not
-         , [ forall "l2" tlist @@ forall "l0" tlist
-             @@ FConn
-                  ( `And
-                  , [ FPred
-                        ( "perm"
-                        , [ EFun ("cons", [ var "x"; var "l1" ]); var "l0" ] )
-                    ; FPred
-                        ( "perm"
-                        , [ var "l0"; EFun ("cons", [ var "x"; var "l2" ]) ] )
-                    ] )
-           ] )
+    exist "x" nat @@ forall "l1" list_nat
+    @@ mkApp (mkCst Name.not)
+    @@ forall "l2" list_nat @@ forall "l0" list_nat
+    @@ mkApps (mkCst Name.and_)
+         [ mkApps perm_nat [ mkApps cons_nat [ mkVar 3; mkVar 2 ]; mkVar 0 ]
+         ; mkApps perm_nat [ mkVar 0; mkApps cons_nat [ mkVar 3; mkVar 1 ] ]
+         ]
   in
+
+  (* mkApps cons_nat [ mkVar 2; mkVar 1 ]
+     =?=
+     mkApps cons_nat [ mkVar 6; mkVar 5 ]
+
+     mkApps cons_nat [ mkVar 2; mkVar 0 ]
+     =?=
+     mkVar 3
+  *)
   let actions =
-    link_backward hyp [ 0; 0; 0 ] concl [ 0; 0; 0; 0; 0; 0 ] hlpred
+    link_backward hyp [ 1; 1; 2; 1 ] concl [ 2; 1; 1; 1; 1; 1; 1 ] hlpred
   in
   check_linkactions actions @@ function
-  | `Subform (s1, s2) ->
-      subst_sbound "x" s1 && subst_sbound "l1" s1
-      && (not (subst_contains "l2" s1))
-      && subst_sflex "x" s2
-      && (not (subst_contains "l1" s2))
-      && subst_sflex "l2" s2 && subst_sbound "l0" s2
-  | _ -> false*)
+  | Subform subst ->
+      subst.n_free_1 = 3 && subst.n_free_2 = 4
+      (* In the hypothesis, l2 is rigid, l1 is bound. *)
+      && is_rigid subst 0
+      && is_bound subst 1
+      (* In the conclusion, l1 is rigid, l0 is bound. *)
+      && is_rigid subst 5
+      && is_bound subst 3
+      (* We unify the x of the hypothesis and the conclusion. *)
+      && ((is_flex subst 2 && is_bound subst 6)
+         || (is_bound subst 2 && is_flex subst 6))
+  | _ -> false
 
 (**********************************************************************************************)
 (** Testing [Pred.wf_subform]. *)
@@ -524,7 +531,7 @@ let () =
             [ test_eq_0; test_eq_1; test_eq_2; test_eq_3; test_eq_4 ]
         ;*)
       test_group "unification"
-        [ test_unif_0; test_unif_1; test_unif_2 (*; test_unif_3*) ]
+        [ test_unif_0; test_unif_1; test_unif_2; test_unif_3 ]
       (*; test_group "subformula-linking"
             [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3; test_sfl_4 ]
         ; test_group "deep-rewrite" [ test_drw_0 ]*)
