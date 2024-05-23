@@ -57,18 +57,18 @@ module IntGraph : Graph.Sig.P
 (** An item in a substitution's mapping. *)
 type sitem =
   | (* This variable is rigid : it cannot be substituted.
-       In other terms it NOT a unification variable. *)
+       In other terms it is NOT a unification variable. *)
     SRigid
   | (* This variable is flexible : it can be substituted.
-       In other it is a unification variable that has not been instantiated. *)
+       In other terms it is a unification variable that has not been instantiated (yet). *)
     SFlex
-  | (* This variable is a unification variable that has been substituted.
-       The term can still contain more [SFlex] of [Sbound] variables. *)
+  | (* This variable is a unification variable that has been instantiated.
+       The term can still contain more [SFlex] or [Sbound] variables. *)
     SBound of Term.t
 [@@deriving show]
 
 (** A subtitution is the result of unifying the two sides of a link [(t1, t2)].
-    For practical reasons I chose to work with de Bruijn indices directly instead of 
+    For various reasons I chose to work with de Bruijn indices directly instead of 
     using explicit unification variables.
 
     When unifying [t1] and [t2], the free variables of [t2] are "lifted" above those of [t1],

@@ -11,6 +11,11 @@ open CoreLogic
 (**********************************************************************************************)
 (** Making mock proofs. *)
 
+let forall name ty body = Term.mkProd (Name.make name) ty body
+
+let exist name ty body =
+  Term.(mkApps (mkCst @@ Name.ex) [ ty; mkLambda (Name.make name) ty body ])
+
 let nat : Term.t = Term.mkCst Name.nat
 let list_nat : Term.t = Term.(mkApp (mkCst @@ Name.make "list") nat)
 let perm_nat : Term.t = Term.(mkApp (mkCst @@ Name.make "perm") nat)
@@ -101,23 +106,31 @@ let link_backward hyp hyp_sub concl concl_sub hlpred : Link.linkaction list =
   in
   List.concat_map flatten_linkaction actions
 
-(** Is [name] bound in [subst] ? *)
-(*let subst_contains name subst =
-    List.exists (fun (name', _) -> name = name') (Form.Subst.aslist subst)
+(** Is [var] bound to an [SFlex] item in [subst] ? *)
+let is_flex subst var : bool =
+  let open Link in
+  match IntMap.find_opt var subst.mapping with Some SFlex -> true | _ -> false
 
-  (** Is [name] bound to an [Sbound _] item in [subst] ? *)
-  let subst_sbound name subst =
-    let item_bound sitem = match sitem with Sflex -> false | Sbound _ -> true in
-    List.exists
-      (fun (name', sitem) -> name = name' && item_bound sitem)
-      (Form.Subst.aslist subst)
+(** Is [var] bound to an [SRigid] item in [subst] ? *)
+let is_rigid subst var : bool =
+  let open Link in
+  match IntMap.find_opt var subst.mapping with
+  | Some SRigid -> true
+  | _ -> false
 
-  (** Is [name] bound to an [Sflex _] item in [subst] ? *)
-  let subst_sflex name subst =
-    let item_flex sitem = match sitem with Sflex -> true | Sbound _ -> false in
-    List.exists
-      (fun (name', sitem) -> name = name' && item_flex sitem)
-      (Form.Subst.aslist subst)*)
+(** Is [var] bound to an [Sbound _] item in [subst] ? *)
+let is_bound subst var =
+  let open Link in
+  match IntMap.find_opt var subst.mapping with
+  | Some (SBound _) -> true
+  | _ -> false
+
+(** Is [var] bound to an [Sbound term] item in [subst] ? *)
+let is_bound_to subst var term =
+  let open Link in
+  match IntMap.find_opt var subst.mapping with
+  | Some (SBound term') when term = term' -> true
+  | _ -> false
 
 (**********************************************************************************************)
 (** Testing [Pred.opposite_pol_formulas]. *)
@@ -289,9 +302,10 @@ let link_backward hyp hyp_sub concl concl_sub hlpred : Link.linkaction list =
 (** Testing [Pred.unifiable]. *)
 
 let test_unif_0 () =
+  let open Term in
   let hlpred = Link.Pred.(lift unifiable) in
-  let hyp1 = Term.(mkArrow (mkCst Name.true_) (mkCst Name.false_)) in
-  let hyp2 = Term.(mkCst Name.true_) in
+  let hyp1 = mkArrow (mkCst Name.true_) (mkCst Name.false_) in
+  let hyp2 = mkCst Name.true_ in
   let actions = link_forward hyp1 [ 0 ] hyp2 [] hlpred in
   check_linkactions actions @@ function
   | Subform subst ->
@@ -303,12 +317,9 @@ let test_unif_0 () =
 let test_unif_1 () =
   let open Term in
   let hlpred = Link.Pred.lift Link.Pred.unifiable in
-  let hyp =
-    mkProd (Name.make "l") list_nat @@ mkApps perm_nat [ mkVar 0; mkVar 0 ]
-  in
+  let hyp = forall "l" list_nat @@ mkApps perm_nat [ mkVar 0; mkVar 0 ] in
   let concl =
-    mkProd (Name.make "x") nat
-    @@ mkProd (Name.make "l") list_nat
+    forall "x" nat @@ forall "l" list_nat
     @@ mkApps perm_nat
          [ mkApps cons_nat [ mkVar 1; mkVar 0 ]
          ; mkApps cons_nat [ mkVar 1; mkVar 0 ]
@@ -316,82 +327,81 @@ let test_unif_1 () =
   in
   let actions = link_backward hyp [ 1 ] concl [ 1; 1 ] hlpred in
   check_linkactions actions @@ function
-  | Subform subst -> subst.n_free_1 = 1 && subst.n_free_2 = 2
+  | Subform subst ->
+      subst.n_free_1 = 1 && subst.n_free_2 = 2 && is_bound subst 0
+      && is_rigid subst 1 && is_rigid subst 2
   | _ -> false
 
-(*let test_unif_2 () =
-    let hlpred = Link.Pred.(lift unifiable) in
-    let hyp =
-      forall "l1" tlist @@ forall "l2" tlist @@ forall "l3" tlist
-      @@ FConn
-           ( `Imp
-           , [ FPred ("perm", [ var "l1"; var "l2" ])
-             ; FConn
-                 ( `Imp
-                 , [ FPred ("perm", [ var "l2"; var "l3" ])
-                   ; FPred ("perm", [ var "l1"; var "l3" ])
-                   ] )
-             ] )
-    in
-    let concl =
-      FConn
-        ( `Not
-        , [ forall "x" tnat @@ exist "l1" tlist @@ forall "l2" tlist
-            @@ FPred
-                 ( "perm"
-                 , [ EFun ("cons", [ var "x"; var "l1" ])
-                   ; EFun ("cons", [ var "x"; var "l2" ])
-                   ] )
-          ] )
-    in
-    let actions =
-      link_backward hyp [ 0; 0; 0; 1; 1 ] concl [ 0; 0; 0; 0 ] hlpred
-    in
-    check_linkactions actions @@ function
-    | `Subform (s1, s2) ->
-        subst_sbound "l1" s1 && subst_sflex "l2" s1 && subst_sbound "l3" s1
-        && subst_sflex "x" s2
-        && (not (subst_contains "l1" s2))
-        && subst_sflex "l2" s2
-    | _ -> false
+let test_unif_2 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift unifiable) in
+  let hyp =
+    forall "l1" list_nat @@ forall "l2" list_nat @@ forall "l3" list_nat
+    @@ mkArrows
+         [ mkApps perm_nat [ mkVar 2; mkVar 1 ]
+         ; mkApps perm_nat [ mkVar 1; mkVar 0 ]
+         ; mkApps perm_nat [ mkVar 2; mkVar 0 ]
+         ]
+  in
+  let concl =
+    mkApp (mkCst Name.not)
+    @@ forall "x" nat @@ exist "l1" list_nat @@ forall "l2" list_nat
+    @@ mkApps perm_nat
+         [ mkApps cons_nat [ mkVar 2; mkVar 1 ]
+         ; mkApps cons_nat [ mkVar 2; mkVar 0 ]
+         ]
+  in
+  let actions =
+    link_backward hyp [ 1; 1; 1; 1; 1 ] concl [ 1; 1; 2; 1; 1 ] hlpred
+  in
+  check_linkactions actions @@ function
+  | Subform subst ->
+      subst.n_free_1 = 3 && subst.n_free_2 = 3
+      (* In the hypothesis, l1 and l3 are bound but l2 is flex. *)
+      && is_bound subst 0
+      && is_flex subst 1 && is_bound subst 2
+      (* In the conclusion, x and l2 are flex but l1 is rigid. *)
+      && is_flex subst 3
+      && is_rigid subst 4 && is_flex subst 5
+  | _ -> false
 
-  let test_unif_3 () =
-    let hlpred = Link.Pred.(lift unifiable) in
-    let hyp =
-      forall "x" tnat @@ forall "l1" tlist @@ exist "l2" tlist
-      @@ FPred
-           ( "perm"
-           , [ EFun ("cons", [ var "x"; var "l1" ])
-             ; EFun ("cons", [ var "x"; var "l2" ])
-             ] )
-    in
-    let concl =
-      exist "x" tnat @@ forall "l1" tlist
-      @@ FConn
-           ( `Not
-           , [ forall "l2" tlist @@ forall "l0" tlist
-               @@ FConn
-                    ( `And
-                    , [ FPred
-                          ( "perm"
-                          , [ EFun ("cons", [ var "x"; var "l1" ]); var "l0" ] )
-                      ; FPred
-                          ( "perm"
-                          , [ var "l0"; EFun ("cons", [ var "x"; var "l2" ]) ] )
-                      ] )
-             ] )
-    in
-    let actions =
-      link_backward hyp [ 0; 0; 0 ] concl [ 0; 0; 0; 0; 0; 0 ] hlpred
-    in
-    check_linkactions actions @@ function
-    | `Subform (s1, s2) ->
-        subst_sbound "x" s1 && subst_sbound "l1" s1
-        && (not (subst_contains "l2" s1))
-        && subst_sflex "x" s2
-        && (not (subst_contains "l1" s2))
-        && subst_sflex "l2" s2 && subst_sbound "l0" s2
-    | _ -> false*)
+(*let test_unif_3 () =
+  let hlpred = Link.Pred.(lift unifiable) in
+  let hyp =
+    forall "x" tnat @@ forall "l1" tlist @@ exist "l2" tlist
+    @@ FPred
+         ( "perm"
+         , [ EFun ("cons", [ var "x"; var "l1" ])
+           ; EFun ("cons", [ var "x"; var "l2" ])
+           ] )
+  in
+  let concl =
+    exist "x" tnat @@ forall "l1" tlist
+    @@ FConn
+         ( `Not
+         , [ forall "l2" tlist @@ forall "l0" tlist
+             @@ FConn
+                  ( `And
+                  , [ FPred
+                        ( "perm"
+                        , [ EFun ("cons", [ var "x"; var "l1" ]); var "l0" ] )
+                    ; FPred
+                        ( "perm"
+                        , [ var "l0"; EFun ("cons", [ var "x"; var "l2" ]) ] )
+                    ] )
+           ] )
+  in
+  let actions =
+    link_backward hyp [ 0; 0; 0 ] concl [ 0; 0; 0; 0; 0; 0 ] hlpred
+  in
+  check_linkactions actions @@ function
+  | `Subform (s1, s2) ->
+      subst_sbound "x" s1 && subst_sbound "l1" s1
+      && (not (subst_contains "l2" s1))
+      && subst_sflex "x" s2
+      && (not (subst_contains "l1" s2))
+      && subst_sflex "l2" s2 && subst_sbound "l0" s2
+  | _ -> false*)
 
 (**********************************************************************************************)
 (** Testing [Pred.wf_subform]. *)
@@ -514,7 +524,7 @@ let () =
             [ test_eq_0; test_eq_1; test_eq_2; test_eq_3; test_eq_4 ]
         ;*)
       test_group "unification"
-        [ test_unif_0; test_unif_1 (*; test_unif_2; test_unif_3*) ]
+        [ test_unif_0; test_unif_1; test_unif_2 (*; test_unif_3*) ]
       (*; test_group "subformula-linking"
             [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3; test_sfl_4 ]
         ; test_group "deep-rewrite" [ test_drw_0 ]*)

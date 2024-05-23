@@ -190,7 +190,10 @@ let rec traverse_rec pol acc (fo : FirstOrder.t) sub : sitem list =
     when Name.equal eq Name.eq ->
       acc
   (* The path is either invalid or escapes the first-order skeleton. *)
-  | _ -> failwith "traverse_rec: invalid path"
+  | _ ->
+      Format.printf "INVALID PATH\nTERM:\n%s\nSUB: %s\n" (FirstOrder.show fo)
+        (List.to_string string_of_int sub);
+      failwith "traverse_rec: invalid path"
 
 (** [traverse path proof] traverses [path], deciding whether each traversed 
     binder is [SFlex] or [SRigid]. It returns the list of sitems computed,
@@ -251,6 +254,7 @@ module Pred = struct
         IntMap.of_list @@ List.combine indices (src_sitems @ dst_sitems)
       in
       let subst = { n_free_1; n_free_2; mapping; deps } in
+
       (* Unify the two subterms. Don't forget to lift the second term. *)
       match
         unify_rec 0 subst (src_subterm, TermUtils.lift_free n_free_1 dst_subterm)
@@ -267,7 +271,7 @@ module Pred = struct
     | Lang.Typing.TypingError err ->
         Format.printf "Typing error:\n%s\n" (Typing.show_typeError err);
         []
-    | _ ->
+    | exn ->
         (* We got an exception : most likely [traverse] raised an exception because a path was invalid. *)
         []
 
