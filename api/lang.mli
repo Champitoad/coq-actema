@@ -85,6 +85,9 @@ module Name : sig
 
   (** Coq's inductive [False : Prop]. *)
   val false_ : t
+
+  (** [is_logical_conn name] tests whether [name] corresponds to a logical connector. *)
+  val is_logical_conn : t -> bool
 end
 
 (***************************************************************************************)

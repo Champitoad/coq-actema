@@ -53,6 +53,9 @@ module Name = struct
   let false_ = make "Coq.Init.Logic.False"
   let add = make "Coq.Init.Nat.add"
   let mul = make "Coq.Init.Nat.mul"
+
+  let is_logical_conn name : bool =
+    List.exists (equal name) [ and_; or_; not; equiv; true_; false_ ]
 end
 
 (***************************************************************************************)
@@ -152,21 +155,27 @@ module Env = struct
     let open Term in
     let nat = mkCst @@ Name.make "nat" in
     let constants =
-      [ ("True", mkProp)
-      ; ("False", mkProp)
-      ; ("or", mkArrows [ mkProp; mkProp; mkProp ])
-      ; ("and", mkArrows [ mkProp; mkProp; mkProp ])
-      ; ("not", mkArrow mkProp mkProp)
-      ; ("nat", mkType)
-      ; ("Zero", nat)
-      ; ("Succ", mkArrow nat nat)
-      ; ("plus", mkArrows [ nat; nat; nat ])
-      ; ("mult", mkArrows [ nat; nat; nat ])
-      ; ("le", mkArrows [ nat; nat; mkProp ])
+      [ (Name.true_, mkProp)
+      ; (Name.false_, mkProp)
+      ; (Name.or_, mkArrows [ mkProp; mkProp; mkProp ])
+      ; (Name.and_, mkArrows [ mkProp; mkProp; mkProp ])
+      ; (Name.not, mkArrow mkProp mkProp)
+      ; (Name.equiv, mkArrows [ mkProp; mkProp; mkProp ])
+      ; (Name.nat, mkType)
+      ; (Name.zero, nat)
+      ; (Name.succ, mkArrow nat nat)
+      ; (Name.add, mkArrows [ nat; nat; nat ])
+      ; (Name.mul, mkArrows [ nat; nat; nat ])
+      ; ( Name.eq
+        , mkProd (Name.make "A") mkType @@ mkArrows [ mkVar 0; mkVar 0; mkProp ]
+        )
+      ; ( Name.ex
+        , mkProd (Name.make "A") mkType
+          @@ mkArrow (mkArrow (mkVar 0) mkProp) mkProp )
       ]
     in
     List.fold_left
-      (fun env (name, ty) -> add_constant (Name.make name) ty env)
+      (fun env (name, ty) -> add_constant name ty env)
       empty constants
 end
 
@@ -285,8 +294,8 @@ module Typing = struct
 
   let pp_typeError fmt err =
     match err with
-    | UnboundVar n -> Format.fprintf fmt "Unbound variable\n%d" n
-    | UnboundCst c -> Format.fprintf fmt "Unbound constant\n%s" (Name.show c)
+    | UnboundVar n -> Format.fprintf fmt "Unbound variable: %d" n
+    | UnboundCst c -> Format.fprintf fmt "Unbound constant: %s" (Name.show c)
     | ExpectedType (term, actual_ty, expected_ty) ->
         Format.fprintf fmt
           "The term\n%s\nhas type\n%s\nbut a term of type\n%s\nwas expected"

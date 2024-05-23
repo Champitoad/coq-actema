@@ -4,34 +4,32 @@ exception InvalidGoalId of int
 exception InvalidHyphName of Name.t
 exception InvalidLemmaName of Name.t
 
-(*(***************************************************************************************)
-  (** First-order terms. *)
+(***************************************************************************************)
+(** First-order. *)
 
-  (** Extracting the first-order structure of terms. *)
-  module FirstOrder : sig
-    type bkind = Forall | Exist
-    type conn = True | False | Not | Or | And | Impl | Equiv
+(** Extracting the first-order skeleton of terms. *)
+module FirstOrder : sig
+  type bkind = Forall | Exist [@@deriving show]
+  type conn = True | False | Not | Or | And | Equiv [@@deriving show]
 
-    (** This type represents a term and gives us additional information about
-        its first-order head connective. *)
-    type t =
-      | FExpr of Term.t (* An arbitrary term that is not of type [Prop]. *)
-      | FProp of Term.t (* An arbitrary term of type [Prop]. *)
-      | FConn of conn * Term.t list
-      | FBind of bkind * Name.t * Term.t * Term.t
+  (** This type represents a term and gives us additional information about
+      its first-order structure. *)
+  type t =
+    | FAtom of Term.t (* A wrapper around an arbitrary term. *)
+    | FConn of conn * t list (* A logical connective, EXCEPT implication. *)
+    | FImpl of t * t (* Logical implication. *)
+    | FBind of bkind * Name.t * Term.t * t (* Logical quantifier. *)
+  [@@deriving show]
 
-    (** [of_term env t] destructs the term [t] into an element of the
-        inductive type [t].
-        For instance the term [forall x : nat, x = x + 1 \/ P] gets destructed into
-        [FForall (x, nat, x = x + 1 \/ P)].
-        This is not recursive : you have to manually destruct [x = x + 1 \/ P] into
-        [FOr (x = x + 1, FProp P)] if you need it. *)
-    val of_term : Env.t -> Term.t -> t
+  (** [of_term ?context env t] destructs the term [t] into an element of the inductive type [t].
+      For instance the term [forall x : nat, x = x + 1 \/ P] gets destructed into
+      [FBind (Forall, x, nat, FConn (Or, [FAtom (x = x + 1); FAtom P]))]. *)
+  val of_term : ?context:Context.t -> Env.t -> Term.t -> t
 
-    (** [to_term fo] is the inverse of [term_to_fo]. It takes an element of the inductive type
-        [t] and reconstructs the term that it represents. *)
-    val to_term : t -> Term.t
-  end*)
+  (** [to_term fo] is the inverse of [term_to_fo]. It takes an element of the inductive type
+      [t] and reconstructs the term that it represents. *)
+  val to_term : t -> Term.t
+end
 
 (***************************************************************************************)
 (** Items *)
@@ -98,6 +96,10 @@ type item =
       (** Variable. The first term is the variable's type, 
           the second (optional) term is the variable's body. *)
 [@@deriving show]
+
+(** [term_of_item item] gets the term contained in the conlusion or hypothesis [item]. 
+    Raises an exception if [item] is a variable. *)
+val term_of_item : item -> Term.t
 
 (***************************************************************************************)
 (** Paths *)

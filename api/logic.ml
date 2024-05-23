@@ -5,53 +5,60 @@ exception InvalidGoalId of int
 exception InvalidHyphName of Name.t
 exception InvalidLemmaName of Name.t
 
-(*(***************************************************************************************)
-  (** First-order terms. *)
+(***************************************************************************************)
+(** First-order terms. *)
 
-  module FirstOrder = struct
-    type bkind = Forall | Exist
-    type conn = True | False | Not | Or | And | Impl | Equiv
+module FirstOrder = struct
+  type bkind = Forall | Exist [@@deriving show]
+  type conn = True | False | Not | Or | And | Equiv [@@deriving show]
 
-    type t =
-      | FExpr of Term.t (* An arbitrary term that is not of type [Prop]. *)
-      | FProp of Term.t (* An arbitrary term of type [Prop]. *)
-      | FConn of conn * Term.t list
-      | FBind of bkind * Name.t * Term.t * Term.t
+  type t =
+    | FAtom of Term.t
+    | FConn of conn * t list
+    | FImpl of t * t
+    | FBind of bkind * Name.t * Term.t * t
+  [@@deriving show]
 
-    let to_term fo : Term.t =
-      let open Term in
-      match fo with
-      | FExpr t | FProp t -> t
-      | FConn (True, []) -> mkCst Name.true_
-      | FConn (False, []) -> mkCst Name.false_
-      | FConn (Not, [ t ]) -> mkApp (mkCst Name.not) t
-      | FConn (And, [ t1; t2 ]) -> mkApps (mkCst Name.and_) [ t1; t2 ]
-      | FConn (Or, [ t1; t2 ]) -> mkApps (mkCst Name.or_) [ t1; t2 ]
-      | FConn (Impl, [ t1; t2 ]) -> mkArrow t1 t2
-      | FConn (Equiv, [ t1; t2 ]) -> mkApps (mkCst Name.equiv) [ t1; t2 ]
-      | FBind (Forall, x, ty, body) -> mkProd x ty body
-      | FBind (Exist, x, ty, body) ->
-          mkApps (mkCst Name.ex) [ ty; mkLambda x ty body ]
-      | FConn _ -> assert false
+  let rec to_term fo : Term.t =
+    let open Term in
+    match fo with
+    | FAtom t -> t
+    | FConn (True, []) -> mkCst Name.true_
+    | FConn (False, []) -> mkCst Name.false_
+    | FConn (Not, [ t ]) -> mkApp (mkCst Name.not) (to_term t)
+    | FConn (And, [ t1; t2 ]) ->
+        mkApps (mkCst Name.and_) [ to_term t1; to_term t2 ]
+    | FConn (Or, [ t1; t2 ]) ->
+        mkApps (mkCst Name.or_) [ to_term t1; to_term t2 ]
+    | FImpl (t1, t2) -> mkArrow (to_term t1) (to_term t2)
+    | FConn (Equiv, [ t1; t2 ]) ->
+        mkApps (mkCst Name.equiv) [ to_term t1; to_term t2 ]
+    | FBind (Forall, x, ty, body) -> mkProd x ty (to_term body)
+    | FBind (Exist, x, ty, body) ->
+        mkApps (mkCst Name.ex) [ ty; mkLambda x ty (to_term body) ]
+    | FConn _ -> assert false
 
-    let of_term env (t : Term.t) : t =
-      match t with
-      (* Detect expressions first. *)
-      | _ when Typing.typeof env t <> Term.mkProp -> FExpr t
-      (* Anything below is a Prop. *)
-      | Cst true_ when Name.equal true_ Name.true_ -> FConn (True, [])
-      | Cst false_ when Name.equal false_ Name.false_ -> FConn (False, [])
-      | App (Cst not, [ arg ]) when Name.equal not Name.not -> FConn (Not, [ arg ])
-      | App (Cst and_, [ arg1; arg2 ]) when Name.equal and_ Name.and_ ->
-          FAnd (arg1, arg2)
-      | App (Cst or_, [ arg1; arg2 ]) when Name.equal or_ Name.or_ ->
-          FOr (arg1, arg2)
-      | Arrow (t1, t2) -> FImpl (t1, t2)
-      | Prod (x, ty, body) -> FForall (x, ty, body)
-      | App (Cst ex, [ ty; Lambda (x, _, body) ]) when Name.equal ex Name.ex ->
-          FExist (x, ty, body)
-      | _ -> FProp t
-  end*)
+  (* We need the context and environment be able to compute the type of the term. *)
+  let rec of_term ?(context = Context.empty) env (t : Term.t) : t =
+    match t with
+    | Cst true_ when Name.equal true_ Name.true_ -> FConn (True, [])
+    | Cst false_ when Name.equal false_ Name.false_ -> FConn (False, [])
+    | App (Cst not, [ arg ]) when Name.equal not Name.not ->
+        FConn (Not, [ of_term ~context env arg ])
+    | App (Cst and_, [ arg1; arg2 ]) when Name.equal and_ Name.and_ ->
+        FConn (And, [ of_term ~context env arg1; of_term ~context env arg2 ])
+    | App (Cst or_, [ arg1; arg2 ]) when Name.equal or_ Name.or_ ->
+        FConn (Or, [ of_term ~context env arg1; of_term ~context env arg2 ])
+    | Arrow (t1, t2) when Typing.typeof ~context env t = Term.mkProp ->
+        FImpl (of_term ~context env t1, of_term ~context env t2)
+    | Prod (x, ty, body) when Typing.typeof ~context env t = Term.mkProp ->
+        FBind
+          (Forall, x, ty, of_term ~context:(Context.push x ty context) env body)
+    | App (Cst ex, [ ty; Lambda (x, _, body) ]) when Name.equal ex Name.ex ->
+        FBind
+          (Exist, x, ty, of_term ~context:(Context.push x ty context) env body)
+    | _ -> FAtom t
+end
 
 (***************************************************************************************)
 (** Items *)
@@ -160,6 +167,12 @@ type item =
   | Hyp of Name.t * hyp  (** Hypothesis. *)
   | Var of Name.t * Term.t * Term.t option  (** Variable. *)
 [@@deriving show]
+
+let term_of_item (item : item) : Term.t =
+  match item with
+  | Concl t -> t
+  | Hyp (_, { h_form; _ }) -> h_form
+  | _ -> failwith "Logic.term_of_item: got a variable."
 
 (***************************************************************************************)
 (** Paths *)

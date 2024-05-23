@@ -83,7 +83,10 @@ let expand_cond depth subst var : bool =
   (* [var] has to be bound in [subst]. *)
   && match IntMap.find var subst.mapping with SBound _ -> true | _ -> false
 
-(** This does not deal with subst.deps. *)
+(** [unify_rec depth subst (t1, t2)] performs syntactic unification on the terms [t1] and [t2], 
+    starting with a substitution [subst]. Initially [depth] should be equal to [0]. 
+    This does not build the [deps] graph of the substitution, 
+    and does not check for cycles. *)
 let rec unify_rec depth (subst : subst) ((t1, t2) : Term.t * Term.t) :
     subst option =
   let open Option.Syntax in
@@ -131,6 +134,9 @@ let rec unify_rec depth (subst : subst) ((t1, t2) : Term.t * Term.t) :
   (* We failed to unify. *)
   | _ -> None
 
+(** [build_deps subst] returns a substitution equivalent to [subst], 
+    but with the [deps] graph computed. 
+    This only build the [deps] graph : it does not check for cycles. *)
 let build_deps (subst : subst) : subst =
   let n1 = subst.n_free_1 in
   let n2 = subst.n_free_2 in
@@ -156,6 +162,51 @@ let build_deps (subst : subst) : subst =
       deps all_vars
   in
   { subst with deps }
+
+(** [traverse_rec pol acc fo sub] traverses [term] along the path [sub], 
+    and recording an [SFlex] or [SRigid] sitem for each binder we cross.
+    This assumes the path [sub] points to a sub-formula in the first-order skeleton,
+    and raises an exception if it doesn't. *)
+let rec traverse_rec pol acc (fo : FirstOrder.t) sub : sitem list =
+  match (sub, fo) with
+  | [], _ -> acc
+  (* Inverse the polarity. *)
+  | 1 :: sub, FConn (Not, [ t1 ]) -> traverse_rec (Polarity.opp pol) acc t1 sub
+  | 0 :: sub, FImpl (t1, t2) -> traverse_rec (Polarity.opp pol) acc t1 sub
+  (* Recurse in the formula. *)
+  | 1 :: sub, FImpl (t1, t2) -> traverse_rec pol acc t2 sub
+  | i :: sub, FConn (conn, ts) when 1 <= i && i <= List.length ts ->
+      traverse_rec pol acc (List.at ts (i - 1)) sub
+  (* Binders. *)
+  | 1 :: sub, FBind (Forall, x, ty, body) ->
+      let sitem = if pol = Polarity.Neg then SFlex else SRigid in
+      traverse_rec pol (sitem :: acc) body sub
+  | 2 :: 1 :: sub, FBind (Exist, x, ty, body) ->
+      let sitem = if pol = Polarity.Pos then SFlex else SRigid in
+      traverse_rec pol (sitem :: acc) body sub
+  (* Equality. *)
+  | [ 0 ], FAtom (App (Cst eq, [ _; _; _ ]))
+  | [ 1 ], FAtom (App (Cst eq, [ _; _; _ ]))
+    when Name.equal eq Name.eq ->
+      acc
+  (* The path is either invalid or escapes the first-order skeleton. *)
+  | _ -> failwith "traverse_rec: invalid path"
+
+(** [traverse path proof] traverses [path], deciding whether each traversed 
+    binder is [SFlex] or [SRigid]. It returns the list of sitems computed,
+    along with the subterm pointed at by [path]. 
+    
+    This raises an exception if [path] points to a variable,
+    or if [path] points to something outside the first-order skeleton. *)
+let traverse (path : Path.t) (proof : Proof.t) : sitem list * Term.t =
+  let goal, item, context, subterm = PathUtils.destr path proof in
+  let env = goal.g_pregoal.g_env in
+  let fo_term = FirstOrder.of_term ~context env @@ term_of_item item in
+
+  (*Format.printf "FO TERM:\n%s\nSUB: %s\n" (FirstOrder.show fo_term)
+    (List.to_string string_of_int path.sub);*)
+  let sitems = traverse_rec (Polarity.of_item item) [] fo_term path.sub in
+  (sitems, subterm)
 
 (*******************************************************************************************)
 (* Link predicates. *)
@@ -183,57 +234,42 @@ module Pred = struct
     let actions = p1 pr lnk in
     if not (List.is_empty actions) then actions else p2 pr lnk
 
-  let unifiable : lpred = failwith "unifiable : todo"
-  (*let open Form in
-    let open PreUnif in
-    fun proof (src, dst) ->
-      try
-        let deps, trav_src, trav_dst = traverse_link proof (src, dst) in
+  (** This assumes that both sides of the link point to a formula in a hypothesis/conclusion. *)
+  let unifiable : lpred =
+   fun proof (src, dst) ->
+    try
+      (* Traverse each formula, collecting information about the binders. *)
+      let src_sitems, src_subterm = traverse src proof in
+      let dst_sitems, dst_subterm = traverse dst proof in
 
-        let goal, _, (_, t_src) = IPath.destr proof src in
-        let _, _, (_, t_dst) = IPath.destr proof dst in
-
-        let s1 = Subst.aslist trav_src.subst in
-        let s2 = Subst.aslist trav_dst.subst in
-        let s = Subst.oflist (s1 @ s2) in
-
-        let s =
-          begin
-            match (trav_src.term, trav_dst.term) with
-            (* Subformula linking *)
-            | `F f1, `F f2 ->
-                f_unify goal.g_pregoal.g_env LEnv.empty s [ (f1, f2) ]
-            (* Deep rewrite *)
-            | `E e1, `E e2
-              when let env = goal.g_pregoal.g_env in
-                   let ty1 =
-                     einfer (IPath.env proof src) (expr_of_term t_src)
-                   in
-                   let ty2 =
-                     einfer (IPath.env proof dst) (expr_of_term t_dst)
-                   in
-                   Form.(t_equal env ty1 ty2) ->
-                e_unify goal.g_pregoal.g_env LEnv.empty s [ (e1, e2) ]
-            | _ -> None
-          end
-        in
-
-        match s with
-        | Some s when acyclic (Deps.subst deps s) ->
-            let s1, s2 = List.split_at (List.length s1) (Subst.aslist s) in
-            let s1 =
-              s1
-              |> rename trav_src.rename trav_dst.rename
-              |> List.rev |> Subst.oflist
-            in
-            let s2 =
-              s2
-              |> rename trav_dst.rename trav_src.rename
-              |> List.rev |> Subst.oflist
-            in
-            [ `Subform (s1, s2) ]
-        | _ -> []
-      with Invalid_argument _ -> []*)
+      (* Create the initial substitution. *)
+      let n_free_1 = List.length src_sitems in
+      let n_free_2 = List.length dst_sitems in
+      let deps = IntGraph.empty in
+      let indices = List.init (n_free_1 + n_free_2) Fun.id in
+      let mapping =
+        IntMap.of_list @@ List.combine indices (src_sitems @ dst_sitems)
+      in
+      let subst = { n_free_1; n_free_2; mapping; deps } in
+      (* Unify the two subterms. Don't forget to lift the second term. *)
+      match
+        unify_rec 0 subst (src_subterm, TermUtils.lift_free n_free_1 dst_subterm)
+      with
+      (* The terms are unifiable. *)
+      | Some subst ->
+          (* Check the substitution is acyclic. *)
+          let subst = build_deps subst in
+          let module Dfs = Graph.Traverse.Dfs (IntGraph) in
+          if Dfs.has_cycle subst.deps then [] else [ Subform subst ]
+      (* The terms are not unifiable. *)
+      | None -> []
+    with
+    | Lang.Typing.TypingError err ->
+        Format.printf "Typing error:\n%s\n" (Typing.show_typeError err);
+        []
+    | _ ->
+        (* We got an exception : most likely [traverse] raised an exception because a path was invalid. *)
+        []
 
   let opposite_pol_formulas : lpred =
    fun proof (src, dst) -> failwith "opposite_pol_formulas: todo"
@@ -303,7 +339,9 @@ module Pred = struct
 
   (* A deep rewrite link is not required to be intuitionistic. *)
   let deep_rewrite : hlpred = mult [ lift neg_eq_operand; lift unifiable ]
-  let instantiate : hlpred = failwith "instantiate: todo"
+
+  let instantiate : hlpred =
+   fun proof (src, dst) -> failwith "instantiate: todo"
   (*let is_free_expr (t : term) (sub : int list) : bool =
       let lenv, subt =
         List.fold_left

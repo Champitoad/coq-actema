@@ -231,11 +231,6 @@ module Polarity = struct
 
   let opp = function Pos -> Neg | Neg -> Pos | Sup -> Sup
 
-  (** [is_logical_conn name] tests whether [name] corresponds to a logical connector. *)
-  let is_logical_conn name : bool =
-    List.exists (Name.equal name)
-      [ Name.and_; Name.or_; Name.not; Name.equiv; Name.true_; Name.false_ ]
-
   (** This assumes that [t] has type [Prop]. *)
   let rec of_subterm_rec exn (pol : t) context t sub : t * (Context.t * Term.t)
       =
@@ -261,16 +256,18 @@ module Polarity = struct
         | App (Cst f, [ t1; t2 ]) when Name.equal f Name.equiv && idx = 2 ->
             of_subterm_rec exn Sup context t2 sub
         (* Any other logical connector. *)
-        | App (Cst c, args) when is_logical_conn c -> begin
+        | App (Cst c, args) when Name.is_logical_conn c -> begin
             match idx with
             | 0 when sub = [] -> (pol, (context, Term.mkCst c))
             | i when 1 <= i && i <= List.length args ->
                 of_subterm_rec exn pol context (List.at args (i - 1)) sub
             | _ -> raise exn
           end
-        (* Anpther application (not a logical connector) : stop counting negations. *)
+        (* Existentials. *)
+        | App (Cst c, [ ty; Lambda (x, _, body) ]) -> failwith "todo"
+        (* Another application (not a logical connector) : stop counting negations. *)
         | App _ -> (pol, TermUtils.subterm ~context t (idx :: sub))
-        (* Products. *)
+        (* Foralls. *)
         | Prod (x, ty, body) -> begin
             match idx with
             | 0 -> (pol, TermUtils.subterm ~context ty sub)
@@ -306,7 +303,7 @@ module Polarity = struct
             | _ -> raise exn
           end
         (* Any other logical connector. *)
-        | App (Cst c, args) when is_logical_conn c -> begin
+        | App (Cst c, args) when Name.is_logical_conn c -> begin
             match idx with
             | 0 when sub = [] -> (negs, (context, Term.mkCst c))
             | i when 1 <= i && i <= List.length args ->

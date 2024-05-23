@@ -36,8 +36,8 @@
        Choosing an order for the rules is important as the rewrite system 
        is non-confluent (see the paper "A drag and drop proof tactic"). *)
 
-open Utils
 open Api
+open Utils
 open Lang
 open Logic
 open CoreLogic
