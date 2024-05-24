@@ -153,7 +153,7 @@ module Env = struct
 
   let test_env =
     let open Term in
-    let nat = mkCst @@ Name.make "nat" in
+    let nat = mkCst @@ Name.nat in
     let constants =
       [ (Name.true_, mkProp)
       ; (Name.false_, mkProp)
@@ -183,8 +183,6 @@ end
 (** Term utility functions. *)
 
 module TermUtils = struct
-  exception InvalidSubtermPath of Term.t * int list
-
   let rec lift k n t =
     match (t : Term.t) with
     | Var i when i >= k -> Term.mkVar (i + n)

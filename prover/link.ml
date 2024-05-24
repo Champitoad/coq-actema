@@ -216,7 +216,8 @@ let rec traverse_rec pol acc (fo : FirstOrder.t) sub : sitem list =
     binder is [SFlex] or [SRigid]. It returns the list of sitems computed,
     along with the subterm pointed at by [path]. 
     
-    @raise Invalid_argument if [path] points to a variable
+    @raise Path.InvalidPath if [path] is invalid.
+    @raise Invalid_argument if [path] points to a variable.
     @raise InvalidSubtermPath if [path] points to something outside the first-order skeleton. *)
 let traverse (path : Path.t) (proof : Proof.t) : sitem list * Term.t =
   let goal, item, context, subterm = PathUtils.destr path proof in
@@ -282,7 +283,7 @@ module Pred = struct
           if Dfs.has_cycle subst.deps then [] else [ Subform subst ]
       (* The terms are not unifiable. *)
       | None -> []
-    with InvalidSubtermPath _ | Invalid_argument _ ->
+    with InvalidSubtermPath _ | Invalid_argument _ | Path.InvalidPath _ ->
       (* We got an exception : most likely [traverse] raised an exception because a path was invalid. *)
       []
 
@@ -301,24 +302,24 @@ module Pred = struct
       []
 
   let neg_eq_operand : lpred =
-   fun proof (src, dst) -> failwith "neg_eq_operand: todo"
-  (*let check (path : IPath.t) : bool =
-      let _, item, (sub, term) = IPath.destr proof path in
-      if sub = []
-      then false
-      else
-        let eq_sub = List.remove_at (List.length sub - 1) sub in
-        try
-          match
-            Polarity.of_subform
-              (Polarity.of_item item, form_of_item item)
-              eq_sub
-          with
-          | Neg, FPred ("_EQ", _) -> true
-          | _ -> false
-        with Invalid_argument _ | InvalidSubFormPath _ -> false
+   fun proof (src, dst) ->
+    let check (path : Path.t) : bool =
+      try
+        let eq_sub = List.remove_at (List.length path.sub - 1) path.sub in
+        let goal, item, _, _ = PathUtils.destr path proof in
+        let env = goal.g_pregoal.g_env in
+
+        match
+          Polarity.of_subterm env (Polarity.of_item item) (term_of_item item)
+            eq_sub
+        with
+        (* TODO: should we also allow the [Sup] polarity ? *)
+        | Neg, _, App (Cst eq, [ _; _; _ ]) when Name.equal eq Name.eq -> true
+        | _ -> false
+      with Invalid_argument _ | InvalidSubtermPath _ | Path.InvalidPath _ ->
+        false
     in
-    if check src || check dst then [ `Nothing ] else []*)
+    if check src || check dst then [ Nothing ] else []
 
   let intuitionistic : lpred =
    fun proof (src, dst) -> failwith "intuitionistic: todo"

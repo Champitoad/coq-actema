@@ -17,6 +17,7 @@ let exist name ty body =
   Term.(mkApps (mkCst @@ Name.ex) [ ty; mkLambda (Name.make name) ty body ])
 
 let nat : Term.t = Term.mkCst Name.nat
+let eq_nat : Term.t = Term.(mkApp (mkCst Name.eq) nat)
 let list_nat : Term.t = Term.(mkApp (mkCst @@ Name.make "list") nat)
 let perm_nat : Term.t = Term.(mkApp (mkCst @@ Name.make "perm") nat)
 let nil_nat : Term.t = Term.(mkApp (mkCst @@ Name.make "nil") nat)
@@ -46,7 +47,10 @@ let mk_test_proof (hyps : Term.t list) (concl : Term.t) : Proof.t =
     |> Hyps.of_list
   in
   let pregoal = { g_env = perm_env; g_hyps = hyps; g_concl = concl } in
-  Proof.init [ { g_id = 0; g_pregoal = pregoal } ]
+  try Proof.init [ { g_id = 0; g_pregoal = pregoal } ]
+  with Typing.TypingError err ->
+    failwith
+    @@ Format.sprintf "Typing Error !!\n%s\n" (Typing.show_typeError err)
 
 (**********************************************************************************************)
 (** Testing utilities. *)
@@ -144,7 +148,7 @@ let test_pol_0 () =
   let concl =
     forall "n" nat
     @@ mkApps (mkCst Name.and_)
-         [ mkApps (mkCst Name.eq) [ nat; mkVar 0; mkVar 0 ]
+         [ mkApps eq_nat [ mkVar 0; mkVar 0 ]
          ; exist "l" list_nat @@ mkCst Name.true_
          ]
   in
@@ -161,7 +165,7 @@ let test_pol_1 () =
   let concl =
     forall "n" nat
     @@ mkApps (mkCst Name.and_)
-         [ mkApps (mkCst Name.eq) [ nat; mkVar 0; mkVar 0 ]
+         [ mkApps eq_nat [ mkVar 0; mkVar 0 ]
          ; exist "l" list_nat @@ mkCst Name.true_
          ]
   in
@@ -177,7 +181,7 @@ let test_pol_2 () =
   let concl =
     forall "n" nat
     @@ mkApps (mkCst Name.and_)
-         [ mkApps (mkCst Name.eq) [ nat; mkVar 0; mkVar 0 ]
+         [ mkApps eq_nat [ mkVar 0; mkVar 0 ]
          ; exist "l" list_nat @@ mkCst Name.true_
          ]
   in
@@ -194,7 +198,7 @@ let test_pol_3 () =
   let concl =
     forall "n" nat
     @@ mkApps (mkCst Name.and_)
-         [ mkApps (mkCst Name.eq) [ nat; mkVar 0; mkVar 0 ]
+         [ mkApps eq_nat [ mkVar 0; mkVar 0 ]
          ; exist "l" list_nat @@ mkCst Name.true_
          ]
   in
@@ -205,123 +209,118 @@ let test_pol_3 () =
 (**********************************************************************************************)
 (** Testing [Pred.neg_eq_operand]. *)
 
-(*let test_eq_0 () =
-    let hlpred = Link.Pred.(lift neg_eq_operand) in
-    let hyp =
-      FConn
-        ( `Imp
-        , [ FConn
-              ( `Not
-              , [ forall "x" tnat @@ exist "y" tnat @@ eq (var "x") (var "y") ] )
-          ; FFalse
-          ] )
-    in
-    let concl =
-      forall "n" tnat
-      @@ FConn
-           ( `And
-           , [ FConn
-                 (`Imp, [ eq (var "local_x") (EFun ("S", [ var "n" ])); FFalse ])
-             ; exist "l" tlist FTrue
-             ] )
-    in
-    let actions = link_backward hyp [ 0; 0; 0; 0; 0 ] concl [ 0 ] hlpred in
-    check_linkactions actions @@ function `Nothing -> true | _ -> false
+let test_eq_0 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift neg_eq_operand) in
+  let hyp =
+    mkArrow
+      (mkApp (mkCst Name.not)
+      @@ forall "x" nat @@ exist "y" nat
+      @@ mkApps eq_nat [ mkVar 1; mkVar 0 ])
+      (mkCst Name.false_)
+  in
+  let concl =
+    forall "n" nat
+    @@ mkApps (mkCst Name.and_)
+         [ mkArrow
+             (mkApps eq_nat [ mkVar 0; mkApp (mkCst Name.succ) (mkVar 0) ])
+             (mkCst Name.false_)
+         ; exist "l" list_nat @@ mkCst Name.true_
+         ]
+  in
+  let actions = link_backward hyp [ 0; 1; 1; 2; 1; 2 ] concl [ 1 ] hlpred in
+  check_linkactions actions @@ function Nothing -> true | _ -> false
 
-  let test_eq_1 () =
-    let hlpred = Link.Pred.(lift neg_eq_operand) in
-    let hyp =
-      FConn
-        ( `Imp
-        , [ FConn
-              ( `Not
-              , [ forall "x" tnat @@ exist "y" tnat @@ eq (var "x") (var "y") ] )
-          ; FFalse
-          ] )
-    in
-    let concl =
-      forall "n" tnat
-      @@ FConn
-           ( `And
-           , [ FConn
-                 (`Imp, [ eq (var "local_x") (EFun ("S", [ var "n" ])); FFalse ])
-             ; exist "l" tlist FTrue
-             ] )
-    in
-    let actions = link_backward hyp [ 1 ] concl [ 0; 0; 0; 1 ] hlpred in
-    check_linkactions actions @@ function `Nothing -> true | _ -> false
+let test_eq_1 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift neg_eq_operand) in
+  let hyp =
+    mkArrow
+      (mkApp (mkCst Name.not)
+      @@ forall "x" nat @@ exist "y" nat
+      @@ mkApps eq_nat [ mkVar 1; mkVar 0 ])
+      (mkCst Name.false_)
+  in
+  let concl =
+    forall "n" nat
+    @@ mkApps (mkCst Name.and_)
+         [ mkArrow
+             (mkApps eq_nat [ mkVar 0; mkApp (mkCst Name.succ) (mkVar 0) ])
+             (mkCst Name.false_)
+         ; exist "l" list_nat @@ mkCst Name.true_
+         ]
+  in
+  let actions = link_backward hyp [ 1 ] concl [ 1; 1; 0; 3 ] hlpred in
+  check_linkactions actions @@ function Nothing -> true | _ -> false
 
-  let test_eq_2 () =
-    let hlpred = Link.Pred.(lift neg_eq_operand) in
-    let hyp =
-      FConn
-        ( `Imp
-        , [ FConn
-              ( `Not
-              , [ forall "x" tnat @@ exist "y" tnat @@ eq (var "x") (var "y") ] )
-          ; FFalse
-          ] )
-    in
-    let concl =
-      forall "n" tnat
-      @@ FConn
-           ( `And
-           , [ FConn
-                 (`Imp, [ eq (var "local_x") (EFun ("S", [ var "n" ])); FFalse ])
-             ; exist "l" tlist FTrue
-             ] )
-    in
-    let actions = link_backward hyp [ 1 ] concl [ 0; 0; 0; 1; 0 ] hlpred in
-    (* The second path points too far under an equality. *)
-    check_empty actions
+let test_eq_2 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift neg_eq_operand) in
+  let hyp =
+    mkArrow
+      (mkApp (mkCst Name.not)
+      @@ forall "x" nat @@ exist "y" nat
+      @@ mkApps eq_nat [ mkVar 1; mkVar 0 ])
+      (mkCst Name.false_)
+  in
+  let concl =
+    forall "n" nat
+    @@ mkApps (mkCst Name.and_)
+         [ mkArrow
+             (mkApps eq_nat [ mkVar 0; mkApp (mkCst Name.succ) (mkVar 0) ])
+             (mkCst Name.false_)
+         ; exist "l" list_nat @@ mkCst Name.true_
+         ]
+  in
+  let actions = link_backward hyp [ 1 ] concl [ 1; 1; 0; 3; 1 ] hlpred in
+  (* The second path points too far under an equality. *)
+  check_empty actions
 
-  let test_eq_3 () =
-    let hlpred = Link.Pred.(lift neg_eq_operand) in
-    let hyp =
-      FConn
-        ( `Imp
-        , [ FConn
-              ( `Not
-              , [ forall "x" tnat @@ exist "y" tnat @@ eq (var "x") (var "y") ] )
-          ; FFalse
-          ] )
-    in
-    let concl =
-      forall "n" tnat
-      @@ FConn
-           ( `And
-           , [ FConn
-                 (`Imp, [ eq (var "local_x") (EFun ("S", [ var "n" ])); FFalse ])
-             ; exist "l" tlist FTrue
-             ] )
-    in
-    let actions = link_backward hyp [ 1 ] concl [ 0; 0; 0 ] hlpred in
-    (* The second path points to an equality instead of an equality argument. *)
-    check_empty actions
+let test_eq_3 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift neg_eq_operand) in
+  let hyp =
+    mkArrow
+      (mkApp (mkCst Name.not)
+      @@ forall "x" nat @@ exist "y" nat
+      @@ mkApps eq_nat [ mkVar 1; mkVar 0 ])
+      (mkCst Name.false_)
+  in
+  let concl =
+    forall "n" nat
+    @@ mkApps (mkCst Name.and_)
+         [ mkArrow
+             (mkApps eq_nat [ mkVar 0; mkApp (mkCst Name.succ) (mkVar 0) ])
+             (mkCst Name.false_)
+         ; exist "l" list_nat @@ mkCst Name.true_
+         ]
+  in
+  let actions = link_backward hyp [ 1 ] concl [ 1; 1; 0 ] hlpred in
+  (* The second path points to an equality instead of an equality argument. *)
+  check_empty actions
 
-  let test_eq_4 () =
-    let hlpred = Link.Pred.(lift neg_eq_operand) in
-    let hyp1 =
-      FConn
-        ( `Imp
-        , [ FConn
-              ( `Not
-              , [ forall "x" tnat @@ exist "y" tnat @@ eq (var "x") (var "y") ] )
-          ; FFalse
-          ] )
-    in
-    let hyp2 =
-      forall "n" tnat
-      @@ FConn
-           ( `And
-           , [ FConn
-                 (`Imp, [ eq (var "local_x") (EFun ("S", [ var "n" ])); FFalse ])
-             ; exist "l" tlist FTrue
-             ] )
-    in
-    let actions = link_forward hyp1 [ 1 ] hyp2 [ 0; 0; 0; 1 ] hlpred in
-    (* The second path points to an equality argument with positive polarity. *)
-    check_empty actions*)
+let test_eq_4 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift neg_eq_operand) in
+  let hyp1 =
+    mkArrow
+      (mkApp (mkCst Name.not)
+      @@ forall "x" nat @@ exist "y" nat
+      @@ mkApps eq_nat [ mkVar 1; mkVar 0 ])
+      (mkCst Name.false_)
+  in
+  let hyp2 =
+    forall "n" nat
+    @@ mkApps (mkCst Name.and_)
+         [ mkArrow
+             (mkApps eq_nat [ mkVar 0; mkApp (mkCst Name.succ) (mkVar 0) ])
+             (mkCst Name.false_)
+         ; exist "l" list_nat @@ mkCst Name.true_
+         ]
+  in
+  let actions = link_forward hyp1 [ 1 ] hyp2 [ 1; 1; 0; 2 ] hlpred in
+  (* The second path points to an equality argument with positive polarity. *)
+  check_empty actions
 
 (**********************************************************************************************)
 (** Testing [Pred.unifiable]. *)
@@ -543,10 +542,9 @@ let () =
   run "Prover.Link"
     [ test_group "opposite-polarity-formulas"
         [ test_pol_0; test_pol_1; test_pol_2; test_pol_3 ]
-    ; (*test_group "neg-polarity-eq-operand"
-            [ test_eq_0; test_eq_1; test_eq_2; test_eq_3; test_eq_4 ]
-        ;*)
-      test_group "unification"
+    ; test_group "neg-polarity-eq-operand"
+        [ test_eq_0; test_eq_1; test_eq_2; test_eq_3; test_eq_4 ]
+    ; test_group "unification"
         [ (*test_unif_0; test_unif_1; test_unif_2; test_unif_3*) ]
       (*; test_group "subformula-linking"
             [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3; test_sfl_4 ]
