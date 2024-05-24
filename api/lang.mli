@@ -2,7 +2,7 @@
     We call this the Actema language to distinguish it from the language used by Coq.
     It is the which creates Actema terms (from Coq terms). *)
 
-open Utils
+open Utils.Pervasive
 
 (***************************************************************************************)
 (** Names *)
@@ -276,6 +276,10 @@ module TermUtils : sig
       context that [t] lives in : by default it is [Context.empty].
       Raises [InvalidSubtermPath] if [sub] is not a valid path in [t]. *)
   val subterm : ?context:Context.t -> Term.t -> int list -> Context.t * Term.t
+
+  (** [all_subs t] returns the list of all paths [sub] that 
+      points to a subterm of [t]. *)
+  val all_subs : Term.t -> int list list
 end
 
 (***************************************************************************************)

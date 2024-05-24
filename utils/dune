@@ -1,0 +1,4 @@
+(library
+ (name utils)
+ (public_name coq-actema.utils)
+ (libraries qcheck-core batteries.unthreaded tyxml))

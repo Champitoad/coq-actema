@@ -1,6 +1,6 @@
 (* -------------------------------------------------------------------- *)
+open Utils.Pervasive
 open Prover
-open Utils
 open Api
 open Lang
 open CoreLogic
@@ -146,87 +146,86 @@ let rec js_proof_engine (proof : Proof.t) =
      *)
     method actions asource = Js.array [||]
     (*let actions =
-          let kinds =
-            match Js.to_string (Js.typeof asource) with
-            | "string" -> [ `Click (ipath_of_obj asource) ]
-            | "object" -> (
-                let asource = Js.Unsafe.coerce asource in
-                match Js.as_string InvalidASource asource##.kind with
-                | "click" ->
-                    let path = ipath_of_obj asource##.path in
-                    [ `Click path ]
-                | "ctxt" -> [ `Ctxt ]
-                | "dnd" ->
-                    let source = ipath_of_obj asource##.source in
-                    let destination = ipath_of_opt asource##.destination in
-                    [ `DnD Actions.{ source; destination } ]
-                | "any" ->
-                    let path = ipath_of_obj asource##.path in
-                    [ `Click path
-                    ; `DnD Actions.{ source = path; destination = None }
-                    ]
-                | _ -> raise InvalidASource)
-            | _ -> raise InvalidASource
-          and selection = ipath_of_array asource##.selection in
+        let kinds =
+          match Js.to_string (Js.typeof asource) with
+          | "string" -> [ `Click (ipath_of_obj asource) ]
+          | "object" -> (
+              let asource = Js.Unsafe.coerce asource in
+              match Js.as_string InvalidASource asource##.kind with
+              | "click" ->
+                  let path = ipath_of_obj asource##.path in
+                  [ `Click path ]
+              | "ctxt" -> [ `Ctxt ]
+              | "dnd" ->
+                  let source = ipath_of_obj asource##.source in
+                  let destination = ipath_of_opt asource##.destination in
+                  [ `DnD Actions.{ source; destination } ]
+              | "any" ->
+                  let path = ipath_of_obj asource##.path in
+                  [ `Click path
+                  ; `DnD Actions.{ source = path; destination = None }
+                  ]
+              | _ -> raise InvalidASource)
+          | _ -> raise InvalidASource
+        and selection = ipath_of_array asource##.selection in
 
-          let asource =
-            List.map (fun kind -> Actions.{ kind; selection }) kinds
-          in
-
-          List.flatten (List.map !!(Actions.actions _self##.proof) asource)
+        let asource =
+          List.map (fun kind -> Actions.{ kind; selection }) kinds
         in
 
-        Js.array
-          (Array.of_list
-             (List.map
-                (fun Actions.
-                       { description = p
-                       ; icon = ic
-                       ; highlights = ps
-                       ; kind = aui
-                       ; action = a
-                       ; goal_handle = g_id
-                       } ->
-                  let ps = List.map CoreLogic.IPath.to_string ps in
-                  let ps = Js.array (Array.of_list (List.map Js.string ps)) in
+        List.flatten (List.map !!(Actions.actions _self##.proof) asource)
+      in
 
-                  let aui =
-                    let pp = CoreLogic.IPath.to_string in
+      Js.array
+        (Array.of_list
+           (List.map
+              (fun Actions.
+                     { description = p
+                     ; icon = ic
+                     ; highlights = ps
+                     ; kind = aui
+                     ; action = a
+                     ; goal_handle = g_id
+                     } ->
+                let ps = List.map CoreLogic.IPath.to_string ps in
+                let ps = Js.array (Array.of_list (List.map Js.string ps)) in
 
-                    match aui with
-                    | `Click p ->
-                        Js.Unsafe.obj
-                          [| ("kind", Js.Unsafe.inject (Js.string "click"))
-                           ; ("target", Js.Unsafe.inject (Js.string (pp p)))
-                          |]
-                    | `DnD (src, dst) ->
-                        Js.Unsafe.obj
-                          [| ("kind", Js.Unsafe.inject (Js.string "dnd"))
-                           ; ("source", Js.Unsafe.inject (Js.string (pp src)))
-                           ; ("destination", Js.Unsafe.inject (Js.string (pp dst)))
-                          |]
-                    | `Ctxt ->
-                        Js.Unsafe.obj
-                          [| ("kind", Js.Unsafe.inject (Js.string "ctxt")) |]
-                  in
+                let aui =
+                  let pp = CoreLogic.IPath.to_string in
 
-                  let icon =
-                    match ic with
-                    | Some s -> Js.Unsafe.inject (Js.string s)
-                    | None -> Js.Unsafe.inject Js.undefined
-                  in
+                  match aui with
+                  | `Click p ->
+                      Js.Unsafe.obj
+                        [| ("kind", Js.Unsafe.inject (Js.string "click"))
+                         ; ("target", Js.Unsafe.inject (Js.string (pp p)))
+                        |]
+                  | `DnD (src, dst) ->
+                      Js.Unsafe.obj
+                        [| ("kind", Js.Unsafe.inject (Js.string "dnd"))
+                         ; ("source", Js.Unsafe.inject (Js.string (pp src)))
+                         ; ("destination", Js.Unsafe.inject (Js.string (pp dst)))
+                        |]
+                  | `Ctxt ->
+                      Js.Unsafe.obj
+                        [| ("kind", Js.Unsafe.inject (Js.string "ctxt")) |]
+                in
 
-                  Js.Unsafe.obj
-                    [| ("description", Js.Unsafe.inject (Js.string p))
-                     ; ("icon", icon)
-                     ; ("highlight", Js.Unsafe.inject ps)
-                     ; ("ui", aui)
-                     ; ("action", Js.Unsafe.inject (g_id, a))
-                    |])
-                actions))
+                let icon =
+                  match ic with
+                  | Some s -> Js.Unsafe.inject (Js.string s)
+                  | None -> Js.Unsafe.inject Js.undefined
+                in
 
+                Js.Unsafe.obj
+                  [| ("description", Js.Unsafe.inject (Js.string p))
+                   ; ("icon", icon)
+                   ; ("highlight", Js.Unsafe.inject ps)
+                   ; ("ui", aui)
+                   ; ("action", Js.Unsafe.inject (g_id, a))
+                  |])
+              actions))*)
 
-      (** [this#lemmareqb (selection : CoreLogic.IPath.t list) (pattern : string)] returns the base64-encoded string corresponding to the parameters of
+    (*(** [this#lemmareqb (selection : CoreLogic.IPath.t list) (pattern : string)] returns the base64-encoded string corresponding to the parameters of
              a lemma request, where [pattern] is the text entered in the lemma search bar and [selection] is the currently selected subformula. *)
       method lemmareqb selection pattern =
         let doit () =
@@ -530,9 +529,9 @@ and js_subgoal parent (handle : int) =
       let doit () =
         let from = Name.make from in
         let before = Option.map Name.make @@ Js.Opt.to_option before in
-        js_log
+        Js_log.log
         @@ Format.sprintf "Moving hyp [%s] to [%s]\n" (Name.show from)
-             (Option.to_string Name.show before);
+             (Option.map_default Name.show "#None" before);
         let subgoal = Proof.byid parent##.proof _self##.handle in
         (* Check that [from] is a hypothesis. *)
         let is_hypothesis = List.mem from (Logic.Hyps.ids subgoal.g_hyps) in
@@ -825,7 +824,7 @@ and js_term parent (goal_id : int) (kind : [ `C | `H of Name.t ])
 (** Print a single goal in Actema format (for debug purposes). *)
 let print_goal (Logic.{ g_id; g_pregoal = goal } : Logic.goal) : unit =
   let xml = Notation.term_to_xml (Logic.Path.make 0) goal.g_env goal.g_concl in
-  js_log @@ Format.asprintf "%a\n" (Tyxml.Xml.pp ()) xml
+  Js_log.log @@ Format.asprintf "%a\n" (Tyxml.Xml.pp ()) xml
 
 (* Print the env. *)
 (*js_log "ENV\n";

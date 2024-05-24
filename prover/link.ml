@@ -1,14 +1,13 @@
-open Utils
+open Utils.Pervasive
 open Api
 open Lang
 open Logic
 open CoreLogic
-open Utils
 
 type link = Path.t * Path.t [@@deriving show]
 type hyperlink = Path.t list * Path.t list [@@deriving show]
 
-module IntGraph = Graph.Persistent.Digraph.Concrete (Int)
+module IntGraph = Graph.Persistent.Digraph.Concrete (Stdlib.Int)
 
 type sitem = SRigid | SFlex | SBound of Term.t [@@deriving show]
 
@@ -96,7 +95,7 @@ let expand_cond depth subst var : bool =
     and does not check for cycles. *)
 let rec unify_rec depth (subst : subst) ((t1, t2) : Term.t * Term.t) :
     subst option =
-  let open Option.Syntax in
+  let open Utils.Monad.Option in
   (* Apply the subsitution to [v]. *)
   let do_expand v t : subst option =
     match IntMap.find (v - depth) subst.mapping with

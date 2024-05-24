@@ -146,8 +146,14 @@ module Path : sig
   (** Encode a path to a string. *)
   val to_string : t -> string
 
-  (** [subpath p1 p2] checks whether [p1] is a subpath of [p2]. *)
-  val subpath : t -> t -> bool
+  (** [same_item p1 p2] checks whether [p1] and [p2] point to the same item.
+      A variable's head and body are considered the same item. *)
+  val same_item : t -> t -> bool
+
+  (** [is_prefix p1 p2] checks whether [p1] is a prefix of [p2]. This means that :
+      - [p1] and [p2] point to the same item.
+      - [p1.sub] is a prefix of [p2.sub]. *)
+  val is_prefix : t -> t -> bool
 
   (** Set the [sub] parts of a path to the empty list. *)
   val erase_sub : t -> t

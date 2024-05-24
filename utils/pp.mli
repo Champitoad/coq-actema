@@ -1,4 +1,12 @@
-(**************************************************************************************)
+(** This module implements a pretty-printing combinator library (author : Mathis Bouverot-Dupuis). 
+    It is based on François Pottier's Pprint library : https://github.com/fpottier/pprint.
+
+    It has the particularity of printing documents that can contain "annotated text" : 
+    we can box pieces of text in an "annotation" of any type. 
+    To print to plain text, we could simply ignore these annotations.
+
+    I developed this library in order to format text in Html. 
+    In this setting annotations correspond to a div and its attributes. *)
 
 open Tyxml
 

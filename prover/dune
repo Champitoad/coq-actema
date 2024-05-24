@@ -5,9 +5,9 @@
  (public_name coq-actema.prover)
  (libraries
   coq-actema.api
+  coq-actema.utils
   lwt
   menhirLib
-  batteries.unthreaded
   tyxml
   js_of_ocaml
   ocamlgraph

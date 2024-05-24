@@ -37,7 +37,7 @@
        is non-confluent (see the paper "A drag and drop proof tactic"). *)
 
 open Api
-open Utils
+open Utils.Pervasive
 open Lang
 open Logic
 open CoreLogic

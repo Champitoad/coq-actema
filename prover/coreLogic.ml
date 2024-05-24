@@ -1,8 +1,7 @@
-open Utils
+open Utils.Pervasive
 open Api
 open Lang
 open Logic
-open Js_of_ocaml
 
 exception SubgoalNotOpened of int
 
@@ -13,7 +12,7 @@ module IntNameMap = Map.Make (struct
 end)
 
 module Proof = struct
-  type meta = < > Js.t
+  type meta = < > Js_of_ocaml.Js.t
 
   type t =
     { p_goals : goal IntMap.t
@@ -85,7 +84,7 @@ module Proof = struct
   let byid (proof : t) (goal_id : int) : pregoal =
     let goal =
       Option.get_exn
-        (IntMap.Exceptionless.find goal_id proof.p_goals)
+        (IntMap.find_opt goal_id proof.p_goals)
         (InvalidGoalId goal_id)
     in
     goal.g_pregoal

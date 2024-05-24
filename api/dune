@@ -6,10 +6,6 @@
 (library
  (name api)
  (public_name coq-actema.api)
- (libraries
-  coq-actema.ann-print
-  qcheck-core
-  qcheck-alcotest
-  batteries.unthreaded)
+ (libraries qcheck-core qcheck-alcotest coq-actema.utils)
  (preprocess
   (pps ppx_deriving.show)))

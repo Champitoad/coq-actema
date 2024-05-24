@@ -1,4 +1,4 @@
-open Utils
+open Utils.Pervasive
 
 (***************************************************************************************)
 (** Names *)
@@ -275,6 +275,25 @@ module TermUtils = struct
   let subterm ?(context = Context.empty) t sub =
     let exn = InvalidSubtermPath (t, sub) in
     subterm_rec exn context t sub
+
+  let rec all_subs_rec (term : Term.t) sub acc : int list list =
+    match term with
+    | Var _ | Cst _ | Sort _ -> sub :: acc
+    | Arrow (t1, t2) ->
+        let acc = all_subs_rec t1 (0 :: sub) acc in
+        let acc = all_subs_rec t2 (1 :: sub) acc in
+        sub :: acc
+    | Lambda (x, ty, body) | Prod (x, ty, body) ->
+        let acc = all_subs_rec ty (0 :: sub) acc in
+        let acc = all_subs_rec body (1 :: sub) acc in
+        sub :: acc
+    | App (f, args) ->
+        sub
+        :: BatList.fold_lefti
+             (fun acc i x -> all_subs_rec x (i :: sub) acc)
+             acc (f :: args)
+
+  let all_subs term = all_subs_rec term [] [] |> List.(map rev)
 end
 
 (***************************************************************************************)
@@ -384,6 +403,7 @@ end
 
 module TermGen = struct
   open QCheck2
+  open Utils
   open BGen.Syntax
 
   let gen_letter = Gen.(Char.chr <$> oneof [ 65 -- 90; 97 -- 122 ])

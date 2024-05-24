@@ -1,9 +1,8 @@
 (** Tests for prover/link.ml. *)
 
+open Utils.Pervasive
 open Prover
-open Utils
 open Api
-open Utils
 open Lang
 open Logic
 open CoreLogic
@@ -545,7 +544,7 @@ let () =
     ; test_group "neg-polarity-eq-operand"
         [ test_eq_0; test_eq_1; test_eq_2; test_eq_3; test_eq_4 ]
     ; test_group "unification"
-        [ (*test_unif_0; test_unif_1; test_unif_2; test_unif_3*) ]
+        [ test_unif_0; test_unif_1; test_unif_2 (*; test_unif_3*) ]
       (*; test_group "subformula-linking"
             [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3; test_sfl_4 ]
         ; test_group "deep-rewrite" [ test_drw_0 ]*)

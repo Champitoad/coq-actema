@@ -1,6 +1,6 @@
+open Utils.Pervasive
 open Api
 open CoqUtils
-open Extlib
 
 (** The imperative state maintained by the translating algorithm. 
     We could use a state monad instead, but come on this is Ocaml not Haskell. *)

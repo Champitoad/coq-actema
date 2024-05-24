@@ -1,8 +1,8 @@
+open Utils.Pervasive
 open Lang
 open Logic
 open Tyxml
-open Ann_print
-module StringMap = Map.Make (String)
+module Pp = Utils.Pp
 
 (***************************************************************************************)
 (** Instantiate the pretty-printing library. *)

@@ -5,46 +5,59 @@
     when the user starts dragging an item (for instance a hypothesis), 
     the frontend will highlight all the places where dropping the item makes sense. *)
 
-(*open CoreLogic
+open Api
+open Logic
+open CoreLogic
 
-  type selection = Path.t list [@@deriving show]
-  type adnd = { source : IPath.t; destination : IPath.t option } [@@deriving show]
+(** An [action_kind] discriminates between :
+    - [Click path] where the user clicked on [path].
+    - [Ctxt] where the user clicked on an item in the contextual (circle-shaped) menu.
+    - [Dnd source destination] where the user is dragging [source], optionally on top of [destination]. *)
+type akind = Click of Path.t | DnD of Path.t * Path.t option | Ctxt
+[@@deriving show]
 
-  type asource_kind = [ `Click of IPath.t | `DnD of adnd | `Ctxt ]
-  [@@deriving show]
+(** An action source. From this and a [Proof.t] we should be able to generate all valid actions. *)
+type asource = { kind : akind; selection : Path.t list } [@@deriving show]
 
-  type asource = { kind : asource_kind; selection : selection } [@@deriving show]
+(** A [preaction] is similar to an Actema action [Logic.action], but it contains 
+    a bit less information (for instance for hyperlinks). *)
+type preaction =
+  (* The [int] indicates which intro rule to use. *)
+  (*| Intro of int
+    (* The name identifies the hypothesis we are eliminating. *)
+    | Elim of Name.t * int
+    | Ind of int
+    | Simpl of Path.t
+    | Red of Path.t
+    | Indt of Path.t
+    | Case of Path.t
+    | Pbp of Path.t
+    | Fold of Name.t
+    | Unfold of Name.t*)
+  | Hyperlink of Link.hyperlink * Link.linkaction list
+[@@deriving show]
 
-  type action_type =
-    [ `Intro of int
-      (** The [int] indicates which intro rule to use. See Api.Logic.AIntro. *)
-    | `Elim of Handle.t * int
-      (** The [Handle.t] identifies the hypothesis we are eliminating. *)
-    | `Lemma of name
-    | `Ind of Handle.t
-    | `Simpl of IPath.t
-    | `Red of IPath.t
-    | `Indt of IPath.t
-    | `Case of IPath.t
-    | `Pbp of IPath.t
-    | `Fold of vname
-    | `Unfold of vname
-    | `Hyperlink of Link.hyperlink * Link.linkaction list ]
-  [@@deriving show]
+(** An action output. 
 
-  type aoutput_kind = [ `Click of IPath.t | `DnD of Link.link | `Ctxt ]
-  [@@deriving show]
+    This contains information useful or the frontend such as :
+    - [description] : a text string that consisely describes the action.
+    - [icon] : the name of a FontAwesome icon to display.
+    - [highlights] : a set of paths to highlight.
+    
+    It also contains proof-related information :
+    - [kind] : the action kind.
+    - [goal_id] : the identifier of the goal this action executes in.
+    - [preaction] : the corresponding preaction. *)
+type aoutput =
+  { description : string
+  ; icon : string option
+  ; highlights : Path.t list
+  ; kind : akind
+  ; goal_id : int
+  ; preaction : preaction
+  }
+[@@deriving show]
 
-  type aoutput =
-    { description : string
-    ; icon : string option
-    ; highlights : IPath.t list
-    ; kind : aoutput_kind
-    ; goal_handle : Handle.t (* The goal this action executes in. *)
-    ; action : action_type
-    }
-  [@@deriving show]
-
-  (** Get the list of all valid actions on a given proof state. *)
-  val actions : Proof.proof -> asource -> aoutput list
-*)
+(** [actions proof source] gets the list of all valid actions on [proof] with 
+    source [source]. *)
+val actions : Proof.t -> asource -> aoutput list

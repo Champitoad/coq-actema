@@ -1,5 +1,5 @@
+open Utils.Pervasive
 open Lang
-open Batteries
 
 exception InvalidGoalId of int
 exception InvalidHyphName of Name.t
@@ -241,19 +241,18 @@ module Path = struct
 
     { goal; kind; sub }
 
-  let rec is_prefix (xs : 'a list) (pr : 'a list) =
-    match (xs, pr) with
-    | _, [] -> true
-    | x :: xs, y :: pr -> x = y && is_prefix xs pr
-    | _, _ -> false
+  let same_item p1 p2 =
+    p1.goal = p2.goal
+    &&
+    match (p1.kind, p2.kind) with
+    | Concl, Concl -> true
+    | Hyp h1, Hyp h2 when Name.equal h1 h2 -> true
+    | (VarHead v1, VarHead v2 | VarBody v1, VarBody v2 | VarHead v1, VarBody v2)
+      when Name.equal v1 v2 ->
+        true
+    | _ -> false
 
-  let subpath p sp =
-    (*p.goal = sp.goal && p.kind = sp.kind
-      && (p.ctxt.kind = sp.ctxt.kind
-         || (p.ctxt.kind = Var `Head && sp.ctxt.kind = Var `Body))
-      && is_prefix sp.sub p.sub*)
-    failwith "subpath: todo"
-
+  let is_prefix p1 p2 = same_item p1 p2 && List.is_prefix p1.sub p2.sub
   let erase_sub path = { path with sub = [] }
 end
 

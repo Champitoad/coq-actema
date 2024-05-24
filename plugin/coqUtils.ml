@@ -1,3 +1,4 @@
+open Utils.Pervasive
 open Proofview
 
 (** A thin wrapper around Proofview.Monad.
@@ -29,7 +30,7 @@ module Log = struct
       |> UState.ugraph |> UGraph.domain |> Univ.Level.Set.elements
       |> List.map Univ.Level.to_string
     in
-    str Extlib.(List.to_string identity univs)
+    str (List.to_string Fun.id univs)
 
   let profile (name : string) (chunk : unit -> 'a) : 'a =
     let start = Sys.time () in
