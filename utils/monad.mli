@@ -1,7 +1,9 @@
 (** This module implements some basic but very useful monads. 
     
     There is nothing fancy going on here, in particular no monad transformers
-    (although they could be added in the future). *)
+    (although they could be added in the future). 
+    
+    Author : Mathis Bouverot-Dupuis. *)
 
 (**************************************************************************************)
 

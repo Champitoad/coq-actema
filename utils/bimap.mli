@@ -1,5 +1,5 @@
 (** This module implements bijections between finite sets, i.e. bi-directional maps. 
-    Implemented by Pablo Donato. *)
+    Author : Pablo Donato. *)
 
 module Make (K : Map.OrderedType) (V : Map.OrderedType) : sig
   type t

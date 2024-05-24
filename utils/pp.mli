@@ -1,4 +1,4 @@
-(** This module implements a pretty-printing combinator library (author : Mathis Bouverot-Dupuis). 
+(** This module implements a pretty-printing combinator library. 
     It is based on François Pottier's Pprint library : https://github.com/fpottier/pprint.
 
     It has the particularity of printing documents that can contain "annotated text" : 
@@ -6,11 +6,14 @@
     To print to plain text, we could simply ignore these annotations.
 
     I developed this library in order to format text in Html. 
-    In this setting annotations correspond to a div and its attributes. *)
+    In this setting annotations correspond to a div and its attributes.
+    
+    Author : Mathis Bouverot-Dupuis. *)
 
 open Tyxml
 
-(* The abstract type of 'a docs, which is polymorphic over the type of annotations. *)
+(** The abstract type of documents, which is polymorphic over the type of annotations.
+    Internally this is a GADT. *)
 type 'annot doc
 
 (**************************************************************************************)

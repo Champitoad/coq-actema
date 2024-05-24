@@ -11,3 +11,8 @@
   - most recent lemmas first.
   - compute a matching degree, which could be the size of the subterm of the lemma that matches 
     the current selection (better measure than size of the permutation).
+
+# Topics for the report 
+
+- Talk about the pretty-printer (it's a GADT lol).
+- Talk about the lemma search "fast" unification.
