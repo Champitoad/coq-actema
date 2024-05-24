@@ -2,6 +2,7 @@
 open Utils.Pervasive
 open Prover
 open Api
+open Logic
 open Lang
 open CoreLogic
 
@@ -144,27 +145,26 @@ let rec js_proof_engine (proof : Proof.t) =
      *  - highlight   : a JS array of IDs to highlight
      *  - action      : the related action
      *)
-    method actions asource = Js.array [||]
-    (*let actions =
+    method actions asource =
+      let open Actions in
+      let actions =
         let kinds =
           match Js.to_string (Js.typeof asource) with
-          | "string" -> [ `Click (ipath_of_obj asource) ]
+          | "string" -> [ Click (ipath_of_obj asource) ]
           | "object" -> (
               let asource = Js.Unsafe.coerce asource in
               match Js.as_string InvalidASource asource##.kind with
               | "click" ->
                   let path = ipath_of_obj asource##.path in
-                  [ `Click path ]
-              | "ctxt" -> [ `Ctxt ]
+                  [ Click path ]
+              | "ctxt" -> [ Ctxt ]
               | "dnd" ->
                   let source = ipath_of_obj asource##.source in
                   let destination = ipath_of_opt asource##.destination in
-                  [ `DnD Actions.{ source; destination } ]
+                  [ DnD (source, destination) ]
               | "any" ->
                   let path = ipath_of_obj asource##.path in
-                  [ `Click path
-                  ; `DnD Actions.{ source = path; destination = None }
-                  ]
+                  [ Click path; DnD (path, None) ]
               | _ -> raise InvalidASource)
           | _ -> raise InvalidASource
         and selection = ipath_of_array asource##.selection in
@@ -184,28 +184,31 @@ let rec js_proof_engine (proof : Proof.t) =
                      ; icon = ic
                      ; highlights = ps
                      ; kind = aui
-                     ; action = a
-                     ; goal_handle = g_id
+                     ; preaction = a
+                     ; goal_id = g_id
                      } ->
-                let ps = List.map CoreLogic.IPath.to_string ps in
+                let ps = List.map Path.to_string ps in
                 let ps = Js.array (Array.of_list (List.map Js.string ps)) in
 
                 let aui =
-                  let pp = CoreLogic.IPath.to_string in
-
                   match aui with
-                  | `Click p ->
+                  | Click p ->
                       Js.Unsafe.obj
                         [| ("kind", Js.Unsafe.inject (Js.string "click"))
-                         ; ("target", Js.Unsafe.inject (Js.string (pp p)))
+                         ; ( "target"
+                           , Js.Unsafe.inject (Js.string (Path.to_string p)) )
                         |]
-                  | `DnD (src, dst) ->
+                  | DnD (src, dst) ->
                       Js.Unsafe.obj
                         [| ("kind", Js.Unsafe.inject (Js.string "dnd"))
-                         ; ("source", Js.Unsafe.inject (Js.string (pp src)))
-                         ; ("destination", Js.Unsafe.inject (Js.string (pp dst)))
+                         ; ( "source"
+                           , Js.Unsafe.inject (Js.string (Path.to_string src))
+                           )
+                         ; ( "destination"
+                           , Js.Unsafe.inject
+                               (Js.string (Path.to_string @@ Option.get dst)) )
                         |]
-                  | `Ctxt ->
+                  | Ctxt ->
                       Js.Unsafe.obj
                         [| ("kind", Js.Unsafe.inject (Js.string "ctxt")) |]
                 in
@@ -223,7 +226,7 @@ let rec js_proof_engine (proof : Proof.t) =
                    ; ("ui", aui)
                    ; ("action", Js.Unsafe.inject (g_id, a))
                   |])
-              actions))*)
+              actions))
 
     (*(** [this#lemmareqb (selection : CoreLogic.IPath.t list) (pattern : string)] returns the base64-encoded string corresponding to the parameters of
              a lemma request, where [pattern] is the text entered in the lemma search bar and [selection] is the currently selected subformula. *)

@@ -10,7 +10,10 @@ type akind = Click of Path.t | DnD of Path.t * Path.t option | Ctxt
 
 type asource = { kind : akind; selection : Path.t list } [@@deriving show]
 
-type preaction = Hyperlink of Link.hyperlink * Link.linkaction list
+type preaction =
+  | Intro of int
+  | Elim of Name.t * int
+  | Hyperlink of Link.hyperlink * Link.linkaction list
 [@@deriving show]
 
 type aoutput =
@@ -223,67 +226,64 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
             ; pbp tgt
             ]
       end
-    | _ -> []
+    | _ -> []*)
 
-  let rebuild_path i =
-    let rec aux l = function 0 -> 0 :: l | i -> aux (1 :: l) (i - 1) in
-    List.rev (aux [] i)
-
-  let rebuild_pathd l i =
-    if i + 1 = l
-    then [ 1 ]
-    else
-      let rec aux = function 0 -> [] | i -> 0 :: aux (i - 1) in
-      if i = 0 then aux (l - 1) else aux (l - i - 1) @ [ 1 ]*)
+(* This seems very hacky to me. *)
+let rebuild_pathd l i =
+  if i + 1 = l
+  then [ 1 ]
+  else
+    let rec aux = function 0 -> [] | i -> 0 :: aux (i - 1) in
+    if i = 0 then aux (l - 1) else aux (l - i - 1) @ [ 1 ]
 
 let ctxt_actions (sel : Path.t list) (proof : Proof.t) : aoutput list = []
 (*let selpred = selpred_add [ single_subterm_sel ] in
   selpred proof sel*)
 
-let click_actions (selection : Path.t list) (proof : Proof.t) : aoutput list =
-  []
-(*begin
-    let Proof.{ g_id = hd; g_pregoal = goal }, item, (_, _) =
-      IPath.destr proof path
-    in
-    match item with
-    | `C _ -> begin
-        let iv = Proof.Tactics.ivariants proof ~goal_id:hd in
-        let bv = List.length iv <= 1 in
-        List.mapi
-          (fun i x ->
-            let hg =
-              IPath.make (Handle.toint hd)
-                ~sub:(if bv then [] else rebuild_pathd (List.length iv) i)
+let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
+    aoutput list =
+  let goal, item, _, _ = PathUtils.destr path proof in
+  match item with
+  (* Enumerate all the introduction rules we can apply on the conclusion. *)
+  | Concl concl ->
+      let ivariants = Proof.ivariants proof ~goal_id:goal.g_id in
+      let bv = List.length ivariants <= 1 in
+      List.mapi
+        begin
+          fun i description ->
+            let highlight =
+              Path.make goal.g_id
+                ~sub:
+                  (if bv then [] else rebuild_pathd (List.length ivariants) i)
             in
-            { description = x
+            { description
             ; icon = None
-            ; highlights = [ hg ]
-            ; kind = `Click hg
-            ; goal_handle = hd
-            ; action = `Intro i
-            })
-          iv
-      end
-    | `H (rp, _) ->
-        let ev = Proof.Tactics.evariants proof ~goal_id:hd ~hyp_id:rp in
-        let bv = List.length ev <= 1 in
-        List.mapi
-          (fun i x ->
-            let hg =
-              IPath.make (Handle.toint hd)
-                ~ctxt:{ kind = `Hyp; handle = Handle.toint rp }
-                ~sub:(if bv then [] else rebuild_pathd (List.length ev) i)
-            in
-            { description = x
-            ; icon = None
-            ; highlights = [ hg ]
-            ; kind = `Click hg
-            ; goal_handle = hd
-            ; action = `Elim (rp, i)
-            })
-          ev
-    | `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
+            ; highlights = [ highlight ]
+            ; kind = Click highlight
+            ; goal_id = goal.g_id
+            ; preaction = Intro i
+            }
+        end
+        ivariants
+  (* Enumerate all the elimination rules we can apply on the hypothesis. *)
+  | Hyp (hyp_name, _) ->
+      let evariants = Proof.evariants proof ~goal_id:goal.g_id ~hyp_name in
+      let bv = List.length evariants <= 1 in
+      List.mapi
+        (fun i description ->
+          let highlight =
+            Path.make goal.g_id ~kind:(Hyp hyp_name)
+              ~sub:(if bv then [] else rebuild_pathd (List.length evariants) i)
+          in
+          { description
+          ; icon = None
+          ; highlights = [ highlight ]
+          ; kind = Click highlight
+          ; goal_id = goal.g_id
+          ; preaction = Elim (hyp_name, i)
+          })
+        evariants
+  (*| `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
         let rp = Vars.getid goal.g_env x |> Option.get in
         let hg =
           IPath.make (Handle.toint hd)
@@ -323,12 +323,11 @@ let click_actions (selection : Path.t list) (proof : Proof.t) : aoutput list =
           ; goal_handle = hd
           ; action = `Fold x
           }
-        ]
-    | _ -> []
-  end*)
+        ]*)
+  | _ -> []
 
 let actions (proof : Proof.t) (source : asource) : aoutput list =
   match source.kind with
-  | Click path -> click_actions source.selection proof
+  | Click path -> click_actions path source.selection proof
   | DnD (src, dst) -> dnd_actions src dst source.selection proof
   | Ctxt -> ctxt_actions source.selection proof

@@ -7,6 +7,7 @@
 
 open Api
 open Logic
+open Lang
 open CoreLogic
 
 (** An [action_kind] discriminates between :
@@ -23,17 +24,17 @@ type asource = { kind : akind; selection : Path.t list } [@@deriving show]
     a bit less information (for instance for hyperlinks). *)
 type preaction =
   (* The [int] indicates which intro rule to use. *)
-  (*| Intro of int
-    (* The name identifies the hypothesis we are eliminating. *)
-    | Elim of Name.t * int
-    | Ind of int
-    | Simpl of Path.t
-    | Red of Path.t
-    | Indt of Path.t
-    | Case of Path.t
-    | Pbp of Path.t
-    | Fold of Name.t
-    | Unfold of Name.t*)
+  | Intro of int
+  (* The name identifies the hypothesis we are eliminating. *)
+  | Elim of Name.t * int
+    (*| Ind of int
+      | Simpl of Path.t
+      | Red of Path.t
+      | Indt of Path.t
+      | Case of Path.t
+      | Pbp of Path.t
+      | Fold of Name.t
+      | Unfold of Name.t*)
   | Hyperlink of Link.hyperlink * Link.linkaction list
 [@@deriving show]
 

@@ -137,7 +137,7 @@ module Proof = struct
         else if name = Name.equiv
         then [ "split" ]
         else if name = Name.not
-        then [ "into" ]
+        then [ "intro" ]
         else if name = Name.ex
         then [ "exists" ]
         else []
