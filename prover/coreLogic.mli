@@ -9,8 +9,6 @@ open Api
 open Lang
 open Logic
 
-exception InvalidSubFormPath of int list
-exception InvalidSubExprPath of int list
 exception SubgoalNotOpened of int
 
 (** This module defines the core datastructure used in the prover : the proof state.
@@ -137,8 +135,7 @@ end
     reading of equivalence as the additive conjunction of both directions of an
     implication. 
     
-    A subexpression (i.e. a subterm of type other than Prop) has the same polarity as
-    the subformula that contains it. *)
+    Polarities only make sense within the first-order skeleton of terms. *)
 module Polarity : sig
   (** A polarity : positive, negative or superposed (i.e. both positive and negative). *)
   type t = Pos | Neg | Sup [@@deriving show]
@@ -147,18 +144,19 @@ module Polarity : sig
       [Sup] is mapped to itself. *)
   val opp : t -> t
 
-  (** [of_subterm pol t sub] returns the subterm of [t] at path [sub] together
+  (** [of_subterm env pol t sub] returns the subterm of [t] at path [sub] together
       with its polarity and context, given that [t]'s polarity is [pol].
-      Raises [InvalidSubtermPath] if [sub] does not point to a valid subterm in [t]. *)
-  val of_subterm : t -> Term.t -> int list -> t * Context.t * Term.t
+      @raise InvalidSubtermPath if [path] is invalid or escapes the first-order skeleton. *)
+  val of_subterm : Env.t -> t -> Term.t -> int list -> t * Context.t * Term.t
 
   (** [neg_count t sub] counts the number of negations in [t] along path [sub] *)
-  val neg_count : Term.t -> int list -> int
+  (*val neg_count : Term.t -> int list -> int*)
 
   (** [of_item it] returns the polarity of the item [it]. *)
   val of_item : item -> t
 
   (** [of_ipath proof path] returns the polarity of the subterm at path [path] in [proof]. 
-      Raises an anomaly if [path] points to a variable (head or body). *)
+      @raise Invalid_argument if [path] points to a variable (head or body).
+      @raise InvalidSubtermPath if [path] is invalid or escapes the first-order skeleton. *)
   val of_ipath : Proof.t -> Path.t -> t
 end

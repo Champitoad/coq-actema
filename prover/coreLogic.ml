@@ -4,8 +4,6 @@ open Lang
 open Logic
 open Js_of_ocaml
 
-exception InvalidSubFormPath of int list
-exception InvalidSubExprPath of int list
 exception SubgoalNotOpened of int
 
 module IntNameMap = Map.Make (struct
@@ -231,60 +229,35 @@ module Polarity = struct
 
   let opp = function Pos -> Neg | Neg -> Pos | Sup -> Sup
 
-  (** This assumes that [t] has type [Prop]. *)
-  let rec of_subterm_rec exn (pol : t) context t sub : t * (Context.t * Term.t)
-      =
-    match sub with
-    | [] -> (pol, (context, t))
-    | idx :: sub -> begin
-        match (t : Term.t) with
-        (* Invalid terms at this point. *)
-        | Var _ | Cst _ | Sort _ -> raise exn
-        (* Traverse a [not]. *)
-        | App (Cst f, [ arg ]) when Name.equal f Name.not && idx = 1 ->
-            of_subterm_rec exn (opp pol) context arg sub
-        (* Implication. *)
-        | Arrow (t1, t2) -> begin
-            match idx with
-            | 0 -> of_subterm_rec exn (opp pol) context t1 sub
-            | 1 -> of_subterm_rec exn pol context t2 sub
-            | _ -> raise exn
-          end
-        (* Equivalence. *)
-        | App (Cst f, [ t1; t2 ]) when Name.equal f Name.equiv && idx = 1 ->
-            of_subterm_rec exn Sup context t1 sub
-        | App (Cst f, [ t1; t2 ]) when Name.equal f Name.equiv && idx = 2 ->
-            of_subterm_rec exn Sup context t2 sub
-        (* Any other logical connector. *)
-        | App (Cst c, args) when Name.is_logical_conn c -> begin
-            match idx with
-            | 0 when sub = [] -> (pol, (context, Term.mkCst c))
-            | i when 1 <= i && i <= List.length args ->
-                of_subterm_rec exn pol context (List.at args (i - 1)) sub
-            | _ -> raise exn
-          end
-        (* Existentials. *)
-        | App (Cst c, [ ty; Lambda (x, _, body) ]) -> failwith "todo"
-        (* Another application (not a logical connector) : stop counting negations. *)
-        | App _ -> (pol, TermUtils.subterm ~context t (idx :: sub))
-        (* Foralls. *)
-        | Prod (x, ty, body) -> begin
-            match idx with
-            | 0 -> (pol, TermUtils.subterm ~context ty sub)
-            | 1 -> of_subterm_rec exn pol (Context.push x ty context) body sub
-            | _ -> raise exn
-          end
-        (* Lambdas are not of type Prop. *)
-        | Lambda _ -> raise exn
-      end
+  let rec of_subterm_rec pol context (fo : FirstOrder.t) sub :
+      t * (Context.t * Term.t) =
+    match (sub, fo) with
+    | [], _ -> (pol, (context, FirstOrder.to_term fo))
+    (* Inverse the polarity. *)
+    | 1 :: sub, FConn (Not, [ t1 ]) -> of_subterm_rec (opp pol) context t1 sub
+    | 0 :: sub, FImpl (t1, t2) -> of_subterm_rec (opp pol) context t1 sub
+    (* Switch to [Sup] polarity. *)
+    | 1 :: sub, FConn (Equiv, [ t1; t2 ]) -> of_subterm_rec Sup context t1 sub
+    | 2 :: sub, FConn (Equiv, [ t1; t2 ]) -> of_subterm_rec Sup context t2 sub
+    (* Recurse in the formula. *)
+    | 1 :: sub, FImpl (t1, t2) -> of_subterm_rec pol context t2 sub
+    | i :: sub, FConn (conn, ts) when 1 <= i && i <= List.length ts ->
+        of_subterm_rec pol context (List.at ts (i - 1)) sub
+    (* Binders. *)
+    | 1 :: sub, FBind (Forall, x, ty, body) ->
+        of_subterm_rec pol (Context.push x ty context) body sub
+    | 2 :: 1 :: sub, FBind (Exist, x, ty, body) ->
+        of_subterm_rec pol (Context.push x ty context) body sub
+    (* The path is either invalid or escapes the first-order skeleton. *)
+    | _ -> raise @@ InvalidSubtermPath (FirstOrder.to_term fo, sub)
 
-  let of_subterm pol term sub : t * Context.t * Term.t =
-    let exn = InvalidSubtermPath (term, sub) in
-    let pol, (ctx, t) = of_subterm_rec exn pol Context.empty term sub in
+  let of_subterm env pol term sub : t * Context.t * Term.t =
+    let fo = FirstOrder.of_term env term in
+    let pol, (ctx, t) = of_subterm_rec pol Context.empty fo sub in
     (pol, ctx, t)
 
   (** This assumes that [t] has type [Prop]. *)
-  let rec neg_count_rec exn (negs : int) context t sub :
+  (*let rec neg_count_rec exn (negs : int) context t sub :
       int * (Context.t * Term.t) =
     match sub with
     | [] -> (negs, (context, t))
@@ -321,22 +294,25 @@ module Polarity = struct
           end
         (* Lambdas are not of type Prop. *)
         | Lambda _ -> raise exn
-      end
+      end*)
 
-  let neg_count term sub : int =
+  (*let neg_count term sub : int = failwith "neg_count: todo"
     let exn = InvalidSubtermPath (term, sub) in
-    let negs, _ = neg_count_rec exn 0 Context.empty term sub in
-    negs
+      let negs, _ = neg_count_rec exn 0 Context.empty term sub in
+      negs*)
 
   let of_item item : t = match item with Concl _ -> Pos | Var _ | Hyp _ -> Neg
 
   let of_ipath proof path : t =
+    let goal, item, _, _ = PathUtils.destr path proof in
     let pol, form =
-      match PathUtils.item path proof with
+      match item with
       | Hyp (_, { h_form = f; _ }) -> (Neg, f)
       | Concl f -> (Pos, f)
-      | Var _ -> failwith "Polarity.of_ipath : path points to a variable."
+      | Var _ ->
+          raise
+          @@ Invalid_argument "Polarity.of_ipath : path points to a variable."
     in
-    let pol, _, _ = of_subterm pol form path.sub in
+    let pol, _, _ = of_subterm goal.g_pregoal.g_env pol form path.sub in
     pol
 end

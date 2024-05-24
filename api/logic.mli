@@ -98,7 +98,7 @@ type item =
 [@@deriving show]
 
 (** [term_of_item item] gets the term contained in the conlusion or hypothesis [item]. 
-    Raises an exception if [item] is a variable. *)
+    @raise Invalid_argument if [item] is a variable. *)
 val term_of_item : item -> Term.t
 
 (***************************************************************************************)

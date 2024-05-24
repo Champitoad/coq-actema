@@ -20,11 +20,18 @@ let print_mapping fmt map =
   in
   Format.fprintf fmt "[%s]" (String.concat "," bindings)
 
+let print_deps fmt deps =
+  let edges = IntGraph.fold_edges (fun i j acc -> (i, j) :: acc) deps [] in
+  let bindings =
+    List.map (fun (i, j) -> Format.sprintf "%d --> %d" i j) edges
+  in
+  Format.fprintf fmt "[%s]" (String.concat "," bindings)
+
 type subst =
   { n_free_1 : int
   ; n_free_2 : int
   ; mapping : sitem IntMap.t [@printer print_mapping]
-  ; deps : IntGraph.t [@opaque]
+  ; deps : IntGraph.t [@printer print_deps]
   }
 [@@deriving show]
 
@@ -134,6 +141,11 @@ let rec unify_rec depth (subst : subst) ((t1, t2) : Term.t * Term.t) :
   (* We failed to unify. *)
   | _ -> None
 
+(** [range low high] returns the list [low; low + 1; ...; high - 1] ([low] included, [high] excluded).
+    Returns an empty list if [low > high]. *)
+let range low high =
+  if low > high then [] else List.init (high - low) (fun i -> i + low)
+
 (** [build_deps subst] returns a substitution equivalent to [subst], 
     but with the [deps] graph computed. 
     This only build the [deps] graph : it does not check for cycles. *)
@@ -145,7 +157,15 @@ let build_deps (subst : subst) : subst =
   let deps = IntGraph.empty in
   (* Add a vertex for each free variable. *)
   let deps = List.fold_left IntGraph.add_vertex deps all_vars in
-  (* Add edges for bound variables. *)
+  (* Add an edge [i --> i-1] for each variable free in [t1] or [t2]. *)
+  let indices =
+    range 1 subst.n_free_1
+    @ range (subst.n_free_1 + 1) (subst.n_free_1 + subst.n_free_2)
+  in
+  let deps =
+    List.fold_left (fun deps i -> IntGraph.add_edge deps i (i - 1)) deps indices
+  in
+  (* Add an edge for each element [i --> Sbound term] of the substitution. *)
   let deps =
     List.fold_left
       begin
@@ -190,24 +210,18 @@ let rec traverse_rec pol acc (fo : FirstOrder.t) sub : sitem list =
     when Name.equal eq Name.eq ->
       acc
   (* The path is either invalid or escapes the first-order skeleton. *)
-  | _ ->
-      Format.printf "INVALID PATH\nTERM:\n%s\nSUB: %s\n" (FirstOrder.show fo)
-        (List.to_string string_of_int sub);
-      failwith "traverse_rec: invalid path"
+  | _ -> raise @@ InvalidSubtermPath (FirstOrder.to_term fo, sub)
 
 (** [traverse path proof] traverses [path], deciding whether each traversed 
     binder is [SFlex] or [SRigid]. It returns the list of sitems computed,
     along with the subterm pointed at by [path]. 
     
-    This raises an exception if [path] points to a variable,
-    or if [path] points to something outside the first-order skeleton. *)
+    @raise Invalid_argument if [path] points to a variable
+    @raise InvalidSubtermPath if [path] points to something outside the first-order skeleton. *)
 let traverse (path : Path.t) (proof : Proof.t) : sitem list * Term.t =
   let goal, item, context, subterm = PathUtils.destr path proof in
   let env = goal.g_pregoal.g_env in
   let fo_term = FirstOrder.of_term ~context env @@ term_of_item item in
-
-  (*Format.printf "FO TERM:\n%s\nSUB: %s\n" (FirstOrder.show fo_term)
-    (List.to_string string_of_int path.sub);*)
   let sitems = traverse_rec (Polarity.of_item item) [] fo_term path.sub in
   (sitems, subterm)
 
@@ -263,41 +277,28 @@ module Pred = struct
       | Some subst ->
           (* Check the substitution is acyclic. *)
           let subst = build_deps subst in
+          Format.printf "%s" (show_subst subst);
           let module Dfs = Graph.Traverse.Dfs (IntGraph) in
           if Dfs.has_cycle subst.deps then [] else [ Subform subst ]
       (* The terms are not unifiable. *)
       | None -> []
-    with
-    | Lang.Typing.TypingError err ->
-        Format.printf "Typing error:\n%s\n" (Typing.show_typeError err);
-        []
-    | exn ->
-        (* We got an exception : most likely [traverse] raised an exception because a path was invalid. *)
-        []
+    with InvalidSubtermPath _ | Invalid_argument _ ->
+      (* We got an exception : most likely [traverse] raised an exception because a path was invalid. *)
+      []
 
   let opposite_pol_formulas : lpred =
-   fun proof (src, dst) -> failwith "opposite_pol_formulas: todo"
-  (*try
-      let _, item_src, sub_src, _ = PathUtils.destr src proof in
-      let _, item_dst, sub_dst, _ = PathUtils.destr dst proof in
-
-
-      let src_pol =
-        fst
-        @@ Polarity.of_subterm
-             (Polarity.of_item item_src, form_of_item item_src)
-             sub_src
-      in
-      let dst_pol =
-        fst
-        @@ Polarity.of_subform
-             (Polarity.of_item item_dst, form_of_item item_dst)
-             sub_dst
-      in
+   fun proof (src, dst) ->
+    try
+      let src_pol = Polarity.of_ipath proof src in
+      let dst_pol = Polarity.of_ipath proof dst in
+      Format.printf "## %s ## %s ##\n" (Polarity.show src_pol)
+        (Polarity.show dst_pol);
       match (src_pol, dst_pol) with
-      | Neg, Pos | Pos, Neg | Sup, _ | _, Sup -> [ `Nothing ]
+      | Neg, Pos | Pos, Neg | Sup, _ | _, Sup -> [ Nothing ]
       | _ -> []
-    with Invalid_argument _ | InvalidSubFormPath _ -> []*)
+    with Invalid_argument _ | InvalidSubtermPath _ ->
+      Format.printf "ERROR\n";
+      []
 
   let neg_eq_operand : lpred =
    fun proof (src, dst) -> failwith "neg_eq_operand: todo"

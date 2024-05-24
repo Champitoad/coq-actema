@@ -49,6 +49,8 @@ module FirstOrder = struct
         FConn (And, [ of_term ~context env arg1; of_term ~context env arg2 ])
     | App (Cst or_, [ arg1; arg2 ]) when Name.equal or_ Name.or_ ->
         FConn (Or, [ of_term ~context env arg1; of_term ~context env arg2 ])
+    | App (Cst equiv, [ arg1; arg2 ]) when Name.equal equiv Name.equiv ->
+        FConn (Equiv, [ of_term ~context env arg1; of_term ~context env arg2 ])
     | Arrow (t1, t2) when Typing.typeof ~context env t = Term.mkProp ->
         FImpl (of_term ~context env t1, of_term ~context env t2)
     | Prod (x, ty, body) when Typing.typeof ~context env t = Term.mkProp ->
@@ -172,7 +174,7 @@ let term_of_item (item : item) : Term.t =
   match item with
   | Concl t -> t
   | Hyp (_, { h_form; _ }) -> h_form
-  | _ -> failwith "Logic.term_of_item: got a variable."
+  | _ -> raise @@ Invalid_argument "term_of_item : got a variable."
 
 (***************************************************************************************)
 (** Paths *)

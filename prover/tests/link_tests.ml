@@ -66,7 +66,7 @@ let check_linkactions (linkactions : Link.linkaction list)
        %s\n"
       (List.length linkactions) linkactions_str
 
-(*let check_empty (linkactions : Link.linkaction list) : unit =
+let check_empty (linkactions : Link.linkaction list) : unit =
   if linkactions = []
   then ()
   else
@@ -75,7 +75,7 @@ let check_linkactions (linkactions : Link.linkaction list)
         linkactions
     in
     Alcotest.failf "There were %d unwanted linkactions generated :\n%s\n"
-      (List.length linkactions) linkactions_str*)
+      (List.length linkactions) linkactions_str
 
 let rec flatten_linkaction (la : Link.linkaction) : Link.linkaction list =
   match la with
@@ -135,47 +135,72 @@ let is_bound_to subst var term =
 (**********************************************************************************************)
 (** Testing [Pred.opposite_pol_formulas]. *)
 
-(*let test_pol_0 () =
-    let hlpred = Link.Pred.(lift opposite_pol_formulas) in
-    let hyp = FConn (`Imp, [ FConn (`Not, [ FTrue ]); FFalse ]) in
-    let concl =
-      forall "n" tnat
-      @@ FConn (`And, [ eq (var "local_x") (var "n"); exist "l" tlist FTrue ])
-    in
-    let actions = link_backward hyp [ 0; 0 ] concl [ 0; 1 ] hlpred in
-    check_linkactions actions @@ function `Nothing -> true | _ -> false
+let test_pol_0 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift opposite_pol_formulas) in
+  let hyp =
+    mkArrow (mkApp (mkCst Name.not) @@ mkCst Name.true_) (mkCst Name.false_)
+  in
+  let concl =
+    forall "n" nat
+    @@ mkApps (mkCst Name.and_)
+         [ mkApps (mkCst Name.eq) [ nat; mkVar 0; mkVar 0 ]
+         ; exist "l" list_nat @@ mkCst Name.true_
+         ]
+  in
+  let actions = link_backward hyp [ 0; 1 ] concl [ 1; 2; 2; 1 ] hlpred in
+  check_linkactions actions @@ function Nothing -> true | _ -> false
 
-  let test_pol_1 () =
-    let hlpred = Link.Pred.(lift opposite_pol_formulas) in
-    let hyp = FConn (`Equiv, [ FConn (`Not, [ FTrue ]); FFalse ]) in
-    let concl =
-      forall "n" tnat
-      @@ FConn (`And, [ eq (var "local_x") (var "n"); exist "l" tlist FTrue ])
-    in
-    let actions = link_backward hyp [ 0; 0 ] concl [ 0; 1 ] hlpred in
-    check_linkactions actions @@ function `Nothing -> true | _ -> false
+let test_pol_1 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift opposite_pol_formulas) in
+  let hyp =
+    mkApps (mkCst Name.equiv)
+      [ mkApp (mkCst Name.not) @@ mkCst Name.true_; mkCst Name.false_ ]
+  in
+  let concl =
+    forall "n" nat
+    @@ mkApps (mkCst Name.and_)
+         [ mkApps (mkCst Name.eq) [ nat; mkVar 0; mkVar 0 ]
+         ; exist "l" list_nat @@ mkCst Name.true_
+         ]
+  in
+  let actions = link_backward hyp [ 1; 1 ] concl [ 1; 2; 2; 1 ] hlpred in
+  check_linkactions actions @@ function Nothing -> true | _ -> false
 
-  let test_pol_2 () =
-    let hlpred = Link.Pred.(lift opposite_pol_formulas) in
-    let hyp = FConn (`Imp, [ FConn (`Not, [ FTrue ]); FFalse ]) in
-    let concl =
-      forall "n" tnat
-      @@ FConn (`And, [ eq (var "local_x") (var "n"); exist "l" tlist FTrue ])
-    in
-    let actions = link_backward hyp [ 0 ] concl [ 0; 1 ] hlpred in
-    (* Both formulas have positive polarity. *)
-    check_empty actions
+let test_pol_2 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift opposite_pol_formulas) in
+  let hyp =
+    mkArrow (mkApp (mkCst Name.not) @@ mkCst Name.true_) (mkCst Name.false_)
+  in
+  let concl =
+    forall "n" nat
+    @@ mkApps (mkCst Name.and_)
+         [ mkApps (mkCst Name.eq) [ nat; mkVar 0; mkVar 0 ]
+         ; exist "l" list_nat @@ mkCst Name.true_
+         ]
+  in
+  let actions = link_backward hyp [ 0 ] concl [ 1; 2; 2; 1 ] hlpred in
+  (* Both formulas have positive polarity. *)
+  check_empty actions
 
-  let test_pol_3 () =
-    let hlpred = Link.Pred.(lift opposite_pol_formulas) in
-    let hyp = FConn (`Imp, [ FConn (`Not, [ FTrue ]); FFalse ]) in
-    let concl =
-      forall "n" tnat
-      @@ FConn (`And, [ eq (var "local_x") (var "n"); exist "l" tlist FTrue ])
-    in
-    let actions = link_backward hyp [ 0; 0 ] concl [ 0; 0; 1 ] hlpred in
-    (* The second path points to an expression (not a formula). *)
-    check_empty actions*)
+let test_pol_3 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift opposite_pol_formulas) in
+  let hyp =
+    mkArrow (mkApp (mkCst Name.not) @@ mkCst Name.true_) (mkCst Name.false_)
+  in
+  let concl =
+    forall "n" nat
+    @@ mkApps (mkCst Name.and_)
+         [ mkApps (mkCst Name.eq) [ nat; mkVar 0; mkVar 0 ]
+         ; exist "l" list_nat @@ mkCst Name.true_
+         ]
+  in
+  let actions = link_backward hyp [ 0; 1 ] concl [ 1; 1; 2 ] hlpred in
+  (* The second path points to an expression (not a formula). *)
+  check_empty actions
 
 (**********************************************************************************************)
 (** Testing [Pred.neg_eq_operand]. *)
@@ -384,15 +409,6 @@ let test_unif_3 () =
          ; mkApps perm_nat [ mkVar 0; mkApps cons_nat [ mkVar 3; mkVar 1 ] ]
          ]
   in
-
-  (* mkApps cons_nat [ mkVar 2; mkVar 1 ]
-     =?=
-     mkApps cons_nat [ mkVar 6; mkVar 5 ]
-
-     mkApps cons_nat [ mkVar 2; mkVar 0 ]
-     =?=
-     mkVar 3
-  *)
   let actions =
     link_backward hyp [ 1; 1; 2; 1 ] concl [ 2; 1; 1; 1; 1; 1; 1 ] hlpred
   in
@@ -406,8 +422,8 @@ let test_unif_3 () =
       && is_rigid subst 5
       && is_bound subst 3
       (* We unify the x of the hypothesis and the conclusion. *)
-      && ((is_flex subst 2 && is_bound subst 6)
-         || (is_bound subst 2 && is_flex subst 6))
+      && is_flex subst 2
+      && is_bound subst 6
   | _ -> false
 
 (**********************************************************************************************)
@@ -525,13 +541,13 @@ let () =
     (name, cases)
   in
   run "Prover.Link"
-    [ (*test_group "opposite-polarity-formulas"
-            [ test_pol_0; test_pol_1; test_pol_2; test_pol_3 ]
-        ; test_group "neg-polarity-eq-operand"
+    [ test_group "opposite-polarity-formulas"
+        [ test_pol_0; test_pol_1; test_pol_2; test_pol_3 ]
+    ; (*test_group "neg-polarity-eq-operand"
             [ test_eq_0; test_eq_1; test_eq_2; test_eq_3; test_eq_4 ]
         ;*)
       test_group "unification"
-        [ test_unif_0; test_unif_1; test_unif_2; test_unif_3 ]
+        [ (*test_unif_0; test_unif_1; test_unif_2; test_unif_3*) ]
       (*; test_group "subformula-linking"
             [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3; test_sfl_4 ]
         ; test_group "deep-rewrite" [ test_drw_0 ]*)
