@@ -1,19 +1,13 @@
 (** This module implements Backtraking random generators. 
-    These are quickcheck-like generators that can fail and backtrack. *)
+    These are quickcheck-like generators that can fail and backtrack.
+    
+    Author : Mathis Bouverot-Dupuis. *)
 
 open QCheck2
 
-(** Backtracking generators ['a BGen.t] are represented as ['a option Gen.t]. *)
-type 'a t
-
-(** Monad return. *)
-val return : 'a -> 'a t
-
-(** Functor map. *)
-val map : ('a -> 'b) -> 'a t -> 'b t
-
-(** Monad bind. *)
-val bind : 'a t -> ('a -> 'b t) -> 'b t
+(** Backtracking generators form a monad. 
+    Internally ['a BGen.t] is represented as ['a option Gen.t] *)
+include Monad.S
 
 (** Failing is the first component of backtracking. *)
 val fail : unit -> 'a t
@@ -48,24 +42,3 @@ val oneofl : 'a list -> 'a t
 
 (** [frequency weighted_gens] is a backtracking point. *)
 val frequency : (int * 'a t) list -> 'a t
-
-(** For convenience we provide alternative syntax for some operators. *)
-module Syntax : sig
-  (** Let-style functor map. *)
-  val ( let+ ) : 'a t -> ('a -> 'b) -> 'b t
-
-  (** Infix functor map. *)
-  val ( <$> ) : ('a -> 'b) -> 'a t -> 'b t
-
-  (** Applicative syntax. *)
-  val ( <*> ) : ('a -> 'b) t -> 'a t -> 'b t
-
-  (** Let-style monad bind. *)
-  val ( let* ) : 'a t -> ('a -> 'b t) -> 'b t
-
-  (** Infix monad bind. *)
-  val ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t
-
-  (** Infix monad bind, with arguments reversed. *)
-  val ( =<< ) : ('a -> 'b t) -> 'a t -> 'b t
-end

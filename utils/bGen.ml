@@ -1,10 +1,14 @@
 open QCheck2
 
-type 'a t = 'a option Gen.t
+include Monad.Make (struct
+  type nonrec 'a t = 'a option Gen.t
 
-let return x = Gen.return (Some x)
-let map f a = Gen.map (Option.map f) a
-let bind a f = Gen.bind a @@ function None -> Gen.return None | Some a -> f a
+  let return x = Gen.return (Some x)
+
+  let bind a f =
+    Gen.bind a @@ function None -> Gen.return None | Some a -> f a
+end)
+
 let fail () = Gen.return None
 let guard c a = bind a @@ fun a -> if c a then return a else fail ()
 let cond c a = if c then a else fail ()
@@ -27,17 +31,3 @@ let oneof gens =
 
 let oneofl xs = if List.is_empty xs then fail () else lift (Gen.oneofl xs)
 let frequency weighted_gens = Gen.bind (Gen.shuffle_w_l weighted_gens) first
-
-module Syntax = struct
-  let ( let+ ) a f = map f a
-  let ( <$> ) = map
-  let ( let* ) = bind
-
-  let ( <*> ) f a =
-    let* f = f in
-    let* a = a in
-    return (f a)
-
-  let ( >>= ) = bind
-  let ( =<< ) f a = bind a f
-end

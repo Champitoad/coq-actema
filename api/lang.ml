@@ -404,7 +404,6 @@ end
 module TermGen = struct
   open QCheck2
   open Utils
-  open BGen.Syntax
 
   let gen_letter = Gen.(Char.chr <$> oneof [ 65 -- 90; 97 -- 122 ])
 
@@ -596,8 +595,8 @@ module TermGen = struct
     | Some ty ->
         BGen.run
           begin
-            let open BGen.Syntax in
-            let* n = BGen.lift Gen.(0 -- 10) in
+            let open Utils.BGen in
+            let* n = lift Gen.(0 -- 10) in
             let+ term = typed_rec env context [] n ty in
             (term, ty)
           end
