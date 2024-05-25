@@ -75,3 +75,6 @@ _opam/
 actema.proofs/
 
 .vscode/
+.nix/
+.direnv/
+Makefile.coq*
