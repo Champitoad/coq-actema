@@ -111,26 +111,26 @@ let link_backward hyp hyp_sub concl concl_sub hlpred : Link.linkaction list =
 
 (** Is [var] bound to an [SFlex] item in [subst] ? *)
 let is_flex subst var : bool =
-  let open Link in
+  let open Unif in
   match IntMap.find_opt var subst.mapping with Some SFlex -> true | _ -> false
 
 (** Is [var] bound to an [SRigid] item in [subst] ? *)
 let is_rigid subst var : bool =
-  let open Link in
+  let open Unif in
   match IntMap.find_opt var subst.mapping with
   | Some SRigid -> true
   | _ -> false
 
 (** Is [var] bound to an [Sbound _] item in [subst] ? *)
 let is_bound subst var =
-  let open Link in
+  let open Unif in
   match IntMap.find_opt var subst.mapping with
   | Some (SBound _) -> true
   | _ -> false
 
 (** Is [var] bound to an [Sbound term] item in [subst] ? *)
 let is_bound_to subst var term =
-  let open Link in
+  let open Unif in
   match IntMap.find_opt var subst.mapping with
   | Some (SBound term') when term = term' -> true
   | _ -> false
@@ -334,7 +334,7 @@ let test_unif_0 () =
   | Subform subst ->
       subst.n_free_1 = 0 && subst.n_free_2 = 0
       && IntMap.is_empty subst.mapping
-      && Link.IntGraph.is_empty subst.deps
+      && Unif.IntGraph.is_empty subst.deps
   | _ -> false
 
 let test_unif_1 () =
@@ -399,30 +399,48 @@ let test_unif_3 () =
          ]
   in
   let concl =
-    exist "x" nat @@ forall "l1" list_nat
+    exist "x" nat @@ exist "l1" list_nat
     @@ mkApp (mkCst Name.not)
     @@ forall "l2" list_nat @@ forall "l0" list_nat
-    @@ mkApps (mkCst Name.and_)
-         [ mkApps perm_nat [ mkApps cons_nat [ mkVar 3; mkVar 2 ]; mkVar 0 ]
-         ; mkApps perm_nat [ mkVar 0; mkApps cons_nat [ mkVar 3; mkVar 1 ] ]
-         ]
+    @@ mkApps perm_nat [ mkApps cons_nat [ mkVar 3; mkVar 2 ]; mkVar 0 ]
   in
   let actions =
-    link_backward hyp [ 1; 1; 2; 1 ] concl [ 2; 1; 1; 1; 1; 1; 1 ] hlpred
+    link_backward hyp [ 1; 1; 2; 1 ] concl [ 2; 1; 2; 1; 1; 1; 1 ] hlpred
   in
   check_linkactions actions @@ function
   | Subform subst ->
       subst.n_free_1 = 3 && subst.n_free_2 = 4
-      (* In the hypothesis, l2 is rigid, l1 is bound. *)
+      (* In the hypothesis. *)
       && is_rigid subst 0
-      && is_bound subst 1
-      (* In the conclusion, l1 is rigid, l0 is bound. *)
-      && is_rigid subst 5
+      && is_flex subst 1 && is_flex subst 2
+      (* In the conclusion. *)
       && is_bound subst 3
-      (* We unify the x of the hypothesis and the conclusion. *)
-      && is_flex subst 2
-      && is_bound subst 6
+      && is_flex subst 4 && is_bound subst 5 && is_bound subst 6
   | _ -> false
+
+(* This is the same as test_unif_3, but we swapped [exist l1] to [forall l1] in the conclusion.
+   This has the effect of making [l1] SRigid in the conclusion,
+   and it prevents us from finding an acyclic substitution. *)
+let test_unif_4 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift unifiable) in
+  let hyp =
+    forall "x" nat @@ forall "l1" list_nat @@ exist "l2" list_nat
+    @@ mkApps perm_nat
+         [ mkApps cons_nat [ mkVar 2; mkVar 1 ]
+         ; mkApps cons_nat [ mkVar 2; mkVar 0 ]
+         ]
+  in
+  let concl =
+    exist "x" nat @@ forall "l1" list_nat
+    @@ mkApp (mkCst Name.not)
+    @@ forall "l2" list_nat @@ forall "l0" list_nat
+    @@ mkApps perm_nat [ mkApps cons_nat [ mkVar 3; mkVar 2 ]; mkVar 0 ]
+  in
+  let actions =
+    link_backward hyp [ 1; 1; 2; 1 ] concl [ 2; 1; 1; 1; 1; 1 ] hlpred
+  in
+  check_empty actions
 
 (**********************************************************************************************)
 (** Testing [Pred.wf_subform]. *)
@@ -544,7 +562,7 @@ let () =
     ; test_group "neg-polarity-eq-operand"
         [ test_eq_0; test_eq_1; test_eq_2; test_eq_3; test_eq_4 ]
     ; test_group "unification"
-        [ test_unif_0; test_unif_1; test_unif_2 (*; test_unif_3*) ]
+        [ test_unif_0; test_unif_1; test_unif_2; test_unif_3; test_unif_4 ]
       (*; test_group "subformula-linking"
             [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3; test_sfl_4 ]
         ; test_group "deep-rewrite" [ test_drw_0 ]*)

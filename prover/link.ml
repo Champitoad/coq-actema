@@ -7,37 +7,10 @@ open CoreLogic
 type link = Path.t * Path.t [@@deriving show]
 type hyperlink = Path.t list * Path.t list [@@deriving show]
 
-module IntGraph = Graph.Persistent.Digraph.Concrete (Stdlib.Int)
-
-type sitem = SRigid | SFlex | SBound of Term.t [@@deriving show]
-
-let print_mapping fmt map =
-  let bindings =
-    IntMap.bindings map
-    |> List.map (fun (var, item) ->
-           Format.sprintf "(%d, %s)" var (show_sitem item))
-  in
-  Format.fprintf fmt "[%s]" (String.concat "," bindings)
-
-let print_deps fmt deps =
-  let edges = IntGraph.fold_edges (fun i j acc -> (i, j) :: acc) deps [] in
-  let bindings =
-    List.map (fun (i, j) -> Format.sprintf "%d --> %d" i j) edges
-  in
-  Format.fprintf fmt "[%s]" (String.concat "," bindings)
-
-type subst =
-  { n_free_1 : int
-  ; n_free_2 : int
-  ; mapping : sitem IntMap.t [@printer print_mapping]
-  ; deps : IntGraph.t [@printer print_deps]
-  }
-[@@deriving show]
-
 type linkaction =
   | Nothing
   | Both of linkaction * linkaction
-  | Subform of subst
+  | Subform of Unif.subst
   | Instantiate of Term.t * Path.t
   | Rewrite of Term.t * Term.t * Path.t list
   | Fold of Name.t * Path.t list
@@ -58,135 +31,12 @@ let rec remove_nothing action =
     end
   | _ -> Some action
 
-(*******************************************************************************************)
-(* Unifying terms. *)
-
-(** [var] and [term] both live at level [depth], whereas [subst] always lives at level [0]. *)
-let unify_cond depth subst var term : bool =
-  let fvars = TermUtils.free_vars term in
-  (* [var] has to be a free variable. *)
-  var >= depth
-  (* [var] has to be an Sflex variable. *)
-  && IntMap.find (var - depth) subst.mapping = SFlex
-  (* [term] must only use variables that are free in the original [t1] or [t2]. *)
-  && (IntSet.is_empty fvars || IntSet.min_elt fvars >= depth)
-  && (* [term] must not use any variables that are defined below [var].
-        This also checks that [var] is not free in [term]. *)
-  begin
-    if var - depth < subst.n_free_1
-    then
-      (* [var] is free in the original [t1]. *)
-      IntSet.is_empty fvars || IntSet.min_elt fvars > var
-    else
-      (* [var] is free in the original [t2]. *)
-      let fvars = snd @@ IntSet.split_lt (subst.n_free_1 + depth) fvars in
-      IntSet.is_empty fvars || IntSet.min_elt fvars > var
-  end
-
-let expand_cond depth subst var : bool =
-  (* [var] has to be a free variable. *)
-  var >= depth
-  (* [var] has to be bound in [subst]. *)
-  && match IntMap.find var subst.mapping with SBound _ -> true | _ -> false
-
-(** [unify_rec depth subst (t1, t2)] performs syntactic unification on the terms [t1] and [t2], 
-    starting with a substitution [subst]. Initially [depth] should be equal to [0]. 
-    This does not build the [deps] graph of the substitution, 
-    and does not check for cycles. *)
-let rec unify_rec depth (subst : subst) ((t1, t2) : Term.t * Term.t) :
-    subst option =
-  let open Utils.Monad.Option in
-  (* Apply the subsitution to [v]. *)
-  let do_expand v t : subst option =
-    match IntMap.find (v - depth) subst.mapping with
-    | SBound t' -> unify_rec depth subst (t, t')
-    | _ -> assert false
-  in
-  (* Add a mapping [v --> SBound t] to the substitution. *)
-  let do_unify v t : subst option =
-    (* Lower [v] and [t] from level [depth] to level [0]. *)
-    let v = v - depth in
-    let t = TermUtils.lift_free (-depth) t in
-    (* Extend the substitution's mapping. *)
-    let subst =
-      { subst with mapping = IntMap.add v (SBound t) subst.mapping }
-    in
-    Some subst
-  in
-  match (t1, t2) with
-  (* Trivial cases. *)
-  | Var v1, Var v2 when v1 = v2 -> Some subst
-  | Sort s1, Sort s2 when s1 = s2 -> Some subst
-  | Cst c1, Cst c2 when Name.equal c1 c2 -> Some subst
-  (* Expand a variable that is in the substitution. *)
-  | Var v, t when expand_cond depth subst v -> do_expand v t
-  | t, Var v when expand_cond depth subst v -> do_expand v t
-  (* Add a mapping to the substitution. *)
-  | Var v, t when unify_cond depth subst v t -> do_unify v t
-  | t, Var v when unify_cond depth subst v t -> do_unify v t
-  (* Recursive cases. *)
-  | App (f1, args1), App (f2, args2) when List.length args1 = List.length args2
-    ->
-      foldM (unify_rec depth) subst @@ List.combine (f1 :: args1) (f2 :: args2)
-  | Lambda (x1, ty1, body1), Lambda (x2, ty2, body2)
-  | Prod (x1, ty1, body1), Prod (x2, ty2, body2) ->
-      let* subst = unify_rec depth subst (ty1, ty2) in
-      let* subst = unify_rec (depth + 1) subst (body1, body2) in
-      Some subst
-  | Arrow (a1, b1), Arrow (a2, b2) ->
-      let* subst = unify_rec depth subst (a1, a2) in
-      let* subst = unify_rec depth subst (b1, b2) in
-      Some subst
-  (* We failed to unify. *)
-  | _ -> None
-
-(** [range low high] returns the list [low; low + 1; ...; high - 1] ([low] included, [high] excluded).
-    Returns an empty list if [low > high]. *)
-let range low high =
-  if low > high then [] else List.init (high - low) (fun i -> i + low)
-
-(** [build_deps subst] returns a substitution equivalent to [subst], 
-    but with the [deps] graph computed. 
-    This only build the [deps] graph : it does not check for cycles. *)
-let build_deps (subst : subst) : subst =
-  let n1 = subst.n_free_1 in
-  let n2 = subst.n_free_2 in
-  let all_vars = List.init (n1 + n2) Fun.id in
-  (* Start from the empty graph. *)
-  let deps = IntGraph.empty in
-  (* Add a vertex for each free variable. *)
-  let deps = List.fold_left IntGraph.add_vertex deps all_vars in
-  (* Add an edge [i --> i-1] for each variable free in [t1] or [t2]. *)
-  let indices =
-    range 1 subst.n_free_1
-    @ range (subst.n_free_1 + 1) (subst.n_free_1 + subst.n_free_2)
-  in
-  let deps =
-    List.fold_left (fun deps i -> IntGraph.add_edge deps i (i - 1)) deps indices
-  in
-  (* Add an edge for each element [i --> Sbound term] of the substitution. *)
-  let deps =
-    List.fold_left
-      begin
-        fun deps i ->
-          (* Check if i is bound in [subst]. *)
-          match IntMap.find i subst.mapping with
-          | SBound term ->
-              (* Add an edge i -> j for each free variable j of [term]. *)
-              IntSet.fold
-                (fun j deps -> IntGraph.add_edge deps i j)
-                (TermUtils.free_vars term) deps
-          | _ -> deps
-      end
-      deps all_vars
-  in
-  { subst with deps }
-
 (** [traverse_rec pol acc fo sub] traverses [term] along the path [sub], 
     and recording an [SFlex] or [SRigid] sitem for each binder we cross.
     This assumes the path [sub] points to a sub-formula in the first-order skeleton,
     and raises an exception if it doesn't. *)
-let rec traverse_rec pol acc (fo : FirstOrder.t) sub : sitem list =
+let rec traverse_rec pol acc (fo : FirstOrder.t) sub : Unif.sitem list =
+  let open Unif in
   match (sub, fo) with
   | [], _ -> acc
   (* Inverse the polarity. *)
@@ -218,7 +68,7 @@ let rec traverse_rec pol acc (fo : FirstOrder.t) sub : sitem list =
     @raise Path.InvalidPath if [path] is invalid.
     @raise Invalid_argument if [path] points to a variable.
     @raise InvalidSubtermPath if [path] points to something outside the first-order skeleton. *)
-let traverse (path : Path.t) (proof : Proof.t) : sitem list * Term.t =
+let traverse (path : Path.t) (proof : Proof.t) : Unif.sitem list * Term.t =
   let goal, item, context, subterm = PathUtils.destr path proof in
   let env = goal.g_pregoal.g_env in
   let fo_term = FirstOrder.of_term ~context env @@ term_of_item item in
@@ -259,29 +109,16 @@ module Pred = struct
       let src_sitems, src_subterm = traverse src proof in
       let dst_sitems, dst_subterm = traverse dst proof in
 
-      (* Create the initial substitution. *)
-      let n_free_1 = List.length src_sitems in
-      let n_free_2 = List.length dst_sitems in
-      let deps = IntGraph.empty in
-      let indices = List.init (n_free_1 + n_free_2) Fun.id in
-      let mapping =
-        IntMap.of_list @@ List.combine indices (src_sitems @ dst_sitems)
-      in
-      let subst = { n_free_1; n_free_2; mapping; deps } in
-
       (* Unify the two subterms. Don't forget to lift the second term. *)
-      match
-        unify_rec 0 subst (src_subterm, TermUtils.lift_free n_free_1 dst_subterm)
-      with
+      let solutions =
+        Unif.unify (src_subterm, src_sitems) (dst_subterm, dst_sitems)
+      in
+      (* Get the first acyclic solution. *)
+      match solutions () with
       (* The terms are unifiable. *)
-      | Some subst ->
-          (* Check the substitution is acyclic. *)
-          let subst = build_deps subst in
-          Format.printf "%s" (show_subst subst);
-          let module Dfs = Graph.Traverse.Dfs (IntGraph) in
-          if Dfs.has_cycle subst.deps then [] else [ Subform subst ]
+      | Cons (subst, _) -> [ Subform subst ]
       (* The terms are not unifiable. *)
-      | None -> []
+      | Nil -> []
     with InvalidSubtermPath _ | Invalid_argument _ | Path.InvalidPath _ ->
       (* We got an exception : most likely [traverse] raised an exception because a path was invalid. *)
       []
@@ -296,9 +133,7 @@ module Pred = struct
       match (src_pol, dst_pol) with
       | Neg, Pos | Pos, Neg | Sup, _ | _, Sup -> [ Nothing ]
       | _ -> []
-    with Invalid_argument _ | InvalidSubtermPath _ ->
-      Format.printf "ERROR\n";
-      []
+    with Invalid_argument _ | InvalidSubtermPath _ | Path.InvalidPath _ -> []
 
   let neg_eq_operand : lpred =
    fun proof (src, dst) ->

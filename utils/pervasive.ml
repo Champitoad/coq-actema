@@ -13,6 +13,7 @@ let ( <<< ) g f x = g (f x)
 module Int = BatInt
 module String = BatString
 module Option = BatOption
+module Seq = BatSeq
 module Map = BatMap
 module Set = BatSet
 

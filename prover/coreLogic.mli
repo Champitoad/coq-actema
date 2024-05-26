@@ -163,6 +163,7 @@ module Polarity : sig
 
   (** [of_ipath proof path] returns the polarity of the subterm at path [path] in [proof]. 
       @raise Invalid_argument if [path] points to a variable (head or body).
-      @raise InvalidSubtermPath if [path] is invalid or escapes the first-order skeleton. *)
+      @raise InvalidSubtermPath if [path] is invalid or escapes the first-order skeleton.
+      @raise Path.InvalidPath if [path] is invalid. *)
   val of_ipath : Proof.t -> Path.t -> t
 end
