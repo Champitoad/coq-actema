@@ -26,56 +26,13 @@ type aoutput =
   }
 [@@deriving show]
 
-(** Create path to the root of every hypothesis (in a subgoal). *)
-(*let all_hyps_ipaths Proof.{ g_id; g_pregoal } =
-    (* Get the list of hypotheses handles *)
-    Proof.Hyps.ids g_pregoal.Proof.g_hyps
-    |> (* Create a list of paths to each hypothesis *)
-    List.map
-      begin
-        fun hd ->
-          IPath.make (Handle.toint g_id)
-            ~ctxt:{ kind = `Hyp; handle = Handle.toint hd }
-      end
-
-  (** Create a path to the body (and optionally the head) of every variable (in a subgoal). *)
-  let all_vars_ipaths ?(heads = true) Proof.{ g_id; g_pregoal } =
-    let env = g_pregoal.Proof.g_env in
-    (* Get the list of variable handles *)
-    env.env_handles |> BiMap.codomain
-    |> (* Create a list of paths to each variable's head and body *)
-    List.concat_map
-      begin
-        fun hd ->
-          (if heads
-           then
-             [ IPath.make (Handle.toint g_id)
-                 ~ctxt:{ kind = `Var `Head; handle = Handle.toint hd }
-             ]
-           else [])
-          @
-          match Vars.byid env hd with
-          | Some (_, (_, Some _)) ->
-              [ IPath.make (Handle.toint g_id)
-                  ~ctxt:{ kind = `Var `Body; handle = Handle.toint hd }
-              ]
-          | _ -> []
-      end
-
-  (** Create a path to the following items in a subgoal :
-      - the root of the goal.
-      - the root of every hypothesis.
-      - the body (and optionally the head) of every variable. *)
-  let all_items_ipaths ?heads goal =
-    (IPath.to_concl goal :: all_hyps_ipaths goal) @ all_vars_ipaths ?heads goal*)
-
 (* TODO : check this works when [path] points to a variable. *)
 let all_subpaths proof path : Path.t list =
   let term = PathUtils.term path proof in
   let subs = TermUtils.all_subs term in
   List.map (fun sub -> Path.{ goal = path.goal; kind = path.kind; sub }) subs
 
-(* TODO : add variables in here. *)
+(* TODO : handle variables. *)
 let all_goal_subpaths proof goal : Path.t list =
   let roots =
     Path.make ~kind:Concl goal.g_id
@@ -85,10 +42,10 @@ let all_goal_subpaths proof goal : Path.t list =
   in
   List.concat_map (all_subpaths proof) roots
 
-(** [dnd_actions src dst selection proof] computes all possible proof actions
+(** [dnd_actions src dst selection proof] computes all possible link action actions
     associated with the DnD action [DnD (src, dst)].
 
-    To see more specifically what hyperlinks are tested,
+    To see more specifically which hyperlinks are tested,
     look at the definition of [hyperlink_sources] and [hyperlink_dests] below. *)
 let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
     (selection : Path.t list) (proof : Proof.t) : aoutput list =
@@ -228,7 +185,7 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
       end
     | _ -> []*)
 
-(* This seems very hacky to me. *)
+(* This seems very hacky. *)
 let rebuild_pathd l i =
   if i + 1 = l
   then [ 1 ]

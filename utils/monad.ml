@@ -78,6 +78,13 @@ module List = Make (struct
   let bind x f = List.concat_map f x
 end)
 
+module Seq = Make (struct
+  type 'a t = 'a Seq.t
+
+  let return x = Seq.cons x Seq.empty
+  let bind x f = Seq.concat_map f x
+end)
+
 module Reader (T : sig
   type t
 end) =

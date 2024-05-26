@@ -64,13 +64,16 @@ end) : S with type 'a t = 'a M.t
 (**************************************************************************************)
 (** Some useful monads. *)
 
-(** The standard option monad. *)
+(** Standard option monad. *)
 module Option : S with type 'a t = 'a option
 
-(** The standard list monad. *)
+(** Standard list monad. *)
 module List : S with type 'a t = 'a list
 
-(** The standard reader monad over some type [T.t].
+(** Lazy list monad. *)
+module Seq : S with type 'a t = 'a Seq.t
+
+(** Standard reader monad over some type [T.t].
     This provides read-only access to a value of type [T.t]. *)
 module Reader (T : sig
   type t
@@ -84,7 +87,7 @@ end) : sig
   val run : T.t -> 'a t -> 'a
 end
 
-(** The standard state monad over some type [T.t].
+(** Standard state monad over some type [T.t].
     This provides read-write access to a value of type [T.t]. *)
 module State (T : sig
   type t
