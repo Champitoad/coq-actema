@@ -18,6 +18,7 @@ let exist name ty body =
 let nat : Term.t = Term.mkCst Name.nat
 let eq_nat : Term.t = Term.(mkApp (mkCst Name.eq) nat)
 let list_nat : Term.t = Term.(mkApp (mkCst @@ Name.make "list") nat)
+let eq_list_nat : Term.t = Term.(mkApp (mkCst Name.eq) list_nat)
 let perm_nat : Term.t = Term.(mkApp (mkCst @@ Name.make "perm") nat)
 let nil_nat : Term.t = Term.(mkApp (mkCst @@ Name.make "nil") nat)
 let cons_nat : Term.t = Term.(mkApp (mkCst @@ Name.make "cons") nat)
@@ -442,6 +443,27 @@ let test_unif_4 () =
   in
   check_empty actions
 
+let test_unif_5 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift unifiable) in
+  let hyp = forall "x" nat @@ mkApps eq_nat [ mkVar 0; mkVar 0 ] in
+  let concl = forall "x" list_nat @@ mkApps eq_list_nat [ mkVar 0; mkVar 0 ] in
+  let actions = link_backward hyp [ 1; 2 ] concl [ 1; 2 ] hlpred in
+  check_linkactions actions @@ function
+  | Subform subst ->
+      subst.n_free_1 = 1 && subst.n_free_2 = 1 && is_bound subst 0
+      && is_rigid subst 1
+  | _ -> false
+
+let test_unif_6 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift unifiable) in
+  let hyp = forall "x" nat @@ mkApps eq_nat [ mkVar 0; mkVar 0 ] in
+  let concl = forall "x" list_nat @@ mkApps eq_list_nat [ mkVar 0; mkVar 0 ] in
+  let actions = link_backward hyp [ 1; 2 ] concl [ 1; 2 ] hlpred in
+  (* The two linked variables are of different types. *)
+  check_empty actions
+
 (**********************************************************************************************)
 (** Testing [Pred.wf_subform]. *)
 
@@ -562,7 +584,14 @@ let () =
     ; test_group "neg-polarity-eq-operand"
         [ test_eq_0; test_eq_1; test_eq_2; test_eq_3; test_eq_4 ]
     ; test_group "unification"
-        [ test_unif_0; test_unif_1; test_unif_2; test_unif_3; test_unif_4 ]
+        [ test_unif_0
+        ; test_unif_1
+        ; test_unif_2
+        ; test_unif_3
+        ; test_unif_4
+        ; test_unif_5
+        ; test_unif_6
+        ]
       (*; test_group "subformula-linking"
             [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3; test_sfl_4 ]
         ; test_group "deep-rewrite" [ test_drw_0 ]*)

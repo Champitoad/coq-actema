@@ -54,8 +54,8 @@ let rec traverse_rec pol acc (fo : FirstOrder.t) sub : Unif.sitem list =
       let sitem = if pol = Polarity.Pos then SFlex else SRigid in
       traverse_rec pol (sitem :: acc) body sub
   (* Equality. *)
-  | [ 0 ], FAtom (App (Cst eq, [ _; _; _ ]))
-  | [ 1 ], FAtom (App (Cst eq, [ _; _; _ ]))
+  | [ 2 ], FAtom (App (Cst eq, [ _; _; _ ]))
+  | [ 3 ], FAtom (App (Cst eq, [ _; _; _ ]))
     when Name.equal eq Name.eq ->
       acc
   (* The path is either invalid or escapes the first-order skeleton. *)
@@ -64,9 +64,12 @@ let rec traverse_rec pol acc (fo : FirstOrder.t) sub : Unif.sitem list =
 (** [traverse path proof] traverses [path], deciding whether each traversed 
     binder is [SFlex] or [SRigid]. It returns the list of sitems computed,
     along with the subterm pointed at by [path]. 
+
+    [path] should point to a something in the first-order skeleton,
+    or to an argument of an equality which itself is in the first-order skeleton.
     
     @raise Path.InvalidPath if [path] is invalid.
-    @raise Invalid_argument if [path] points to a variable.
+    @raise Invalid_argument if [path] points to a variable item.
     @raise InvalidSubtermPath if [path] points to something outside the first-order skeleton. *)
 let traverse (path : Path.t) (proof : Proof.t) : Unif.sitem list * Term.t =
   let goal, item, context, subterm = PathUtils.destr path proof in
