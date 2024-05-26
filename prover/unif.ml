@@ -23,13 +23,16 @@ let print_deps fmt deps =
 type subst =
   { n_free_1 : int
   ; n_free_2 : int
+  ; context : Context.t
   ; mapping : sitem IntMap.t [@printer print_mapping]
   ; deps : IntGraph.t [@printer print_deps]
   }
 [@@deriving show]
 
-(** [var] and [term] both live at level [depth], whereas [subst] always lives at level [0]. *)
-let unify_cond depth subst var term : bool =
+(** [unify_cond depth subst var term] checks whether we can add the mapping [var --> term]
+    to [subst].
+    [var] and [term] both live at level [depth], whereas [subst] always lives at level [0]. *)
+let unify_cond depth env subst var term : bool =
   let fvars = TermUtils.free_vars term in
   (* [var] has to be a free variable. *)
   var >= depth
@@ -37,6 +40,9 @@ let unify_cond depth subst var term : bool =
   && IntMap.find (var - depth) subst.mapping = SFlex
   (* [term] must only use variables that are free in the original [t1] or [t2]. *)
   && (IntSet.is_empty fvars || IntSet.min_elt fvars >= depth)
+  (* [var] and [term] must have the same type. *)
+  && snd @@ Option.get @@ Context.get (var - depth) subst.context
+     = Typing.typeof ~context:subst.context env term
 
 (** [var] lives at level [depth], whereas [subst] always lives at level [0]. *)
 let expand_cond depth subst var : bool =
@@ -49,13 +55,13 @@ let expand_cond depth subst var : bool =
     starting with a substitution [subst]. Initially [depth] should be equal to [0]. 
     This does not build the [deps] graph of the substitution, 
     and does not check for cycles. *)
-let rec unify_rec depth (subst : subst) ((t1, t2) : Term.t * Term.t) :
+let rec unify_rec depth env (subst : subst) ((t1, t2) : Term.t * Term.t) :
     subst Seq.t =
   let open Utils.Monad.Seq in
   (* Apply the subsitution to [v]. *)
   let do_expand v t : subst Seq.t =
     match IntMap.find (v - depth) subst.mapping with
-    | SBound t' -> unify_rec depth subst (t, t')
+    | SBound t' -> unify_rec depth env subst (t, t')
     | _ -> assert false
   in
   (* Extend the substitution in two separate ways :
@@ -94,23 +100,24 @@ let rec unify_rec depth (subst : subst) ((t1, t2) : Term.t * Term.t) :
   | t, Var v when expand_cond depth subst v -> do_expand v t
   (* Add a mapping to the substitution. *)
   | Var v1, Var v2
-    when unify_cond depth subst v1 (Term.mkVar v2)
-         && unify_cond depth subst v2 (Term.mkVar v1) ->
+    when unify_cond depth env subst v1 (Term.mkVar v2)
+         && unify_cond depth env subst v2 (Term.mkVar v1) ->
       do_unify_vars v1 v2
-  | Var v, t when unify_cond depth subst v t -> do_unify v t
-  | t, Var v when unify_cond depth subst v t -> do_unify v t
+  | Var v, t when unify_cond depth env subst v t -> do_unify v t
+  | t, Var v when unify_cond depth env subst v t -> do_unify v t
   (* Recursive cases. *)
   | App (f1, args1), App (f2, args2) when List.length args1 = List.length args2
     ->
-      foldM (unify_rec depth) subst @@ List.combine (f1 :: args1) (f2 :: args2)
+      foldM (unify_rec depth env) subst
+      @@ List.combine (f1 :: args1) (f2 :: args2)
   | Lambda (x1, ty1, body1), Lambda (x2, ty2, body2)
   | Prod (x1, ty1, body1), Prod (x2, ty2, body2) ->
-      let* subst = unify_rec depth subst (ty1, ty2) in
-      let* subst = unify_rec (depth + 1) subst (body1, body2) in
+      let* subst = unify_rec depth env subst (ty1, ty2) in
+      let* subst = unify_rec (depth + 1) env subst (body1, body2) in
       return subst
   | Arrow (a1, b1), Arrow (a2, b2) ->
-      let* subst = unify_rec depth subst (a1, a2) in
-      let* subst = unify_rec depth subst (b1, b2) in
+      let* subst = unify_rec depth env subst (a1, a2) in
+      let* subst = unify_rec depth env subst (b1, b2) in
       return subst
   (* We failed to unify. *)
   | _ -> Seq.empty
@@ -157,17 +164,26 @@ let build_deps (subst : subst) : subst =
   in
   { subst with deps }
 
-let unify (t1, sitems1) (t2, sitems2) : subst Seq.t =
+let unify env (sitems1, ctx1, t1) (sitems2, ctx2, t2) : subst Seq.t =
+  assert (List.length sitems1 = Context.size ctx1);
+  assert (List.length sitems2 = Context.size ctx2);
+
   (* Create the initial substitution. *)
   let n_free_1 = List.length sitems1 in
   let n_free_2 = List.length sitems2 in
-  let deps = IntGraph.empty in
   let indices = range 0 (n_free_1 + n_free_2) in
   let mapping = IntMap.of_list @@ List.combine indices (sitems1 @ sitems2) in
-  let subst = { n_free_1; n_free_2; mapping; deps } in
+  let subst =
+    { n_free_1
+    ; n_free_2
+    ; context = Context.stack ctx1 ctx2
+    ; mapping
+    ; deps = IntGraph.empty
+    }
+  in
 
   (* Compute all solutions (acyclic or not). *)
-  let solutions = unify_rec 0 subst (t1, TermUtils.lift_free n_free_1 t2) in
+  let solutions = unify_rec 0 env subst (t1, TermUtils.lift_free n_free_1 t2) in
 
   (* Filter out the cyclic solutions. This is lazy. *)
   Seq.filter_map

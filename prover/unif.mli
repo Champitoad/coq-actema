@@ -35,6 +35,9 @@ type subst =
     n_free_1 : int
   ; (* The number of free variables of [t2] (before lifting [t2]). *)
     n_free_2 : int
+  ; (* The common context that [t1] and [t2] live in.
+       This context has n_free_1 + n_free_2 variables. *)
+    context : Context.t
   ; (* The actual substitution. It maps the free variables of the common context
        to terms that depend on these free variables.
 
@@ -66,7 +69,8 @@ val close : subst -> subst
     [apply ~repeat:false subst term] will terminate. *)
 val apply : repeat:bool -> subst -> Term.t -> Term.t
 
-(** [unify (t1, sitems1) (t2, sitems2)] performs syntactic unification on the terms [t1] and [t2].
+(** [unify env (sitems1, ctx1, t1) (sitems2, ct2, t2)] performs syntactic unification 
+    on the terms [t1] and [t2].
     The list [sitems1] gives the initial [sitem]s for the free variables of [t1] (and same for [t2]). 
 
     Internally the term [t2] is lifted above [t1] so that they live in the same context 
@@ -74,4 +78,8 @@ val apply : repeat:bool -> subst -> Term.t -> Term.t
 
     This returns a lazy sequence of all acyclic substitutions that unify [t1] and [t2].
     The returned substitutions are not necessarily closed. *)
-val unify : Term.t * sitem list -> Term.t * sitem list -> subst Seq.t
+val unify :
+     Env.t
+  -> sitem list * Context.t * Term.t
+  -> sitem list * Context.t * Term.t
+  -> subst Seq.t

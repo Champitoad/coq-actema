@@ -119,6 +119,7 @@ module Context = struct
     |> List.mapi (fun i (_, ty') -> if ty = ty' then Some i else None)
     |> List.filter_map Fun.id
 
+  let stack ctx1 ctx2 = ctx1 @ ctx2
   let to_list ctx = ctx
   let of_list ctx = ctx
 end

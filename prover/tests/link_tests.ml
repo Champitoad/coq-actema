@@ -447,7 +447,7 @@ let test_unif_5 () =
   let open Term in
   let hlpred = Link.Pred.(lift unifiable) in
   let hyp = forall "x" nat @@ mkApps eq_nat [ mkVar 0; mkVar 0 ] in
-  let concl = forall "x" list_nat @@ mkApps eq_list_nat [ mkVar 0; mkVar 0 ] in
+  let concl = forall "x" nat @@ mkApps eq_nat [ mkVar 0; mkVar 0 ] in
   let actions = link_backward hyp [ 1; 2 ] concl [ 1; 2 ] hlpred in
   check_linkactions actions @@ function
   | Subform subst ->

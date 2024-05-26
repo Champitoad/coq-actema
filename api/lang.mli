@@ -193,6 +193,9 @@ module Context : sig
 
   (** [get_by_type ty ctx] returns the list of all the variables that have type [ty] in [ctx]. *)
   val get_by_type : Term.t -> t -> int list
+
+  (** [stack ctx1 ctx2] is equivalent to pushing every variable of [ctx1] onto [ctx2]. *)
+  val stack : t -> t -> t
 end
 
 (***************************************************************************************)

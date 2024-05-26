@@ -71,12 +71,13 @@ let rec traverse_rec pol acc (fo : FirstOrder.t) sub : Unif.sitem list =
     @raise Path.InvalidPath if [path] is invalid.
     @raise Invalid_argument if [path] points to a variable item.
     @raise InvalidSubtermPath if [path] points to something outside the first-order skeleton. *)
-let traverse (path : Path.t) (proof : Proof.t) : Unif.sitem list * Term.t =
+let traverse (path : Path.t) (proof : Proof.t) :
+    Unif.sitem list * Context.t * Term.t =
   let goal, item, context, subterm = PathUtils.destr path proof in
   let env = goal.g_pregoal.g_env in
   let fo_term = FirstOrder.of_term ~context env @@ term_of_item item in
   let sitems = traverse_rec (Polarity.of_item item) [] fo_term path.sub in
-  (sitems, subterm)
+  (sitems, context, subterm)
 
 (*******************************************************************************************)
 (* Link predicates. *)
@@ -108,15 +109,14 @@ module Pred = struct
   let unifiable : lpred =
    fun proof (src, dst) ->
     try
-      (* Traverse each formula, collecting information about the binders. *)
-      let src_sitems, src_subterm = traverse src proof in
-      let dst_sitems, dst_subterm = traverse dst proof in
+      let goal = PathUtils.goal src proof in
 
-      (* Unify the two subterms. Don't forget to lift the second term. *)
+      (* Unify the two subterms. *)
       let solutions =
-        Unif.unify (src_subterm, src_sitems) (dst_subterm, dst_sitems)
+        Unif.unify goal.g_pregoal.g_env (traverse src proof)
+          (traverse dst proof)
       in
-      (* Get the first acyclic solution. *)
+      (* Get the first (acyclic) solution. *)
       match solutions () with
       (* The terms are unifiable. *)
       | Cons (subst, _) -> [ Subform subst ]
