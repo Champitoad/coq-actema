@@ -29,6 +29,7 @@ let predefined =
   ; (Name.add, Env.{ symbol = "+"; implicit_args = []; position = Infix })
   ; (Name.mul, Env.{ symbol = "⋅"; implicit_args = []; position = Infix })
   ; (Name.eq, Env.{ symbol = "="; implicit_args = [ 0 ]; position = Infix })
+  ; (Name.equiv, Env.{ symbol = "↔"; implicit_args = []; position = Infix })
   ]
 
 (** [get_pp_info name] returns the pretty-printing information for [name]. *)

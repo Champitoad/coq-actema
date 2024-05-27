@@ -227,14 +227,6 @@ exception InvalidPath of Logic.Path.t
     in
     (t, i)
 
-  (** Make an introduction pattern to introduce named variables.
-      If any of the given names is already bound, this will create a fresh name instead. *)
-  let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
-    let open Tactypes in
-    List.map
-      (fun name ->
-        CAst.make (IntroNaming (Namegen.IntroFresh (Names.Id.of_string name))))
-      names
 
   let bool_path coq_env (sub : int list) : EConstr.t =
     let boollist_of_intlist =
@@ -321,37 +313,9 @@ exception InvalidPath of Logic.Path.t
       let mind = Names.MutInd.make2 modpath label in
       ((mind, i), j)
     in
-    try Some (Scanf.sscanf name "I%s@/%s@/%s@/%d/%d" parse) with _ -> None
+    try Some (Scanf.sscanf name "I%s@/%s@/%s@/%d/%d" parse) with _ -> None*)
 
-  (** Execute an [AIntro] action. *)
-  let execute_aintro goal side =
-    match (goal.Logic.g_concl, side) with
-    | Logic.FTrue, 0 -> Tactics.one_constructor 1 Tactypes.NoBindings
-    | Logic.FConn (Logic.Imp, _), 0 | Logic.FConn (Logic.Not, _), 0 ->
-        let pat = mk_intro_patterns [ "imp_left" ] in
-        Tactics.intro_patterns false pat
-    | Logic.FConn (Logic.And, _), 0 | Logic.FConn (Logic.Equiv, _), 0 ->
-        Tactics.split Tactypes.NoBindings
-    | Logic.FConn (Logic.Or, _), 0 -> Tactics.left Tactypes.NoBindings
-    | Logic.FConn (Logic.Or, _), 1 -> Tactics.right Tactypes.NoBindings
-    | Logic.FBind (Logic.Forall, x, _, _), 0 ->
-        let pat = mk_intro_patterns [ x ] in
-        Tactics.intro_patterns false pat
-    | Logic.FPred ("_EQ", _), 0 ->
-        (* Here we are not sure that the two sides of the equality are indeed equal.
-
-           The frontend can only handle syntactic equality : it delegates to the plugin
-           the responsability of dealing with non-equal terms.
-
-           We choose to simply ignore an intro action on an equality that is not provable by computation. *)
-        Tacticals.tclTRY Tactics.reflexivity
-    | _ ->
-        let msg =
-          "The goal has an invalid head connective/predicate for an introduction."
-        in
-        raise @@ UnsupportedAction (Logic.AIntro side, msg)
-
-  (** Execute an [ALemma] action. This consists in adding the required lemma as a hypothesis. *)
+(*(** Execute an [ALemma] action. This consists in adding the required lemma as a hypothesis. *)
   let execute_alemma coq_goal full_name =
     (* Decode the lemma name. *)
     let stmt, basename =
@@ -433,58 +397,6 @@ exception InvalidPath of Logic.Path.t
     (* Add the lemma as a hypothesis. *)
     Tactics.pose_proof hyp_name stmt
 
-  (** Execute an [AElim] action. This action eliminates the hypothesis named [hyp_name].
-      The hypothesis is cleared and replaced by (possibly several goals) which contain derived hypotheses.
-      The integer index is used when eliminating an equality, to decide which way (left/right) to rewrite. *)
-  let execute_aelim goal hyp_name i =
-    let hyp_id = Names.Id.of_string hyp_name in
-    let hyp = Utils.get_hyp goal hyp_name in
-    match hyp.h_form with
-    | Logic.FTrue | Logic.FFalse | Logic.FConn (Logic.Not, _) ->
-        let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
-        Tactics.default_elim false (Some true) bindings
-    | Logic.FConn (Logic.Imp, _) -> Tactics.apply (EConstr.mkVar hyp_id)
-    | Logic.FConn (Logic.And, _) | Logic.FConn (Logic.Equiv, _) ->
-        (* First eliminate the hypothesis, then introduce the hypotheses we created. *)
-        let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
-        Tacticals.tclTHENS
-          (Tactics.default_elim false (Some true) bindings)
-          [ Tactics.intro_patterns false
-            @@ mk_intro_patterns [ hyp_name; hyp_name ]
-          ]
-    | Logic.FConn (Logic.Or, _) ->
-        (* First eliminate the hypothesis, then introduce the hypotheses we created. *)
-        let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
-        Tacticals.tclTHENS
-          (Tactics.default_elim false (Some true) bindings)
-          [ Tactics.intro_patterns false @@ mk_intro_patterns [ hyp_name ]
-          ; Tactics.intro_patterns false @@ mk_intro_patterns [ hyp_name ]
-          ]
-    | Logic.FBind (Logic.Exist, x, _, _) ->
-        (* First eliminate the hypothesis, then introduce the variable and hypothesis we created. *)
-        let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
-        Tacticals.tclTHENS
-          (Tactics.default_elim false (Some true) bindings)
-          [ Tactics.intro_patterns false @@ mk_intro_patterns [ x; hyp_name ] ]
-    | Logic.FPred ("_EQ", _) -> begin
-        match i with
-        | 0 -> calltac (kname "rew_all_left") [ EConstr.mkVar hyp_id ]
-        | 1 -> calltac (kname "rew_all_right") [ EConstr.mkVar hyp_id ]
-        | _ ->
-            let msg =
-              Format.sprintf
-                "When eliminating an equality, the index should be either 0 or 1 \
-                 (got %d)."
-                i
-            in
-            raise @@ UnsupportedAction (Logic.AElim (hyp_name, i), msg)
-      end
-    | _ ->
-        let msg =
-          "The hypothesis has an invalid head connective/predicate for \
-           elimination."
-        in
-        raise @@ UnsupportedAction (Logic.AElim (hyp_name, i), msg)
 
   let execute_alink coq_goal sign goal src dst (itr : Logic.itrace) =
     let get_eq (p : Logic.ipath) : (bool list * bool) option =
@@ -751,8 +663,120 @@ exception InvalidPath of Logic.Path.t
 
     calltac tac args*)
 
+(** Return the kernel name of a tactic defined in [Actema.HOL]. *)
+let tactic_kname = kername [ "Actema"; "HOL" ]
+
+(** Make an introduction pattern to introduce named variables.
+    If any of the given names is already bound, this will create a fresh name instead. *)
+let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
+  let open Tactypes in
+  List.map
+    (fun name ->
+      CAst.make @@ IntroNaming (Namegen.IntroFresh (Names.Id.of_string name)))
+    names
+
+(** Execute an [AIntro] action. *)
+let execute_aintro (api_goal : Logic.pregoal) side : unit tactic =
+  let open Lang in
+  let open Term in
+  match (api_goal.g_concl, side) with
+  | Cst true_, 0 when Name.equal true_ Name.true_ ->
+      Tactics.one_constructor 1 Tactypes.NoBindings
+  | Arrow _, 0 ->
+      let pat = mk_intro_patterns [ "h" ] in
+      Tactics.intro_patterns false pat
+  | App (Cst not_, _), 0 when Name.equal not_ Name.not ->
+      let pat = mk_intro_patterns [ "h" ] in
+      Tactics.intro_patterns false pat
+  | App (Cst and_, _), 0 when Name.equal and_ Name.and_ ->
+      Tactics.split Tactypes.NoBindings
+  | App (Cst equiv, _), 0 when Name.equal equiv Name.equiv ->
+      Tactics.split Tactypes.NoBindings
+  | App (Cst or_, _), 0 when Name.equal or_ Name.or_ ->
+      Tactics.left Tactypes.NoBindings
+  | App (Cst or_, _), 1 when Name.equal or_ Name.or_ ->
+      Tactics.right Tactypes.NoBindings
+  | Prod (x, _, _), 0 ->
+      let pat = mk_intro_patterns [ Name.show x ] in
+      Tactics.intro_patterns false pat
+  | App (Cst eq, _), 0 when Name.equal eq Name.eq ->
+      (* Here we are not sure that the two sides of the equality are indeed equal.
+
+         The frontend can only handle syntactic equality : it delegates to the plugin
+         the responsability of dealing with non-equal terms.
+
+         We choose to simply ignore an intro action on an equality that is not provable by computation. *)
+      Tacticals.tclTRY Tactics.reflexivity
+  | _ ->
+      let msg =
+        "The goal has an invalid head connective/predicate for an introduction."
+      in
+      raise @@ UnsupportedAction (Logic.AIntro side, msg)
+
+(** Execute an [AElim] action. This action eliminates the hypothesis named [hyp_name].
+    The hypothesis is cleared and replaced by (possibly several) goals which contain derived hypotheses.
+    The integer index is used when eliminating an equality, to decide which way (left/right) to rewrite. *)
+let execute_aelim (api_goal : Logic.pregoal) hyp_name i : unit tactic =
+  let open Lang in
+  let open Term in
+  let hyp_id = Names.Id.of_string @@ Name.show hyp_name in
+  let hyp = Logic.Hyps.by_name api_goal.g_hyps hyp_name in
+  match hyp.h_form with
+  | Cst c when Name.equal c Name.true_ || Name.equal c Name.false_ ->
+      let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
+      Tactics.default_elim false (Some true) bindings
+  | App (Cst not_, _) when Name.equal not_ Name.not ->
+      let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
+      Tactics.default_elim false (Some true) bindings
+  | Arrow _ -> Tactics.apply @@ EConstr.mkVar hyp_id
+  | App (Cst c, _) when Name.equal c Name.and_ || Name.equal c Name.equiv ->
+      (* First eliminate the hypothesis, then introduce the hypotheses we created. *)
+      let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
+      Tacticals.tclTHENS
+        (Tactics.default_elim false (Some true) bindings)
+        [ Tactics.intro_patterns false
+          @@ mk_intro_patterns [ Name.show hyp_name; Name.show hyp_name ]
+        ]
+  | App (Cst or_, _) when Name.equal or_ Name.or_ ->
+      (* First eliminate the hypothesis, then introduce the hypotheses we created. *)
+      let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
+      Tacticals.tclTHENS
+        (Tactics.default_elim false (Some true) bindings)
+        [ Tactics.intro_patterns false
+          @@ mk_intro_patterns [ Name.show hyp_name ]
+        ; Tactics.intro_patterns false
+          @@ mk_intro_patterns [ Name.show hyp_name ]
+        ]
+  | App (Cst ex, [ _; Lambda (x, _, _) ]) when Name.equal ex Name.ex ->
+      (* First eliminate the hypothesis, then introduce the variable and hypothesis we created. *)
+      let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
+      Tacticals.tclTHENS
+        (Tactics.default_elim false (Some true) bindings)
+        [ Tactics.intro_patterns false
+          @@ mk_intro_patterns [ Name.show x; Name.show hyp_name ]
+        ]
+  | App (Cst eq, _) when Name.equal eq Name.eq -> begin
+      match i with
+      | 0 -> calltac (tactic_kname "rew_all_left") [ EConstr.mkVar hyp_id ]
+      | 1 -> calltac (tactic_kname "rew_all_right") [ EConstr.mkVar hyp_id ]
+      | _ ->
+          let msg =
+            Format.sprintf
+              "When eliminating an equality, the index should be either 0 or 1 \
+               (got %d)."
+              i
+          in
+          raise @@ UnsupportedAction (Logic.AElim (hyp_name, i), msg)
+    end
+  | _ ->
+      let msg =
+        "The hypothesis has an invalid head connective/predicate for \
+         elimination."
+      in
+      raise @@ UnsupportedAction (Logic.AElim (hyp_name, i), msg)
+
 let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
-  (*let api_goal = Translate.goal coq_goal in*)
+  let api_goal = Translate.goal coq_goal in
   match action with
   | Logic.AId -> Tacticals.tclIDTAC
   | Logic.ADuplicate hyp_name ->
@@ -770,64 +794,64 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.AGeneralize name ->
       let name = Names.Id.of_string @@ Lang.Name.show name in
       Generalize.generalize_dep (EConstr.mkVar name)
-  (*| Logic.ADef (x, _, e) ->
-        let id = Names.Id.of_string x in
-        let name = Names.Name.Name id in
-        let body = expr sign [] e in
-        Tactics.pose_tac name body
-    | Logic.ALemma full_name -> execute_alemma coq_goal full_name
-    | Logic.ACut f ->
-        let id = Goal.fresh_name coq_goal () |> Names.Name.mk_name in
-        let form =
-          form (Goal.env coq_goal) (Goal.sigma coq_goal) sign goal.g_env [] f
-        in
-        Tactics.assert_before id form
-    | Logic.AIntro side -> execute_aintro goal side
-    | Logic.AElim (hyp_name, i) -> execute_aelim goal hyp_name i
-    | Logic.ALink (src, dst, itr) -> execute_alink coq_goal sign goal src dst itr
-    | Logic.AInstantiate (witness, target) ->
-        execute_ainstantiate coq_goal sign goal witness target
-    | Logic.AInd var_name ->
-        let var = EConstr.mkVar @@ Names.Id.of_string var_name in
-        Induction.induction false (Some true) var None None
-    | Logic.AIndt tgt ->
-        let tac_name, args =
-          let path = tgt.sub |> Trm.Datatypes.natlist (Goal.env coq_goal) in
-          match tgt.ctxt.kind with
-          | Logic.Concl -> ("myinduction", [ path ])
-          | _ ->
-              (* TODO: the COQ tactic [myinduction_hyp] is broken. *)
-              raise
-              @@ UnsupportedAction
-                   ( a
-                   , "Logic.AIndt only works in the goal (use Logic.AInd for a \
-                      local variable). " )
-        in
-        calltac (kname tac_name) args
-    | Logic.ASimpl tgt | Logic.ARed tgt | Logic.ACase tgt | Logic.APbp tgt ->
-        (* TODO: the COQ tactic [mycase_hyp] is broken. *)
-        let tac_name =
-          match a with
-          | Logic.ASimpl _ -> "simpl_path"
-          | Logic.ARed _ -> "unfold_path"
-          | Logic.APbp _ -> "pbp"
-          | Logic.ACase _ -> "mycase"
-          | _ -> assert false
-        in
-        let tac_name, args =
-          let path = tgt.sub |> Trm.Datatypes.natlist (Goal.env coq_goal) in
-          match tgt.ctxt.kind with
-          | Logic.Hyp ->
-              let id = Names.Id.of_string tgt.ctxt.handle in
-              (tac_name ^ "_hyp", [ EConstr.mkVar id; path ])
-          | Logic.Concl -> (tac_name, [ path ])
-          | _ -> raise (InvalidPath tgt)
-        in
-        calltac (kname tac_name) args*)
-  | _ ->
-      raise
-      @@ UnsupportedAction
-           (action, "This action type is not supported in the plugin.")
+  | Logic.AIntro side -> execute_aintro api_goal side
+  | Logic.AElim (hyp_name, i) -> execute_aelim api_goal hyp_name i
+(* _ ->
+    raise
+    @@ UnsupportedAction
+         (action, "This action type is not supported in the plugin.")*)
+(*| Logic.ADef (x, _, e) ->
+         let id = Names.Id.of_string x in
+         let name = Names.Name.Name id in
+         let body = expr sign [] e in
+         Tactics.pose_tac name body
+     | Logic.ALemma full_name -> execute_alemma coq_goal full_name
+     | Logic.ACut f ->
+         let id = Goal.fresh_name coq_goal () |> Names.Name.mk_name in
+         let form =
+           form (Goal.env coq_goal) (Goal.sigma coq_goal) sign goal.g_env [] f
+         in
+         Tactics.assert_before id form
+     | Logic.ALink (src, dst, itr) -> execute_alink coq_goal sign goal src dst itr
+     | Logic.AInstantiate (witness, target) ->
+         execute_ainstantiate coq_goal sign goal witness target
+     | Logic.AInd var_name ->
+         let var = EConstr.mkVar @@ Names.Id.of_string var_name in
+         Induction.induction false (Some true) var None None
+     | Logic.AIndt tgt ->
+         let tac_name, args =
+           let path = tgt.sub |> Trm.Datatypes.natlist (Goal.env coq_goal) in
+           match tgt.ctxt.kind with
+           | Logic.Concl -> ("myinduction", [ path ])
+           | _ ->
+               (* TODO: the COQ tactic [myinduction_hyp] is broken. *)
+               raise
+               @@ UnsupportedAction
+                    ( a
+                    , "Logic.AIndt only works in the goal (use Logic.AInd for a \
+                       local variable). " )
+         in
+         calltac (kname tac_name) args
+     | Logic.ASimpl tgt | Logic.ARed tgt | Logic.ACase tgt | Logic.APbp tgt ->
+         (* TODO: the COQ tactic [mycase_hyp] is broken. *)
+         let tac_name =
+           match a with
+           | Logic.ASimpl _ -> "simpl_path"
+           | Logic.ARed _ -> "unfold_path"
+           | Logic.APbp _ -> "pbp"
+           | Logic.ACase _ -> "mycase"
+           | _ -> assert false
+         in
+         let tac_name, args =
+           let path = tgt.sub |> Trm.Datatypes.natlist (Goal.env coq_goal) in
+           match tgt.ctxt.kind with
+           | Logic.Hyp ->
+               let id = Names.Id.of_string tgt.ctxt.handle in
+               (tac_name ^ "_hyp", [ EConstr.mkVar id; path ])
+           | Logic.Concl -> (tac_name, [ path ])
+           | _ -> raise (InvalidPath tgt)
+         in
+         calltac (kname tac_name) args*)
 
 let execute ((idx, a) : int * Logic.action) : unit tactic =
   tclFOCUS (idx + 1) (idx + 1) @@ Goal.enter @@ execute_helper a

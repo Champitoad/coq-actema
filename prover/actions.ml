@@ -189,60 +189,65 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
     | _ -> []*)
 
 (* This seems very hacky. *)
-let rebuild_pathd l i =
+(*let rebuild_pathd l i =
   if i + 1 = l
   then [ 1 ]
   else
     let rec aux = function 0 -> [] | i -> 0 :: aux (i - 1) in
-    if i = 0 then aux (l - 1) else aux (l - i - 1) @ [ 1 ]
+    if i = 0 then aux (l - 1) else aux (l - i - 1) @ [ 1 ]*)
 
 let ctxt_actions (sel : Path.t list) (proof : Proof.t) : aoutput list = []
 (*let selpred = selpred_add [ single_subterm_sel ] in
   selpred proof sel*)
 
-(** Get all the introduction variants of a given goal. *)
-let intro_variants goal : string list =
+(** Get all the introduction variants of a given goal.
+    This returns a list of [description, sub] where [sub] is the subpath
+    in the conclusion which should be highlighted. *)
+let intro_variants goal : (string * int list) list =
   match goal.g_concl with
   | App (Cst name, _) ->
       if name = Name.eq
-      then [ "reflexivity" ]
+      then [ ("reflexivity", []) ]
       else if name = Name.and_
-      then [ "split" ]
+      then [ ("split", []) ]
       else if name = Name.or_
-      then [ "left"; "right" ]
+      then [ ("left", [ 1 ]); ("right", [ 2 ]) ]
       else if name = Name.equiv
-      then [ "split" ]
+      then [ ("split", []) ]
       else if name = Name.not
-      then [ "intro" ]
+      then [ ("intro", []) ]
       else if name = Name.ex
-      then [ "exists" ]
+      then [ ("exists", []) ]
       else []
-  | Cst name when name = Name.true_ -> [ "constructor" ]
-  | Arrow _ | Prod _ | Lambda _ -> [ "intro" ]
+  | Cst name when name = Name.true_ -> [ ("constructor", []) ]
+  | Arrow _ | Prod _ | Lambda _ -> [ ("intro", []) ]
   | _ -> []
 
-(** Get all the elimination variants of a given hypothesis. *)
-let elim_variants hyp : string list =
+(** Get all the elimination variants of a given hypothesis. 
+    This returns a list of [description, sub] where [sub] is the subpath
+    in the hypothesis which should be highlighted. *)
+
+let elim_variants hyp : (string * int list) list =
   match hyp.h_form with
   | App (Cst name, _) ->
       if name = Name.eq
-      then [ "rewrite->"; "rewrite<-" ]
+      then [ ("rewrite ->", [ 2 ]); ("rewrite <-", [ 3 ]) ]
       else if name = Name.equiv
-      then [ "destruct" ]
+      then [ ("destruct", []) ]
       else if name = Name.or_
-      then [ "destruct" ]
+      then [ ("destruct", []) ]
       else if name = Name.not
-      then [ "destruct " ]
+      then [ ("destruct", []) ]
       else if name = Name.ex
-      then [ "destruct" ]
+      then [ ("destruct", []) ]
       else []
   | Cst name ->
       if name = Name.true_
-      then [ "destruct" ]
+      then [ ("destruct", []) ]
       else if name = Name.false_
-      then [ "destruct" ]
+      then [ ("destruct", []) ]
       else []
-  | Arrow _ -> [ "apply" ]
+  | Arrow _ -> [ ("apply", []) ]
   | _ -> []
 
 let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
@@ -251,47 +256,35 @@ let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
   match item with
   (* On the conclusion, we can apply an introduction rule. *)
   | Concl concl ->
-      let ivariants = intro_variants goal.g_pregoal in
-      let bv = List.length ivariants <= 1 in
       List.mapi
         begin
-          fun i description ->
-            let highlight =
-              Path.make goal.g_id
-                ~sub:
-                  (if bv then [] else rebuild_pathd (List.length ivariants) i)
-            in
+          fun i (description, sub) ->
+            let path = Path.make goal.g_id ~sub in
             { description
             ; icon = None
-            ; highlights = [ highlight ]
-            ; kind = Click highlight
+            ; highlights = [ path ]
+            ; kind = Click path
             ; goal_id = goal.g_id
             ; preaction = Intro i
             }
         end
-        ivariants
+        (intro_variants goal.g_pregoal)
   (* On a hypothesis, we can apply an elimination rule, or use the exact tactic. *)
   | Hyp (hyp_name, _) ->
       let hyp = Hyps.by_name goal.g_pregoal.g_hyps hyp_name in
       (* Elimination. *)
-      let evariants = elim_variants hyp in
-      let bv = List.length evariants <= 1 in
       let elim_actions =
         List.mapi
-          (fun i description ->
-            let highlight =
-              Path.make goal.g_id ~kind:(Hyp hyp_name)
-                ~sub:
-                  (if bv then [] else rebuild_pathd (List.length evariants) i)
-            in
+          (fun i (description, sub) ->
+            let path = Path.make goal.g_id ~kind:(Hyp hyp_name) ~sub in
             { description
             ; icon = None
-            ; highlights = [ highlight ]
-            ; kind = Click highlight
+            ; highlights = [ path ]
+            ; kind = Click path
             ; goal_id = goal.g_id
             ; preaction = Elim (hyp_name, i)
             })
-          evariants
+          (elim_variants hyp)
       in
       (* Exact. *)
       let exact_actions =

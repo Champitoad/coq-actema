@@ -3,8 +3,15 @@ Require Import ssreflect.
 
 Parameter H : Prop.
 
-Lemma test (h : H) : H.
-actema_force.
+Goal True \/ False.
+Proof. actema_force. Admitted.
+
+
+Goal forall x : nat, x = 0.
+Proof. actema_force. Admitted.
+
+
+(* forall intro : fix the error. *)
 
 Lemma test (v : nat) : v = 0.
   let n : nat := 4 + 2.
