@@ -295,6 +295,21 @@ module TermUtils = struct
              acc (f :: args)
 
   let all_subs term = all_subs_rec term [] [] |> List.(map rev)
+
+  let rec trim_rec (t : Term.t) : Term.t =
+    match t with
+    | Var _ | Cst _ | Sort _ -> t
+    | Lambda (x, ty, body) -> Term.mkLambda x (trim_rec ty) (trim_rec body)
+    | Arrow (t1, t2) -> Term.mkArrow (trim_rec t1) (trim_rec t2)
+    | App (f, args) -> Term.mkApps (trim_rec f) (List.map trim_rec args)
+    | Prod (x, ty, body) ->
+        let ty = trim_rec ty in
+        let body = trim_rec body in
+        if IntSet.mem 0 (free_vars body)
+        then Term.mkProd x ty body
+        else Term.mkArrow ty (lift_free (-1) body)
+
+  let trim_products t = trim_rec t
 end
 
 (***************************************************************************************)

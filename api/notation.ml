@@ -94,7 +94,7 @@ let rec pp_term ?(paren = false) env (path : Path.t) ctx (t : Term.t) :
     | Sort `Prop -> string "Prop"
     | Sort `Type -> string "Type"
     | Lambda (name, ty, body) ->
-        let pp_binder = string "fun" ^+^ pp_binder env name ^+^ string ":" in
+        let pp_binder = string "λ" ^+^ pp_binder env name ^+^ string ":" in
         let pp_ty = pp_term env (extend 0 path) ctx ty ^+^ utf8string "⇒" in
         let pp_body =
           pp_term env (extend 1 path) (Context.push name ty ctx) body
@@ -112,7 +112,7 @@ let rec pp_term ?(paren = false) env (path : Path.t) ctx (t : Term.t) :
         (* We don't need parentheses around [t2]. *)
         let pp_t2 = pp_term env (extend 1 path) ctx t2 in
         (* Combine the results. *)
-        (pp_t1 ^+^ utf8string "→") ^//^ pp_t2
+        (pp_t1 ^+^ utf8string "➞") ^//^ pp_t2
     | Prod (name, ty, body) ->
         let pp_binder = utf8string "∀" ^+^ pp_binder env name ^+^ string ":" in
         let parent_ty = match ty with Prod _ -> true | _ -> false in

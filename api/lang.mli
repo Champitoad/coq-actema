@@ -283,6 +283,10 @@ module TermUtils : sig
   (** [all_subs t] returns the list of all paths [sub] that 
       points to a subterm of [t]. *)
   val all_subs : Term.t -> int list list
+
+  (** [trim_products term] replaces all dependent products [forall x : T, U]
+      where [x] is not free in [U] by non-dependent products [T -> U]. *)
+  val trim_products : Term.t -> Term.t
 end
 
 (***************************************************************************************)

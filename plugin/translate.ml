@@ -82,24 +82,26 @@ let rec translate_term state (t : EConstr.t) : Lang.Term.t =
   then
     (* Product. *)
     let binder, ty, body = EConstr.destProd state.sigma t in
-    match binder.binder_name with
-    | Anonymous ->
-        (* Non-dependent product. *)
-        (* Translate the type and body. *)
-        let ty = translate_term state ty in
-        let body = translate_term state body in
-        (* We removed a binder over [body], so lower all its free variables by 1. *)
-        Term.mkArrow ty (TermUtils.lift_free (-1) body)
-    | Name _ ->
-        (* Dependent product. *)
-        let name =
-          Name.make @@ Pp.string_of_ppcmds
-          @@ Names.Name.print binder.binder_name
-        in
-        (* Translate the type and body. *)
-        let ty = translate_term state ty in
-        let body = translate_term state body in
-        Term.mkProd name ty body
+    (* Translate the type and body. *)
+    let ty = translate_term state ty in
+    let body = translate_term state body in
+    (* Decide whether this is a dependent or non-dependent product.
+       For non-dependent products we have to take care to lower the body by [1],
+       since we remove the binder. *)
+    begin
+      match binder.binder_name with
+      (* Non-dependent product. *)
+      | Anonymous -> Term.mkArrow ty (TermUtils.lift_free (-1) body)
+      | _ when not @@ IntSet.mem 0 (TermUtils.free_vars body) ->
+          Term.mkArrow ty (TermUtils.lift_free (-1) body)
+      (* Dependent product. *)
+      | _ ->
+          let name =
+            Name.make @@ Pp.string_of_ppcmds
+            @@ Names.Name.print binder.binder_name
+          in
+          Term.mkProd name ty body
+    end
   else if EConstr.isConst state.sigma t
   then begin
     (* Constant. *)
