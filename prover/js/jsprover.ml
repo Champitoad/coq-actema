@@ -99,7 +99,7 @@ let rec js_proof_engine (proof : Proof.t) =
       Js.array (Array.of_list subgoals)
 
     (* Return true when there are no opened subgoals left *)
-    method closed = Js.bool (Proof.closed proof)
+    method closed = Js.bool (Proof.is_closed proof)
 
     (* Return the given action as a binary, base64-encoded string *)
     (*method getactionb action =
@@ -111,10 +111,10 @@ let rec js_proof_engine (proof : Proof.t) =
       pr |> Fun.flip Marshal.to_string [] |> Base64.encode_string |> Js.string*)
 
     (* Get the meta-data attached to this proof engine *)
-    method getmeta = Js.Opt.option (Proof.get_proof_meta proof)
+    method getmeta = Js.Opt.option (Proof.get_meta proof MProof)
 
     (* Attach meta-data to the proof engine *)
-    method setmeta meta = Proof.set_proof_meta proof (Js.Opt.to_option meta)
+    method setmeta meta = Proof.set_meta proof MProof (Js.Opt.to_option meta)
 
     (* Get all the proof actions that can be applied to the
      * goal targetted by [asource] as an array of actions.
@@ -367,35 +367,30 @@ let rec js_proof_engine (proof : Proof.t) =
 (* JS wrapper for subgoals                                              *)
 and js_subgoal parent (handle : int) =
   object%js (_self)
-    (* back-link to the [js_proof_engine] this subgoal belongs to *)
+    (** Back-link to the [js_proof_engine] this subgoal belongs to. *)
     val parent = parent
 
-    (* the handle (index) of the subgoal *)
+    (** The handle (index) of the subgoal. *)
     val handle = handle
 
-    (* the OCaml subgoal *)
+    (** Return the wrapped goal. *)
     method goal = Proof.byid parent##.proof _self##.handle
 
-    (* Return all the local variables as a [js_tvar array] *)
-    method tvars =
-      (* let goal = _self##goal in
-         let tvars = Vars.to_list goal.g_env in
-         let aout =
-           List.mapi (fun i (id, x, b) -> js_tvar _self (i, (id, x, b))) tvars
-         in
-         Js.array (Array.of_list aout)*)
-      Js.array [||]
+    (** Return all the local variables as a [js_var array] *)
+    method vars =
+      let vars = Vars.to_list (_self##goal).g_vars in
+      Js.array @@ Array.of_list @@ List.mapi (js_var _self _self##.handle) vars
 
     (** Return all the local hypotheses (context) as a [js_hyps array] *)
     method context =
       let goal = _self##goal in
       let hyps = List.rev (Logic.Hyps.to_list goal.Logic.g_hyps) in
-      Js.array (Array.of_list (List.mapi (js_hyps _self _self##.handle) hyps))
+      Js.array @@ Array.of_list @@ List.mapi (js_hyps _self _self##.handle) hyps
 
     (** Return the subgoal conclusion as a [js_form] *)
     method conclusion =
       let goal = Proof.byid parent##.proof _self##.handle in
-      js_term _self _self##.handle `C goal.g_concl
+      js_term _self _self##.handle Path.Concl goal.g_concl
 
     (** [this#ivariants] Return the available introduction rules that can
                 be applied to the conclusion of [this] as a string array. The strings
@@ -548,59 +543,12 @@ and js_subgoal parent (handle : int) =
       js_proof_engine (!!doit ())
 
     method getmeta =
-      Js.Opt.option (Proof.get_goal_meta parent##.proof ~goal_id:_self##.handle)
+      Js.Opt.option @@ Proof.get_meta parent##.proof (MGoal _self##.handle)
 
     method setmeta meta =
-      Proof.set_goal_meta parent##.proof ~goal_id:_self##.handle
+      Proof.set_meta parent##.proof
+        (MGoal _self##.handle)
         (Js.Opt.to_option meta)
-
-    (*method toascii =
-        let funs : string list =
-          _self##fvars |> Js.to_array |> Array.to_list |> List.map Js.to_string
-        in
-        let props : string list =
-          _self##pvars |> Js.to_array |> Array.to_list |> List.map Js.to_string
-        in
-        let vars : string list =
-          _self##tvars |> Js.to_array |> Array.to_list
-          |> List.map (fun v -> v##toascii |> Js.to_string)
-        in
-        let hyps : string list =
-          _self##context |> Js.to_array |> Array.to_list
-          |> List.map (fun h -> h##toascii |> Js.to_string)
-        in
-        let concl : string =
-          _self##conclusion |> fun c -> c##toascii |> Js.to_string
-        in
-
-        let to_string = List.to_string ~sep:", " ~left:"" ~right:"" identity in
-        let comma =
-          ""
-          |> List.fold_left (fun s l ->
-                 if String.is_empty s
-                 then if List.is_empty l then "" else to_string l
-                 else if List.is_empty l
-                 then s
-                 else s ^ ", " ^ to_string l)
-        in
-
-        Js.string
-          (Printf.sprintf "%s; %s |- %s"
-             (comma [ funs; vars; props ])
-             (to_string hyps) concl)
-
-      method tostring =
-        let hyps : string list =
-          _self##context |> Js.to_array |> Array.to_list
-          |> List.map (fun h -> h##tostring |> Js.to_string)
-        in
-        let concl : string =
-          _self##conclusion |> fun c -> c##tostring |> Js.to_string
-        in
-
-        let to_string = List.to_string ~sep:", " ~left:"" ~right:"" identity in
-
-        Js.string (Printf.sprintf "%s ⊢ %s" (to_string hyps) concl)*)
   end
 
 (* -------------------------------------------------------------------- *)
@@ -623,7 +571,7 @@ and js_hyps parent (goal_id : int) (pos : int) (hyp : Logic.hyp) =
     val fresh = Js.bool (hyp.h_gen <= 1)
 
     (* the hypothesis as a [js_term] *)
-    val term = js_term parent parent##.handle (`H hyp.h_name) hyp.h_form
+    val term = js_term parent parent##.handle Path.(Hyp hyp.h_name) hyp.h_form
 
     (* The enclosing proof engine *)
     val proof = parent##.parent
@@ -636,159 +584,105 @@ and js_hyps parent (goal_id : int) (pos : int) (hyp : Logic.hyp) =
 
     method getmeta =
       Js.Opt.option
-        (Proof.get_hyp_meta _self##.proof##.proof ~goal_id ~hyp_name:hyp.h_name)
+      @@ Proof.get_meta _self##.proof##.proof (MHyp (goal_id, hyp.h_name))
 
     method setmeta meta =
-      Proof.set_hyp_meta
+      Proof.set_meta
         _self##.proof##.proof
-        ~goal_id ~hyp_name:hyp.h_name (Js.Opt.to_option meta)
+        (MHyp (goal_id, hyp.h_name))
+        (Js.Opt.to_option meta)
   end
 
-(* (* -------------------------------------------------------------------- *)
-   (* JS Wrapper for a local variable                                      *)
-   and js_tvar parent ((i, (handle, x, (ty, b))) : int * (Handle.t * vname * bvar))
-       =
-     object%js (_self)
-       (* back-link to the [js_subgoal] this local variable belongs to *)
-       val parent = parent
+(* -------------------------------------------------------------------- *)
+(* JS Wrapper for a local variable                                      *)
+and js_var parent (goal_id : int) (pos : int) (var : Logic.var) =
+  object%js (_self)
+    (** Back-link to the [js_subgoal] this local variable belongs to. *)
+    val parent = parent
 
-       (* the handle of the local variable *)
-       val handle = handle
+    (** The handle of the local variable *)
+    val handle = Js.string @@ Name.show var.v_name
 
-       (* the handle position in its context *)
-       val position = i
+    (** The variable's position in the variable set. *)
+    val position = pos
 
-       (* the local variable name, as an OCaml string *)
-       val oname = Notation.e_tostring (parent##goal).g_env (EVar x)
+    (** the local variable name, as an OCaml string *)
+    val oname = Name.show var.v_name
 
-       (* the local variable name *)
-       method name = Js.string _self##.oname
+    (** the local variable name *)
+    method name = Js.string _self##.oname
 
-       (* the local variable type as a [js_type] *)
-       val type_ = js_type parent ty
+    (** the local variable type as a [js_term] *)
+    val type_ = js_term parent goal_id (Path.VarHead var.v_name) var.v_type
 
-       (* the local definition - return an optional expression *)
-       val body = Js.Opt.option (Option.map (js_expr parent) b)
+    (** the local definition - as a [js_option js_term]. *)
+    val body =
+      Js.Opt.option
+      @@ Option.map
+           (js_term parent goal_id (Path.VarBody var.v_name))
+           var.v_body
 
-       (* the enclosing proof engine *)
-       val proof = parent##.parent
+    (** the enclosing proof engine *)
+    val proof = parent##.parent
 
-       method prefix (b : bool) =
-         Format.sprintf "%d/V%s#%d%s"
-           (Handle.toint _self##.parent##.handle)
-           (if b then "b" else "h")
-           (Handle.toint _self##.handle)
-           (if b then "" else ":")
+    (* Return the [html] of the enclosed local variable *)
+    method html = failwith "js_var.html : TODO"
+    (*let dt =
+          span
+            [ span
+                ([ span
+                     ~a:[ Xml.string_attrib "id" _self##idhead ]
+                     ([ span [ Xml.pcdata _self##.oname ] ]
+                     @ spaced [ span [ Xml.pcdata ":" ] ]
+                     @ [ Notation.t_tohtml (parent##goal).g_env ty ])
+                 ]
+                @
+                match b with
+                | Some b ->
+                    spaced [ span [ Xml.pcdata ":=" ] ]
+                    @ [ Notation.e_tohtml
+                          ~id:(Some _self##idbody)
+                          (parent##goal).g_env b
+                      ]
+                | None -> [])
+            ]
+        in
+      Js.string
+        (Format.asprintf "%a" (Tyxml.Xml.pp ()) (Tyxml.Xml.node "span" []))*)
 
-       (* the path to the local variable's head *)
-       method idhead = _self##prefix false
+    (* Return an UTF8 string representation of the enclosed local variable *)
+    method tostring =
+      let env = (parent##goal).g_env in
+      match var.v_body with
+      | Some body ->
+          Js.string
+          @@ Format.sprintf "%s : %s := %s" (Name.show var.v_name)
+               (Notation.term_to_string env var.v_type)
+               (Notation.term_to_string env body)
+      | None ->
+          Js.string
+          @@ Format.sprintf "%s : %s" (Name.show var.v_name)
+               (Notation.term_to_string env var.v_type)
 
-       (* the path to the local variable's body *)
-       method idbody = _self##prefix true
+    method getmeta =
+      Js.Opt.option
+      @@ Proof.get_meta _self##.proof##.proof (MVar (goal_id, var.v_name))
 
-       (* Return the [html] of the enclosed local variable *)
-       method html =
-         let open Tyxml in
-         let open Utils.Html in
-         let dt =
-           span
-             [ span
-                 ([ span
-                      ~a:[ Xml.string_attrib "id" _self##idhead ]
-                      ([ span [ Xml.pcdata _self##.oname ] ]
-                      @ spaced [ span [ Xml.pcdata ":" ] ]
-                      @ [ Notation.t_tohtml (parent##goal).g_env ty ])
-                  ]
-                 @
-                 match b with
-                 | Some b ->
-                     spaced [ span [ Xml.pcdata ":=" ] ]
-                     @ [ Notation.e_tohtml
-                           ~id:(Some _self##idbody)
-                           (parent##goal).g_env b
-                       ]
-                 | None -> [])
-             ]
-         in
-         Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
-
-       (* Return the [mathml] of the enclosed local variable *)
-       method mathml =
-         let open Tyxml in
-         let open Utils.Mathml in
-         let dt =
-           math
-             [ row
-                 ([ row
-                      ~a:[ Xml.string_attrib "id" _self##idhead ]
-                      ([ mi (Notation.e_tostring (parent##goal).g_env (EVar x)) ]
-                      @ [ mo ":" ]
-                      @ [ Notation.t_tomathml (parent##goal).g_env ty ])
-                  ]
-                 @
-                 match b with
-                 | Some b ->
-                     [ mo ":=" ]
-                     @ [ Notation.e_tomathml
-                           ~id:(Some _self##idbody)
-                           (parent##goal).g_env b
-                       ]
-                 | None -> [])
-             ]
-         in
-         Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) dt)
-
-       (* Return an UTF8 string representation of the enclosed local variable *)
-       method tostring =
-         match b with
-         | Some b ->
-             Js.string
-               (Format.sprintf "%s : %s := %s"
-                  (Notation.e_tostring (parent##goal).g_env (EVar x))
-                  (Notation.t_tostring (parent##goal).g_env ty)
-                  (Notation.e_tostring (parent##goal).g_env b))
-         | None ->
-             Js.string
-               (Format.sprintf "%s : %s"
-                  (Notation.e_tostring (parent##goal).g_env (EVar x))
-                  (Notation.t_tostring (parent##goal).g_env ty))
-
-       (* Return an ASCII string representation of the enclosed local variable *)
-       method toascii =
-         match b with
-         | Some b ->
-             Js.string
-               (Format.sprintf "%s := %s"
-                  (Notation.e_tostring (parent##goal).g_env (EVar x))
-                  (Notation.e_toascii (parent##goal).g_env b))
-         | None ->
-             Js.string
-               (Format.sprintf "%s : %s"
-                  (Notation.e_tostring (parent##goal).g_env (EVar x))
-                  (Notation.t_toascii (parent##goal).g_env ty))
-
-       method getmeta =
-         Js.Opt.option (Proof.get_meta _self##.proof##.proof _self##.handle)
-
-       method setmeta meta =
-         Proof.set_meta
-           _self##.proof##.proof
-           _self##.handle (Js.Opt.to_option meta)
-     end*)
+    method setmeta meta =
+      Proof.set_meta
+        _self##.proof##.proof
+        (MVar (goal_id, var.v_name))
+        (Js.Opt.to_option meta)
+  end
 
 (* -------------------------------------------------------------------- *)
 (* JS Wrapper for terms                                              *)
-and js_term parent (goal_id : int) (kind : [ `C | `H of Name.t ])
-    (term : Term.t) =
+and js_term parent (goal_id : int) (kind : Path.kind) (term : Term.t) =
   object%js (_self)
     (** Return the html of the term. *)
     method html =
       (* Get the path to the term. *)
-      let path =
-        match kind with
-        | `H name -> Logic.Path.make ~kind:(Hyp name) goal_id
-        | `C -> Logic.Path.make ~kind:Concl goal_id
-      in
+      let path = Logic.Path.make ~kind goal_id in
       (* Pretty-print the term to xml.
          We choose an arbitrary width here : in the future we could
          make it so this method takes the width as input, so that

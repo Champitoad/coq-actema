@@ -12,16 +12,25 @@ module IntNameMap = Map.Make (struct
 end)
 
 module Proof = struct
-  type meta = < > Js_of_ocaml.Js.t
+  type mkey =
+    | MProof
+    | MGoal of int
+    | MHyp of int * Name.t
+    | MVar of int * Name.t
+
+  module MKeyMap = Map.Make (struct
+    type t = mkey
+
+    let compare = compare
+  end)
+
+  type mdata = < > Js_of_ocaml.Js.t
 
   type t =
     { p_goals : goal IntMap.t
           (** A map from goal handles to goals. 
               Contains only the opened (i.e. currently active) goals. *)
-    ; p_meta : meta option ref  (** Metadata associated to the proof. *)
-    ; p_goal_meta : meta IntMap.t ref  (** Metadata associated to each goal. *)
-    ; p_hyp_meta : meta IntNameMap.t ref
-          (** Metadata associated to each hypothesis. *)
+    ; p_meta : mdata MKeyMap.t ref  (** Metadata. *)
     ; p_db : Lemmas.t  (** The lemma database. *)
     }
 
@@ -45,40 +54,18 @@ module Proof = struct
           IntMap.add g.g_id g p_goals)
         IntMap.empty goals
     in
-    { p_goals
-    ; p_meta = ref None
-    ; p_goal_meta = ref IntMap.empty
-    ; p_hyp_meta = ref IntNameMap.empty
-    ; p_db = Lemmas.empty
-    }
+    { p_goals; p_meta = ref MKeyMap.empty; p_db = Lemmas.empty }
 
   let get_db (proof : t) = proof.p_db
   let set_db (proof : t) (db : Lemmas.t) = { proof with p_db = db }
-  let set_proof_meta proof meta : unit = proof.p_meta := meta
-  let get_proof_meta proof : meta option = !(proof.p_meta)
 
-  let set_goal_meta proof ~goal_id meta : unit =
+  let set_meta proof key meta : unit =
     match meta with
-    | None -> proof.p_goal_meta := IntMap.remove goal_id !(proof.p_goal_meta)
-    | Some meta ->
-        proof.p_goal_meta := IntMap.add goal_id meta !(proof.p_goal_meta)
+    | None -> proof.p_meta := MKeyMap.remove key !(proof.p_meta)
+    | Some meta -> proof.p_meta := MKeyMap.add key meta !(proof.p_meta)
 
-  let get_goal_meta proof ~goal_id : meta option =
-    IntMap.find_opt goal_id !(proof.p_goal_meta)
-
-  let set_hyp_meta proof ~goal_id ~hyp_name meta : unit =
-    match meta with
-    | None ->
-        proof.p_hyp_meta :=
-          IntNameMap.remove (goal_id, hyp_name) !(proof.p_hyp_meta)
-    | Some meta ->
-        proof.p_hyp_meta :=
-          IntNameMap.add (goal_id, hyp_name) meta !(proof.p_hyp_meta)
-
-  let get_hyp_meta proof ~goal_id ~hyp_name : meta option =
-    IntNameMap.find_opt (goal_id, hyp_name) !(proof.p_hyp_meta)
-
-  let closed (proof : t) = IntMap.is_empty proof.p_goals
+  let get_meta proof key : mdata option = MKeyMap.find_opt key !(proof.p_meta)
+  let is_closed (proof : t) = IntMap.is_empty proof.p_goals
   let opened (proof : t) = IntMap.keys proof.p_goals |> List.of_enum
 
   let byid (proof : t) (goal_id : int) : pregoal =
@@ -106,13 +93,13 @@ module Proof = struct
     let new_ids = List.map (fun x -> x.g_id) subgoals in
 
     (* The new subgoals get the same metadata as the old goal. *)
-    let p_goal_meta =
-      match get_goal_meta proof ~goal_id with
-      | None -> !(proof.p_goal_meta)
+    let p_meta =
+      match get_meta proof (MGoal goal_id) with
+      | None -> !(proof.p_meta)
       | Some meta ->
           List.fold_left
-            (fun map id -> IntMap.add id meta map)
-            !(proof.p_goal_meta) new_ids
+            (fun map id -> MKeyMap.add (MGoal id) meta map)
+            !(proof.p_meta) new_ids
     in
 
     (* Remove the old goal and add the new goals. *)
@@ -123,7 +110,7 @@ module Proof = struct
            subgoals
     in
     (* Don't forget to return the indices of the new goals. *)
-    (new_ids, { proof with p_goals; p_goal_meta = ref p_goal_meta })
+    (new_ids, { proof with p_goals; p_meta = ref p_meta })
 
   let ivariants proof ~goal_id =
     match (byid proof goal_id).g_concl with

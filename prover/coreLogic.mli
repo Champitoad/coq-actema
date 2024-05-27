@@ -20,14 +20,11 @@ module Proof : sig
   (** Abstract type of a proof state. *)
   type t
 
-  (** Metadata associated to a proof/goal/hypothesis. *)
-  type meta = < > Js_of_ocaml.Js.t
-
   (** Create a fresh proof that contains some goals. *)
   val init : goal list -> t
 
   (** Test whether the proof has some remaining active goals. *)
-  val closed : t -> bool
+  val is_closed : t -> bool
 
   (** Return a list of all active goals in the proof. *)
   val opened : t -> int list
@@ -43,7 +40,7 @@ module Proof : sig
 
   (********************************************************************************)
   (** The JS frontend can attach metadata (arbitrary JS objects) to the proof, 
-      to a specific subgoal, or to a specific hypothesis. Examples of metadata include :
+      to a specific subgoal, or to a specific hypothesis, etc. Examples of metadata include :
       - the currently active subgoal. 
       - the coordinates of a hypothesis on screen.
       
@@ -51,25 +48,27 @@ module Proof : sig
       abstract metadata. 
       
       The handling of metadata here is imperative. I (Mathis) have no idea why this is (ask Pablo),
-      but changing it to a functional style would be a lot of refactoring. *)
+      but changing it to a functional style would probably be a lot of refactoring. *)
 
-  (** Attach metadata to the proof. *)
-  val set_proof_meta : t -> meta option -> unit
+  (** A [mkey] is a proxy we can attach metadata to. *)
+  type mkey =
+    (* Metadata shared by the whole proof state. *)
+    | MProof
+    (* Metadata specific to a goal. *)
+    | MGoal of int
+    (* Metadata specific to a hypothesis in a goal. *)
+    | MHyp of int * Name.t
+    (* Metadata specific to a variable in a goal. *)
+    | MVar of int * Name.t
 
-  (** Get the metadata attached to the proof. *)
-  val get_proof_meta : t -> meta option
+  (** A [mdata] is a piece of metadata associated to a [mkey]. *)
+  type mdata = < > Js_of_ocaml.Js.t
 
-  (** Attach metadata to a goal. *)
-  val set_goal_meta : t -> goal_id:int -> meta option -> unit
+  (** Attach metadata to a [mkey]. *)
+  val set_meta : t -> mkey -> mdata option -> unit
 
-  (** Get the metadata attached to a goal. *)
-  val get_goal_meta : t -> goal_id:int -> meta option
-
-  (** Attach metadata to a hypothesis. *)
-  val set_hyp_meta : t -> goal_id:int -> hyp_name:Name.t -> meta option -> unit
-
-  (** Get the metadata attached to a hypothesis. *)
-  val get_hyp_meta : t -> goal_id:int -> hyp_name:Name.t -> meta option
+  (** Get the metadata attached to some [mkey]. *)
+  val get_meta : t -> mkey -> mdata option
 
   (********************************************************************************)
   (** A set of (basic) functions that modify a proof. *)
