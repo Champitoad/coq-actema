@@ -46,7 +46,9 @@ let mk_test_proof (hyps : Term.t list) (concl : Term.t) : Proof.t =
            { h_gen = 0; h_name = mk_hyp_name i; h_form = form })
     |> Hyps.of_list
   in
-  let pregoal = { g_env = perm_env; g_hyps = hyps; g_concl = concl } in
+  let pregoal =
+    { g_env = perm_env; g_vars = Vars.empty; g_hyps = hyps; g_concl = concl }
+  in
   try Proof.init [ { g_id = 0; g_pregoal = pregoal } ]
   with Typing.TypingError err ->
     failwith

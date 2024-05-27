@@ -105,7 +105,6 @@ module Pred = struct
     let actions = p1 pr lnk in
     if not (List.is_empty actions) then actions else p2 pr lnk
 
-  (** This assumes that both sides of the link point to a formula in a hypothesis/conclusion. *)
   let unifiable : lpred =
    fun proof (src, dst) ->
     try
@@ -131,8 +130,6 @@ module Pred = struct
     try
       let src_pol = Polarity.of_ipath proof src in
       let dst_pol = Polarity.of_ipath proof dst in
-      Format.printf "## %s ## %s ##\n" (Polarity.show src_pol)
-        (Polarity.show dst_pol);
       match (src_pol, dst_pol) with
       | Neg, Pos | Pos, Neg | Sup, _ | _, Sup -> [ Nothing ]
       | _ -> []
@@ -303,36 +300,4 @@ module Pred = struct
       | _ -> []
       (* Empty link end *)
     with Failure _ -> []*)
-
-  let search_linkactions ?(fixed_srcs : Path.t list option)
-      ?(fixed_dsts : Path.t list option) (hlp : hlpred) proof
-      ((src, dst) : link) : (hyperlink * linkaction list) list =
-    failwith "search_linkactions : todo"
-  (*let subpath p sub =
-      Path.{ goal = p.goal; kind = p.kind; sub = p.sub @ sub }
-    in
-
-    let query_actions lnk =
-      match hlp proof lnk with
-      | _ :: _ as actions -> [ (lnk, actions) ]
-      | [] -> []
-    in
-
-    let open Monad.List in
-    match (fixed_srcs, fixed_dsts) with
-    | Some srcs, Some dsts -> query_actions (srcs, dsts)
-    | Some srcs, None ->
-        let _, _, _, t_dst = PathUtils.destr proof dst in
-        t_subs t_dst >>= fun sub_dst ->
-        query_actions (srcs, [ subpath dst sub_dst ])
-    | None, Some dsts ->
-        let _, _, (_, t_src) = PathUtils.destr proof src in
-        t_subs t_src >>= fun sub_src ->
-        query_actions ([ subpath src sub_src ], dsts)
-    | None, None ->
-        let _, _, (_, t_src) = PathUtils.destr proof src in
-        let _, _, (_, t_dst) = PathUtils.destr proof dst in
-        t_subs t_src >>= fun sub_src ->
-        t_subs t_dst >>= fun sub_dst ->
-        query_actions ([ subpath src sub_src ], [ subpath dst sub_dst ])*)
 end

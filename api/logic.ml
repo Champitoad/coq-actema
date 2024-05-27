@@ -65,6 +65,49 @@ end
 (***************************************************************************************)
 (** Items *)
 
+type var = { v_name : Name.t; v_type : Term.t; v_body : Term.t option }
+[@@deriving show]
+
+module Vars = struct
+  (** A list of variables, each with a name. *)
+  type t = (Name.t * var) list
+
+  let empty : t = []
+
+  let by_name (vars : t) (name : Name.t) =
+    Option.get_exn (List.Exceptionless.assoc name vars) (InvalidHyphName name)
+
+  let add (vars : t) (v : var) : t =
+    assert (Option.is_none (List.Exceptionless.assoc v.v_name vars));
+    (v.v_name, v) :: vars
+
+  let remove (vars : t) (name : Name.t) : t =
+    List.remove_if (Name.equal name <<< fst) vars
+
+  let move (vars : t) (from : Name.t) (before : Name.t option) =
+    let tg = by_name vars from in
+    let vars = remove vars from in
+
+    match before with
+    | None -> (from, tg) :: vars
+    | Some before ->
+        let pos, _ =
+          Option.get_exn
+            (List.Exceptionless.findi
+               (fun _ (x, _) -> Name.equal x before)
+               vars)
+            (InvalidHyphName before)
+        in
+        let post, pre = List.split_at (1 + pos) vars in
+        post @ ((from, tg) :: pre)
+
+  let names (vars : t) = List.map fst vars
+  let map f (vars : t) = List.map (fun (id, v) -> (id, f v)) vars
+  let iter f (vars : t) = List.iter (fun (_, v) -> f v) vars
+  let to_list (vars : t) = List.map snd vars
+  let of_list vars : t = List.map (fun v -> (v.v_name, v)) vars
+end
+
 (** A single hypothesis. *)
 type hyp = { h_name : Name.t; h_gen : int; h_form : Term.t } [@@deriving show]
 
@@ -75,18 +118,18 @@ module Hyps = struct
 
   let empty : t = []
 
-  let byid (hyps : t) (id : Name.t) =
-    Option.get_exn (List.Exceptionless.assoc id hyps) (InvalidHyphName id)
+  let by_name (hyps : t) (name : Name.t) =
+    Option.get_exn (List.Exceptionless.assoc name hyps) (InvalidHyphName name)
 
-  let add (hyps : t) (id : Name.t) (h : hyp) : t =
-    assert (Option.is_none (List.Exceptionless.assoc id hyps));
-    (id, h) :: hyps
+  let add (hyps : t) (h : hyp) : t =
+    assert (Option.is_none (List.Exceptionless.assoc h.h_name hyps));
+    (h.h_name, h) :: hyps
 
-  let remove (hyps : t) (id : Name.t) : t =
-    List.filter (fun (x, _) -> not (Name.equal x id)) hyps
+  let remove (hyps : t) (name : Name.t) : t =
+    List.remove_if (Name.equal name <<< fst) hyps
 
   let move (hyps : t) (from : Name.t) (before : Name.t option) =
-    let tg = byid hyps from in
+    let tg = by_name hyps from in
     let hyps = remove hyps from in
 
     match before with
@@ -105,15 +148,9 @@ module Hyps = struct
   let bump (hyps : t) : t =
     List.map (fun (id, h) -> (id, { h with h_gen = h.h_gen + 1 })) hyps
 
-  let ids (hyps : t) = List.map fst hyps
+  let names (hyps : t) = List.map fst hyps
   let map f (hyps : t) = List.map (fun (id, h) -> (id, f h)) hyps
   let iter f (hyps : t) = List.iter (fun (_handle, hyp) -> f hyp) hyps
-
-  let diff (hs1 : t) (hs2 : t) =
-    hs1
-    |> List.filter (fun (id, _) ->
-           not (List.exists (fun (id', _) -> Name.equal id id') hs2))
-
   let to_list (hyps : t) = List.map snd hyps
   let of_list hyps : t = List.map (fun h -> (h.h_name, h)) hyps
 end
@@ -136,29 +173,36 @@ module Lemmas = struct
 
   let env lemmas = lemmas.db_env
 
-  let byid lemmas id =
-    Option.get_exn (Name.Map.find_opt id lemmas.db_map) (InvalidLemmaName id)
+  let by_name lemmas name =
+    Option.get_exn
+      (Name.Map.find_opt name lemmas.db_map)
+      (InvalidLemmaName name)
 
-  let add lemmas id l = { lemmas with db_map = Name.Map.add id l lemmas.db_map }
+  let add lemmas l =
+    { lemmas with db_map = Name.Map.add l.l_full l lemmas.db_map }
 
-  let remove lemmas id =
-    { lemmas with db_map = Name.Map.remove id lemmas.db_map }
+  let remove lemmas name =
+    { lemmas with db_map = Name.Map.remove name lemmas.db_map }
 
-  let ids lemmas = Name.Map.bindings lemmas.db_map |> List.map fst
+  let names lemmas = Name.Map.bindings lemmas.db_map |> List.map fst
   let map f lemmas = { lemmas with db_map = Name.Map.map f lemmas.db_map }
-  let iter f lemmas = Name.Map.iter (fun _ -> f) lemmas.db_map
+  let iter f lemmas = Name.Map.iter (const f) lemmas.db_map
 
   let filter pred lemmas =
-    { lemmas with db_map = Name.Map.filter (fun _ -> pred) lemmas.db_map }
+    { lemmas with db_map = Name.Map.filter (const pred) lemmas.db_map }
 
-  let to_list lemmas = Name.Map.bindings lemmas.db_map
+  let to_list lemmas = Name.Map.bindings lemmas.db_map |> List.map snd
 
   let of_list ls =
-    { db_env = Env.empty; db_map = Name.Map.of_seq @@ List.to_seq ls }
+    { db_env = Env.empty
+    ; db_map =
+        Name.Map.of_seq @@ List.to_seq @@ List.map (fun l -> (l.l_full, l)) ls
+    }
 end
 
 (** A single pregoal. *)
-type pregoal = { g_env : Env.t; g_hyps : Hyps.t; g_concl : Term.t }
+type pregoal =
+  { g_env : Env.t; g_vars : Vars.t; g_hyps : Hyps.t; g_concl : Term.t }
 
 (** A goal is a pregoal together with a handle. *)
 type goal = { g_id : int; g_pregoal : pregoal }

@@ -65,7 +65,7 @@ type linkaction =
 (** Lift a link into a hyperlink. *)
 val hyperlink_of_link : link -> hyperlink
 
-(** Remove all the [`Nothing] appearing in a linkaction. *)
+(** Remove all the [Nothing] appearing in a linkaction. *)
 val remove_nothing : linkaction -> linkaction option
 
 (** A (hyper)link predicate ([Pred.lpred] and [Pred.hlpred]) captures functions which
@@ -75,30 +75,13 @@ val remove_nothing : linkaction -> linkaction option
     as well as some standard predicates. 
 
     One can emulate a traditional boolean predicate by returning the singleton
-    [`Nothing] to indicate membership, or the empty list to indicate absence thereof. *)
+    [Nothing] to indicate membership, or the empty list to indicate absence thereof. *)
 module Pred : sig
   (** A link predicate. *)
   type lpred = Proof.t -> link -> linkaction list
 
   (** A hyperlink predicate. *)
   type hlpred = Proof.t -> hyperlink -> linkaction list
-
-  (** [search_linkactions hlp proof (src, dst)] returns all links between
-      subterms of [src] and [dst] in [proof] that can interact according to
-      the hyperlink predicate [hlp], together with the lists of possible link
-      actions determined by the predicate.
-   
-      If [fixed_srcs] (resp. [fixed_dsts]) is set, the function returns only
-      hyperlinks with sources [fixed_srcs] (resp. destinations [fixed_dsts]),
-      and whose destinations (resp. sources) are subterms of [dst] (resp.
-      [src]). *)
-  val search_linkactions :
-       ?fixed_srcs:Path.t list
-    -> ?fixed_dsts:Path.t list
-    -> hlpred
-    -> Proof.t
-    -> link
-    -> (hyperlink * linkaction list) list
 
   (** Lift a link predicate to a hyperlink predicate. *)
   val lift : lpred -> hlpred
@@ -115,10 +98,11 @@ module Pred : sig
       and [p2] elsewhere. *)
   val if_empty : hlpred -> hlpred -> hlpred
 
-  (** [Pred.unifiable proof (src, dst)] checks that [src] and [dst] lead to either :
-      - two unifiable formulas.
-      - two unifiable expressions, that additionnally have the same type. 
-      If this check succeeds, returns a `Subform linkaction. *)
+  (** [Pred.unifiable proof (src, dst)] checks that [src] and [dst] lead to
+      unifiable formulas in the first-order skeleton of their respective items.
+      They can also lead to an argument of an equality (still in the first-order skeleton).
+      
+      If this check succeeds, returns a Subform linkaction containing the substitution. *)
   val unifiable : lpred
 
   (** [Pred.opposite_pol_formulas proof (src, dst)] checks that [src] and [dst]

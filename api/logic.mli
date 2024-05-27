@@ -34,6 +34,26 @@ end
 (***************************************************************************************)
 (** Items *)
 
+(** A single variable. *)
+type var = { v_name : Name.t; v_type : Term.t; v_body : Term.t option }
+[@@deriving show]
+
+(** A module to handle collections of variables. *)
+module Vars : sig
+  type t
+
+  val empty : t
+  val by_name : t -> Name.t -> var
+  val add : t -> var -> t
+  val remove : t -> Name.t -> t
+  val move : t -> Name.t -> Name.t option -> t
+  val names : t -> Name.t list
+  val map : (var -> var) -> t -> t
+  val iter : (var -> unit) -> t -> unit
+  val to_list : t -> var list
+  val of_list : var list -> t
+end
+
 (** A single hypothesis. *)
 type hyp = { h_name : Name.t; h_gen : int; h_form : Term.t } [@@deriving show]
 
@@ -42,12 +62,12 @@ module Hyps : sig
   type t
 
   val empty : t
-  val byid : t -> Name.t -> hyp
-  val add : t -> Name.t -> hyp -> t
+  val by_name : t -> Name.t -> hyp
+  val add : t -> hyp -> t
   val remove : t -> Name.t -> t
   val move : t -> Name.t -> Name.t option -> t
   val bump : t -> t
-  val ids : t -> Name.t list
+  val names : t -> Name.t list
   val map : (hyp -> hyp) -> t -> t
   val iter : (hyp -> unit) -> t -> unit
   val to_list : t -> hyp list
@@ -71,19 +91,20 @@ module Lemmas : sig
   val empty : t
   val extend_env : Env.t -> t -> t
   val env : t -> Env.t
-  val byid : t -> Name.t -> lemma
-  val add : t -> Name.t -> lemma -> t
+  val by_name : t -> Name.t -> lemma
+  val add : t -> lemma -> t
   val remove : t -> Name.t -> t
-  val ids : t -> Name.t list
+  val names : t -> Name.t list
   val map : (lemma -> lemma) -> t -> t
   val iter : (lemma -> unit) -> t -> unit
   val filter : (lemma -> bool) -> t -> t
-  val to_list : t -> (Name.t * lemma) list
-  val of_list : (Name.t * lemma) list -> t
+  val to_list : t -> lemma list
+  val of_list : lemma list -> t
 end
 
 (** A single pregoal. *)
-type pregoal = { g_env : Env.t; g_hyps : Hyps.t; g_concl : Term.t }
+type pregoal =
+  { g_env : Env.t; g_vars : Vars.t; g_hyps : Hyps.t; g_concl : Term.t }
 
 (** A goal is a pregoal together with a handle. *)
 type goal = { g_id : int; g_pregoal : pregoal }

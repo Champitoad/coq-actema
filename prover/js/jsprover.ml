@@ -537,7 +537,7 @@ and js_subgoal parent (handle : int) =
              (Option.map_default Name.show "#None" before);
         let subgoal = Proof.byid parent##.proof _self##.handle in
         (* Check that [from] is a hypothesis. *)
-        let is_hypothesis = List.mem from (Logic.Hyps.ids subgoal.g_hyps) in
+        let is_hypothesis = List.mem from (Logic.Hyps.names subgoal.g_hyps) in
         if is_hypothesis
         then
           (* Actually move the hypothesis. *)

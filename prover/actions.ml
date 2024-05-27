@@ -38,7 +38,7 @@ let all_goal_subpaths proof goal : Path.t list =
     Path.make ~kind:Concl goal.g_id
     :: List.map
          (fun name -> Path.make ~kind:(Hyp name) goal.g_id)
-         (Hyps.ids goal.g_pregoal.g_hyps)
+         (Hyps.names goal.g_pregoal.g_hyps)
   in
   List.concat_map (all_subpaths proof) roots
 

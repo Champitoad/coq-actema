@@ -175,34 +175,52 @@ let goal coq_goal : Logic.pregoal =
   (* Translate the conclusion. *)
   let concl = translate_term state (Goal.concl coq_goal) in
   (* Translate the hypotheses and variables. *)
-  let hyps =
-    List.filter_map
+  let hyps, vars =
+    List.fold_left
       begin
-        fun decl ->
+        fun (hyps, vars) decl ->
           let name =
             Context.Named.Declaration.get_id decl
             |> Names.Id.to_string |> Lang.Name.make
           in
-          let ty =
+          let coq_ty =
             decl |> Context.Named.Declaration.get_type |> EConstr.of_constr
           in
-          let sort = Retyping.get_sort_of state.coq_env state.sigma ty in
-          let ty = translate_term state ty in
+          let coq_sort =
+            Retyping.get_sort_of state.coq_env state.sigma coq_ty
+          in
+          let act_ty = translate_term state coq_ty in
           (* Don't forget to add the constant to the actema environment. *)
           let pp = Lang.Env.default_pp_info (Lang.Name.show name) in
-          state.env <- Lang.Env.add_constant name ty ~pp state.env;
-          (* If this is a hypothesis, add it to the list. *)
-          if EConstr.ESorts.is_prop state.sigma sort
+          state.env <- Lang.Env.add_constant name act_ty ~pp state.env;
+          (* Add it to the list of hypotheses or variables. *)
+          if EConstr.ESorts.is_prop state.sigma coq_sort
           then
             (* This is a hypothesis. *)
-            Some Logic.{ h_name = name; h_gen = 0; h_form = ty }
-          else (* This is a variable. *)
-            None
+            let new_hyp = Logic.{ h_name = name; h_gen = 0; h_form = act_ty } in
+            (new_hyp :: hyps, vars)
+          else
+            (* This is a variable. *)
+            (* Get the body of the variable and translate it (if it exists). *)
+            let coq_body = Context.Named.Declaration.get_value decl in
+            let act_body =
+              Option.map (translate_term state <<< EConstr.of_constr) coq_body
+            in
+            let new_var =
+              Logic.{ v_name = name; v_type = act_ty; v_body = act_body }
+            in
+            (hyps, new_var :: vars)
       end
+      ([], [])
       (Environ.named_context state.coq_env)
   in
   (* Construct the actema pregoal. *)
-  Logic.{ g_env = state.env; g_hyps = Hyps.of_list hyps; g_concl = concl }
+  Logic.
+    { g_env = state.env
+    ; g_vars = Vars.of_list vars
+    ; g_hyps = Hyps.of_list hyps
+    ; g_concl = concl
+    }
 
 (***********************************************************************************)
 (** Translate lemmas. *)

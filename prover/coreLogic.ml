@@ -146,7 +146,7 @@ module Proof = struct
     | _ -> []
 
   let evariants proof ~goal_id ~hyp_name =
-    match (Hyps.byid (byid proof goal_id).g_hyps hyp_name).h_form with
+    match (Hyps.by_name (byid proof goal_id).g_hyps hyp_name).h_form with
     | App (Cst name, _) ->
         if name = Name.eq
         then [ "rewrite->"; "rewrite<-" ]
@@ -187,7 +187,7 @@ module PathUtils = struct
       | Path.Concl -> (Concl pregoal.g_concl, pregoal.g_concl)
       | Path.Hyp hid ->
           let hyp =
-            try Hyps.byid pregoal.g_hyps hid
+            try Hyps.by_name pregoal.g_hyps hid
             with InvalidHyphName _ -> raise exn
           in
           (Hyp (hid, hyp), hyp.h_form)
