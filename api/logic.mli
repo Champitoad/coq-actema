@@ -1,6 +1,7 @@
 open Lang
 
 exception InvalidGoalId of int
+exception InvalidVarName of Name.t
 exception InvalidHyphName of Name.t
 exception InvalidLemmaName of Name.t
 

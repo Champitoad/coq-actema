@@ -181,8 +181,6 @@ export default {
                 var isInWorkZone = meta && meta.inWorkZone;
                 return !isInWorkZone;
             });
-            console.log("getSortedPredicates\n");
-            console.log(predicates);
             return _.sortBy(predicates, ["position"]);
         },
 

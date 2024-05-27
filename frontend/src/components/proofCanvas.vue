@@ -174,14 +174,14 @@
                                 <div class="canvas row" style="height: 100%; position: relative;">
                                     <div class="lemmas-zone" :style="{ width: (hypsZoneStart * docWidth) + 'px' }">
                                         <lemma-search :goal="subgoal" :context="subgoal.context()"
-                                            :vars="subgoal.tvars()" :selectMode="selectMode" :displayMode="displayMode"
+                                            :vars="subgoal.vars()" :selectMode="selectMode" :displayMode="displayMode"
                                             ref="lsearch"></lemma-search>
                                     </div>
                                     <div class=" dragbar" ref="dragbar-left" @mousedown="startDragLeft"></div>
                                     <div class="hypothesis-zone" @click="deselect"
                                         :style="{ width: ((hypsZoneEnd - hypsZoneStart) * docWidth) + 'px' }">
                                         <proposition-list :goal="subgoal" :context="subgoal.context()"
-                                            :vars="subgoal.tvars()" :selectMode="selectMode" :displayMode="displayMode"
+                                            :vars="subgoal.vars()" :selectMode="selectMode" :displayMode="displayMode"
                                             ref="plist"></proposition-list>
                                     </div>
                                     <div class="dragbar" ref="dragbar-right" @mousedown="startDragRight"></div>
@@ -750,7 +750,7 @@ export default {
         },
 
         getExpressionsInWorkZone(subgoal) {
-            return _.filter(subgoal.tvars(), o => {
+            return _.filter(subgoal.vars(), o => {
                 var meta = o.getmeta();
                 if (meta) {
                     return meta.inWorkZone || false;

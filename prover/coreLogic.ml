@@ -172,13 +172,25 @@ module PathUtils = struct
     let item, i_term =
       match path.kind with
       | Path.Concl -> (Concl pregoal.g_concl, pregoal.g_concl)
-      | Path.Hyp hid ->
+      | Path.Hyp hname ->
           let hyp =
-            try Hyps.by_name pregoal.g_hyps hid
+            try Hyps.by_name pregoal.g_hyps hname
             with InvalidHyphName _ -> raise exn
           in
-          (Hyp (hid, hyp), hyp.h_form)
-      | _ -> failwith "PathUtils.dest : todo"
+          (Hyp (hname, hyp), hyp.h_form)
+      | Path.VarHead vname ->
+          let var =
+            try Vars.by_name pregoal.g_vars vname
+            with InvalidVarName _ -> raise exn
+          in
+          (Var (vname, var.v_type, var.v_body), Term.mkCst vname)
+      | Path.VarBody vname ->
+          let var =
+            try Vars.by_name pregoal.g_vars vname
+            with InvalidVarName _ -> raise exn
+          in
+          let body = Option.get_exn var.v_body exn in
+          (Var (vname, var.v_type, var.v_body), body)
     in
     let ctx, term =
       try TermUtils.subterm i_term path.sub

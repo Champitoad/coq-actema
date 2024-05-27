@@ -2,6 +2,7 @@ open Utils.Pervasive
 open Lang
 
 exception InvalidGoalId of int
+exception InvalidVarName of Name.t
 exception InvalidHyphName of Name.t
 exception InvalidLemmaName of Name.t
 
@@ -75,7 +76,7 @@ module Vars = struct
   let empty : t = []
 
   let by_name (vars : t) (name : Name.t) =
-    Option.get_exn (List.Exceptionless.assoc name vars) (InvalidHyphName name)
+    Option.get_exn (List.Exceptionless.assoc name vars) (InvalidVarName name)
 
   let add (vars : t) (v : var) : t =
     assert (Option.is_none (List.Exceptionless.assoc v.v_name vars));
@@ -96,7 +97,7 @@ module Vars = struct
             (List.Exceptionless.findi
                (fun _ (x, _) -> Name.equal x before)
                vars)
-            (InvalidHyphName before)
+            (InvalidVarName before)
         in
         let post, pre = List.split_at (1 + pos) vars in
         post @ ((from, tg) :: pre)
@@ -211,7 +212,9 @@ type goal = { g_id : int; g_pregoal : pregoal }
 type item =
   | Concl of Term.t  (** Conclusion. *)
   | Hyp of Name.t * hyp  (** Hypothesis. *)
-  | Var of Name.t * Term.t * Term.t option  (** Variable. *)
+  | Var of Name.t * Term.t * Term.t option
+      (** Variable. The first term is the variables's type,
+          the second term (option) is the variable's body. *)
 [@@deriving show]
 
 let term_of_item (item : item) : Term.t =

@@ -626,29 +626,36 @@ and js_var parent (goal_id : int) (pos : int) (var : Logic.var) =
     val proof = parent##.parent
 
     (* Return the [html] of the enclosed local variable *)
-    method html = failwith "js_var.html : TODO"
-    (*let dt =
-          span
-            [ span
-                ([ span
-                     ~a:[ Xml.string_attrib "id" _self##idhead ]
-                     ([ span [ Xml.pcdata _self##.oname ] ]
-                     @ spaced [ span [ Xml.pcdata ":" ] ]
-                     @ [ Notation.t_tohtml (parent##goal).g_env ty ])
-                 ]
-                @
-                match b with
-                | Some b ->
-                    spaced [ span [ Xml.pcdata ":=" ] ]
-                    @ [ Notation.e_tohtml
-                          ~id:(Some _self##idbody)
-                          (parent##goal).g_env b
-                      ]
-                | None -> [])
-            ]
-        in
-      Js.string
-        (Format.asprintf "%a" (Tyxml.Xml.pp ()) (Tyxml.Xml.node "span" []))*)
+    method html =
+      let open Tyxml in
+      (* Convenience functions. *)
+      let span ?(a = []) x = Xml.node ~a "span" x in
+      let spaced ?(left = true) ?(right = true) c =
+        let sp = [ span [ Xml.entity "nbsp" ] ] in
+        let c = if left then sp @ c else c in
+        let c = if right then c @ sp else c in
+        c
+      in
+
+      (* Actual xml generation. *)
+      let xml =
+        span
+          [ span
+              ([ span
+                   (*~a:[ Xml.string_attrib "id" idhead ]*)
+                   ([ span [ Xml.pcdata @@ Name.show var.v_name ] ]
+                   @ spaced [ span [ Xml.pcdata ":" ] ]
+                   @ [ _self##.type_##tyxml ])
+               ]
+              @
+              match Js.Opt.to_option _self##.body with
+              | Some js_body ->
+                  spaced [ span [ Xml.pcdata ":=" ] ] @ [ js_body##tyxml ]
+              | None -> [])
+          ]
+      in
+      (* Print the xml to a string. *)
+      Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) xml)
 
     (* Return an UTF8 string representation of the enclosed local variable *)
     method tostring =
@@ -679,8 +686,8 @@ and js_var parent (goal_id : int) (pos : int) (var : Logic.var) =
 (* JS Wrapper for terms                                              *)
 and js_term parent (goal_id : int) (kind : Path.kind) (term : Term.t) =
   object%js (_self)
-    (** Return the html of the term. *)
-    method html =
+    (** Return the Tyxml.Xml of the term. *)
+    method tyxml =
       (* Get the path to the term. *)
       let path = Logic.Path.make ~kind goal_id in
       (* Pretty-print the term to xml.
@@ -708,10 +715,13 @@ and js_term parent (goal_id : int) (kind : Path.kind) (term : Term.t) =
         | Node (tag, attribs, elts) ->
             Xml.node tag ~a:attribs (List.map add_spans elts)
       in
-      let xml = span @@ add_spans xml in
+      span @@ add_spans xml
+
+    (** Return the html of the term (as a js string). *)
+    method html =
       (* Pretty-print the xml to a string. This will then be used
          by the javascript code. *)
-      Js.string @@ Format.asprintf "%a" (Tyxml.Xml.pp ()) xml
+      Js.string @@ Format.asprintf "%a" (Tyxml.Xml.pp ()) _self##tyxml
 
     (* Return an UTF8 string representation of the term. *)
     method tostring =

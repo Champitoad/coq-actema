@@ -21,10 +21,6 @@ end))
 let span ?(attribs = []) (x : annot Pp.doc) : annot Pp.doc =
   Pp.annotate ("span", attribs) x
 
-let paren ?(doit = true) x =
-  let open Pp in
-  if doit then char '(' ^^ x ^^ char ')' else x
-
 (** [filter_args implicits args] filters out the implicit arguments in [args]. *)
 let filter_args implicits args =
   let rec loop implicits args kept i =
@@ -74,10 +70,15 @@ let rec get_nat_constant (t : Term.t) : int =
 let extend i (path : Path.t) : Path.t = { path with sub = i :: path.sub }
 let reverse (path : Path.t) : Path.t = { path with sub = List.rev path.sub }
 
-(** [pp_term env path t] pretty-prints the term [t]. 
+(** [indices ?start=0 [x0; x1; ... xn]] returns the list [(start, x0); (start+1; x1); ... (start+n, xn)]. *)
+let indices ?(start = 0) xs = List.mapi (fun i x -> (start + i, x)) xs
+
+(** [pp_term ?paren env path t] pretty-prints the term [t]. 
     The argument [path] keeps track of the path to the term [t], 
-    and is used to annotate the Xml divs of each subterm. *)
-let rec pp_term env (path : Path.t) ctx (t : Term.t) : annot Pp.doc =
+    and is used to annotate the Xml divs of each subterm. 
+    The flag [paren] controls whether we should add parentheses around [t]. *)
+let rec pp_term ?(paren = false) env (path : Path.t) ctx (t : Term.t) :
+    annot Pp.doc =
   let open Pp in
   let content =
     match t with
@@ -101,22 +102,22 @@ let rec pp_term env (path : Path.t) ctx (t : Term.t) : annot Pp.doc =
         (pp_binder ^//^ pp_ty) ^//^ pp_body
     | Arrow (t1, t2) ->
         (* We might or might not need to add parentheses around [t1]. *)
-        let doit =
+        let paren_t1 =
           match t1 with
           | Var _ | Cst _ | App _ | Sort _ -> false
           | _ when is_nat_constant t1 -> false
           | _ -> true
         in
-        let pp_t1 = paren ~doit @@ pp_term env (extend 0 path) ctx t1 in
+        let pp_t1 = pp_term ~paren:paren_t1 env (extend 0 path) ctx t1 in
         (* We don't need parentheses around [t2]. *)
         let pp_t2 = pp_term env (extend 1 path) ctx t2 in
         (* Combine the results. *)
         (pp_t1 ^+^ utf8string "→") ^//^ pp_t2
     | Prod (name, ty, body) ->
         let pp_binder = utf8string "∀" ^+^ pp_binder env name ^+^ string ":" in
-        let doit = match ty with Prod _ -> true | _ -> false in
+        let parent_ty = match ty with Prod _ -> true | _ -> false in
         let pp_ty =
-          paren ~doit (pp_term env (extend 0 path) ctx ty) ^^ string ","
+          pp_term ~paren:parent_ty env (extend 0 path) ctx ty ^^ string ","
         in
         let pp_body =
           pp_term env (extend 1 path) (Context.push name ty ctx) body
@@ -124,37 +125,44 @@ let rec pp_term env (path : Path.t) ctx (t : Term.t) : annot Pp.doc =
         (pp_binder ^//^ pp_ty) ^//^ pp_body
     | App (f, args) ->
         (* Applications are a bit tricky : we have to check if the function is a constant,
-           and if so take into account the formatting information about that constant. *)
+           and if so take into account the formatting information about that constant.
+
+           When tracking paths we also take care that the order in which the function
+           and arguments are printed is not always the same. *)
         let elts =
           match f with
           | Cst name ->
               let info = name_info env name in
-              let args = filter_args info.implicit_args args in
+              let args =
+                filter_args info.implicit_args (indices ~start:1 args)
+              in
               begin
                 match (info.position, args) with
-                | Prefix, args -> f :: args
-                | Infix, [ arg1; arg2 ] -> [ arg1; f; arg2 ]
-                | Suffix, [ arg ] -> [ arg; f ]
+                | Prefix, args -> (0, f) :: args
+                | Infix, [ arg1; arg2 ] -> [ arg1; (0, f); arg2 ]
+                | Suffix, [ arg ] -> [ arg; (0, f) ]
                 | _ -> assert false
               end
-          | _ -> f :: args
+          | _ -> indices (f :: args)
         in
         (* Pretty-print the applications one by one, adding parentheses where needed. *)
         elts
-        |> List.mapi
+        |> List.map
              begin
-               fun i (t : Term.t) ->
+               fun (i, t) ->
                  (* Decide whether we need parentheses around [t]. *)
-                 let doit =
-                   match t with
+                 let paren_t =
+                   match (t : Term.t) with
                    | Var _ | Cst _ | Sort _ -> false
                    | _ when is_nat_constant t -> false
                    | _ -> true
                  in
-                 paren ~doit @@ pp_term env (extend i path) ctx t
+                 pp_term ~paren:paren_t env (extend i path) ctx t
              end
         |> flow (ifflat space (nest 2 hardline))
   in
+  (* Add parentheses if needed. *)
+  let content = if paren then char '(' ^^ content ^^ char ')' else content in
   (* Wrap the term in a span which holds the path to the term. *)
   let path_str = Path.to_string @@ reverse path in
   span ~attribs:[ Xml.string_attrib "id" path_str ] content
