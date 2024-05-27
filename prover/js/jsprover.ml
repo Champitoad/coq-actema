@@ -613,7 +613,7 @@ and js_var parent (goal_id : int) (pos : int) (var : Logic.var) =
     method name = Js.string _self##.oname
 
     (** the local variable type as a [js_term] *)
-    val type_ = js_term parent goal_id (Path.VarHead var.v_name) var.v_type
+    val type_ = js_term parent goal_id (Path.VarType var.v_name) var.v_type
 
     (** the local definition - as a [js_option js_term]. *)
     val body =
@@ -625,8 +625,8 @@ and js_var parent (goal_id : int) (pos : int) (var : Logic.var) =
     (** the enclosing proof engine *)
     val proof = parent##.parent
 
-    (* Return the [html] of the enclosed local variable *)
-    method html =
+    (* Return the Tyxml.Xml of the variable. *)
+    method tyxml =
       let open Tyxml in
       (* Convenience functions. *)
       let span ?(a = []) x = Xml.node ~a "span" x in
@@ -636,26 +636,34 @@ and js_var parent (goal_id : int) (pos : int) (var : Logic.var) =
         let c = if right then c @ sp else c in
         c
       in
-
       (* Actual xml generation. *)
-      let xml =
-        span
-          [ span
-              ([ span
-                   (*~a:[ Xml.string_attrib "id" idhead ]*)
-                   ([ span [ Xml.pcdata @@ Name.show var.v_name ] ]
-                   @ spaced [ span [ Xml.pcdata ":" ] ]
-                   @ [ _self##.type_##tyxml ])
-               ]
-              @
-              match Js.Opt.to_option _self##.body with
-              | Some js_body ->
-                  spaced [ span [ Xml.pcdata ":=" ] ] @ [ js_body##tyxml ]
-              | None -> [])
-          ]
+      let head_xml =
+        let path =
+          Path.to_string @@ Path.make ~kind:(VarHead var.v_name) goal_id
+        in
+        [ span
+            ~a:[ Xml.string_attrib "id" path ]
+            [ Xml.pcdata @@ Name.show var.v_name ]
+        ]
       in
+      span
+        [ span
+            ([ span
+                 (head_xml
+                 @ spaced [ span [ Xml.pcdata ":" ] ]
+                 @ [ _self##.type_##tyxml ])
+             ]
+            @
+            match Js.Opt.to_option _self##.body with
+            | Some js_body ->
+                spaced [ span [ Xml.pcdata ":=" ] ] @ [ js_body##tyxml ]
+            | None -> [])
+        ]
+
+    (* Return the [html] of the enclosed local variable *)
+    method html =
       (* Print the xml to a string. *)
-      Js.string (Format.asprintf "%a" (Tyxml.Xml.pp ()) xml)
+      Js.string @@ Format.asprintf "%a" (Tyxml.Xml.pp ()) _self##tyxml
 
     (* Return an UTF8 string representation of the enclosed local variable *)
     method tostring =
@@ -688,34 +696,14 @@ and js_term parent (goal_id : int) (kind : Path.kind) (term : Term.t) =
   object%js (_self)
     (** Return the Tyxml.Xml of the term. *)
     method tyxml =
-      (* Get the path to the term. *)
-      let path = Logic.Path.make ~kind goal_id in
       (* Pretty-print the term to xml.
          We choose an arbitrary width here : in the future we could
          make it so this method takes the width as input, so that
          the javascript code decides which width to use. *)
-      let xml =
-        Notation.term_to_xml ~width:50 path (parent##goal).Logic.g_env term
-      in
-      (* For some reason the frontend requires us to :
-         - wrap every string (pcdata) in a span.
-         - wrap the whole term in a span.
-         The frontend being in a horrible state, we comply
-         and don't touch to the javascript code. *)
-      let open Tyxml in
-      let span ?(a = []) elt = Xml.node ~a "span" [ elt ] in
-      let rec add_spans elt =
-        match Xml.content elt with
-        | Empty -> Xml.empty ()
-        | Comment str -> Xml.comment str
-        | EncodedPCDATA str -> span @@ Xml.encodedpcdata str
-        | PCDATA str -> span @@ Xml.pcdata str
-        | Entity str -> span @@ Xml.entity str
-        | Leaf (tag, attribs) -> Xml.leaf tag ~a:attribs
-        | Node (tag, attribs, elts) ->
-            Xml.node tag ~a:attribs (List.map add_spans elts)
-      in
-      span @@ add_spans xml
+      Notation.term_to_xml ~width:50
+        (Logic.Path.make ~kind goal_id)
+        (parent##goal).Logic.g_env term
+      |> Notation.tidy_xml
 
     (** Return the html of the term (as a js string). *)
     method html =

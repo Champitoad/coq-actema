@@ -127,31 +127,39 @@ val term_of_item : item -> Term.t
 (** Paths *)
 
 (** This module defines paths to items.
-      A path can point to :
-      - A subterm of the conclusion.
-      - A subterm of a hypothesis.
-      - A variable definition : either to the head (variable name) or a subterm of the definition's body.
-      A path points to an item in a specific goal. *)
+    A path points to a subterm of an item in a specific goal. *)
 module Path : sig
   (** What object does a path point to ? *)
-  type kind = Hyp of Name.t | Concl | VarHead of Name.t | VarBody of Name.t
+  type kind =
+    (* The goal's conclusion. *)
+    | Concl
+    (* A named hypothesis. *)
+    | Hyp of Name.t
+    (* A variable's head, i.e. the variable name. *)
+    | VarHead of Name.t
+    (* A variable's type. *)
+    | VarType of Name.t
+    (* A variable's body. Note that not all variables have a body. *)
+    | VarBody of Name.t
   [@@deriving show]
 
   (** A path to a subterm of an item.
       As an example, consider the goal :
-        [x := 4, y := 3 * x + 2, x + 3 * y = 0 |- x = 0]
+        [x : nat := 4, y : nat := 3 * x + 2, x + 3 * y = 0 |- x = 0]
       Assuming this is the goal with index 0, possible paths include :
       - [{ goal = 0 ; kind = Concl } ; sub = [2] }]
         which points to the variable [x] in the conclusion.
       - [{ goal = 0 ; kind = VarBody "y" ; sub = [1] }]
-        which points to the expression [3 * x] in the definition of [y].
+        which points to the expression [3 * x] in the variable [y].
       - [{ goal = 0 ; kind = VarHead "x" ; sub = [] }]
-        which points to the variable name [x] in the definition of [x].
+        which points to the variable name [x] in the variable [x].
     *)
   type t =
     { goal : int  (** The index of the goal we point to. *)
     ; kind : kind  (** The object we point to. *)
-    ; sub : int list  (** The position in the term we point to. *)
+    ; sub : int list
+          (** The position in the term we point to. 
+              When [kind] is [VarHead _], [sub] should be empty. *)
     }
   [@@deriving show]
 
@@ -169,11 +177,12 @@ module Path : sig
   val to_string : t -> string
 
   (** [same_item p1 p2] checks whether [p1] and [p2] point to the same item.
-      A variable's head and body are considered the same item. *)
+      A variable's head, type and body are considered in the same item. *)
   val same_item : t -> t -> bool
 
   (** [is_prefix p1 p2] checks whether [p1] is a prefix of [p2]. This means that :
-      - [p1] and [p2] point to the same item.
+      - [p1.goal] and [p2.goal] are equal.
+      - [p1.kind] and [p2.kind] are equal.
       - [p1.sub] is a prefix of [p2.sub]. *)
   val is_prefix : t -> t -> bool
 

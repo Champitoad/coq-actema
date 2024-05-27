@@ -190,3 +190,23 @@ let term_to_xml ?(width = default_width) ?(ctx = Context.empty) path env t :
       @@ Format.sprintf
            "Notation.term_to_xml : expected a single Xml element (got %d)"
            (List.length xml)
+
+(** For some reason the frontend requires us to :
+    - wrap every string (pcdata) in a span.
+    - wrap the whole term in a span.
+    The frontend being in a horrible state, we comply
+    and don't touch to the javascript code. *)
+let tidy_xml xml : Xml.elt =
+  let span ?(a = []) elt = Xml.node ~a "span" [ elt ] in
+  let rec add_spans elt =
+    match Xml.content elt with
+    | Empty -> Xml.empty ()
+    | Comment str -> Xml.comment str
+    | EncodedPCDATA str -> span @@ Xml.encodedpcdata str
+    | PCDATA str -> span @@ Xml.pcdata str
+    | Entity str -> span @@ Xml.entity str
+    | Leaf (tag, attribs) -> Xml.leaf tag ~a:attribs
+    | Node (tag, attribs, elts) ->
+        Xml.node tag ~a:attribs (List.map add_spans elts)
+  in
+  span @@ add_spans xml

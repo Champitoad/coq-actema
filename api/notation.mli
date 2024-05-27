@@ -17,3 +17,7 @@ val term_to_string : ?width:int -> ?ctx:Context.t -> Env.t -> Term.t -> string
     This function is meant to be used by the frontend. *)
 val term_to_xml :
   ?width:int -> ?ctx:Context.t -> Path.t -> Env.t -> Term.t -> Xml.elt
+
+(** [tidy_xml xml] applies some transformations to [xml] so that it matches
+    what the frontend expects. You'll probably want to use this in the prover after [term_to_xml]. *)
+val tidy_xml : Xml.elt -> Xml.elt

@@ -184,6 +184,12 @@ module PathUtils = struct
             with InvalidVarName _ -> raise exn
           in
           (Var (vname, var.v_type, var.v_body), Term.mkCst vname)
+      | Path.VarType vname ->
+          let var =
+            try Vars.by_name pregoal.g_vars vname
+            with InvalidVarName _ -> raise exn
+          in
+          (Var (vname, var.v_type, var.v_body), var.v_type)
       | Path.VarBody vname ->
           let var =
             try Vars.by_name pregoal.g_vars vname

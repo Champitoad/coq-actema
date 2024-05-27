@@ -227,7 +227,12 @@ let term_of_item (item : item) : Term.t =
 (** Paths *)
 
 module Path = struct
-  type kind = Hyp of Name.t | Concl | VarHead of Name.t | VarBody of Name.t
+  type kind =
+    | Concl
+    | Hyp of Name.t
+    | VarHead of Name.t
+    | VarType of Name.t
+    | VarBody of Name.t
   [@@deriving show]
 
   type t = { goal : int; kind : kind; sub : int list } [@@deriving show]
@@ -241,6 +246,7 @@ module Path = struct
     | Hyp _ -> "H"
     | Concl -> "C"
     | VarHead _ -> "Vh"
+    | VarType _ -> "Vt"
     | VarBody _ -> "Vb"
 
   let name_of_kind = function
@@ -248,12 +254,14 @@ module Path = struct
     | Concl -> Name.make ""
     | VarHead name -> name
     | VarBody name -> name
+    | VarType name -> name
 
   let kind_of_string kind_str name_str =
     match kind_str with
     | "H" -> Hyp (Name.make name_str)
     | "C" -> Concl
     | "Vh" -> VarHead (Name.make name_str)
+    | "Vt" -> VarType (Name.make name_str)
     | "Vb" -> VarBody (Name.make name_str)
     | _ -> failwith "Logic.kind_of_string: invalid path tag"
 
@@ -294,12 +302,22 @@ module Path = struct
     match (p1.kind, p2.kind) with
     | Concl, Concl -> true
     | Hyp h1, Hyp h2 when Name.equal h1 h2 -> true
-    | (VarHead v1, VarHead v2 | VarBody v1, VarBody v2 | VarHead v1, VarBody v2)
+    | VarHead v1, VarHead v2
+    | VarHead v1, VarType v2
+    | VarHead v1, VarBody v2
+    | VarType v1, VarHead v2
+    | VarType v1, VarType v2
+    | VarType v1, VarBody v2
+    | VarBody v1, VarHead v2
+    | VarBody v1, VarType v2
+    | VarBody v1, VarBody v2
       when Name.equal v1 v2 ->
         true
     | _ -> false
 
-  let is_prefix p1 p2 = same_item p1 p2 && List.is_prefix p1.sub p2.sub
+  let is_prefix p1 p2 =
+    p1.goal = p2.goal && p1.kind = p2.kind && List.is_prefix p1.sub p2.sub
+
   let erase_sub path = { path with sub = [] }
 end
 
