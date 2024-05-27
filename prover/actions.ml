@@ -205,48 +205,37 @@ let ctxt_actions (sel : Path.t list) (proof : Proof.t) : aoutput list = []
     in the conclusion which should be highlighted. *)
 let intro_variants goal : (string * int list) list =
   match goal.g_concl with
-  | App (Cst name, _) ->
-      if name = Name.eq
-      then [ ("reflexivity", []) ]
-      else if name = Name.and_
-      then [ ("split", []) ]
-      else if name = Name.or_
-      then [ ("left", [ 1 ]); ("right", [ 2 ]) ]
-      else if name = Name.equiv
-      then [ ("split", []) ]
-      else if name = Name.not
-      then [ ("intro", []) ]
-      else if name = Name.ex
-      then [ ("exists", []) ]
-      else []
-  | Cst name when name = Name.true_ -> [ ("constructor", []) ]
+  | App (Cst eq, [ _; _; _ ]) when Name.equal eq Name.eq ->
+      [ ("reflexivity", []) ]
+  | App (Cst and_, [ _; _ ]) when Name.equal and_ Name.and_ -> [ ("split", []) ]
+  | App (Cst or_, [ _; _ ]) when Name.equal or_ Name.or_ ->
+      [ ("left", [ 1 ]); ("right", [ 2 ]) ]
+  | App (Cst equiv_, [ _; _ ]) when Name.equal equiv_ Name.equiv ->
+      [ ("split", []) ]
+  | App (Cst not_, [ _ ]) when Name.equal not_ Name.not -> [ ("intro", []) ]
+  | Cst true_ when true_ = Name.true_ -> [ ("constructor", []) ]
   | Arrow _ | Prod _ | Lambda _ -> [ ("intro", []) ]
   | _ -> []
+
+let is_cst = function Term.Cst _ -> true | _ -> false
 
 (** Get all the elimination variants of a given hypothesis. 
     This returns a list of [description, sub] where [sub] is the subpath
     in the hypothesis which should be highlighted. *)
-
 let elim_variants hyp : (string * int list) list =
   match hyp.h_form with
-  | App (Cst name, _) ->
-      if name = Name.eq
-      then [ ("rewrite ->", [ 2 ]); ("rewrite <-", [ 3 ]) ]
-      else if name = Name.equiv
-      then [ ("destruct", []) ]
-      else if name = Name.or_
-      then [ ("destruct", []) ]
-      else if name = Name.not
-      then [ ("destruct", []) ]
-      else if name = Name.ex
-      then [ ("destruct", []) ]
-      else []
-  | Cst name ->
-      if name = Name.true_
-      then [ ("destruct", []) ]
-      else if name = Name.false_
-      then [ ("destruct", []) ]
-      else []
+  | App (Cst eq, [ _; t1; t2 ]) when Name.equal eq Name.eq ->
+      [ ("rewrite->", [ 2 ]); ("rewrite<-", [ 3 ]) ]
+  | App (Cst equiv, [ _; _ ]) when Name.equal equiv Name.equiv ->
+      [ ("destruct", []) ]
+  | App (Cst and_, [ _; _ ]) when Name.equal and_ Name.and_ ->
+      [ ("destruct", []) ]
+  | App (Cst or_, [ _; _ ]) when Name.equal or_ Name.or_ -> [ ("destruct", []) ]
+  | App (Cst not, [ _ ]) when Name.equal not Name.not -> [ ("apply", []) ]
+  | App (Cst ex, [ _; Lambda _ ]) when Name.equal ex Name.ex ->
+      [ ("destruct", []) ]
+  | Cst true_ when Name.equal true_ Name.true_ -> [ ("destruct", []) ]
+  | Cst false_ when Name.equal false_ Name.false_ -> [ ("destruct", []) ]
   | Arrow _ -> [ ("apply", []) ]
   | _ -> []
 

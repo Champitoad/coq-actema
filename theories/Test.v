@@ -1,14 +1,11 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
-Parameter H : Prop.
 
+Lemma test x y (h : y = x + x) : y + 42 = x +  x.
+Proof. actema_force. 
 
-Goal forall x : nat, x = 0.
-Proof. actema_force. Admitted.
-
-
-(* forall intro : fix the error. *)
+(* Rewrite : fix click raising error. *)
 
 Lemma test (v : nat) : v = 0.
   let n : nat := 4 + 2.

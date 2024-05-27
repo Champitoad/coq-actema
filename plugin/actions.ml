@@ -755,24 +755,12 @@ let execute_aelim (api_goal : Logic.pregoal) hyp_name i : unit tactic =
         [ Tactics.intro_patterns false
           @@ mk_intro_patterns [ Name.show x; Name.show hyp_name ]
         ]
-  | App (Cst eq, _) when Name.equal eq Name.eq -> begin
-      match i with
-      | 0 -> calltac (tactic_kname "rew_all_left") [ EConstr.mkVar hyp_id ]
-      | 1 -> calltac (tactic_kname "rew_all_right") [ EConstr.mkVar hyp_id ]
-      | _ ->
-          let msg =
-            Format.sprintf
-              "When eliminating an equality, the index should be either 0 or 1 \
-               (got %d)."
-              i
-          in
-          raise @@ UnsupportedAction (Logic.AElim (hyp_name, i), msg)
-    end
+  | App (Cst eq, [ _; _; _ ]) when Name.equal eq Name.eq && i = 0 ->
+      calltac (tactic_kname "rew_all_left") [ EConstr.mkVar hyp_id ]
+  | App (Cst eq, [ _; _; _ ]) when Name.equal eq Name.eq && i = 1 ->
+      calltac (tactic_kname "rew_all_right") [ EConstr.mkVar hyp_id ]
   | _ ->
-      let msg =
-        "The hypothesis has an invalid head connective/predicate for \
-         elimination."
-      in
+      let msg = "Could not apply elimination action." in
       raise @@ UnsupportedAction (Logic.AElim (hyp_name, i), msg)
 
 let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =

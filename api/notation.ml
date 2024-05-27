@@ -67,6 +67,12 @@ let rec get_nat_constant (t : Term.t) : int =
   | App (f, [ arg ]) when f = Term.mkCst Name.succ -> get_nat_constant arg + 1
   | _ -> assert false
 
+let is_prod = function Term.Prod _ -> true | _ -> false
+
+let is_exist = function
+  | Term.App (Cst ex, [ _; Lambda _ ]) when Name.equal ex Name.ex -> true
+  | _ -> false
+
 let extend i (path : Path.t) : Path.t = { path with sub = i :: path.sub }
 let reverse (path : Path.t) : Path.t = { path with sub = List.rev path.sub }
 
@@ -115,12 +121,25 @@ let rec pp_term ?(paren = false) env (path : Path.t) ctx (t : Term.t) :
         (pp_t1 ^+^ utf8string "➞") ^//^ pp_t2
     | Prod (name, ty, body) ->
         let pp_binder = utf8string "∀" ^+^ pp_binder env name ^+^ string ":" in
-        let parent_ty = match ty with Prod _ -> true | _ -> false in
+        let paren_ty = is_prod ty || is_exist ty in
         let pp_ty =
-          pp_term ~paren:parent_ty env (extend 0 path) ctx ty ^^ string ","
+          pp_term ~paren:paren_ty env (extend 0 path) ctx ty ^^ string ","
         in
         let pp_body =
           pp_term env (extend 1 path) (Context.push name ty ctx) body
+        in
+        (pp_binder ^//^ pp_ty) ^//^ pp_body
+    | App (Cst ex, [ _; Lambda (name, ty, body) ]) when Name.equal ex Name.ex ->
+        let pp_binder = utf8string "∃" ^+^ pp_binder env name ^+^ string ":" in
+        let paren_ty = is_prod ty || is_exist ty in
+        let pp_ty =
+          pp_term ~paren:paren_ty env (extend 0 @@ extend 2 path) ctx ty
+          ^^ string ","
+        in
+        let pp_body =
+          pp_term env
+            (extend 1 @@ extend 2 path)
+            (Context.push name ty ctx) body
         in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
     | App (f, args) ->

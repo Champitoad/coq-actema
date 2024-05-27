@@ -194,7 +194,8 @@ module TermUtils = struct
     | Prod (_, ty1, body1), Prod (_, ty2, body2) ->
         alpha_equiv ty1 ty2 && alpha_equiv body1 body2
     | Arrow (a1, b1), Arrow (a2, b2) -> alpha_equiv a1 a2 && alpha_equiv b1 b2
-    | App (f1, args1), App (f2, args2) ->
+    | App (f1, args1), App (f2, args2)
+      when List.length args1 = List.length args2 ->
         List.fold_left ( && ) (alpha_equiv f1 f2)
           (List.map2 alpha_equiv args1 args2)
     | _ -> false

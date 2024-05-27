@@ -103,6 +103,9 @@ let rec js_proof_engine (proof : Proof.t) =
 
     (* Return the given action as a binary, base64-encoded string. *)
     method encodeaction (goal_id, preaction) =
+      Js_log.log
+      @@ Format.sprintf "Encoding action : %d --> %s\n" goal_id
+           (Actions.show_preaction preaction);
       let action = !!(Export.export_action _self##.proof goal_id) preaction in
       Js_log.log @@ Api.Logic.show_action action;
       action

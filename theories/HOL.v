@@ -4505,8 +4505,8 @@ Ltac rew_all_left h :=
 Ltac rew_all_right h :=
     match type of h with
   | ?a = ?b =>
-      is_var a;
-      rewrite -> h in *; clear h
+      is_var b;
+      rewrite <- h in *; clear h
   | ?a = ?b => rewrite <- h in *
   | _ => idtac
   end.
