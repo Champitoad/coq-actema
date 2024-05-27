@@ -83,6 +83,11 @@ let kname_of_constructor env (c : Names.Construct.t) : Names.KerName.t =
   let modpath = Names.Construct.modpath c in
   Names.KerName.make modpath label
 
+let type_of_variable env (v : Names.variable) : EConstr.t =
+  match Environ.lookup_named v env with
+  | LocalAssum (_, ty) -> EConstr.of_constr ty
+  | LocalDef (_, _, ty) -> EConstr.of_constr ty
+
 let type_of_constructor env (c : Names.Construct.t) : EConstr.t =
   let ind = Names.inductive_of_constructor c in
   let ind_body = ind_body env ind in

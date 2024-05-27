@@ -714,8 +714,10 @@ and js_term parent (goal_id : int) (kind : Path.kind) (term : Term.t) =
 
 (** Print a single goal in Actema format (for debug purposes). *)
 let print_goal (Logic.{ g_id; g_pregoal = goal } : Logic.goal) : unit =
-  let xml = Notation.term_to_xml (Logic.Path.make 0) goal.g_env goal.g_concl in
-  Js_log.log @@ Format.asprintf "%a\n" (Tyxml.Xml.pp ()) xml
+  Js_log.log @@ Format.sprintf "%s\n"
+  @@ Notation.term_to_string goal.g_env goal.g_concl
+(*let xml = Notation.term_to_xml (Logic.Path.make 0) goal.g_env goal.g_concl in
+  Js_log.log @@ Format.asprintf "%a\n" (Tyxml.Xml.pp ()) xml*)
 
 (* Print the env. *)
 (*js_log "ENV\n";

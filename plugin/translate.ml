@@ -104,15 +104,21 @@ let rec translate_term state (t : EConstr.t) : Lang.Term.t =
           Term.mkProd name ty body
     end
   else if EConstr.isConst state.sigma t
-  then begin
+  then
     (* Constant. *)
     let cname, _ = EConstr.destConst state.sigma t in
     let name = Name.make @@ Names.Constant.to_string cname in
     let cdecl = Environ.lookup_constant cname state.coq_env in
     handle_cst state name @@ EConstr.of_constr cdecl.const_type
-  end
+  else if EConstr.isVar state.sigma t
+  then
+    (* Local context variable. *)
+    let vname = EConstr.destVar state.sigma t in
+    let name = vname |> Names.Id.to_string |> Name.make in
+    let ty = type_of_variable state.coq_env vname in
+    handle_cst state name ty
   else if EConstr.isConstruct state.sigma t
-  then begin
+  then
     (* Constructor. *)
     let cname, _ = EConstr.destConstruct state.sigma t in
     let name =
@@ -121,7 +127,6 @@ let rec translate_term state (t : EConstr.t) : Lang.Term.t =
     in
     let ty = type_of_constructor state.coq_env cname in
     handle_cst state name ty
-  end
   else if EConstr.isInd state.sigma t
   then
     (* Inductive. *)

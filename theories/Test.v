@@ -3,9 +3,6 @@ Require Import ssreflect.
 
 Parameter H : Prop.
 
-Goal True \/ False.
-Proof. actema_force. Admitted.
-
 
 Goal forall x : nat, x = 0.
 Proof. actema_force. Admitted.
