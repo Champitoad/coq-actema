@@ -14,6 +14,8 @@ type preaction =
   | Exact of Name.t
   | Intro of int
   | Elim of Name.t * int
+  | Fold of Name.t
+  | Unfold of Name.t
   | Hyperlink of Link.hyperlink * Link.linkaction list
 [@@deriving show]
 
@@ -97,7 +99,7 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
     in*)
   let hlpred =
     Pred.add
-      [ Pred.wf_subform
+      [ Pred.lift Pred.unifiable
         (*; Pred.if_empty Pred.deep_rewrite (Pred.rewrite |> hlpred_only_sel)
           ; Pred.fold |> hlpred_only_sel
           ; Pred.instantiate*)
@@ -308,6 +310,27 @@ let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
       in
       (* Concatenate the results. *)
       elim_actions @ exact_actions
+  (* On a variable with a body, we can fold/unfold. *)
+  | Var (vname, _, Some _) ->
+      (*let rp = Vars.getid goal.g_env x |> Option.get in*)
+      let unfold_path = Path.make ~kind:(VarHead vname) goal.g_id in
+      let fold_path = Path.make ~kind:(VarBody vname) goal.g_id in
+
+      [ { description = "Unfold"
+        ; icon = None
+        ; highlights = [ unfold_path ]
+        ; kind = Click unfold_path
+        ; goal_id = goal.g_id
+        ; preaction = Unfold vname
+        }
+      ; { description = "Fold"
+        ; icon = None
+        ; highlights = [ fold_path ]
+        ; kind = Click fold_path
+        ; goal_id = goal.g_id
+        ; preaction = Fold vname
+        }
+      ]
   (*| `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
         let rp = Vars.getid goal.g_env x |> Option.get in
         let hg =
@@ -322,33 +345,7 @@ let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
           ; action = `Ind rp
           }
         ]
-    | `V (x, (_, Some _)) ->
-        let rp = Vars.getid goal.g_env x |> Option.get in
-
-        let hg_unfold =
-          IPath.make (Handle.toint hd)
-            ~ctxt:{ kind = `Var `Head; handle = Handle.toint rp }
-        in
-        let hg_fold =
-          IPath.make (Handle.toint hd)
-            ~ctxt:{ kind = `Var `Body; handle = Handle.toint rp }
-        in
-
-        [ { description = "Unfold"
-          ; icon = None
-          ; highlights = [ hg_unfold ]
-          ; kind = `Click hg_unfold
-          ; goal_handle = hd
-          ; action = `Unfold x
-          }
-        ; { description = "Fold"
-          ; icon = None
-          ; highlights = [ hg_fold ]
-          ; kind = `Click hg_fold
-          ; goal_handle = hd
-          ; action = `Fold x
-          }
-        ]*)
+  *)
   | _ -> []
 
 let actions (proof : Proof.t) (source : asource) : aoutput list =

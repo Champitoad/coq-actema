@@ -101,7 +101,7 @@ let rec js_proof_engine (proof : Proof.t) =
     (* Return true when there are no opened subgoals left *)
     method closed = Js.bool (Proof.is_closed proof)
 
-    (* Return the given action as a binary, base64-encoded string *)
+    (* Return the given action as a binary, base64-encoded string. *)
     method encodeaction (goal_id, preaction) =
       let action = !!(Export.export_action _self##.proof goal_id) preaction in
       Js_log.log @@ Api.Logic.show_action action;
@@ -402,121 +402,118 @@ and js_subgoal parent (handle : int) =
         Js.array aout*)
       Js.array [||]
 
-    (*(** [this#getduplicateb (hyp_handle : int)] gets the hypothesis in the current goal,
-                  and returns the base64-encoded string of the corresponding ADuplicate action. *)
-      method getduplicateb hyp_handle =
-            let doit () =
-              (* Get the hypothesis name. *)
-              let hidmap = Proof.hidmap parent##.proof in
-              let hyp_name = Hidmap.State.run (Hidmap.find hyp_handle) hidmap in
-              (* Construct the ADuplicate action and encode it. *)
-              Api.Logic.ADuplicate hyp_name
-              |> Fun.flip Marshal.to_string []
-              |> Base64.encode_string |> Js.string
-            in
-            !!doit ()
+    (** [this#encodeduplicate (hyp_name : string)] gets the hypothesis in the current goal,
+        and returns the base64-encoded string of the corresponding ADuplicate action. *)
+    method encodeduplicate hyp_name =
+      let doit () =
+        (* Get the hypothesis name. *)
+        let hyp_name = Name.make @@ Js.to_string hyp_name in
+        (* Construct the ADuplicate action and encode it. *)
+        Api.Logic.ADuplicate hyp_name
+        |> Fun.flip Marshal.to_string []
+        |> Base64.encode_string |> Js.string
+      in
+      !!doit ()
 
-          (** [this#getclearb (hyp_handle : int)] gets the hypothesis in the current goal,
-                 and returns the base64-encoded string of the corresponding AClear action. *)
-          method getclearb hyp_handle =
-            let doit () =
-              (* Get the hypothesis name. *)
-              let hidmap = Proof.hidmap parent##.proof in
-              let hyp_name = Hidmap.State.run (Hidmap.find hyp_handle) hidmap in
-              (* Construct the AClear action and encode it. *)
-              Api.Logic.AClear hyp_name
-              |> Fun.flip Marshal.to_string []
-              |> Base64.encode_string |> Js.string
-            in
-            !!doit ()
+    (** [this#encodeclear (hyp_handle : string)] gets the hypothesis in the current goal,
+        and returns the base64-encoded string of the corresponding AClear action. *)
+    method encodeclear hyp_name =
+      let doit () =
+        (* Get the hypothesis name. *)
+        let hyp_name = Name.make @@ Js.to_string hyp_name in
+        (* Construct the AClear action and encode it. *)
+        Api.Logic.AClear hyp_name
+        |> Fun.flip Marshal.to_string []
+        |> Base64.encode_string |> Js.string
+      in
+      !!doit ()
 
-          (** [this#getgeneralizeb (hyp_handle : int)] gets the hypothesis in the current goal,
-                 and returns the base64-encoded string of the corresponding AGeneralize action. *)
-          method getgeneralizeb hyp_handle =
-            let doit () =
-              (* Get the hypothesis name. *)
-              let hidmap = Proof.hidmap parent##.proof in
-              let hyp_name = Hidmap.State.run (Hidmap.find hyp_handle) hidmap in
-              (* Construct the AClear action and encode it. *)
-              Api.Logic.AGeneralize hyp_name
-              |> Fun.flip Marshal.to_string []
-              |> Base64.encode_string |> Js.string
-            in
-            !!doit ()
+    (** [this#encodegeneralize (hyp_name : string)] gets the hypothesis in the current goal,
+        and returns the base64-encoded string of the corresponding AGeneralize action. *)
+    method encodegeneralize hyp_name =
+      let doit () =
+        (* Get the hypothesis name. *)
+        let hyp_name = Name.make @@ Js.to_string hyp_name in
+        (* Construct the AClear action and encode it. *)
+        Api.Logic.AGeneralize hyp_name
+        |> Fun.flip Marshal.to_string []
+        |> Base64.encode_string |> Js.string
+      in
+      !!doit ()
 
-          (** [this#getcutb (form : string)] parses [form] in the current goal, and
-                 returns the base64-encoded string of the corresponding ACut action. *)
-          method getcutb form =
-            let doit () =
-              let goal = _self##goal in
-              let form =
-                form |> Js.to_string |> String.trim |> Io.from_string |> Io.parse_form
-                |> Form.check goal.g_env |> Fo.Translate.of_form
-              in
-              Api.Logic.ACut form
-              |> Fun.flip Marshal.to_string []
-              |> Base64.encode_string |> Js.string
-            in
-            !!doit ()
+    (*(** [this#getcutb (form : string)] parses [form] in the current goal, and
+                   returns the base64-encoded string of the corresponding ACut action. *)
+      method getcutb form =
+        let doit () =
+          let goal = _self##goal in
+          let form =
+            form |> Js.to_string |> String.trim |> Io.from_string |> Io.parse_form
+            |> Form.check goal.g_env |> Fo.Translate.of_form
+          in
+          Api.Logic.ACut form
+          |> Fun.flip Marshal.to_string []
+          |> Base64.encode_string |> Js.string
+        in
+        !!doit ()*)
 
-          (** [this#addlemmab (handle : int)] return the base64-encoded string of the corresponding ALemma action. *)
-          method addlemmab handle =
-            let doit () =
-              (* Find the lemma (and raise an exception if it is not found). *)
-              let db = Proof.get_db parent##.proof in
-              let lemma = Proof.Lemmas.byid db handle in
-              js_log @@ Format.sprintf "addlemmab %s\n" lemma.l_full;
-              (* Recheck the lemma just to make sure. *)
-              Form.recheck (Proof.Lemmas.env db) lemma.l_form;
-              (* Construct the action and encode it. *)
-              Api.Logic.ALemma lemma.l_full
-              |> Fun.flip Marshal.to_string []
-              |> Base64.encode_string |> Js.string
-            in
-            !!doit ()
+    (*(** [this#addlemmab (handle : int)] return the base64-encoded string of the corresponding ALemma action. *)
+      method addlemmab handle =
+          let doit () =
+            (* Find the lemma (and raise an exception if it is not found). *)
+            let db = Proof.get_db parent##.proof in
+            let lemma = Proof.Lemmas.byid db handle in
+            js_log @@ Format.sprintf "addlemmab %s\n" lemma.l_full;
+            (* Recheck the lemma just to make sure. *)
+            Form.recheck (Proof.Lemmas.env db) lemma.l_form;
+            (* Construct the action and encode it. *)
+            Api.Logic.ALemma lemma.l_full
+            |> Fun.flip Marshal.to_string []
+            |> Base64.encode_string |> Js.string
+          in
+          !!doit ()
 
-          (** [this#add_local (name : string) (expr : string)] parses [expr] in the goal
-                 [context] and adds it to the local [context] under the name [name]. *)
-          method addlocal name expr =
-            let doit () =
-              let goal = _self##goal in
-              let expr = String.trim (Js.to_string expr) in
-              let expr = Io.parse_expr (Io.from_string expr) in
-              let expr, ty = Form.echeck goal.g_env expr in
-              Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle
-                (Js.to_string name, ty, expr)
-            in
-            js_proof_engine (!!doit ())
+        (** [this#add_local (name : string) (expr : string)] parses [expr] in the goal
+               [context] and adds it to the local [context] under the name [name]. *)
+        method addlocal name expr =
+          let doit () =
+            let goal = _self##goal in
+            let expr = String.trim (Js.to_string expr) in
+            let expr = Io.parse_expr (Io.from_string expr) in
+            let expr, ty = Form.echeck goal.g_env expr in
+            Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle
+              (Js.to_string name, ty, expr)
+          in
+          js_proof_engine (!!doit ())
 
-          (** [this#add_alias (nexpr : string)] parses [nexpr] as a named expression
-                 in the goal [context] and add it to the local [context]. *)
-          method addalias expr =
-            let doit () =
-              let goal = _self##goal in
-              let expr = String.trim (Js.to_string expr) in
-              let name, expr = Io.parse_nexpr (Io.from_string expr) in
-              let expr, ty = Form.echeck goal.g_env expr in
-              Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle
-                (Location.unloc name, ty, expr)
-            in
-            js_proof_engine (!!doit ())
+        (** [this#add_alias (nexpr : string)] parses [nexpr] as a named expression
+               in the goal [context] and add it to the local [context]. *)
+        method addalias expr =
+          let doit () =
+            let goal = _self##goal in
+            let expr = String.trim (Js.to_string expr) in
+            let name, expr = Io.parse_nexpr (Io.from_string expr) in
+            let expr, ty = Form.echeck goal.g_env expr in
+            Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle
+              (Location.unloc name, ty, expr)
+          in
+          js_proof_engine (!!doit ())
 
-          (** [this#getaliasb (nexpr : string)] parses [nexpr] as a named expression
-                 in the current goal, and returns the base64-encoded string of the
-                 corresponding ADef action. *)
-          method getaliasb expr =
-            let doit () =
-              let goal = _self##goal in
-              let expr = String.trim (Js.to_string expr) in
-              let name, expr = Io.parse_nexpr (Io.from_string expr) in
-              let expr, ty = Form.echeck goal.g_env expr in
-              let name = Location.unloc name in
-              let expr, ty = Fo.Translate.(of_expr expr, of_type_ ty) in
-              Api.Logic.ADef (name, ty, expr)
-              |> Fun.flip Marshal.to_string []
-              |> Base64.encode_string |> Js.string
-            in
-            !!doit ()*)
+        (** [this#getaliasb (nexpr : string)] parses [nexpr] as a named expression
+               in the current goal, and returns the base64-encoded string of the
+               corresponding ADef action. *)
+        method getaliasb expr =
+          let doit () =
+            let goal = _self##goal in
+            let expr = String.trim (Js.to_string expr) in
+            let name, expr = Io.parse_nexpr (Io.from_string expr) in
+            let expr, ty = Form.echeck goal.g_env expr in
+            let name = Location.unloc name in
+            let expr, ty = Fo.Translate.(of_expr expr, of_type_ ty) in
+            Api.Logic.ADef (name, ty, expr)
+            |> Fun.flip Marshal.to_string []
+            |> Base64.encode_string |> Js.string
+          in
+          !!doit ()*)
 
     (** [this#move_hyp (from : string) (before : string option)] moves
         hypothesis [from] before hypothesis [before].

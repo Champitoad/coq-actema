@@ -23,20 +23,27 @@ type asource = { kind : akind; selection : Path.t list } [@@deriving show]
 (** A [preaction] is similar to an Actema action [Logic.action], but it contains 
     a bit less information (for instance for hyperlinks). *)
 type preaction =
-  (* The name identifies the hypothesis that solves the goal. *)
+  (* Trivially solve the goal with a hypothesis. *)
   | Exact of Name.t
-  (* The [int] indicates which intro rule to use. *)
+  (* Apply an introduction rule on the conclusion.
+     The [int] indicates which intro rule to use in case of ambiguity
+     (for instance when the goal is a disjunction). *)
   | Intro of int
-  (* The name identifies the hypothesis we are eliminating. *)
+  (* Apply an elimination rule on a hypothesis.
+     The name identifies the hypothesis we are eliminating.
+     The [int] indicates which intro rule to use in case of ambiguity
+     (for instance when the hypothesis is an equality, it indicates in which direction to rewrite) *)
   | Elim of Name.t * int
+  (* Fold all occurences of a local variable. *)
+  | Fold of Name.t
+  (* Unfold all occurences of a local variable. *)
+  | Unfold of Name.t
     (*| Ind of int
       | Simpl of Path.t
       | Red of Path.t
       | Indt of Path.t
       | Case of Path.t
-      | Pbp of Path.t
-      | Fold of Name.t
-      | Unfold of Name.t*)
+      | Pbp of Path.t*)
   | Hyperlink of Link.hyperlink * Link.linkaction list
 [@@deriving show]
 

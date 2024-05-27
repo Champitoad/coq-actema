@@ -199,28 +199,42 @@ type choice = int * (Context.t * Context.t * Term.t) option [@@deriving show]
 type itrace = choice list [@@deriving show]
 
 type action =
-  | AId (* The empty action which does nothing *)
-  | ADuplicate of Name.t (* Duplicate a hypothesis. *)
-  | AClear of Name.t (* Clear a hypothesis. *)
-  | ADef of (Name.t * Term.t * Term.t) (* Introduction of a local definition *)
+  (* The empty action which does nothing *)
+  | AId
+  (* Duplicate the given hypothesis. *)
+  | ADuplicate of Name.t
+  (* Clear the given hypothesis. *)
+  | AClear of Name.t
+  (* Trivially solve the goal with a hypothesis. *)
+  | AExact of Name.t
+  (* Apply an introduction rule on the conclusion.
+     The [int] is used to indicate which introduction rule to use in case of
+     ambiguity (e.g. when the conclusion is a disjunction). *)
   | AIntro of int
-    (* Click on a conclusion.
-       The [int] indicates which introduction rule to use (0, 1, 2, etc.).
-       Usually it is [0], but for instance when the conclusion is a disjunction
-       it can be [0] to choose the left side or [1] to choose the right side. *)
-  | AExact of Name.t (* Proof by assumption *)
-  | AElim of (Name.t * int) (* Click on a hypothesis *)
+  (* Apply an elimination rule on a hypothesis.
+     The name identifies the hypothesis we are eliminating.
+     The [int] indicates which intro rule to use in case of ambiguity
+     (for instance when the hypothesis is an equality, it indicates in which direction to rewrite) *)
+  | AElim of (Name.t * int)
+  (* Generalize a hypothesis or local variable.
+     This changes a goal of the form
+        h : H |- C
+     into
+        |- H -> C
+     More precisely this is dependent generalization : any variables / hypothesis that depend on h
+     are also generalized. *)
+  | AGeneralize of Name.t
+(* Click on a hypothesis *)
+(*| ADef of (Name.t * Term.t * Term.t) (* Introduction of a local definition *)
   | AInd of Name.t (* Simple induction on a variable (of inductive type). *)
   | ASimpl of Path.t (* Simplify contextual action *)
   | ARed of Path.t (* Unfold contextual action *)
   | AIndt of Path.t (* Induction on a variable deep in the goal. *)
   | ACase of Path.t (* Case contextual action *)
   | ACut of Term.t (* Click on +hyp button *)
-  | AGeneralize of Name.t
-    (* Generalization of a hypothesis. This uses [generalize dependent]. *)
   | ALink of (Path.t * Path.t * itrace) (* DnD action for subformula linking *)
   | AInstantiate of (Term.t * Path.t)
-    (* DnD action for instantiating a quantifier *)
+    (* DnD action for instantiating a quantifier *)*)
 [@@deriving show]
 
 (* An action identifier is a pair of an arbitrary string identifier and an abstract goal. *)

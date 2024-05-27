@@ -1,5 +1,4 @@
-(*open Translate
-  open Extlib*)
+open Utils.Pervasive
 open Api
 open Proofview
 open CoqUtils
@@ -750,24 +749,33 @@ exception InvalidPath of Logic.Path.t
       end
     in
 
-    calltac tac args
+    calltac tac args*)
 
-  let execute_helper (a : Logic.action) (coq_goal : Goal.t) : unit tactic =
-    let goal = Translate.translate_goal coq_goal in
-    match a with
-    | Logic.AId -> Tacticals.tclIDTAC
-    | Logic.ALemma full_name -> execute_alemma coq_goal full_name
-    | Logic.AExact id ->
-        let name = Names.Id.of_string id in
-        Tactics.exact_check (EConstr.mkVar name)
-    | Logic.AGeneralize id ->
-        let name = Names.Id.of_string id in
-        Generalize.generalize_dep (EConstr.mkVar name)
-    | Logic.ADef (x, _, e) ->
+let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
+  (*let api_goal = Translate.goal coq_goal in*)
+  match action with
+  | Logic.AId -> Tacticals.tclIDTAC
+  | Logic.ADuplicate hyp_name ->
+      let hyp_name = Lang.Name.show hyp_name in
+      let new_name =
+        Goal.fresh_name ~basename:hyp_name coq_goal () |> Names.Name.mk_name
+      in
+      let hyp = EConstr.mkVar @@ Names.Id.of_string hyp_name in
+      Tactics.pose_proof new_name hyp
+  | Logic.AClear hyp_name ->
+      Tactics.clear [ Names.Id.of_string @@ Lang.Name.show hyp_name ]
+  | Logic.AExact name ->
+      let name = Names.Id.of_string @@ Lang.Name.show name in
+      Tactics.exact_check (EConstr.mkVar name)
+  | Logic.AGeneralize name ->
+      let name = Names.Id.of_string @@ Lang.Name.show name in
+      Generalize.generalize_dep (EConstr.mkVar name)
+  (*| Logic.ADef (x, _, e) ->
         let id = Names.Id.of_string x in
         let name = Names.Name.Name id in
         let body = expr sign [] e in
         Tactics.pose_tac name body
+    | Logic.ALemma full_name -> execute_alemma coq_goal full_name
     | Logic.ACut f ->
         let id = Goal.fresh_name coq_goal () |> Names.Name.mk_name in
         let form =
@@ -779,13 +787,6 @@ exception InvalidPath of Logic.Path.t
     | Logic.ALink (src, dst, itr) -> execute_alink coq_goal sign goal src dst itr
     | Logic.AInstantiate (witness, target) ->
         execute_ainstantiate coq_goal sign goal witness target
-    | Logic.ADuplicate hyp_name ->
-        let new_name =
-          Goal.fresh_name ~basename:hyp_name coq_goal () |> Names.Name.mk_name
-        in
-        let hyp = EConstr.mkVar @@ Names.Id.of_string hyp_name in
-        Tactics.pose_proof new_name hyp
-    | Logic.AClear hyp_name -> Tactics.clear [ Names.Id.of_string hyp_name ]
     | Logic.AInd var_name ->
         let var = EConstr.mkVar @@ Names.Id.of_string var_name in
         Induction.induction false (Some true) var None None
@@ -822,23 +823,11 @@ exception InvalidPath of Logic.Path.t
           | Logic.Concl -> (tac_name, [ path ])
           | _ -> raise (InvalidPath tgt)
         in
-        calltac (kname tac_name) args
-    | _ ->
-        raise
-        @@ UnsupportedAction
-             (a, "This action type is not supported in the plugin.")
-*)
-let execute ((idx, a) : int * Logic.action) : unit tactic =
-  failwith "Actions.execute : todo"
-(*tclFOCUS (idx + 1) (idx + 1) @@ Goal.enter @@ execute_helper a*)
+        calltac (kname tac_name) args*)
+  | _ ->
+      raise
+      @@ UnsupportedAction
+           (action, "This action type is not supported in the plugin.")
 
-let execute_list (prf : (int * Logic.action) list) : unit tactic =
-  let rec aux prf =
-    let open PVMonad in
-    begin
-      match prf with
-      | action :: prf -> execute action >> aux prf
-      | [] -> return ()
-    end
-  in
-  aux prf
+let execute ((idx, a) : int * Logic.action) : unit tactic =
+  tclFOCUS (idx + 1) (idx + 1) @@ Goal.enter @@ execute_helper a

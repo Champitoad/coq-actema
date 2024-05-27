@@ -567,7 +567,7 @@ export default {
 
         duplicateHyp(subgoal, hypHandle) {
             try {
-                let action = subgoal.getduplicateb(hypHandle);
+                let action = subgoal.encodeduplicate(hypHandle);
                 this.sendAction(action);
             } catch (e) {
                 this.showErrorMessage(e);
@@ -577,7 +577,7 @@ export default {
 
         clearHyp(subgoal, hypHandle) {
             try {
-                let action = subgoal.getclearb(hypHandle);
+                let action = subgoal.encodeclear(hypHandle);
                 this.sendAction(action);
             } catch (e) {
                 this.showErrorMessage(e);
@@ -586,7 +586,7 @@ export default {
 
         generalize(subgoal, hypHandle) {
             try {
-                let action = subgoal.getgeneralizeb(hypHandle);
+                let action = subgoal.encodegeneralize(hypHandle);
                 this.sendAction(action);
             } catch (e) {
                 this.showErrorMessage(e);

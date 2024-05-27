@@ -12,8 +12,6 @@ exception UnsupportedAction of Logic.action * string
 exception UnexpectedDnD
 exception InvalidPath of Logic.Path.t
 
-(** Execute a single action. The integer is the index of the subgoal the action takes place in. *)
+(** Execute a single action. The integer is the index of the subgoal the action takes place in.
+    To execute a list of actions in order consider using [PVMonad.mapM_ execute]. *)
 val execute : int * Logic.action -> unit tactic
-
-(** Convenience function to execute a list of actions, in order. *)
-val execute_list : (int * Logic.action) list -> unit tactic

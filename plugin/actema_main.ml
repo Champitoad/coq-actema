@@ -153,7 +153,7 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
         then interactive ()
         else
           match Storage.load_proof id with
-          | Some prf -> Actions.execute_list prf
+          | Some prf -> mapM_ Actions.execute prf
           | _ -> interactive ()
     end
 

@@ -11,10 +11,13 @@ module type S = sig
   val ( <*> ) : ('a -> 'b) t -> 'a t -> 'b t
   val ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t
   val ( =<< ) : ('a -> 'b t) -> 'a t -> 'b t
+  val ( >> ) : 'a t -> 'b t -> 'b t
+  val ( << ) : 'a t -> 'b t -> 'a t
   val ( let+ ) : 'a t -> ('a -> 'b) -> 'b t
   val ( let* ) : 'a t -> ('a -> 'b t) -> 'b t
   val sequence : 'a t list -> 'a list t
   val mapM : ('a -> 'b t) -> 'a list -> 'b list t
+  val mapM_ : ('a -> 'b t) -> 'a list -> unit t
   val foldM : ('acc -> 'a -> 'acc t) -> 'acc -> 'a list -> 'acc t
 end
 
@@ -39,6 +42,8 @@ struct
     let* a = x in
     return @@ f a
 
+  let ( >> ) x y = x >>= fun _ -> y
+  let ( << ) y x = x >>= fun _ -> y
   let ( <$> ) = map
 
   let ( <*> ) mf m =
@@ -53,6 +58,10 @@ struct
     match ms with [] -> return [] | m :: ms -> List.cons <$> m <*> sequence ms
 
   let mapM f xs = sequence @@ List.map f xs
+
+  let mapM_ f xs =
+    let+ _ = mapM f xs in
+    ()
 
   let foldM f acc xs =
     List.fold_left

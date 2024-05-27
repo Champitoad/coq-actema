@@ -1,13 +1,15 @@
 open Utils.Pervasive
 open Proofview
 
-(** A thin wrapper around Proofview.Monad.
-    Introduces some standard monad notations.*)
-module PVMonad = struct
-  include Proofview.Monad
+(** A thin wrapper around Proofview.Monad. *)
+module PVMonad = Utils.Monad.Make (struct
+  open Proofview.Monad
 
-  let ( let* ) = ( >>= )
-end
+  type nonrec 'a t = 'a t
+
+  let return = return
+  let bind x f = x >>= f
+end)
 
 (** Use this module when logging in the plugin. *)
 module Log = struct

@@ -35,6 +35,12 @@ module type S = sig
   (** Reversed infix bind. *)
   val ( =<< ) : ('a -> 'b t) -> 'a t -> 'b t
 
+  (** Infix bind that doesn't use its argument. *)
+  val ( >> ) : 'a t -> 'b t -> 'b t
+
+  (** Reversed infix bind that doesn't use its argument. *)
+  val ( << ) : 'a t -> 'b t -> 'a t
+
   (** Let-style map. *)
   val ( let+ ) : 'a t -> ('a -> 'b) -> 'b t
 
@@ -46,6 +52,9 @@ module type S = sig
 
   (** Map a monadic action over a list. *)
   val mapM : ('a -> 'b t) -> 'a list -> 'b list t
+
+  (** Same as [mapM], but discards the result. *)
+  val mapM_ : ('a -> 'b t) -> 'a list -> unit t
 
   (** Fold a monadic action over a list. *)
   val foldM : ('acc -> 'a -> 'acc t) -> 'acc -> 'a list -> 'acc t
