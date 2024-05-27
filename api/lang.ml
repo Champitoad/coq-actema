@@ -184,6 +184,21 @@ end
 (** Term utility functions. *)
 
 module TermUtils = struct
+  let rec alpha_equiv (t1 : Term.t) (t2 : Term.t) : bool =
+    match (t1, t2) with
+    | Var v1, Var v2 when v1 = v2 -> true
+    | Cst c1, Cst c2 when Name.equal c1 c2 -> true
+    | Sort s1, Sort s2 when s1 = s2 -> true
+    | Lambda (_, ty1, body1), Lambda (_, ty2, body2) ->
+        alpha_equiv ty1 ty2 && alpha_equiv body1 body2
+    | Prod (_, ty1, body1), Prod (_, ty2, body2) ->
+        alpha_equiv ty1 ty2 && alpha_equiv body1 body2
+    | Arrow (a1, b1), Arrow (a2, b2) -> alpha_equiv a1 a2 && alpha_equiv b1 b2
+    | App (f1, args1), App (f2, args2) ->
+        List.fold_left ( && ) (alpha_equiv f1 f2)
+          (List.map2 alpha_equiv args1 args2)
+    | _ -> false
+
   let rec lift k n t =
     match (t : Term.t) with
     | Var i when i >= k -> Term.mkVar (i + n)

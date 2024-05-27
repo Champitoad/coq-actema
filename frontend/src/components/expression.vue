@@ -50,15 +50,13 @@ export default {
         },
 
         toHTML: function () {
-            return this.expression.html();
+            let html = this.expression.html();
+            // We have to replace newlines in the HTML by <br> tags.
+            return html.split(/\r?\n/).join("<br/>");
         },
 
         toString: function () {
             return this.expression.name;
-        },
-
-        toMathML: function () {
-            return this.expression.mathml();
         },
 
         setMetadata: function (metadata) {

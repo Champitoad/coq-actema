@@ -112,49 +112,6 @@ module Proof = struct
     (* Don't forget to return the indices of the new goals. *)
     (new_ids, { proof with p_goals; p_meta = ref p_meta })
 
-  let ivariants proof ~goal_id =
-    match (byid proof goal_id).g_concl with
-    | App (Cst name, _) ->
-        if name = Name.eq
-        then [ "reflexivity" ]
-        else if name = Name.and_
-        then [ "split" ]
-        else if name = Name.or_
-        then [ "left"; "right" ]
-        else if name = Name.equiv
-        then [ "split" ]
-        else if name = Name.not
-        then [ "intro" ]
-        else if name = Name.ex
-        then [ "exists" ]
-        else []
-    | Cst name when name = Name.true_ -> [ "constructor" ]
-    | Arrow _ | Prod _ | Lambda _ -> [ "intro" ]
-    | _ -> []
-
-  let evariants proof ~goal_id ~hyp_name =
-    match (Hyps.by_name (byid proof goal_id).g_hyps hyp_name).h_form with
-    | App (Cst name, _) ->
-        if name = Name.eq
-        then [ "rewrite->"; "rewrite<-" ]
-        else if name = Name.equiv
-        then [ "destruct" ]
-        else if name = Name.or_
-        then [ "destruct" ]
-        else if name = Name.not
-        then [ "destruct " ]
-        else if name = Name.ex
-        then [ "destruct" ]
-        else []
-    | Cst name ->
-        if name = Name.true_
-        then [ "destruct" ]
-        else if name = Name.false_
-        then [ "destruct" ]
-        else []
-    | Arrow _ -> [ "apply" ]
-    | _ -> []
-
   let move proof ~goal_id ~hyp_name ~dest_name =
     let goal = byid proof goal_id in
     let hyps = Hyps.move goal.g_hyps hyp_name dest_name in

@@ -519,7 +519,7 @@ export default {
 
         sendActionCode(actionCode) {
             try {
-                let action = window.goal.getactionb(actionCode);
+                let action = window.goal.encodeaction(actionCode);
                 this.sendAction(action);
             } catch (e) {
                 this.showErrorMessage(e);

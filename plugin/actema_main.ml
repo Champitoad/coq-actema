@@ -112,6 +112,7 @@ let interactive_proof () : proof tactic =
           failwith
             "Actema_main.interactive_proof: call handle_lemmas on the action."
       | Do (idx, a) ->
+          Log.printf "Received action %d :: %s" idx (Logic.show_action a);
           !hist.before <- (idx, a) :: !hist.before;
           continue idx a
       | Done -> return (Stdlib.List.rev !hist.before)

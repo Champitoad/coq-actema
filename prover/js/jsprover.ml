@@ -102,16 +102,15 @@ let rec js_proof_engine (proof : Proof.t) =
     method closed = Js.bool (Proof.is_closed proof)
 
     (* Return the given action as a binary, base64-encoded string *)
-    (*method getactionb action =
-      let pr =
-        action
-        |> !!(Export.export_action (Proof.hidmap _self##.proof) _self##.proof)
-      in
-      js_log (Api.Logic.show_action pr);
-      pr |> Fun.flip Marshal.to_string [] |> Base64.encode_string |> Js.string*)
+    method encodeaction (goal_id, preaction) =
+      let action = !!(Export.export_action _self##.proof goal_id) preaction in
+      Js_log.log @@ Api.Logic.show_action action;
+      action
+      |> Fun.flip Marshal.to_string []
+      |> Base64.encode_string |> Js.string
 
     (* Get the meta-data attached to this proof engine *)
-    method getmeta = Js.Opt.option (Proof.get_meta proof MProof)
+    method getmeta = Js.Opt.option @@ Proof.get_meta proof MProof
 
     (* Attach meta-data to the proof engine *)
     method setmeta meta = Proof.set_meta proof MProof (Js.Opt.to_option meta)

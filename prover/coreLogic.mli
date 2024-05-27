@@ -84,12 +84,6 @@ module Proof : sig
 
   (** Move a hypothesis BEFORE another hypothesis. *)
   val move : t -> goal_id:int -> hyp_name:Name.t -> dest_name:Name.t option -> t
-
-  (** Get all the introduction variants (in a given goal). *)
-  val ivariants : t -> goal_id:int -> string list
-
-  (** Get all the elimination variants of a given hypothesis (in a given goal). *)
-  val evariants : t -> goal_id:int -> hyp_name:Name.t -> string list
 end
 
 (********************************************************************************)

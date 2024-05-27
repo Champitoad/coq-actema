@@ -23,6 +23,8 @@ type asource = { kind : akind; selection : Path.t list } [@@deriving show]
 (** A [preaction] is similar to an Actema action [Logic.action], but it contains 
     a bit less information (for instance for hyperlinks). *)
 type preaction =
+  (* The name identifies the hypothesis that solves the goal. *)
+  | Exact of Name.t
   (* The [int] indicates which intro rule to use. *)
   | Intro of int
   (* The name identifies the hypothesis we are eliminating. *)

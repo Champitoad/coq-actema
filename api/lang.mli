@@ -256,6 +256,10 @@ end
 (** Term utility functions. *)
 
 module TermUtils : sig
+  (** [alpha_equiv t1 t2] checks whether [t1] and [t2] are alpha-equivalent, 
+       i.e. are equal up to binder names. *)
+  val alpha_equiv : Term.t -> Term.t -> bool
+
   (** [lift k n t] adds [n] to every free variable in [t] that is at index at least [k].
       [n] can be negative. *)
   val lift : int -> int -> Term.t -> Term.t

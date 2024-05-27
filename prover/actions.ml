@@ -11,6 +11,7 @@ type akind = Click of Path.t | DnD of Path.t * Path.t option | Ctxt
 type asource = { kind : akind; selection : Path.t list } [@@deriving show]
 
 type preaction =
+  | Exact of Name.t
   | Intro of int
   | Elim of Name.t * int
   | Hyperlink of Link.hyperlink * Link.linkaction list
@@ -197,13 +198,58 @@ let ctxt_actions (sel : Path.t list) (proof : Proof.t) : aoutput list = []
 (*let selpred = selpred_add [ single_subterm_sel ] in
   selpred proof sel*)
 
+(** Get all the introduction variants of a given goal. *)
+let intro_variants goal : string list =
+  match goal.g_concl with
+  | App (Cst name, _) ->
+      if name = Name.eq
+      then [ "reflexivity" ]
+      else if name = Name.and_
+      then [ "split" ]
+      else if name = Name.or_
+      then [ "left"; "right" ]
+      else if name = Name.equiv
+      then [ "split" ]
+      else if name = Name.not
+      then [ "intro" ]
+      else if name = Name.ex
+      then [ "exists" ]
+      else []
+  | Cst name when name = Name.true_ -> [ "constructor" ]
+  | Arrow _ | Prod _ | Lambda _ -> [ "intro" ]
+  | _ -> []
+
+(** Get all the elimination variants of a given hypothesis. *)
+let elim_variants hyp : string list =
+  match hyp.h_form with
+  | App (Cst name, _) ->
+      if name = Name.eq
+      then [ "rewrite->"; "rewrite<-" ]
+      else if name = Name.equiv
+      then [ "destruct" ]
+      else if name = Name.or_
+      then [ "destruct" ]
+      else if name = Name.not
+      then [ "destruct " ]
+      else if name = Name.ex
+      then [ "destruct" ]
+      else []
+  | Cst name ->
+      if name = Name.true_
+      then [ "destruct" ]
+      else if name = Name.false_
+      then [ "destruct" ]
+      else []
+  | Arrow _ -> [ "apply" ]
+  | _ -> []
+
 let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
     aoutput list =
   let goal, item, _, _ = PathUtils.destr path proof in
   match item with
-  (* Enumerate all the introduction rules we can apply on the conclusion. *)
+  (* On the conclusion, we can apply an introduction rule. *)
   | Concl concl ->
-      let ivariants = Proof.ivariants proof ~goal_id:goal.g_id in
+      let ivariants = intro_variants goal.g_pregoal in
       let bv = List.length ivariants <= 1 in
       List.mapi
         begin
@@ -222,24 +268,46 @@ let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
             }
         end
         ivariants
-  (* Enumerate all the elimination rules we can apply on the hypothesis. *)
+  (* On a hypothesis, we can apply an elimination rule, or use the exact tactic. *)
   | Hyp (hyp_name, _) ->
-      let evariants = Proof.evariants proof ~goal_id:goal.g_id ~hyp_name in
+      let hyp = Hyps.by_name goal.g_pregoal.g_hyps hyp_name in
+      (* Elimination. *)
+      let evariants = elim_variants hyp in
       let bv = List.length evariants <= 1 in
-      List.mapi
-        (fun i description ->
-          let highlight =
-            Path.make goal.g_id ~kind:(Hyp hyp_name)
-              ~sub:(if bv then [] else rebuild_pathd (List.length evariants) i)
-          in
-          { description
-          ; icon = None
-          ; highlights = [ highlight ]
-          ; kind = Click highlight
-          ; goal_id = goal.g_id
-          ; preaction = Elim (hyp_name, i)
-          })
-        evariants
+      let elim_actions =
+        List.mapi
+          (fun i description ->
+            let highlight =
+              Path.make goal.g_id ~kind:(Hyp hyp_name)
+                ~sub:
+                  (if bv then [] else rebuild_pathd (List.length evariants) i)
+            in
+            { description
+            ; icon = None
+            ; highlights = [ highlight ]
+            ; kind = Click highlight
+            ; goal_id = goal.g_id
+            ; preaction = Elim (hyp_name, i)
+            })
+          evariants
+      in
+      (* Exact. *)
+      let exact_actions =
+        if TermUtils.alpha_equiv hyp.h_form goal.g_pregoal.g_concl
+        then
+          let path = Path.make goal.g_id ~kind:(Hyp hyp_name) in
+          [ { description = "exact"
+            ; icon = None
+            ; highlights = [ path ]
+            ; kind = Click path
+            ; goal_id = goal.g_id
+            ; preaction = Exact hyp_name
+            }
+          ]
+        else []
+      in
+      (* Concatenate the results. *)
+      elim_actions @ exact_actions
   (*| `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
         let rp = Vars.getid goal.g_env x |> Option.get in
         let hg =

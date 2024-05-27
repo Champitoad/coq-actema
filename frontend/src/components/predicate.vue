@@ -55,14 +55,6 @@ export default {
             return html.split(/\r?\n/).join("<br/>");;
         },
 
-        toString: function () {
-            return this.predicate.term.tostring();
-        },
-
-        toMathML: function () {
-            return this.predicate.term.mathml();
-        },
-
         setMetadata: function (metadata) {
             this.predicate.setmeta(metadata);
         },

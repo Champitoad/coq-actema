@@ -1,11 +1,9 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
-Lemma test : (4 + 0 = 55).
-  set (f := fun n => 42 + n).
-  actema_force.
+Parameter H : Prop.
 
-Lemma test : True /\ False.
+Lemma test (h : H) : H.
 actema_force.
 
 Lemma test (v : nat) : v = 0.

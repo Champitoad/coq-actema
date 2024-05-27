@@ -1,16 +1,9 @@
-(*open Utils
-  open Fo
-  open Fo.Translate
-  open Proof
-  open Hidmap
-  open State
-  open CoreLogic
-  open Interact
-  open Api
+open Utils.Pervasive
+open Api
 
-  exception UnsupportedAction of Actions.action_type
+exception UnsupportedAction of Actions.preaction
 
-  let of_ctxt (ctxt : IPath.ctxt) : Logic.ctxt State.t =
+(*let of_ctxt (ctxt : IPath.ctxt) : Logic.ctxt State.t =
     let* handle =
       match ctxt.kind with
       | `Concl -> return "concl"
@@ -41,19 +34,14 @@
               (fun (le1, le2, e) -> (of_lenv le1, of_lenv le2, of_expr e))
               w )
       end
-      itrace
+      itrace*)
 
-  let of_action (proof : Proof.proof) ((hd, a) : Handle.t * Actions.action_type) :
-      Logic.action State.t =
-    match a with
-    | `Intro side -> return (Logic.AIntro side)
-    | `Elim (subhd, i) ->
-        let goal = Proof.byid proof hd in
-        let hyp = (Proof.Hyps.byid goal.g_hyps subhd).h_form in
-        let exact = Form.f_equal goal.g_env hyp goal.g_goal in
-        let* uid = find subhd in
-        return (if exact then Logic.AExact uid else Logic.AElim (uid, i))
-    | `Lemma name -> return (Logic.ALemma name)
+let of_action proof goal_id preaction : Logic.action =
+  match (preaction : Actions.preaction) with
+  | Exact hyp_name -> Logic.AExact hyp_name
+  | Intro side -> Logic.AIntro side
+  | Elim (hyp_name, i) -> Logic.AElim (hyp_name, i)
+  (*| `Lemma name -> return (Logic.ALemma name)
     | `Ind subhd ->
         js_log @@ Format.sprintf "Export.of_action `Ind %d\n" (Handle.toint subhd);
         let* state = State.get in
@@ -91,8 +79,7 @@
             return (Logic.AInstantiate (of_expr wit, tgt))
         | _, _ :: _ :: _ -> failwith "Cannot handle multiple link actions yet"
         | _, _ -> raise @@ UnsupportedAction a
-      end
-    | _ -> raise @@ UnsupportedAction a
+      end*)
+  | _ -> raise @@ UnsupportedAction preaction
 
-  let export_action hm proof a = run (of_action proof a) hm
-*)
+let export_action proof goal_id a = of_action proof goal_id a
