@@ -29,11 +29,56 @@ type aoutput =
   }
 [@@deriving show]
 
+(** [is_nat_constant t] checks if [t] is a natural number of the form [S (S (... O))]. *)
+let rec is_nat_constant (t : Term.t) : bool =
+  match t with
+  | Cst c when c = Name.zero -> true
+  | App (f, [ arg ]) when f = Term.mkCst Name.succ -> is_nat_constant arg
+  | _ -> false
+
+let rec displayed_subs_rec env (term : Term.t) sub acc : int list list =
+  match term with
+  | Var _ | Cst _ | Sort _ -> sub :: acc
+  | Arrow (t1, t2) ->
+      let acc = displayed_subs_rec env t1 (0 :: sub) acc in
+      let acc = displayed_subs_rec env t2 (1 :: sub) acc in
+      sub :: acc
+  | Lambda (x, ty, body) | Prod (x, ty, body) ->
+      let acc = displayed_subs_rec env ty (0 :: sub) acc in
+      let acc = displayed_subs_rec env body (1 :: sub) acc in
+      sub :: acc
+  | _ when is_nat_constant term -> sub :: acc
+  | App (f, args) ->
+      let elts =
+        match f with
+        | Cst name ->
+            let info =
+              match Name.Map.find_opt name env.Env.pp_info with
+              | Some info -> info
+              | None -> Env.default_pp_info (Name.show name)
+            in
+            (0, f) :: Env.filter_args info (indices ~start:1 args)
+        | _ -> indices (f :: args)
+      in
+      sub
+      :: List.fold_left
+           (fun acc (i, x) -> displayed_subs_rec env x (i :: sub) acc)
+           acc elts
+
+(** [displayed_subs t] returns the list of all paths [sub] that 
+    points to a subterm of [t] that is actually displayed to the user.
+    For instance it doesn't return paths inside natural number constant,
+    or paths to implicit arguments in applications. *)
+let displayed_subs env t = displayed_subs_rec env t [] [] |> List.map List.rev
+
 (* TODO : check this works when [path] points to a variable. *)
 let all_subpaths proof path : Path.t list =
-  let term = PathUtils.term path proof in
-  let subs = TermUtils.all_subs term in
-  List.map (fun sub -> Path.{ goal = path.goal; kind = path.kind; sub }) subs
+  let goal, _, _, term = PathUtils.destr path proof in
+  let subs = displayed_subs goal.g_pregoal.g_env term in
+  List.map
+    (fun sub ->
+      Path.{ goal = path.goal; kind = path.kind; sub = path.sub @ sub })
+    subs
 
 (* TODO : handle variables. *)
 let all_goal_subpaths proof goal : Path.t list =
@@ -59,7 +104,7 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
 
   (* Compute the destination selection, i.e. all terms that
      are selected but in a different item from [src]. *)
-  let dst_sel = List.remove_if (Path.same_item input_src) selection in
+  let dst_sel = List.filter (not <<< Path.same_item input_src) selection in
 
   (* Compute the hyperlink sources. *)
   let hyperlink_sources =
@@ -85,7 +130,7 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
         (* When the destination selection is empty and the destination path does not exist,
            we use all subpaths of all items, except the source item. *)
         all_goal_subpaths proof goal
-        |> List.remove_if (Path.same_item input_src)
+        |> List.filter (not <<< Path.same_item input_src)
         |> List.(map singleton)
     | dst_sel, _ ->
         (* When the destination selection is non-empty,
@@ -93,13 +138,20 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
         [ dst_sel ]
   in
 
+  Js_log.log "**********************************************************";
+  Js_log.log
+  @@ Format.sprintf "Sources : \n%s\nDests : \n%s\n"
+       (List.to_string (List.to_string Path.to_string) hyperlink_sources)
+       (List.to_string (List.to_string Path.to_string) hyperlink_dests);
+
   (* The hyperlink predicate we use for DnD actions. *)
   (*let hlpred_only_sel (pred : Pred.hlpred) : Pred.hlpred =
      fun proof link -> if link = (src_sel, dst_sel) then pred proof link else []
     in*)
   let hlpred =
     Pred.add
-      [ Pred.lift Pred.unifiable
+      [ Pred.wf_subform
+      ; Pred.deep_rewrite
         (*; Pred.if_empty Pred.deep_rewrite (Pred.rewrite |> hlpred_only_sel)
           ; Pred.fold |> hlpred_only_sel
           ; Pred.instantiate*)
@@ -113,9 +165,15 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
   let linkactions =
     hlpred proof (hyper_src, hyper_dst) |> List.filter_map Link.remove_nothing
   in
+  (* Make sure there is at least one linkaction. *)
+  let* _ = guard (linkactions <> []) in
   (* Build the action output. *)
   let* src = hyper_src in
   let* dst = hyper_dst in
+  Js_log.log
+  @@ Format.sprintf "%s |- %s --> %s\n" (Path.to_string src)
+       (Path.to_string dst)
+       (List.to_string show_linkaction linkactions);
   return
     { description = "Hyperlink"
     ; icon = None

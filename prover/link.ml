@@ -121,7 +121,7 @@ module Pred = struct
       | Cons (subst, _) -> [ Subform subst ]
       (* The terms are not unifiable. *)
       | Nil -> []
-    with InvalidSubtermPath _ | Invalid_argument _ | Path.InvalidPath _ ->
+    with InvalidSubtermPath _ | Invalid_argument _ ->
       (* We got an exception : most likely [traverse] raised an exception because a path was invalid. *)
       []
 
@@ -133,7 +133,7 @@ module Pred = struct
       match (src_pol, dst_pol) with
       | Neg, Pos | Pos, Neg | Sup, _ | _, Sup -> [ Nothing ]
       | _ -> []
-    with Invalid_argument _ | InvalidSubtermPath _ | Path.InvalidPath _ -> []
+    with Invalid_argument _ | InvalidSubtermPath _ -> []
 
   let neg_eq_operand : lpred =
    fun proof (src, dst) ->
@@ -150,29 +150,31 @@ module Pred = struct
         (* TODO: should we also allow the [Sup] polarity ? *)
         | Neg, _, App (Cst eq, [ _; _; _ ]) when Name.equal eq Name.eq -> true
         | _ -> false
-      with Invalid_argument _ | InvalidSubtermPath _ | Path.InvalidPath _ ->
-        false
+      with Invalid_argument _ | InvalidSubtermPath _ -> false
     in
     if check src || check dst then [ Nothing ] else []
 
   let intuitionistic : lpred =
-   fun proof (src, dst) -> failwith "intuitionistic: todo"
-  (*let neg_count (p : IPath.t) =
-      let _, it, (sub, _) = IPath.destr proof p in
-      let f = form_of_item it in
-      let n = Polarity.neg_count f sub in
-      match it with
-      | `C _ -> n
-      | `H _ -> n + 1
-      | `V _ -> raise (Invalid_argument "Expected a formula item")
+   fun proof (src, dst) ->
+    let neg_count (path : Path.t) : int =
+      let goal, item, _, _ = PathUtils.destr path proof in
+      let negs =
+        Polarity.neg_count goal.g_pregoal.g_env (term_of_item item) path.sub
+      in
+      match item with
+      | Concl _ -> negs
+      | Hyp _ -> negs + 1
+      | Var _ ->
+          raise
+          @@ Invalid_argument "Link.intuitionistic : expected a formula item"
     in
 
     try
       match (neg_count src, neg_count dst) with
       | m, n when (m > 0 && n > 0) || (m = 0 && n <= 1) || (m <= 1 && n = 0) ->
-          [ `Nothing ]
+          [ Nothing ]
       | _ -> []
-    with InvalidSubFormPath _ | Invalid_argument _ -> []*)
+    with InvalidSubtermPath _ | Invalid_argument _ -> []
 
   let wf_subform : hlpred =
     mult [ lift opposite_pol_formulas; lift unifiable; lift intuitionistic ]

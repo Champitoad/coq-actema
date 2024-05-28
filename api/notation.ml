@@ -21,21 +21,6 @@ end))
 let span ?(attribs = []) (x : annot Pp.doc) : annot Pp.doc =
   Pp.annotate ("span", attribs) x
 
-(** [filter_args implicits args] filters out the implicit arguments in [args]. *)
-let filter_args implicits args =
-  let rec loop implicits args kept i =
-    match (args, implicits) with
-    | arg :: args, imp :: implicits ->
-        if i = imp
-        then loop implicits args kept (i + 1)
-        else loop (imp :: implicits) args (arg :: kept) (i + 1)
-    | _, [] ->
-        (* All the remaining arguments are explicit. *) List.rev kept @ args
-    | [], _ :: _ ->
-        (* There are remaining implicits but no more args. *) assert false
-  in
-  loop (List.sort Int.compare implicits) args [] 0
-
 (** Get the formatting information for a name. *)
 let name_info env name =
   match Name.Map.find_opt name env.Env.pp_info with
@@ -75,9 +60,6 @@ let is_exist = function
 
 let extend i (path : Path.t) : Path.t = { path with sub = i :: path.sub }
 let reverse (path : Path.t) : Path.t = { path with sub = List.rev path.sub }
-
-(** [indices ?start=0 [x0; x1; ... xn]] returns the list [(start, x0); (start+1; x1); ... (start+n, xn)]. *)
-let indices ?(start = 0) xs = List.mapi (fun i x -> (start + i, x)) xs
 
 (** [pp_term ?paren env path t] pretty-prints the term [t]. 
     The argument [path] keeps track of the path to the term [t], 
@@ -152,9 +134,7 @@ let rec pp_term ?(paren = false) env (path : Path.t) ctx (t : Term.t) :
           match f with
           | Cst name ->
               let info = name_info env name in
-              let args =
-                filter_args info.implicit_args (indices ~start:1 args)
-              in
+              let args = Env.filter_args info (indices ~start:1 args) in
               begin
                 match (info.position, args) with
                 | Prefix, args -> (0, f) :: args

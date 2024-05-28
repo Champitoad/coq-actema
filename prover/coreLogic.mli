@@ -148,8 +148,8 @@ module Polarity : sig
       @raise InvalidSubtermPath if [path] is invalid or escapes the first-order skeleton. *)
   val of_subterm : Env.t -> t -> Term.t -> int list -> t * Context.t * Term.t
 
-  (** [neg_count t sub] counts the number of negations in [t] along path [sub] *)
-  (*val neg_count : Term.t -> int list -> int*)
+  (** [neg_count env t sub] counts the number of negations in [t] along path [sub] *)
+  val neg_count : Env.t -> Term.t -> int list -> int
 
   (** [of_item it] returns the polarity of the item [it]. *)
   val of_item : item -> t

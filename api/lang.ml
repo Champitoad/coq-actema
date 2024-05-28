@@ -152,6 +152,20 @@ module Env = struct
 
   let default_pp_info symbol = { symbol; implicit_args = []; position = Prefix }
 
+  let filter_args pp_info args =
+    let rec loop implicits args kept i =
+      match (args, implicits) with
+      | arg :: args, imp :: implicits ->
+          if i = imp
+          then loop implicits args kept (i + 1)
+          else loop (imp :: implicits) args (arg :: kept) (i + 1)
+      | _, [] ->
+          (* All the remaining arguments are explicit. *) List.rev kept @ args
+      | [], _ :: _ ->
+          (* There are remaining implicits but no more args. *) assert false
+    in
+    loop (List.sort Int.compare pp_info.implicit_args) args [] 0
+
   let test_env =
     let open Term in
     let nat = mkCst @@ Name.nat in
@@ -292,25 +306,6 @@ module TermUtils = struct
   let subterm ?(context = Context.empty) t sub =
     let exn = InvalidSubtermPath (t, sub) in
     subterm_rec exn context t sub
-
-  let rec all_subs_rec (term : Term.t) sub acc : int list list =
-    match term with
-    | Var _ | Cst _ | Sort _ -> sub :: acc
-    | Arrow (t1, t2) ->
-        let acc = all_subs_rec t1 (0 :: sub) acc in
-        let acc = all_subs_rec t2 (1 :: sub) acc in
-        sub :: acc
-    | Lambda (x, ty, body) | Prod (x, ty, body) ->
-        let acc = all_subs_rec ty (0 :: sub) acc in
-        let acc = all_subs_rec body (1 :: sub) acc in
-        sub :: acc
-    | App (f, args) ->
-        sub
-        :: BatList.fold_lefti
-             (fun acc i x -> all_subs_rec x (i :: sub) acc)
-             acc (f :: args)
-
-  let all_subs term = all_subs_rec term [] [] |> List.(map rev)
 
   let rec trim_rec (t : Term.t) : Term.t =
     match t with

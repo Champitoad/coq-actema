@@ -7,7 +7,7 @@
 
 (**************************************************************************************)
 
-(** All the operations a monad gives us access to. *)
+(** The signature for a standard monad. *)
 module type S = sig
   type 'a t
 
@@ -23,28 +23,28 @@ module type S = sig
   (** Monadic join. *)
   val join : 'a t t -> 'a t
 
-  (** Infix map. *)
+  (** Infix [map]. *)
   val ( <$> ) : ('a -> 'b) -> 'a t -> 'b t
 
   (** Applicative stuff. *)
   val ( <*> ) : ('a -> 'b) t -> 'a t -> 'b t
 
-  (** Infix bind. *)
+  (** Infix [bind]. *)
   val ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t
 
-  (** Reversed infix bind. *)
+  (** Reversed infix [bind]. *)
   val ( =<< ) : ('a -> 'b t) -> 'a t -> 'b t
 
-  (** Infix bind that doesn't use its argument. *)
+  (** Infix [bind] that doesn't use its argument. *)
   val ( >> ) : 'a t -> 'b t -> 'b t
 
-  (** Reversed infix bind that doesn't use its argument. *)
+  (** Reversed infix [bind] that doesn't use its argument. *)
   val ( << ) : 'a t -> 'b t -> 'a t
 
-  (** Let-style map. *)
+  (** Let-style [map]. *)
   val ( let+ ) : 'a t -> ('a -> 'b) -> 'b t
 
-  (** Let-style bind. *)
+  (** Let-style [bind]. *)
   val ( let* ) : 'a t -> ('a -> 'b t) -> 'b t
 
   (** Sequence a list of monadic actions, one after the other. *)
@@ -60,6 +60,27 @@ module type S = sig
   val foldM : ('acc -> 'a -> 'acc t) -> 'acc -> 'a list -> 'acc t
 end
 
+(** The signature for a monad that is also a monoid.
+    For instance lists and options satisfy this interface. *)
+module type SPlus = sig
+  include S
+
+  (** The monoid identity. This generalizes [List.nil]. *)
+  val mzero : 'a t
+
+  (** The monoid (associative) operation. This generalizes [List.append]. *)
+  val mplus : 'a t -> 'a t -> 'a t
+
+  (** Infix [mplus]. *)
+  val ( <|> ) : 'a t -> 'a t -> 'a t
+
+  (** Take the sum of a list of monadic values. This generalizes [List.concat]. *)
+  val msum : 'a t list -> 'a t
+
+  (** Contional failure. It is defined by [guard true = return ()] and [guard false = mzero]. *)
+  val guard : bool -> unit t
+end
+
 (**************************************************************************************)
 
 (** Make a monad from a minimal set of operations. *)
@@ -70,17 +91,27 @@ module Make (M : sig
   val bind : 'a t -> ('a -> 'b t) -> 'b t
 end) : S with type 'a t = 'a M.t
 
+(** Make a monad-plus from a minimal set of operations. *)
+module MakePlus (M : sig
+  type 'a t
+
+  val return : 'a -> 'a t
+  val bind : 'a t -> ('a -> 'b t) -> 'b t
+  val mzero : 'a t
+  val mplus : 'a t -> 'a t -> 'a t
+end) : SPlus with type 'a t = 'a M.t
+
 (**************************************************************************************)
 (** Some useful monads. *)
 
 (** Standard option monad. *)
-module Option : S with type 'a t = 'a option
+module Option : SPlus with type 'a t = 'a option
 
 (** Standard list monad. *)
-module List : S with type 'a t = 'a list
+module List : SPlus with type 'a t = 'a list
 
 (** Lazy list monad. *)
-module Seq : S with type 'a t = 'a Seq.t
+module Seq : SPlus with type 'a t = 'a Seq.t
 
 (** Standard reader monad over some type [T.t].
     This provides read-only access to a value of type [T.t]. *)

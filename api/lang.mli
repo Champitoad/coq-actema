@@ -250,6 +250,9 @@ module Env : sig
 
   (** [default_pp_info symbol] prints [symbol] in prefix position with no implicit arguments. *)
   val default_pp_info : string -> pp_info
+
+  (** [filter_args pp_info args] filters out the implicit arguments in [args]. *)
+  val filter_args : pp_info -> 'a list -> 'a list
 end
 
 (***************************************************************************************)
@@ -283,10 +286,6 @@ module TermUtils : sig
       context that [t] lives in : by default it is [Context.empty].
       Raises [InvalidSubtermPath] if [sub] is not a valid path in [t]. *)
   val subterm : ?context:Context.t -> Term.t -> int list -> Context.t * Term.t
-
-  (** [all_subs t] returns the list of all paths [sub] that 
-      points to a subterm of [t]. *)
-  val all_subs : Term.t -> int list list
 
   (** [trim_products term] replaces all dependent products [forall x : T, U]
       where [x] is not free in [U] by non-dependent products [T -> U]. *)

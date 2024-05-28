@@ -4493,6 +4493,7 @@ Ltac pbp p := point_goal shoot p.
 
 Ltac pbp_hyp h p := point_hyp h shoot p.
 
+
 Ltac rew_all_left h :=
   match type of h with
   | ?a = ?b =>

@@ -218,49 +218,29 @@ module Polarity = struct
     (pol, ctx, t)
 
   (** This assumes that [t] has type [Prop]. *)
-  (*let rec neg_count_rec exn (negs : int) context t sub :
+  let rec neg_count_rec negs context (fo : FirstOrder.t) sub :
       int * (Context.t * Term.t) =
-    match sub with
-    | [] -> (negs, (context, t))
-    | idx :: sub -> begin
-        match (t : Term.t) with
-        (* Invalid terms at this point. *)
-        | Var _ | Cst _ | Sort _ -> raise exn
-        (* Traverse a [not]. *)
-        | App (Cst f, [ arg ]) when Name.equal f Name.not && idx = 1 ->
-            neg_count_rec exn (negs + 1) context arg sub
-        (* Implication. *)
-        | Arrow (t1, t2) -> begin
-            match idx with
-            | 0 -> neg_count_rec exn (negs + 1) context t1 sub
-            | 1 -> neg_count_rec exn negs context t2 sub
-            | _ -> raise exn
-          end
-        (* Any other logical connector. *)
-        | App (Cst c, args) when Name.is_logical_conn c -> begin
-            match idx with
-            | 0 when sub = [] -> (negs, (context, Term.mkCst c))
-            | i when 1 <= i && i <= List.length args ->
-                neg_count_rec exn negs context (List.at args (i - 1)) sub
-            | _ -> raise exn
-          end
-        (* Anpther application (not a logical connector) : stop counting negations. *)
-        | App _ -> (negs, TermUtils.subterm ~context t (idx :: sub))
-        (* Products. *)
-        | Prod (x, ty, body) -> begin
-            match idx with
-            | 0 -> (negs, TermUtils.subterm ~context ty sub)
-            | 1 -> neg_count_rec exn negs (Context.push x ty context) body sub
-            | _ -> raise exn
-          end
-        (* Lambdas are not of type Prop. *)
-        | Lambda _ -> raise exn
-      end*)
+    match (sub, fo) with
+    | [], _ -> (negs, (context, FirstOrder.to_term fo))
+    (* Increase the negation count. *)
+    | 1 :: sub, FConn (Not, [ t1 ]) -> neg_count_rec (negs + 1) context t1 sub
+    | 0 :: sub, FImpl (t1, t2) -> neg_count_rec (negs + 1) context t1 sub
+    (* Recurse in the formula. *)
+    | 1 :: sub, FImpl (t1, t2) -> neg_count_rec negs context t2 sub
+    | i :: sub, FConn (conn, ts) when 1 <= i && i <= List.length ts ->
+        neg_count_rec negs context (List.at ts (i - 1)) sub
+    (* Binders. *)
+    | 1 :: sub, FBind (Forall, x, ty, body) ->
+        neg_count_rec negs (Context.push x ty context) body sub
+    | 2 :: 1 :: sub, FBind (Exist, x, ty, body) ->
+        neg_count_rec negs (Context.push x ty context) body sub
+    (* The path is either invalid or escapes the first-order skeleton. *)
+    | _ -> raise @@ InvalidSubtermPath (FirstOrder.to_term fo, sub)
 
-  (*let neg_count term sub : int = failwith "neg_count: todo"
-    let exn = InvalidSubtermPath (term, sub) in
-      let negs, _ = neg_count_rec exn 0 Context.empty term sub in
-      negs*)
+  let neg_count env term sub : int =
+    let fo = FirstOrder.of_term env term in
+    let negs, _ = neg_count_rec 0 Context.empty fo sub in
+    negs
 
   let of_item item : t = match item with Concl _ -> Pos | Var _ | Hyp _ -> Neg
 
