@@ -11,10 +11,10 @@ type linkaction =
   | Nothing
   | Both of linkaction * linkaction
   | Subform of Unif.subst
-  | Instantiate of Term.t * Path.t
-  | Rewrite of Term.t * Term.t * Path.t list
-  | Fold of Name.t * Path.t list
-  | Unfold of Name.t * Path.t list
+    (*| Instantiate of Term.t * Path.t
+      | Rewrite of Term.t * Term.t * Path.t list
+      | Fold of Name.t * Path.t list
+      | Unfold of Name.t * Path.t list*)
 [@@deriving show]
 
 let hyperlink_of_link : link -> hyperlink = fun (src, dst) -> ([ src ], [ dst ])

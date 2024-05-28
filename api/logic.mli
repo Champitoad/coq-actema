@@ -224,7 +224,7 @@ type action =
      The name identifies the hypothesis we are eliminating.
      The [int] indicates which intro rule to use in case of ambiguity
      (for instance when the hypothesis is an equality, it indicates in which direction to rewrite) *)
-  | AElim of (Name.t * int)
+  | AElim of Name.t * int
   (* Generalize a hypothesis or local variable.
      This changes a goal of the form
         h : H |- C
@@ -233,6 +233,8 @@ type action =
      More precisely this is dependent generalization : any variables / hypothesis that depend on h
      are also generalized. *)
   | AGeneralize of Name.t
+  (* A link (DnD) action. The paths are the two sides of the link. *)
+  | ALink of Path.t * Path.t * itrace
 (* Click on a hypothesis *)
 (*| ADef of (Name.t * Term.t * Term.t) (* Introduction of a local definition *)
   | AInd of Name.t (* Simple induction on a variable (of inductive type). *)
@@ -241,7 +243,6 @@ type action =
   | AIndt of Path.t (* Induction on a variable deep in the goal. *)
   | ACase of Path.t (* Case contextual action *)
   | ACut of Term.t (* Click on +hyp button *)
-  | ALink of (Path.t * Path.t * itrace) (* DnD action for subformula linking *)
   | AInstantiate of (Term.t * Path.t)
     (* DnD action for instantiating a quantifier *)*)
 [@@deriving show]

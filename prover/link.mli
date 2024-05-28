@@ -37,7 +37,6 @@
        is non-confluent (see the paper "A drag and drop proof tactic"). *)
 
 open Api
-open Lang
 open Logic
 open ProverLogic
 
@@ -55,11 +54,11 @@ type linkaction =
   | Both of linkaction * linkaction
   | Subform of Unif.subst
       (** Subformula linking. This includes deep rewrites. *)
-  | Instantiate of Term.t * Path.t
+(*| Instantiate of Term.t * Path.t
   | Rewrite of Term.t * Term.t * Path.t list
       (** Rewrite expression [e1] into [e2] at several paths. *)
   | Fold of Name.t * Path.t list
-  | Unfold of Name.t * Path.t list
+  | Unfold of Name.t * Path.t list*)
 [@@deriving show]
 
 (** Lift a link into a hyperlink. *)

@@ -784,6 +784,10 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
       Generalize.generalize_dep (EConstr.mkVar name)
   | Logic.AIntro side -> execute_aintro api_goal side
   | Logic.AElim (hyp_name, i) -> execute_aelim api_goal hyp_name i
+  | Logic.ALink _ ->
+      raise
+        (UnsupportedAction
+           (action, "Link actions are not yet supported in the plugin"))
 (* _ ->
     raise
     @@ UnsupportedAction

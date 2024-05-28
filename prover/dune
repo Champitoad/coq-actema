@@ -16,4 +16,6 @@
   qcheck-alcotest)
  (preprocess
   (pps tyxml-ppx js_of_ocaml-ppx lwt_ppx ppx_deriving.show))
- (synopsis "Mini-prover (backend for the GUI)"))
+ (synopsis "Mini-prover (backend for the GUI)")
+ (flags
+  (:standard -w -37)))

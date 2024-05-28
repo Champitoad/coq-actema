@@ -333,8 +333,9 @@ type action =
   | AClear of Name.t
   | AExact of Name.t
   | AIntro of int
-  | AElim of (Name.t * int)
+  | AElim of Name.t * int
   | AGeneralize of Name.t
+  | ALink of Path.t * Path.t * itrace
 [@@deriving show]
 
 type aident = string * hyp list * Term.t [@@deriving show]

@@ -3,44 +3,19 @@ open Api
 
 exception UnsupportedAction of Actions.preaction
 
-(*let of_ctxt (ctxt : IPath.ctxt) : Logic.ctxt State.t =
-    let* handle =
-      match ctxt.kind with
-      | `Concl -> return "concl"
-      | `Hyp | `Var _ -> find (Handle.ofint ctxt.handle)
-    in
-    let kind =
-      match ctxt.kind with
-      | `Hyp -> Logic.Hyp
-      | `Concl -> Logic.Concl
-      | `Var `Head -> Logic.Var Logic.Head
-      | `Var `Body -> Logic.Var Logic.Body
-    in
-    return Logic.{ kind; handle }
-
-  let of_ipath (p : IPath.t) : Logic.ipath State.t =
-    let* ctxt = of_ctxt p.ctxt in
-    return Logic.{ ctxt; sub = p.sub }
-
-  let of_lenv (lenv : LEnv.lenv) : Logic.lenv =
-    LEnv.bindings lenv |> List.map (fun (x, ty) -> (x, of_type_ ty))
-
-  let of_itrace (itrace : itrace) : Logic.itrace =
-    List.map
-      begin
-        fun (i, w) ->
-          ( i
-          , Option.map
-              (fun (le1, le2, e) -> (of_lenv le1, of_lenv le2, of_expr e))
-              w )
-      end
-      itrace*)
-
-let of_action proof goal_id preaction : Logic.action =
+let export_action proof goal_id preaction : Logic.action =
   match (preaction : Actions.preaction) with
   | Exact hyp_name -> Logic.AExact hyp_name
   | Intro side -> Logic.AIntro side
   | Elim (hyp_name, i) -> Logic.AElim (hyp_name, i)
+  | Hyperlink (hyperlink, linkactions) -> begin
+      match (hyperlink, linkactions) with
+      | ([ src ], [ dst ]), [ Subform subst ] ->
+          (* This is where we perform deep interaction. *)
+          let itrace = Interact.dlink (src, dst) subst proof in
+          Logic.ALink (src, dst, itrace)
+      | _ -> raise @@ UnsupportedAction preaction
+    end
   (*| `Lemma name -> return (Logic.ALemma name)
     | `Ind subhd ->
         js_log @@ Format.sprintf "Export.of_action `Ind %d\n" (Handle.toint subhd);
@@ -81,5 +56,3 @@ let of_action proof goal_id preaction : Logic.action =
         | _, _ -> raise @@ UnsupportedAction a
       end*)
   | _ -> raise @@ UnsupportedAction preaction
-
-let export_action proof goal_id a = of_action proof goal_id a
