@@ -324,7 +324,7 @@ end
 (***************************************************************************************)
 (** Actions *)
 
-type choice = int * (Context.t * Context.t * Term.t) option [@@deriving show]
+type choice = int * (Context.t * Term.t) option [@@deriving show]
 type itrace = choice list [@@deriving show]
 
 type action =

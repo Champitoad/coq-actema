@@ -2,7 +2,7 @@ open Utils.Pervasive
 open Api
 open Logic
 open Lang
-open CoreLogic
+open ProverLogic
 open Link
 
 type akind = Click of Path.t | DnD of Path.t * Path.t option | Ctxt

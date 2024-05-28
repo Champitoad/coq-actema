@@ -4,7 +4,7 @@ open Prover
 open Api
 open Logic
 open Lang
-open CoreLogic
+open ProverLogic
 
 (* -------------------------------------------------------------------- *)
 
@@ -230,7 +230,7 @@ let rec js_proof_engine (proof : Proof.t) =
                   |])
               actions))
 
-    (*(** [this#lemmareqb (selection : CoreLogic.IPath.t list) (pattern : string)] returns the base64-encoded string corresponding to the parameters of
+    (*(** [this#lemmareqb (selection : ProverLogic.IPath.t list) (pattern : string)] returns the base64-encoded string corresponding to the parameters of
              a lemma request, where [pattern] is the text entered in the lemma search bar and [selection] is the currently selected subformula. *)
       method lemmareqb selection pattern =
         let doit () =
@@ -259,7 +259,7 @@ let rec js_proof_engine (proof : Proof.t) =
           (* Get the sub-formula pointed at by the selection. *)
           let term =
             selection
-            |> Option.map (CoreLogic.IPath.term _self##.proof)
+            |> Option.map (ProverLogic.IPath.term _self##.proof)
             |> Option.map Fo.Translate.of_term
           in
           (* Encode the pattern and formula. *)

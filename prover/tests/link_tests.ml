@@ -5,7 +5,7 @@ open Prover
 open Api
 open Lang
 open Logic
-open CoreLogic
+open ProverLogic
 
 (**********************************************************************************************)
 (** Making mock proofs. *)

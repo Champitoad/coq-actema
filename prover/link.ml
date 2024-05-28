@@ -2,7 +2,7 @@ open Utils.Pervasive
 open Api
 open Lang
 open Logic
-open CoreLogic
+open ProverLogic
 
 type link = Path.t * Path.t [@@deriving show]
 type hyperlink = Path.t list * Path.t list [@@deriving show]

@@ -2,7 +2,7 @@
 
 open Api
 open Logic
-open CoreLogic
+open ProverLogic
 
 (** This module defines predicates on lemmas. *)
 module Pred : sig

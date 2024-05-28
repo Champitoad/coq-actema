@@ -193,9 +193,18 @@ end
 (***************************************************************************************)
 (** Actions *)
 
-(* Trace of a subformula linking, from which the list of rewrite rules to apply
-   can be reconstructed *)
-type choice = int * (Context.t * Context.t * Term.t) option [@@deriving show]
+(** A [choice] corresponds to a single choice of rule.
+
+    The [int] is used in case several rules are applicable to a link.
+    For instance in [A ∧ {B} |- {B} ∧ A], we could apply :
+    - (L∧₂) corresponding to 0
+    - (R∧₁) corresponding to 1
+    In general 0 is for the left-hand-side rule and 1 is for the right-hand-side rule.
+
+    The optional argument is used for binders, to indicate whether the bound variable is instantiated,
+    and if yes with what expression (which depends on the variables bound above in each linked formula). *)
+type choice = int * (Context.t * Term.t) option [@@deriving show]
+
 type itrace = choice list [@@deriving show]
 
 type action =

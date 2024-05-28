@@ -2,7 +2,7 @@ open Utils.Pervasive
 open Api
 open Logic
 open Lang
-open CoreLogic
+open ProverLogic
 
 module Pred = struct
   type t = Proof.t -> Logic.lemma -> bool

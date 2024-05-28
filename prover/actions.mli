@@ -8,7 +8,7 @@
 open Api
 open Logic
 open Lang
-open CoreLogic
+open ProverLogic
 
 (** An [action_kind] discriminates between :
     - [Click path] where the user clicked on [path].

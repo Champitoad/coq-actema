@@ -1,5 +1,5 @@
 open Api
-open CoreLogic
+open ProverLogic
 
 (** We can't export the given preaction to an API action. *)
 exception UnsupportedAction of Actions.preaction

@@ -39,7 +39,7 @@
 open Api
 open Lang
 open Logic
-open CoreLogic
+open ProverLogic
 
 (** A link is simply a pair of a source path and destination path.
     You are NOT supposed to link two subterms of a same item. *)

@@ -3,7 +3,7 @@
 (*open Prover
   open Fo
   open Utils
-  open CoreLogic
+  open ProverLogic
 
   (**********************************************************************************************)
   (** Making mock proofs. *)
