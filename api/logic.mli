@@ -202,8 +202,8 @@ end
     In general 0 is for the left-hand-side rule and 1 is for the right-hand-side rule.
 
     The optional argument is used for binders, to indicate whether the bound variable is instantiated,
-    and if yes with what expression (which depends on the variables bound above in each linked formula). *)
-type choice = int * (Context.t * Term.t) option [@@deriving show]
+    and if yes with what expression (which depends on the variables bound in each linked formula). *)
+type choice = int * Term.t option [@@deriving show]
 
 type itrace = choice list [@@deriving show]
 

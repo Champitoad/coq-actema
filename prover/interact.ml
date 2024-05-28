@@ -1,16 +1,17 @@
 open Utils.Pervasive
 open Api
+open Lang
 open Logic
 open ProverLogic
 
+(* For a backwards interaction, the first formula is the hypothesis,
+   the second formula is the conclusion.
+   For a forward interaction, the order doesn't matter. *)
 type state =
-  { (* The global environment. *)
-    (*env : Env.t*)
-    (*; subst : Unif.subst
-      ; depth : int*)
-
-    (* The itrace generated so far. The most recent choice is first. *)
-    itrace : itrace
+  { n_free_1 : int
+  ; n_free_2 : int
+        (* The itrace generated so far. The most recent choice is first. *)
+  ; itrace : itrace
   ; (* The first focussed subterm. *)
     fo1 : FirstOrder.t
   ; (* The second focussed subterm. *)
@@ -19,126 +20,185 @@ type state =
     sub1 : int list
   ; (* The remaining subpath in [fo2]. *)
     sub2 : int list
+  ; (* The witnesses for the remaining instantiations in [fo1]. The next witness comes first.
+       Each witness has open variables that live in the "common context"
+       of the substitution (which was computed in [Link.ml]). *)
+    witnesses1 : Term.t option list
+  ; (* The witnesses for the remaining instantiations in [fo2]. The next witness comes first. *)
+    witnesses2 : Term.t option list
   }
 
 type dnd_mode = Forward | Backward
 
+(*let invertible (kind : [ `Left | `Right | `Forward ]) (f : FirstOrder.t) : bool
+      =
+    match kind with
+    (* Right invertible *)
+    | `Right -> begin
+        match f with
+        | FConn (Not, _) | FConn (Equiv, _) | FImpl _ | FBind (Forall, _, _, _) ->
+            true
+        | _ -> false
+      end
+    (* Left invertible *)
+    | `Left -> begin
+        match f with FConn (Or, _) | FBind (Exist, _, _, _) -> true | _ -> false
+      end
+    (* Forward invertible *)
+    | `Forward -> begin
+        match f with FBind (Exist, _, _, _) -> true | _ -> false
+      end
+
+  let no_prio (kind : [ `Left | `Right | `Forward ])
+      ((f, sub) : FirstOrder.t * int list) =
+    (not (invertible kind f)) || List.is_empty sub*)
+
+(** [instantiable state side] checks whether the next witness on [side] 
+    has all its free variables in scope (which means we are allowed to instantiate
+    the corresponding quantifier). 
+    
+    This assumes that the next witness on [side] is of the form [Some _]. *)
+let instantiable state (side : [ `Left | `Right ]) : bool =
+  (* Get the witness. *)
+  let witness =
+    match side with
+    | `Left -> Option.get @@ List.hd state.witnesses1
+    | `Right -> Option.get @@ List.hd state.witnesses2
+  in
+  (* Compute the lowest variable that is in scope on each side. *)
+  let in_scope_1 = List.length state.witnesses1 in
+  let in_scope_2 = List.length state.witnesses2 in
+  (* Check the free variables are in scope. *)
+  let fvars_1, fvars_2 =
+    IntSet.split_lt state.n_free_1 @@ TermUtils.free_vars witness
+  in
+  (* Performance is not an issue here. *)
+  IntSet.for_all (fun v -> v >= in_scope_1) fvars_1
+  && IntSet.for_all (fun v -> v - state.n_free_1 >= in_scope_2) fvars_2
+
+let take_if cond xs =
+  match (cond, xs) with
+  | false, _ -> (None, xs)
+  | true, hd :: tl -> (hd, tl)
+  | true, [] -> raise @@ Invalid_argument "take_if"
+
+let head_is_none xs : bool = match xs with None :: _ -> true | _ -> false
+let head_is_some xs : bool = match xs with Some _ :: _ -> true | _ -> false
+
 (** Perform a single backwards step. 
     This returns the updated state, and the next dnd mode. *)
 let backward_step (state : state) : state * dnd_mode =
+  (* Step into the right formula (the conclusion). *)
+  let right_step ?(invert = false) ?(binder = false) fo2 sub2 =
+    (* If [binder] is set, use the next witness from [witnesses2]. *)
+    let the_witness, witnesses2 = take_if binder state.witnesses2 in
+    (* If [invert] is set, change to Forward mode. *)
+    let dnd_mode = if invert then Forward else Backward in
+    (* Compute the new state. *)
+    let state =
+      { state with
+        itrace = (1, the_witness) :: state.itrace
+      ; fo2
+      ; sub2
+      ; witnesses2
+      }
+    in
+    (state, dnd_mode)
+  in
+  (* Step into the left formula (the hypothesis). *)
+  let left_step ?(invert = false) ?(binder = false) fo1 sub1 =
+    (* If [binder] is set, use the next witness from [witnesses1]. *)
+    let the_witness, witnesses1 = take_if binder state.witnesses1 in
+    (* If [invert] is set, change to Forward mode. *)
+    let dnd_mode = if invert then Forward else Backward in
+    (* Compute the new state. *)
+    let state =
+      { state with
+        itrace = (0, the_witness) :: state.itrace
+      ; fo1
+      ; sub1
+      ; witnesses1
+      }
+    in
+    (state, dnd_mode)
+  in
+  (* It is very important that we try the invertible rules before the other rules. *)
   match ((state.fo1, state.sub1), (state.fo2, state.sub2)) with
-  (* Right rules *)
+  (***********************************************************************)
+  (* Right INVERTIBLE rules. *)
+  (***********************************************************************)
+  (* Rule R¬ *)
+  | _, (FConn (Not, [ f0 ]), 0 :: sub) -> right_step ~invert:true f0 sub
+  (* Rule R⇒₁ *)
+  | _, (FImpl (f0, f1), 0 :: sub) -> right_step ~invert:true f0 sub
+  (* Rule R⇒₂ *)
+  | _, (FImpl (f0, f1), 1 :: sub) -> right_step f1 sub
+  (* Rule R⇔₁ *)
+  | _, (FConn (Equiv, [ f1; f2 ]), 1 :: sub) -> right_step f1 sub
+  (* Rule R⇔₂ *)
+  | _, (FConn (Equiv, [ f1; f2 ]), 2 :: sub) -> right_step f2 sub
+  (* Rule R∀s *)
+  | _, (FBind (Forall, _, _, f1), 1 :: sub) when head_is_none state.witnesses2
+    ->
+      right_step ~binder:true f1 sub
+  (***********************************************************************)
+  (* Left INVERTIBLE rules. *)
+  (***********************************************************************)
+  (* Rule L∨₁ *)
+  | (FConn (Or, [ f1; f2 ]), 1 :: sub), _ -> left_step f1 sub
+  (* Rule L∨₂ *)
+  | (FConn (Or, [ f1; f2 ]), 2 :: sub), _ -> left_step f2 sub
+  (* Rule L∃s *)
+  | (FBind (Exist, _, _, f1), 2 :: 1 :: sub), _
+    when head_is_none state.witnesses1 ->
+      left_step ~binder:true f1 sub
+  (***********************************************************************)
+  (* Right rules. *)
+  (***********************************************************************)
+  (* Rule R∧₁ *)
+  | _, (FConn (And, [ f1; f2 ]), 1 :: sub) -> right_step f1 sub
+  (* Rule R∧₂ *)
+  | _, (FConn (And, [ f1; f2 ]), 2 :: sub) -> right_step f2 sub
+  (* Rule R∨₁ *)
+  | _, (FConn (Or, [ f1; f2 ]), 1 :: sub) -> right_step f1 sub
+  (* Rule R∨₂ *)
+  | _, (FConn (Or, [ f1; f2 ]), 2 :: sub) -> right_step f2 sub
+  (* Rule R∃s *)
+  | _, (FBind (Exist, _, _, f1), 2 :: 1 :: sub)
+    when head_is_none state.witnesses2 ->
+      right_step ~binder:true f1 sub
+  (* Rule R∃i *)
+  | _, (FBind (Exist, _, _, f1), 2 :: 1 :: sub)
+    when head_is_some state.witnesses2 && instantiable state `Right ->
+      right_step ~binder:true f1 sub
+  (* Rule R∃i *)
+  | _, (FBind (Exist, _, _, f1), 2 :: 1 :: sub)
+    when head_is_some state.witnesses2 ->
+      right_step ~binder:true f1 sub
+  (***********************************************************************)
+  (* Left rules. *)
+  (***********************************************************************)
+  (* Rule L⇒₂ *)
+  | (FImpl (f0, f1), 1 :: sub), _ -> left_step f1 sub
+  (* Rule L∧₁ *)
+  | (FConn (And, [ f1; f2 ]), 1 :: sub), _ -> left_step f1 sub
+  (* Rule L∧₂ *)
+  | (FConn (And, [ f1; f2 ]), 2 :: sub), _ -> left_step f2 sub
+  (* Rule L⇔₁ *)
+  | (FConn (Equiv, [ f1; f2 ]), 1 :: sub), _ -> left_step f1 sub
+  (* Rule L⇔₂ *)
+  | (FConn (Equiv, [ f1; f2 ]), 2 :: sub), _ -> left_step f2 sub
+  (* Rule L∀s *)
+  | (FBind (Forall, _, _, f1), 1 :: sub), _ when head_is_none state.witnesses1
+    ->
+      left_step ~binder:true f1 sub
+  (* Rule L∀i *)
+  | (FBind (Forall, _, _, f1), 1 :: sub), _
+    when head_is_some state.witnesses1 && instantiable state `Left ->
+      left_step ~binder:true f1 sub
+  | _ -> failwith "Interact.backward_step : no rule is applicable."
 
-  (* R∧1 *)
-  | _, (FConn (And, [ arg1; arg2 ]), 1 :: sub) (*when no_prio `Left h*) ->
-      let state =
-        { state with
-          itrace = (1, None) :: state.itrace
-        ; fo2 = arg1
-        ; sub2 = sub
-        }
-      in
-      (state, Backward)
-  (* R∧2 *)
-  | _, (FConn (And, [ arg1; arg2 ]), 2 :: sub) (*when no_prio `Left h*) ->
-      let state =
-        { state with
-          itrace = (1, None) :: state.itrace
-        ; fo2 = arg2
-        ; sub2 = sub
-        }
-      in
-      (state, Backward)
-  (* R∨ *)
-  (*| _, (FConn (`Or, fs), i :: sub) when no_prio `Left h -> begin
-        try
-          let fi, fs = List.pop_at i fs in
-          (Some (CConn (`Or, fs, i)), (1, None), (h, (fi, sub)))
-        with Not_found -> failwith "empty disjunction"
-      end
-    (* R⇒₁ *)
-    | _, (FConn (`Imp, [ f1; f2 ]), 0 :: sub) ->
-        switch_pol := true;
-        (Some (CConn (`Imp, [ f2 ], 0)), (1, None), (h, (f1, sub)))
-    (* R⇒₂ *)
-    | _, (FConn (`Imp, [ f1; f2 ]), 1 :: sub) ->
-        (Some (CConn (`Imp, [ f1 ], 1)), (1, None), (h, (f2, sub)))
-    (* R¬ *)
-    | _, (FConn (`Not, [ f1 ]), 0 :: sub) ->
-        switch_pol := true;
-        (Some (CConn (`Not, [], 0)), (1, None), (h, (f1, sub)))
-    | _, (FConn (`Equiv, [ _; _ ]), _) ->
-        failwith "DnD on positive equivalence currently unsupported"
-    | _, (FBind (`Exist, x, ty, f1), 0 :: sub)
-      when no_prio `Left h && instantiable goal env2 ctx s2 x ty ->
-        let env2 = LEnv.enter env2 x ty in
-        s := (es1, (env2, s2));
-        begin
-          match get_tag (x, LEnv.get_index env2 x) s2 with
-          (* R∃i *)
-          | Some (Sbound e) ->
-              let f1 = Subst.f_apply1 (x, 0) e f1 in
-              (None, (1, Some (env1, env2, e)), (h, (f1, sub)))
-          (* R∃s *)
-          | Some Sflex ->
-              s := (es1, (env2, s2));
-              let h = (f_shift (x, 0) l, lsub) in
-              (Some (CBind (`Exist, x, ty)), (1, None), (h, (f1, sub)))
-          | None -> assert false
-        end
-    (* R∀s *)
-    | _, (FBind (`Forall, x, ty, f1), 0 :: sub) ->
-        s := (es1, (LEnv.enter env2 x ty, s2));
-        let h = (f_shift (x, 0) l, lsub) in
-        (Some (CBind (`Forall, x, ty)), (1, None), (h, (f1, sub)))
-    (* Left rules *)
-    (* L∧ *)
-    | (FConn (`And, fs), i :: sub), _ when no_prio `Right c -> begin
-        try (None, (0, None), ((List.at fs i, sub), c))
-        with Invalid_argument _ -> failwith "empty conjunction"
-      end
-    (* L∨ *)
-    | (FConn (`Or, fs), i :: sub), _ -> begin
-        try
-          let fi, fs = List.pop_at i fs in
-          let fs = List.map (fun fj -> f_imp fj r) fs in
-          (Some (CConn (`And, fs, i)), (0, None), ((fi, sub), c))
-        with Not_found -> failwith "empty disjunction"
-      end
-    (* L⇒₂ *)
-    | (FConn (`Imp, [ f1; f2 ]), 1 :: sub), _ when no_prio `Right c ->
-        (Some (CConn (`And, [ f1 ], 1)), (0, None), ((f2, sub), c))
-    (* L⇔₁ *)
-    | (FConn (`Equiv, [ f1; f2 ]), 0 :: sub), _ when no_prio `Right c ->
-        (Some (CConn (`And, [ f2 ], 0)), (0, None), ((f1, sub), c))
-    (* L⇔₂ *)
-    | (FConn (`Equiv, [ f1; f2 ]), 1 :: sub), _ when no_prio `Right c ->
-        (Some (CConn (`And, [ f1 ], 1)), (0, None), ((f2, sub), c))
-    (* L∃s *)
-    | (FBind (`Exist, x, ty, f1), 0 :: sub), _ ->
-        s := ((LEnv.enter env1 x ty, s1), es2);
-        let c = (f_shift (x, 0) r, rsub) in
-        (Some (CBind (`Forall, x, ty)), (0, None), ((f1, sub), c))
-    | (FBind (`Forall, x, ty, f1), 0 :: sub), _
-      when no_prio `Right c && instantiable goal env1 ctx s1 x ty ->
-        let env1 = LEnv.enter env1 x ty in
-        s := ((env1, s1), es2);
-        begin
-          match get_tag (x, LEnv.get_index env1 x) s1 with
-          (* L∀i *)
-          | Some (Sbound e) ->
-              let f1 = f_apply1 (x, 0) e f1 in
-              (None, (0, Some (env1, env2, e)), ((f1, sub), c))
-          (* L∀s *)
-          | Some Sflex ->
-              s := ((env1, s1), es2);
-              let c = (f_shift (x, 0) r, rsub) in
-              (Some (CBind (`Exist, x, ty)), (0, None), ((f1, sub), c))
-          | None -> assert false
-        end*)
-  | _ -> raise Proof.TacticNotApplicable
-
-(** Backwards-mode interaction. *)
+(** Backward-mode interaction. *)
 let rec backward (state : state) : itrace =
   (*Js_log.log @@ show_linkage goal.g_env `Backward linkage;*)
   if state.sub1 = [] && state.sub2 = []
@@ -150,38 +210,112 @@ let rec backward (state : state) : itrace =
     (* Recurse in forward or backward mode. *)
     match next_mode with Backward -> backward state | Forward -> forward state
 
-(** Forwards-mode interaction. *)
+(** Forward-mode interaction. *)
 and forward (state : state) : itrace = failwith "foward : todo"
 
-let dlink (src_path, dst_path) subst proof : itrace =
+let dlink (src, dst) subst proof : itrace =
   (* Destruct the link. *)
-  let goal, src_item, _, _ = PathUtils.destr src_path proof in
-  let _, dst_item, _, _ = PathUtils.destr dst_path proof in
-  let env = goal.g_pregoal.g_env in
+  let env = (Proof.byid proof src.Path.goal).g_env in
+  let src_term = term_of_item @@ PathUtils.item src proof in
+  let dst_term = term_of_item @@ PathUtils.item dst proof in
+
+  (* Massage the substitution into a format that we can use here. *)
+  let witnesses =
+    let open Unif in
+    (* Note : we rely on the fact that IntMap.bindings returns the bindings
+       by increasing key order. *)
+    subst.mapping |> IntMap.bindings
+    |> List.map (function
+         | _, SRigid -> None
+         | _, SFlex -> None
+         | _, SBound term -> Some term)
+  in
+  let src_wits, dst_wits =
+    pair_map List.rev @@ List.split_at subst.n_free_1 witnesses
+  in
 
   (* Build the initial state and compute the interaction. *)
-  match (src_item, src_path.sub, dst_item, dst_path.sub) with
+  match (src.kind, dst.kind) with
+  | Hyp _, Concl ->
+      backward
+        { n_free_1 = subst.n_free_1
+        ; n_free_2 = subst.n_free_2
+        ; itrace = []
+        ; fo1 = FirstOrder.of_term env src_term
+        ; sub1 = src.sub
+        ; witnesses1 = src_wits
+        ; fo2 = FirstOrder.of_term env dst_term
+        ; sub2 = dst.sub
+        ; witnesses2 = dst_wits
+        }
+  | Concl, Hyp _ ->
+      backward
+        { n_free_1 = subst.n_free_1
+        ; n_free_2 = subst.n_free_2
+        ; itrace = []
+        ; fo1 = FirstOrder.of_term env dst_term
+        ; sub1 = dst.sub
+        ; witnesses1 = dst_wits
+        ; fo2 = FirstOrder.of_term env src_term
+        ; sub2 = src.sub
+        ; witnesses2 = src_wits
+        }
+  | Hyp _, Hyp _ ->
+      forward
+        { n_free_1 = subst.n_free_1
+        ; n_free_2 = subst.n_free_2
+        ; itrace = []
+        ; fo1 = FirstOrder.of_term env src_term
+        ; sub1 = src.sub
+        ; witnesses1 = src_wits
+        ; fo2 = FirstOrder.of_term env dst_term
+        ; sub2 = dst.sub
+        ; witnesses2 = dst_wits
+        }
+  | _ -> failwith "Interact.dlink : invalid link."
+
+(*match
+    (src_item, src_path.sub, src_wits, dst_item, dst_path.sub, dst_wits)
+  with
   (* Start in backward mode. *)
-  | Hyp (_, { h_form = hyp_term; _ }), hyp_sub, Concl concl_term, concl_sub
-  | Concl concl_term, concl_sub, Hyp (_, { h_form = hyp_term; _ }), hyp_sub ->
+  | ( Hyp (_, { h_form = hyp_term; _ })
+    , hyp_sub
+    , hyp_wits
+    , Concl concl_term
+    , concl_sub
+    , concl_wits )
+  | ( Concl concl_term
+    , concl_sub
+    , concl_wits
+    , Hyp (_, { h_form = hyp_term; _ })
+    , hyp_sub
+    , hyp_wits ) ->
       backward
         { itrace = []
         ; fo1 = FirstOrder.of_term env hyp_term
-        ; fo2 = FirstOrder.of_term env concl_term
         ; sub1 = hyp_sub
+        ; witnesses1 = hyp_wits
+        ; fo2 = FirstOrder.of_term env concl_term
         ; sub2 = concl_sub
+        ; witnesses2 = concl_wits
         }
   (* Start in forward mode. *)
-  | Hyp (_, { h_form = term1; _ }), sub1, Hyp (_, { h_form = term2; _ }), sub2
-    ->
+  | ( Hyp (_, { h_form = term1; _ })
+    , sub1
+    , wits1
+    , Hyp (_, { h_form = term2; _ })
+    , sub2
+    , wits2 ) ->
       forward
         { itrace = []
         ; fo1 = FirstOrder.of_term env term1
-        ; fo2 = FirstOrder.of_term env term2
         ; sub1
+        ; witnesses1 = wits1
+        ; fo2 = FirstOrder.of_term env term2
         ; sub2
+        ; witnesses2 = wits2
         }
-  | _ -> failwith "Interact.dlink : invalid link."
+  | _ -> failwith "Interact.dlink : invalid link."*)
 
 (*match ((item_src, sub_src, s_src), (item_dst, sub_dst, s_dst)) with
     | (`H (hid, { h_form = h; _ }), subh, sh), (`C c, subc, sc)

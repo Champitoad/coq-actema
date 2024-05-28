@@ -11,6 +11,9 @@ let ( <<< ) g f x = g (f x)
 (** [indices ?start=0 [x0; x1; ... xn]] returns the list [(start, x0); (start+1; x1); ... (start+n, xn)]. *)
 let indices ?(start = 0) xs = List.mapi (fun i x -> (start + i, x)) xs
 
+(** [pair_map f (a, b) = (f a, f b)]. *)
+let pair_map f (a, b) = (f a, f b)
+
 (** Shorthands for batteries modules. *)
 
 module Int = BatInt
