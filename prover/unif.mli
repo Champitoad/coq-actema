@@ -52,6 +52,9 @@ type subst =
   }
 [@@deriving show]
 
+(** Test whether a substitution is closed. See [close] for more details. *)
+val is_closed : subst -> bool
+
 (** Recursively close an acyclic substitution.
 
     For example the open substitution 

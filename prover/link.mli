@@ -52,8 +52,9 @@ type hyperlink = Path.t list * Path.t list [@@deriving show]
 type linkaction =
   | Nothing
   | Both of linkaction * linkaction
+  (* Subformula linking. This includes deep rewrites.
+      The substitution here is closed (and acyclic of course). *)
   | Subform of Unif.subst
-      (** Subformula linking. This includes deep rewrites. *)
 (*| Instantiate of Term.t * Path.t
   | Rewrite of Term.t * Term.t * Path.t list
       (** Rewrite expression [e1] into [e2] at several paths. *)

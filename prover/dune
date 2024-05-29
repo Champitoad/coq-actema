@@ -18,4 +18,4 @@
   (pps tyxml-ppx js_of_ocaml-ppx lwt_ppx ppx_deriving.show))
  (synopsis "Mini-prover (backend for the GUI)")
  (flags
-  (:standard -w -37)))
+  (:standard -w -37 -w -69)))

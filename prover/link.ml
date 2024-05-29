@@ -117,8 +117,8 @@ module Pred = struct
       in
       (* Get the first (acyclic) solution. *)
       match solutions () with
-      (* The terms are unifiable. *)
-      | Cons (subst, _) -> [ Subform subst ]
+      (* The terms are unifiable. Don't forget to close the substitution. *)
+      | Cons (subst, _) -> [ Subform (Unif.close subst) ]
       (* The terms are not unifiable. *)
       | Nil -> []
     with InvalidSubtermPath _ | Invalid_argument _ ->

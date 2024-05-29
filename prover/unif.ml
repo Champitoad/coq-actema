@@ -223,9 +223,32 @@ let rec apply_rec ~repeat depth subst (term : Term.t) : Term.t =
       let args = List.map (apply_rec ~repeat depth subst) args in
       Term.mkApps f args
 
-let apply ~repeat subst term = apply_rec ~repeat 0 subst term
+let apply ~repeat subst term : Term.t = apply_rec ~repeat 0 subst term
 
-let close subst =
+let not_bound fvar subst : bool =
+  match IntMap.find_opt fvar subst.mapping with
+  | Some (SBound _) -> false
+  | _ -> true
+
+let is_closed subst : bool =
+  IntMap.for_all
+    begin
+      (* For each [var] in the domain of [subst]. *)
+      fun var sitem ->
+        match sitem with
+        | SFlex | SRigid -> true
+        | SBound term ->
+            (* If [var] is bound to [term]. *)
+            IntSet.for_all
+              (fun fvar ->
+                (* And [fvar] is a free variable of [term]. *)
+                (* Then [fvar] is not bound in [subst]. *)
+                not_bound fvar subst)
+              (TermUtils.free_vars term)
+    end
+    subst.mapping
+
+let close subst : subst =
   let mapping =
     IntMap.mapi
       begin

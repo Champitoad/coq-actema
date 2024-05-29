@@ -327,23 +327,33 @@ let test_eq_4 () =
 (**********************************************************************************************)
 (** Testing [Pred.unifiable]. *)
 
+let check_subst subst t1 t2 =
+  Unif.is_closed subst
+  && TermUtils.alpha_equiv
+       (Unif.apply ~repeat:false subst t1)
+       (Unif.apply ~repeat:false subst @@ TermUtils.lift_free subst.n_free_1 t2)
+
 let test_unif_0 () =
   let open Term in
   let hlpred = Link.Pred.(lift unifiable) in
   let hyp1 = mkArrow (mkCst Name.true_) (mkCst Name.false_) in
+  let sub1 = [ 0 ] in
   let hyp2 = mkCst Name.true_ in
-  let actions = link_forward hyp1 [ 0 ] hyp2 [] hlpred in
+  let sub2 = [] in
+  let actions = link_forward hyp1 sub1 hyp2 sub2 hlpred in
   check_linkactions actions @@ function
   | Subform subst ->
       subst.n_free_1 = 0 && subst.n_free_2 = 0
-      && IntMap.is_empty subst.mapping
-      && Unif.IntGraph.is_empty subst.deps
+      && check_subst subst
+           (snd @@ TermUtils.subterm hyp1 sub1)
+           (snd @@ TermUtils.subterm hyp2 sub2)
   | _ -> false
 
 let test_unif_1 () =
   let open Term in
   let hlpred = Link.Pred.lift Link.Pred.unifiable in
   let hyp = forall "l" list_nat @@ mkApps perm_nat [ mkVar 0; mkVar 0 ] in
+  let hyp_sub = [ 1 ] in
   let concl =
     forall "x" nat @@ forall "l" list_nat
     @@ mkApps perm_nat
@@ -351,11 +361,14 @@ let test_unif_1 () =
          ; mkApps cons_nat [ mkVar 1; mkVar 0 ]
          ]
   in
-  let actions = link_backward hyp [ 1 ] concl [ 1; 1 ] hlpred in
+  let concl_sub = [ 1; 1 ] in
+  let actions = link_backward hyp hyp_sub concl concl_sub hlpred in
   check_linkactions actions @@ function
   | Subform subst ->
-      subst.n_free_1 = 1 && subst.n_free_2 = 2 && is_bound subst 0
-      && is_rigid subst 1 && is_rigid subst 2
+      subst.n_free_1 = 1 && subst.n_free_2 = 2
+      && check_subst subst
+           (snd @@ TermUtils.subterm hyp hyp_sub)
+           (snd @@ TermUtils.subterm concl concl_sub)
   | _ -> false
 
 let test_unif_2 () =
@@ -369,6 +382,7 @@ let test_unif_2 () =
          ; mkApps perm_nat [ mkVar 2; mkVar 0 ]
          ]
   in
+  let hyp_sub = [ 1; 1; 1; 1; 1 ] in
   let concl =
     mkApp (mkCst Name.not)
     @@ forall "x" nat @@ exist "l1" list_nat @@ forall "l2" list_nat
@@ -377,18 +391,14 @@ let test_unif_2 () =
          ; mkApps cons_nat [ mkVar 2; mkVar 0 ]
          ]
   in
-  let actions =
-    link_backward hyp [ 1; 1; 1; 1; 1 ] concl [ 1; 1; 2; 1; 1 ] hlpred
-  in
+  let concl_sub = [ 1; 1; 2; 1; 1 ] in
+  let actions = link_backward hyp hyp_sub concl concl_sub hlpred in
   check_linkactions actions @@ function
   | Subform subst ->
       subst.n_free_1 = 3 && subst.n_free_2 = 3
-      (* In the hypothesis, l1 and l3 are bound but l2 is flex. *)
-      && is_bound subst 0
-      && is_flex subst 1 && is_bound subst 2
-      (* In the conclusion, x and l2 are flex but l1 is rigid. *)
-      && is_flex subst 3
-      && is_rigid subst 4 && is_flex subst 5
+      && check_subst subst
+           (snd @@ TermUtils.subterm hyp hyp_sub)
+           (snd @@ TermUtils.subterm concl concl_sub)
   | _ -> false
 
 let test_unif_3 () =
@@ -401,24 +411,21 @@ let test_unif_3 () =
          ; mkApps cons_nat [ mkVar 2; mkVar 0 ]
          ]
   in
+  let hyp_sub = [ 1; 1; 2; 1 ] in
   let concl =
     exist "x" nat @@ exist "l1" list_nat
     @@ mkApp (mkCst Name.not)
     @@ forall "l2" list_nat @@ forall "l0" list_nat
     @@ mkApps perm_nat [ mkApps cons_nat [ mkVar 3; mkVar 2 ]; mkVar 0 ]
   in
-  let actions =
-    link_backward hyp [ 1; 1; 2; 1 ] concl [ 2; 1; 2; 1; 1; 1; 1 ] hlpred
-  in
+  let concl_sub = [ 2; 1; 2; 1; 1; 1; 1 ] in
+  let actions = link_backward hyp hyp_sub concl concl_sub hlpred in
   check_linkactions actions @@ function
   | Subform subst ->
       subst.n_free_1 = 3 && subst.n_free_2 = 4
-      (* In the hypothesis. *)
-      && is_rigid subst 0
-      && is_flex subst 1 && is_flex subst 2
-      (* In the conclusion. *)
-      && is_bound subst 3
-      && is_flex subst 4 && is_bound subst 5 && is_bound subst 6
+      && check_subst subst
+           (snd @@ TermUtils.subterm hyp hyp_sub)
+           (snd @@ TermUtils.subterm concl concl_sub)
   | _ -> false
 
 (* This is the same as test_unif_3, but we swapped [exist l1] to [forall l1] in the conclusion.
@@ -449,12 +456,16 @@ let test_unif_5 () =
   let open Term in
   let hlpred = Link.Pred.(lift unifiable) in
   let hyp = forall "x" nat @@ mkApps eq_nat [ mkVar 0; mkVar 0 ] in
+  let hyp_sub = [ 1; 2 ] in
   let concl = forall "x" nat @@ mkApps eq_nat [ mkVar 0; mkVar 0 ] in
-  let actions = link_backward hyp [ 1; 2 ] concl [ 1; 2 ] hlpred in
+  let concl_sub = [ 1; 2 ] in
+  let actions = link_backward hyp hyp_sub concl concl_sub hlpred in
   check_linkactions actions @@ function
   | Subform subst ->
-      subst.n_free_1 = 1 && subst.n_free_2 = 1 && is_bound subst 0
-      && is_rigid subst 1
+      subst.n_free_1 = 1 && subst.n_free_2 = 1
+      && check_subst subst
+           (snd @@ TermUtils.subterm hyp hyp_sub)
+           (snd @@ TermUtils.subterm concl concl_sub)
   | _ -> false
 
 let test_unif_6 () =
