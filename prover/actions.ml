@@ -138,11 +138,11 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
         [ dst_sel ]
   in
 
-  Js_log.log "**********************************************************";
-  Js_log.log
-  @@ Format.sprintf "Sources : \n%s\nDests : \n%s\n"
-       (List.to_string (List.to_string Path.to_string) hyperlink_sources)
-       (List.to_string (List.to_string Path.to_string) hyperlink_dests);
+  (*Js_log.log "**********************************************************";
+    Js_log.log
+    @@ Format.sprintf "Sources : \n%s\nDests : \n%s\n"
+         (List.to_string (List.to_string Path.to_string) hyperlink_sources)
+         (List.to_string (List.to_string Path.to_string) hyperlink_dests);*)
 
   (* The hyperlink predicate we use for DnD actions. *)
   (*let hlpred_only_sel (pred : Pred.hlpred) : Pred.hlpred =
@@ -170,10 +170,6 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
   (* Build the action output. *)
   let* src = hyper_src in
   let* dst = hyper_dst in
-  Js_log.log
-  @@ Format.sprintf "%s |- %s --> %s\n" (Path.to_string src)
-       (Path.to_string dst)
-       (List.to_string show_linkaction linkactions);
   return
     { description = "Hyperlink"
     ; icon = None

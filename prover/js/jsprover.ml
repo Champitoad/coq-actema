@@ -103,9 +103,6 @@ let rec js_proof_engine (proof : Proof.t) =
 
     (* Return the given action as a binary, base64-encoded string. *)
     method encodeaction (goal_id, preaction) =
-      Js_log.log
-      @@ Format.sprintf "Encoding action : %d --> %s\n" goal_id
-           (Actions.show_preaction preaction);
       let action = !!(Export.export_action _self##.proof goal_id) preaction in
       Js_log.log @@ Api.Logic.show_action action;
       action
@@ -716,9 +713,10 @@ and js_term parent (goal_id : int) (kind : Path.kind) (term : Term.t) =
   end
 
 (** Print a single goal in Actema format (for debug purposes). *)
-let print_goal (Logic.{ g_id; g_pregoal = goal } : Logic.goal) : unit =
-  Js_log.log @@ Format.sprintf "%s\n"
-  @@ Notation.term_to_string goal.g_env goal.g_concl
+let print_goal (Logic.{ g_id; g_pregoal = goal } : Logic.goal) : unit = ()
+
+(*Js_log.log @@ Format.sprintf "%s\n"
+  @@ Notation.term_to_string goal.g_env goal.g_concl*)
 (*let xml = Notation.term_to_xml (Logic.Path.make 0) goal.g_env goal.g_concl in
   Js_log.log @@ Format.asprintf "%a\n" (Tyxml.Xml.pp ()) xml*)
 

@@ -4,7 +4,7 @@ Require Import ssreflect.
 
 Parameter (A : Prop) (B : Prop).
 
-Lemma test (a : A) : A /\ B.
+Lemma test (h : forall x, x = 0 \/ x = 3) : forall y, y = 3.
 Proof. actema_force. 
 
 

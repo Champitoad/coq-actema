@@ -113,9 +113,9 @@ let backward_step (state : state) : state * dnd_mode =
   (* Rule R⇒₂ *)
   | _, (FImpl (f0, f1), 1 :: sub) -> right_step state f1 sub
   (* Rule R⇔₁ *)
-  | _, (FConn (Equiv, [ f1; f2 ]), 1 :: sub) -> right_step state f1 sub
+  | _, (FConn (Equiv, [ f1; f2 ]), 1 :: sub) -> failwith "backward_step: todo"
   (* Rule R⇔₂ *)
-  | _, (FConn (Equiv, [ f1; f2 ]), 2 :: sub) -> right_step state f2 sub
+  | _, (FConn (Equiv, [ f1; f2 ]), 2 :: sub) -> failwith "backward_step: todo"
   (* Rule R∀s *)
   | _, (FBind (Forall, _, _, f1), 1 :: sub) when head_is_none state.witnesses2
     ->
@@ -134,47 +134,34 @@ let backward_step (state : state) : state * dnd_mode =
   (***********************************************************************)
   (* Right rules. *)
   (***********************************************************************)
-  (* Rule R∧₁ *)
-  | _, (FConn (And, [ f1; f2 ]), 1 :: sub) -> right_step state f1 sub
-  (* Rule R∧₂ *)
-  | _, (FConn (And, [ f1; f2 ]), 2 :: sub) -> right_step state f2 sub
-  (* Rule R∨₁ *)
-  | _, (FConn (Or, [ f1; f2 ]), 1 :: sub) -> right_step state f1 sub
-  (* Rule R∨₂ *)
-  | _, (FConn (Or, [ f1; f2 ]), 2 :: sub) -> right_step state f2 sub
-  (* Rule R∃s *)
+  (* Rules R∧₁ and R∨₁ *)
+  | _, (FConn (conn, [ f1; f2 ]), 1 :: sub) when conn = And || conn = Or ->
+      right_step state f1 sub
+  (* Rules R∧₂ and R∨₂ *)
+  | _, (FConn (conn, [ f1; f2 ]), 2 :: sub) when conn = And || conn = Or ->
+      right_step state f2 sub
+  (* Rules R∃s and R∃i *)
   | _, (FBind (Exist, _, _, f1), 2 :: 1 :: sub)
-    when head_is_none state.witnesses2 ->
-      right_step state ~binder:true f1 sub
-  (* Rule R∃i *)
-  | _, (FBind (Exist, _, _, f1), 2 :: 1 :: sub)
-    when head_is_some state.witnesses2 && instantiable state `Right ->
-      right_step state ~binder:true f1 sub
-  (* Rule R∃i *)
-  | _, (FBind (Exist, _, _, f1), 2 :: 1 :: sub)
-    when head_is_some state.witnesses2 ->
+    when head_is_none state.witnesses2
+         || (head_is_some state.witnesses2 && instantiable state `Right) ->
       right_step state ~binder:true f1 sub
   (***********************************************************************)
   (* Left rules. *)
   (***********************************************************************)
   (* Rule L⇒₂ *)
   | (FImpl (f0, f1), 1 :: sub), _ -> left_step state f1 sub
-  (* Rule L∧₁ *)
-  | (FConn (And, [ f1; f2 ]), 1 :: sub), _ -> left_step state f1 sub
-  (* Rule L∧₂ *)
-  | (FConn (And, [ f1; f2 ]), 2 :: sub), _ -> left_step state f2 sub
-  (* Rule L⇔₁ *)
-  | (FConn (Equiv, [ f1; f2 ]), 1 :: sub), _ -> left_step state f1 sub
-  (* Rule L⇔₂ *)
-  | (FConn (Equiv, [ f1; f2 ]), 2 :: sub), _ -> left_step state f2 sub
-  (* Rule L∀s *)
-  | (FBind (Forall, _, _, f1), 1 :: sub), _ when head_is_none state.witnesses1
-    ->
-      left_step state ~binder:true f1 sub
-  (* Rule L∀i *)
+  (* Rules L∧₁ and Rule L⇔₁ *)
+  | (FConn (conn, [ f1; f2 ]), 1 :: sub), _ when conn = Or || conn = Equiv ->
+      left_step state f1 sub
+  (* Rules L∧₂ and L⇔₂ *)
+  | (FConn (conn, [ f1; f2 ]), 2 :: sub), _ when conn = And || conn = Equiv ->
+      left_step state f2 sub
+  (* Rule L∀s and L∀i *)
   | (FBind (Forall, _, _, f1), 1 :: sub), _
-    when head_is_some state.witnesses1 && instantiable state `Left ->
+    when head_is_none state.witnesses1
+         || (head_is_some state.witnesses1 && instantiable state `Left) ->
       left_step state ~binder:true f1 sub
+  (* No applicable rule. *)
   | _ -> failwith "Interact.backward_step : no rule is applicable."
 
 (** Perform a single forward step. 
@@ -182,18 +169,66 @@ let backward_step (state : state) : state * dnd_mode =
 let forward_step (state : state) : state * dnd_mode =
   (* It is very important that we try the invertible rules before the other rules. *)
   match ((state.fo1, state.sub1), (state.fo2, state.sub2)) with
+  (***********************************************************************)
+  (* INVERTIBLE rules. *)
+  (***********************************************************************)
+  (* Rule F∃s *)
+  | _, (FBind (Exist, _, _, f1), 2 :: 1 :: sub)
+    when head_is_none state.witnesses2 ->
+      right_step state ~binder:true f1 sub
+  | (FBind (Exist, _, _, f1), 2 :: 1 :: sub), _
+    when head_is_none state.witnesses1 ->
+      left_step state ~binder:true f1 sub
+  (***********************************************************************)
+  (* Non invertible rules. *)
+  (***********************************************************************)
+  (* Rules F∧₁ and F∨₁ *)
+  | _, (FConn (conn, [ f1; f2 ]), 1 :: sub) when conn = And || conn = Or ->
+      right_step state f1 sub
+  | (FConn (conn, [ f1; f2 ]), 1 :: sub), _ when conn = And || conn = Or ->
+      left_step state f1 sub
+  (* Rules F∧₂ and F∨₂ *)
+  | _, (FConn (conn, [ f1; f2 ]), 2 :: sub) when conn = And || conn = Or ->
+      right_step state f2 sub
+  | (FConn (conn, [ f1; f2 ]), 2 :: sub), _ when conn = And || conn = Or ->
+      left_step state f2 sub
+  (* Rule F⇒₁ *)
+  | _, (FImpl (f0, f1), 0 :: sub) -> right_step state ~invert:true f0 sub
+  | (FImpl (f0, f1), 0 :: sub), _ -> left_step state ~invert:true f0 sub
+  (* Rule F⇒₂ *)
+  | _, (FImpl (f0, f1), 1 :: sub) -> right_step state f1 sub
+  | (FImpl (f0, f1), 1 :: sub), _ -> left_step state f1 sub
+  (* Rule F¬ *)
+  | _, (FConn (Not, [ f0 ]), 0 :: sub) -> right_step state ~invert:true f0 sub
+  | (FConn (Not, [ f0 ]), 0 :: sub), _ -> left_step state ~invert:true f0 sub
+  (* Rules F∀s and F∀i *)
+  | _, (FBind (Forall, _, _, f1), 1 :: sub)
+    when head_is_none state.witnesses2
+         || (head_is_some state.witnesses2 && instantiable state `Right) ->
+      right_step state ~binder:true f1 sub
+  | (FBind (Forall, _, _, f1), 1 :: sub), _
+    when head_is_none state.witnesses1
+         || (head_is_some state.witnesses1 && instantiable state `Left) ->
+      left_step state ~binder:true f1 sub
+  (* No applicable rule. *)
   | _ -> failwith "Interact.forward_step : no rule is applicable."
 
 (** The main interaction loop. *)
-let rec interact (state : state) mode : itrace =
+let rec interact ctx env (state : state) mode : itrace =
+  Js_log.log
+  @@ Format.sprintf "%s %s %s"
+       (Notation.term_to_string ~ctx env @@ FirstOrder.to_term state.fo1)
+       (match mode with Forward -> "*" | Backward -> "|-")
+       (Notation.term_to_string ~ctx env @@ FirstOrder.to_term state.fo2);
+
   if state.sub1 = [] && state.sub2 = []
   then (* We finished the interaction. *)
     List.rev state.itrace
   else
     (* Perform one interaction step. *)
     match mode with
-    | Forward -> forward_step state |> uncurry interact
-    | Backward -> backward_step state |> uncurry interact
+    | Forward -> forward_step state |> uncurry (interact ctx env)
+    | Backward -> backward_step state |> uncurry (interact ctx env)
 
 let swap_sides state : state = failwith "swap_sides : todo"
 
@@ -218,6 +253,13 @@ let dlink (src, dst) subst proof : itrace =
     pair_map List.rev @@ List.split_at subst.n_free_1 witnesses
   in
 
+  Js_log.log
+  @@ Format.sprintf "Source witnesses : %s"
+       (List.to_string (Option.map_default Term.show "[none]") src_wits);
+  Js_log.log
+  @@ Format.sprintf "Dest witnesses : %s"
+       (List.to_string (Option.map_default Term.show "[none]") dst_wits);
+
   (* Build the initial state. *)
   let state =
     { itrace = []
@@ -234,9 +276,9 @@ let dlink (src, dst) subst proof : itrace =
 
   (* Compute the interaction. *)
   match (src.kind, dst.kind) with
-  | Hyp _, Concl -> interact state Backward
-  | Concl, Hyp _ -> interact (swap_sides state) Backward
-  | Hyp _, Hyp _ -> interact state Forward
+  | Hyp _, Concl -> interact subst.context env state Backward
+  | Concl, Hyp _ -> interact subst.context env (swap_sides state) Backward
+  | Hyp _, Hyp _ -> interact subst.context env state Forward
   | _ -> failwith "Interact.dlink : invalid link."
 
 (*match
