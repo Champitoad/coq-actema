@@ -68,7 +68,8 @@
             <template v-for="lemma in lemmaList">
                 <li class="list-group-item p-1 my-1 lemma" title="Add this lemma as a hypothesis"
                     @click="addLemma(lemma)">
-                    <b>{{ lemma.name }}</b> <br> {{ lemma.form }}
+                    <b>{{ lemma.name }}</b> <br>
+                    <div style="white-space: pre;">{{ lemma.form }}</div>
                 </li>
             </template>
         </ul>
@@ -133,6 +134,7 @@ export default {
 
         // Callback invoked when user clicks on an entry in the lemma list.
         addLemma: async function (lemma) {
+            console.log("addLemma " + lemma.handle);
             this.$parent.sendLemma(this.goal, lemma.handle);
         },
 

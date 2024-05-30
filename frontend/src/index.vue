@@ -52,10 +52,10 @@ export default {
                 //let pattern = lemmaSearch.getLemmaSearchText();
                 //proofState = proofState.filterlemmas(selection, pattern);
                 // Load the new proof engine.
-                //this.$refs.proofCanvas.setProofState(proofState);
+                this.$refs.proofCanvas.setProofState(proofState);
 
                 // Once the new proof engine is loaded, update the lemma search bar.
-                //lemmaSearch.updateLemmaList();
+                lemmaSearch.updateLemmaList();
             } catch (e) {
                 this.$refs.proofCanvas.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);

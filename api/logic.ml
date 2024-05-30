@@ -335,6 +335,7 @@ type action =
   | AIntro of int
   | AElim of Name.t * int
   | AGeneralize of Name.t
+  | ALemmaAdd of Name.t
   | ALink of Path.t * Path.t * itrace
 [@@deriving show]
 

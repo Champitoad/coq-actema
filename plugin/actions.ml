@@ -265,138 +265,8 @@ exception InvalidPath of Logic.Path.t
     Log.str
     @@ Format.sprintf "%s::%s" (mpath_to_string mpath)
          (Names.Label.to_string label)
-
-  (** Decode a lemma name, as encoded by Export.encode_lemma_name. *)
-  let decode_lemma_name (name : string) : Names.Constant.t option =
-    let parse dirpath modpath label =
-      let dirpath =
-        (if dirpath = "" then [] else String.split_on_char '.' dirpath)
-        |> List.rev_map Names.Id.of_string
-        |> Names.DirPath.make
-      in
-      let modpath =
-        (if modpath = "" then [] else String.split_on_char '.' modpath)
-        |> List.map Names.Label.make
-      in
-      let modpath =
-        List.fold_left
-          begin
-            fun acc label -> Names.ModPath.MPdot (acc, label)
-          end
-          (Names.ModPath.MPfile dirpath) modpath
-      in
-      let label = Names.Label.make label in
-      Names.Constant.make2 modpath label
-    in
-    try Some (Scanf.sscanf name "C%s@/%s@/%s" parse) with _ -> None
-
-  (** Decode a constructor name, as encoded by Export.encode_constructor_name. *)
-  let decode_constructor_name (name : string) : Names.Construct.t option =
-    let parse dirpath modpath label i j =
-      let dirpath =
-        (if dirpath = "" then [] else String.split_on_char '.' dirpath)
-        |> List.rev_map Names.Id.of_string
-        |> Names.DirPath.make
-      in
-      let modpath =
-        (if modpath = "" then [] else String.split_on_char '.' modpath)
-        |> List.map Names.Label.make
-      in
-      let modpath =
-        List.fold_left
-          begin
-            fun acc label -> Names.ModPath.MPdot (acc, label)
-          end
-          (Names.ModPath.MPfile dirpath) modpath
-      in
-      let label = Names.Label.make label in
-      let mind = Names.MutInd.make2 modpath label in
-      ((mind, i), j)
-    in
-    try Some (Scanf.sscanf name "I%s@/%s@/%s@/%d/%d" parse) with _ -> None*)
-
-(*(** Execute an [ALemma] action. This consists in adding the required lemma as a hypothesis. *)
-  let execute_alemma coq_goal full_name =
-    (* Decode the lemma name. *)
-    let stmt, basename =
-      match decode_lemma_name full_name with
-      (* Case of a lemma that comes from a constant. *)
-      | Some const_name -> begin
-          (* Check the lemma exists in the environment. *)
-          begin
-            if not @@ Environ.mem_constant const_name (Goal.env coq_goal)
-            then
-              let msg = "Name matches no lemma in the COQ environment." in
-              raise @@ UnsupportedAction (ALemma full_name, msg)
-          end;
-          (* Create a term containing the lemma. *)
-          let (_, inst), _ =
-            UnivGen.fresh_constant_instance (Goal.env coq_goal) const_name
-          in
-          let stmt = EConstr.mkConstU (const_name, EConstr.EInstance.make inst) in
-          (* Choose a base name for the hypothesis. *)
-          let basename =
-            Names.Constant.label const_name |> Names.Label.to_string
-          in
-          (stmt, basename)
-        end
-      | None -> begin
-          match decode_constructor_name full_name with
-          (* Case of a lemma that comes from an inductive constructor. *)
-          | Some ((mind_name, i), j) ->
-              (* Check the mutual inductive block exists in the environment. *)
-              begin
-                if not @@ Environ.mem_mind mind_name (Goal.env coq_goal)
-                then
-                  let msg =
-                    "Name matches no mutual inductive in the COQ environment."
-                  in
-                  raise @@ UnsupportedAction (ALemma full_name, msg)
-              end;
-              let mind_body = Environ.lookup_mind mind_name (Goal.env coq_goal) in
-              (* Check the inductive exists. *)
-              begin
-                if i < 0 || i >= mind_body.Declarations.mind_ntypes
-                then
-                  let msg =
-                    Format.sprintf "Inductive index %d is out of bounds." i
-                  in
-                  raise @@ UnsupportedAction (ALemma full_name, msg)
-              end;
-              let ind_body = mind_body.Declarations.mind_packets.(i) in
-              (* Check the constructor exists. *)
-              begin
-                if j < 1 || j > Array.length ind_body.Declarations.mind_consnames
-                then
-                  let msg =
-                    Format.sprintf "Constructor index %d is out of bounds." j
-                  in
-                  raise @@ UnsupportedAction (ALemma full_name, msg)
-              end;
-              let constr_name = ind_body.Declarations.mind_consnames.(j - 1) in
-              (* Create a term containing the lemma. *)
-              let (_, inst), _ =
-                UnivGen.fresh_constructor_instance (Goal.env coq_goal)
-                  ((mind_name, i), j)
-              in
-              let stmt =
-                EConstr.mkConstructU
-                  (((mind_name, i), j), EConstr.EInstance.make inst)
-              in
-              (* Choose a base name for the hypothesis. *)
-              let basename = Names.Id.to_string constr_name in
-              (stmt, basename)
-          | None ->
-              raise
-              @@ UnsupportedAction
-                   (ALemma full_name, "Could not decode lemma name.")
-        end
-    in
-    (* Choose a name for the hypothesis. *)
-    let hyp_name = Names.Name.mk_name @@ Goal.fresh_name ~basename coq_goal () in
-    (* Add the lemma as a hypothesis. *)
-    Tactics.pose_proof hyp_name stmt
-
+*)
+(*
 
   let execute_alink coq_goal sign goal src dst (itr : Logic.itrace) =
     let get_eq (p : Logic.ipath) : (bool list * bool) option =
@@ -763,6 +633,128 @@ let execute_aelim (api_goal : Logic.pregoal) hyp_name i : unit tactic =
       let msg = "Could not apply elimination action." in
       raise @@ UnsupportedAction (Logic.AElim (hyp_name, i), msg)
 
+(** Decode a lemma name, as encoded by Translate.encode_lemma_name. *)
+let decode_lemma_name (name : string) : Names.Constant.t option =
+  let parse dirpath modpath label =
+    let dirpath =
+      (if dirpath = "" then [] else String.split_on_char '.' dirpath)
+      |> List.rev_map Names.Id.of_string
+      |> Names.DirPath.make
+    in
+    let modpath =
+      (if modpath = "" then [] else String.split_on_char '.' modpath)
+      |> List.map Names.Label.make
+    in
+    let modpath =
+      List.fold_left
+        begin
+          fun acc label -> Names.ModPath.MPdot (acc, label)
+        end
+        (Names.ModPath.MPfile dirpath) modpath
+    in
+    let label = Names.Label.make label in
+    Names.Constant.make2 modpath label
+  in
+  try Some (Scanf.sscanf name "C%s@/%s@/%s" parse) with _ -> None
+
+(** Decode a constructor name, as encoded by Translate.encode_constructor_name. *)
+let decode_constructor_name (name : string) : Names.Construct.t option =
+  let parse dirpath modpath label i j =
+    let dirpath =
+      (if dirpath = "" then [] else String.split_on_char '.' dirpath)
+      |> List.rev_map Names.Id.of_string
+      |> Names.DirPath.make
+    in
+    let modpath =
+      (if modpath = "" then [] else String.split_on_char '.' modpath)
+      |> List.map Names.Label.make
+    in
+    let modpath =
+      List.fold_left
+        begin
+          fun acc label -> Names.ModPath.MPdot (acc, label)
+        end
+        (Names.ModPath.MPfile dirpath) modpath
+    in
+    let label = Names.Label.make label in
+    let mind = Names.MutInd.make2 modpath label in
+    ((mind, i), j)
+  in
+  try Some (Scanf.sscanf name "I%s@/%s@/%s@/%d/%d" parse) with _ -> None
+
+(** Execute an [ALemmaAdd] action. This consists in adding the required lemma as a hypothesis. *)
+let execute_alemma_add coq_goal full_name =
+  let decode_constant const_name =
+    (* Check the lemma exists in the environment. *)
+    begin
+      if not @@ Environ.mem_constant const_name (Goal.env coq_goal)
+      then
+        let msg = "Name matches no lemma in the COQ environment." in
+        raise @@ UnsupportedAction (ALemmaAdd full_name, msg)
+    end;
+    (* Create a term containing the lemma. *)
+    let (_, inst), _ =
+      UnivGen.fresh_constant_instance (Goal.env coq_goal) const_name
+    in
+    let stmt = EConstr.mkConstU (const_name, EConstr.EInstance.make inst) in
+    (* Choose a base name for the hypothesis. *)
+    let basename = Names.Constant.label const_name |> Names.Label.to_string in
+    (stmt, basename)
+  in
+  let decode_constructor constr_name =
+    let (mind_name, i), j = constr_name in
+    (* Check the mutual inductive block exists in the environment. *)
+    begin
+      if not @@ Environ.mem_mind mind_name (Goal.env coq_goal)
+      then
+        let msg = "Name matches no mutual inductive in the COQ environment." in
+        raise @@ UnsupportedAction (ALemmaAdd full_name, msg)
+    end;
+    let mind_body = Environ.lookup_mind mind_name (Goal.env coq_goal) in
+    (* Check the inductive exists. *)
+    begin
+      if i < 0 || i >= mind_body.Declarations.mind_ntypes
+      then
+        let msg = Format.sprintf "Inductive index %d is out of bounds." i in
+        raise @@ UnsupportedAction (ALemmaAdd full_name, msg)
+    end;
+    let ind_body = mind_body.Declarations.mind_packets.(i) in
+    (* Check the constructor exists. *)
+    begin
+      if j < 1 || j > Array.length ind_body.Declarations.mind_consnames
+      then
+        let msg = Format.sprintf "Constructor index %d is out of bounds." j in
+        raise @@ UnsupportedAction (ALemmaAdd full_name, msg)
+    end;
+    let constr_name = ind_body.Declarations.mind_consnames.(j - 1) in
+    (* Create a term containing the lemma. *)
+    let (_, inst), _ =
+      UnivGen.fresh_constructor_instance (Goal.env coq_goal) ((mind_name, i), j)
+    in
+    let stmt =
+      EConstr.mkConstructU (((mind_name, i), j), EConstr.EInstance.make inst)
+    in
+    (* Choose a base name for the hypothesis. *)
+    let basename = Names.Id.to_string constr_name in
+    (stmt, basename)
+  in
+
+  let stmt, basename =
+    let open Utils.Monad.Option in
+    let name_str = Lang.Name.show full_name in
+    let res_opt =
+      decode_constant <$> decode_lemma_name name_str
+      <|> (decode_constructor <$> decode_constructor_name name_str)
+    in
+    Option.get_exn res_opt
+      (UnsupportedAction (ALemmaAdd full_name, "Could not decode lemma name."))
+  in
+
+  (* Choose a name for the hypothesis. *)
+  let hyp_name = Names.Name.mk_name @@ Goal.fresh_name ~basename coq_goal () in
+  (* Add the lemma as a hypothesis. *)
+  Tactics.pose_proof hyp_name stmt
+
 let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   let api_goal = Translate.goal coq_goal in
   match action with
@@ -784,6 +776,7 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
       Generalize.generalize_dep (EConstr.mkVar name)
   | Logic.AIntro side -> execute_aintro api_goal side
   | Logic.AElim (hyp_name, i) -> execute_aelim api_goal hyp_name i
+  | Logic.ALemmaAdd full_name -> execute_alemma_add coq_goal full_name
   | Logic.ALink _ ->
       raise
         (UnsupportedAction

@@ -271,15 +271,9 @@ export default {
                 return this.hypsZoneStart_;
             },
             set: function (newStart) {
-                //let hypsWidths = $(".pi-btn.in-hypothesis-zone")
-                //    .map(function () { return $(this).outerWidth(); })
-                //    .toArray();
-                //let maxHypWidth = _.max(hypsWidths) + 80;
-                //if (hypsWidths.length === 0 || newWidth >= maxHypWidth) {
-                if (0.05 <= newStart && newStart <= this.hypsZoneEnd - 0.05) {
+                if (0.1 <= newStart && newStart <= this.hypsZoneEnd - 0.05) {
                     this.hypsZoneStart_ = newStart;
                 }
-                //}
             }
         },
         // The start of the hypotheses zone, as a percentage (between 0.0 and 1.0).
@@ -288,15 +282,9 @@ export default {
                 return this.hypsZoneEnd_;
             },
             set: function (newEnd) {
-                //let hypsWidths = $(".pi-btn.in-hypothesis-zone")
-                //    .map(function () { return $(this).outerWidth(); })
-                //    .toArray();
-                //let maxHypWidth = _.max(hypsWidths) + 80;
-                //if (hypsWidths.length === 0 || newWidth >= maxHypWidth) {
                 if (this.hypsZoneStart + 0.05 <= newEnd && newEnd <= 0.95) {
                     this.hypsZoneEnd_ = newEnd;
                 }
-                //}
             }
         },
     },
@@ -539,7 +527,7 @@ export default {
         // Send a [lemma] action to the plugin.
         sendLemma(subgoal, handle) {
             try {
-                let action = subgoal.addlemmab(handle);
+                let action = subgoal.encodelemmaadd(handle);
                 this.sendAction(action);
             } catch (e) {
                 this.showErrorMessage(e);

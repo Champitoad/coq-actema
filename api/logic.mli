@@ -233,6 +233,9 @@ type action =
      More precisely this is dependent generalization : any variables / hypothesis that depend on h
      are also generalized. *)
   | AGeneralize of Name.t
+  (* Add a lemma to the proof context (i.e. as a hypothesis).
+     The [name] contains the full name of the lemma, slightly encoded. *)
+  | ALemmaAdd of Name.t
   (* A link (DnD) action. The paths are the two sides of the link. *)
   | ALink of Path.t * Path.t * itrace
 (* Click on a hypothesis *)

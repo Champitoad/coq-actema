@@ -263,29 +263,27 @@ let rec js_proof_engine (proof : Proof.t) =
       in
       !!doit ()
 
-    (*(** Serialize the current lemma database into a JS array.
-             Returns an array of lemmas. Each lemma contains the following :
-               (handle (int), name (string), pretty-printed-formula (string)).
-             For performance reasons, we only return a limited amount of lemmas. *)
-      method getlemmas =
-        let db = _self##.proof |> Proof.get_db in
-        db |> Proof.Lemmas.to_list |> List.take 100
-        |> List.map
-             begin
-               fun (handle, lemma) ->
-                 let handle =
-                   handle |> Handle.toint |> string_of_int |> Js.string
-                 in
-                 let name = lemma.Proof.l_user |> Js.string in
-                 let form =
-                   Notation.f_tostring (Proof.Lemmas.env db) lemma.l_form
-                   |> Js.string
-                 in
-                 Js.array [| handle; name; form |]
-             end
-        |> Array.of_list |> Js.array
+    (** Serialize the current lemma database into a JS array.
+        Returns an array of lemmas. Each lemma contains the following :
+          (handle (int), name (string), pretty-printed-formula (string)).
+        For performance reasons, we only return a limited amount of lemmas. *)
+    method getlemmas =
+      let db = _self##.proof |> Proof.get_db in
+      db |> Lemmas.to_list |> List.take 50
+      |> List.map
+           begin
+             fun lemma ->
+               let handle = lemma.l_full |> Name.show |> Js.string in
+               let name = lemma.l_user |> Name.show |> Js.string in
+               let form =
+                 Notation.term_to_string ~width:30 (Lemmas.env db) lemma.l_form
+                 |> Js.string
+               in
+               Js.array [| handle; name; form |]
+           end
+      |> Array.of_list |> Js.array
 
-      (** Filter the lemma database according to :
+    (*(** Filter the lemma database according to :
              - the current selection.
              - a text pattern (usually the text in the lemma search-bar's input-box).
              Both arguments are optional (in javascript-land, they can be undefined). *)
@@ -419,64 +417,63 @@ and js_subgoal parent (handle : int) =
         in
         !!doit ()*)
 
-    (*(** [this#addlemmab (handle : int)] return the base64-encoded string of the corresponding ALemma action. *)
-      method addlemmab handle =
-          let doit () =
-            (* Find the lemma (and raise an exception if it is not found). *)
-            let db = Proof.get_db parent##.proof in
-            let lemma = Proof.Lemmas.byid db handle in
-            js_log @@ Format.sprintf "addlemmab %s\n" lemma.l_full;
-            (* Recheck the lemma just to make sure. *)
-            Form.recheck (Proof.Lemmas.env db) lemma.l_form;
-            (* Construct the action and encode it. *)
-            Api.Logic.ALemma lemma.l_full
-            |> Fun.flip Marshal.to_string []
-            |> Base64.encode_string |> Js.string
-          in
-          !!doit ()
+    (** [this#encodelemmaadd (full_name : string)] return the base64-encoded string 
+        of the corresponding ALemmaAdd action. *)
+    method encodelemmaadd handle =
+      let doit () =
+        (* Find the lemma (and raise an exception if it is not found). *)
+        let full_name = Name.make @@ Js.to_string handle in
+        let db = Proof.get_db parent##.proof in
+        let lemma = Lemmas.by_name db full_name in
+        (* Construct the action and encode it. *)
+        Logic.ALemmaAdd lemma.l_full
+        |> Fun.flip Marshal.to_string []
+        |> Base64.encode_string |> Js.string
+      in
+      !!doit ()
 
-        (** [this#add_local (name : string) (expr : string)] parses [expr] in the goal
-               [context] and adds it to the local [context] under the name [name]. *)
-        method addlocal name expr =
-          let doit () =
-            let goal = _self##goal in
-            let expr = String.trim (Js.to_string expr) in
-            let expr = Io.parse_expr (Io.from_string expr) in
-            let expr, ty = Form.echeck goal.g_env expr in
-            Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle
-              (Js.to_string name, ty, expr)
-          in
-          js_proof_engine (!!doit ())
+    (* (** [this#add_local (name : string) (expr : string)] parses [expr] in the goal
+              [context] and adds it to the local [context] under the name [name]. *)
+       method addlocal name expr =
+         let doit () =
+           let goal = _self##goal in
+           let expr = String.trim (Js.to_string expr) in
+           let expr = Io.parse_expr (Io.from_string expr) in
+           let expr, ty = Form.echeck goal.g_env expr in
+           Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle
+             (Js.to_string name, ty, expr)
+         in
+         js_proof_engine (!!doit ())
 
-        (** [this#add_alias (nexpr : string)] parses [nexpr] as a named expression
-               in the goal [context] and add it to the local [context]. *)
-        method addalias expr =
-          let doit () =
-            let goal = _self##goal in
-            let expr = String.trim (Js.to_string expr) in
-            let name, expr = Io.parse_nexpr (Io.from_string expr) in
-            let expr, ty = Form.echeck goal.g_env expr in
-            Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle
-              (Location.unloc name, ty, expr)
-          in
-          js_proof_engine (!!doit ())
+       (** [this#add_alias (nexpr : string)] parses [nexpr] as a named expression
+              in the goal [context] and add it to the local [context]. *)
+       method addalias expr =
+         let doit () =
+           let goal = _self##goal in
+           let expr = String.trim (Js.to_string expr) in
+           let name, expr = Io.parse_nexpr (Io.from_string expr) in
+           let expr, ty = Form.echeck goal.g_env expr in
+           Proof.Tactics.add_local_def parent##.proof ~goal_id:_self##.handle
+             (Location.unloc name, ty, expr)
+         in
+         js_proof_engine (!!doit ())
 
-        (** [this#getaliasb (nexpr : string)] parses [nexpr] as a named expression
-               in the current goal, and returns the base64-encoded string of the
-               corresponding ADef action. *)
-        method getaliasb expr =
-          let doit () =
-            let goal = _self##goal in
-            let expr = String.trim (Js.to_string expr) in
-            let name, expr = Io.parse_nexpr (Io.from_string expr) in
-            let expr, ty = Form.echeck goal.g_env expr in
-            let name = Location.unloc name in
-            let expr, ty = Fo.Translate.(of_expr expr, of_type_ ty) in
-            Api.Logic.ADef (name, ty, expr)
-            |> Fun.flip Marshal.to_string []
-            |> Base64.encode_string |> Js.string
-          in
-          !!doit ()*)
+       (** [this#getaliasb (nexpr : string)] parses [nexpr] as a named expression
+              in the current goal, and returns the base64-encoded string of the
+              corresponding ADef action. *)
+       method getaliasb expr =
+         let doit () =
+           let goal = _self##goal in
+           let expr = String.trim (Js.to_string expr) in
+           let name, expr = Io.parse_nexpr (Io.from_string expr) in
+           let expr, ty = Form.echeck goal.g_env expr in
+           let name = Location.unloc name in
+           let expr, ty = Fo.Translate.(of_expr expr, of_type_ ty) in
+           Api.Logic.ADef (name, ty, expr)
+           |> Fun.flip Marshal.to_string []
+           |> Base64.encode_string |> Js.string
+         in
+         !!doit ()*)
 
     (** [this#move_hyp (from : string) (before : string option)] moves
         hypothesis [from] before hypothesis [before].
