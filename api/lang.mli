@@ -1,6 +1,6 @@
 (** This module defines the language used by the frontend & prover. 
     We call this the Actema language to distinguish it from the language used by Coq.
-    It is the which creates Actema terms (from Coq terms). *)
+    It is the plugin which creates Actema terms (from Coq terms). *)
 
 open Utils.Pervasive
 

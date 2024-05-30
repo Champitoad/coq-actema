@@ -1,4 +1,6 @@
 (library
  (name utils)
  (public_name coq-actema.utils)
- (libraries qcheck-core batteries.unthreaded tyxml))
+ (libraries qcheck-core batteries.unthreaded tyxml)
+ (preprocess
+  (pps ppx_deriving.show)))
