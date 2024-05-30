@@ -38,10 +38,10 @@ export default {
         res.end('');
       });
       // Request lemmas to the backend.
-      ipcMain.once('request_lemmas', (_, msg) => {
+      ipcMain.once('request_lemmas', _ => {
         let rcode = 254;
         res.writeHead(rcode, { 'Content-Type': 'text/plain' });
-        res.end(msg);
+        res.end('');
       });
 
       ipcMain.once('error', (_, msg) => {

@@ -39,6 +39,8 @@ export default {
         // update the lemma database when lemmas are received.
         window.ipcRenderer.on('received_lemmas', (_, datab) => {
             try {
+                console.log("Received lemmas");
+
                 let proofState = this.$refs.proofCanvas.getProofState();
                 let subgoal_idx = this.$refs.proofCanvas.getActiveSubgoal();
                 let lemmaSearch = this.$refs.proofCanvas.$refs.lsearch[subgoal_idx];
@@ -46,14 +48,14 @@ export default {
                 // Load the lemmas in the proof engine.
                 proofState = proofState.loadlemmas(datab);
                 // Filter the lemma database.            
-                let selection = this.$refs.proofCanvas.getActiveSelection();
-                let pattern = lemmaSearch.getLemmaSearchText();
-                proofState = proofState.filterlemmas(selection, pattern);
+                //let selection = this.$refs.proofCanvas.getActiveSelection();
+                //let pattern = lemmaSearch.getLemmaSearchText();
+                //proofState = proofState.filterlemmas(selection, pattern);
                 // Load the new proof engine.
-                this.$refs.proofCanvas.setProofState(proofState);
+                //this.$refs.proofCanvas.setProofState(proofState);
 
                 // Once the new proof engine is loaded, update the lemma search bar.
-                lemmaSearch.updateLemmaList();
+                //lemmaSearch.updateLemmaList();
             } catch (e) {
                 this.$refs.proofCanvas.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$refs.proofCanvas.errorMsg);

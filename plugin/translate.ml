@@ -291,12 +291,7 @@ let constant_lemmas state : Logic.lemma list =
                in
                let ty = ckey.Declarations.const_type |> EConstr.of_constr in
                let l_form = translate_term state ty in
-
-               (* Check we did indeed manage to translate the lemma.
-                  Discard the lemma if it is not the case. *)
-               if Name.Set.mem Name.dummy (TermUtils.constants l_form)
-               then None
-               else Some Logic.{ l_user; l_full = Name.make l_full; l_form }
+               Some Logic.{ l_user; l_full = Name.make l_full; l_form }
        end
 
 (** Collect all the lemmas from coq_env.env_globals.inductives we can translate to Actema. *)
@@ -334,15 +329,27 @@ let constructor_lemmas state : Logic.lemma list =
                  |> Names.Id.to_string |> Name.make
                in
                let l_form = translate_term state @@ EConstr.of_constr ctype in
-               (* Check we did indeed manage to translate the constructor's type.
-                  Discard the lemma if it is not the case. *)
-               if Name.Set.mem Name.dummy @@ TermUtils.constants l_form
-               then None
-               else Some Logic.{ l_user; l_full = Name.make l_full; l_form }
+               Some Logic.{ l_user; l_full = Name.make l_full; l_form }
        end
 
 let lemmas coq_goal : Logic.lemma list * Lang.Env.t =
+  let open Lang in
   let state = initial_state coq_goal in
   let l1 = constant_lemmas state in
   let l2 = constructor_lemmas state in
-  (l1 @ l2, state.env)
+
+  (* Filter out the lemmas that we couldn't translate correctly. *)
+  let lemmas =
+    List.filter
+      begin
+        fun l ->
+          let form = l.Logic.l_form in
+          (* Check we managed to translate all the lemma's subterms. *)
+          (not (Name.Set.mem Name.dummy (TermUtils.constants form)))
+          (* Check the lemma type-checks. This can sometimes fail because Coq
+             uses beta-conversion when type-checking, but Actema does not. *)
+          && Typing.well_typed state.env form
+      end
+      (l1 @ l2)
+  in
+  (lemmas, state.env)

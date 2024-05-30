@@ -364,7 +364,10 @@ module Typing = struct
     | Var n -> begin
         match Context.get n ctx with
         | None -> raise @@ TypingError (UnboundVar n)
-        | Some (_, ty) -> ty
+        | Some (_, ty) ->
+            (* Don't forget to lift the type of [Var n].
+               Indeed, we traversed (n+1) binders since [n] was bound. *)
+            TermUtils.lift_free (n + 1) ty
       end
     | Cst c -> begin
         match Name.Map.find_opt c env.Env.constants with
@@ -420,6 +423,12 @@ module Typing = struct
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
 
   let check ?(context = Context.empty) env t = check_rec env context t
+
+  let well_typed ?(context = Context.empty) env t =
+    try
+      ignore (check ~context env t);
+      true
+    with TypingError _ -> false
 
   (** TODO: actually makes this faster. *)
   let typeof ?(context = Context.empty) env t = check ~context env t

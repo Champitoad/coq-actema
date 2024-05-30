@@ -56,15 +56,10 @@ let () =
     begin
       fun exn ->
         match exn with
-        (*| DuplicatedEntry (_, name) ->
-              Some ("duplicated entry \"" ^ name ^ "\" in goal")
-          | TypingError -> Some "invalid goal (typing error)"
-          | RecheckFailure -> Some "invalid goal (recheck failure)"
-          | Proof.Tactics.TacticNotApplicable -> Some "tactic not applicable"*)
         | MoveOnlyHyps name ->
             Some ("Reordering variables is not supported : " ^ name)
         | Typing.TypingError err ->
-            Some ("Invalid goal (typing error)\n" ^ Typing.show_typeError err)
+            Some ("Typing error\n" ^ Typing.show_typeError err)
         | _ -> None
     end
 
@@ -101,7 +96,7 @@ let rec js_proof_engine (proof : Proof.t) =
     (* Return true when there are no opened subgoals left *)
     method closed = Js.bool (Proof.is_closed proof)
 
-    (* Return the given action as a binary, base64-encoded string. *)
+    (** Return the given action as a binary, base64-encoded string. *)
     method encodeaction (goal_id, preaction) =
       let action = !!(Export.export_action _self##.proof goal_id) preaction in
       Js_log.log @@ Api.Logic.show_action action;
@@ -227,80 +222,48 @@ let rec js_proof_engine (proof : Proof.t) =
                   |])
               actions))
 
-    (*(** [this#lemmareqb (selection : ProverLogic.IPath.t list) (pattern : string)] returns the base64-encoded string corresponding to the parameters of
-             a lemma request, where [pattern] is the text entered in the lemma search bar and [selection] is the currently selected subformula. *)
-      method lemmareqb selection pattern =
-        let doit () =
-          (* Convert the pattern from JS to ocaml. *)
-          let pattern =
-            pattern |> Js.Optdef.to_option
-            |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
-            |> begin
-                 function Some "" -> None | x -> x
-               end
-          in
-          (* Convert the selection from JS to ocaml. *)
-          let selection =
-            match
-              selection |> Js.Optdef.to_option |> Option.map ipath_of_array
-            with
-            | None -> None
-            | Some [] -> None
-            | Some [ selection ] -> Some selection
-            | Some _ ->
-                js_log
-                  "Jsapi.lemmareqb : limited to one selection. Setting selection \
-                   to None.";
-                None
-          in
-          (* Get the sub-formula pointed at by the selection. *)
-          let term =
-            selection
-            |> Option.map (ProverLogic.IPath.term _self##.proof)
-            |> Option.map Fo.Translate.of_term
-          in
-          (* Encode the pattern and formula. *)
-          ((pattern, term) : string option * Api.Logic.term option)
-          |> Fun.flip Marshal.to_string []
-          |> Base64.encode_string |> Js.string
-        in
-        !!doit ()
-
-      (** Load the lemma database specified by the [data] object into the prover. *)
-      method loadlemmas datab =
+    (** Load the lemma database specified by the [data] object into the prover. *)
+    method loadlemmas datab =
+      let doit () =
         (* Decode the data.
            The type annotation here is very important for unmarshaling to work. *)
-        let (env, lemmas) : Api.Logic.lemmadb =
+        let (env, lemmas) : Env.t * Logic.lemma list =
           datab |> Js.to_string |> Base64.decode_exn
           |> Fun.flip Marshal.from_string 0
         in
-        (* Translate the lemmas and env to the actema format. *)
-        let lemmas =
-          List.map
-            begin
-              fun Api.Logic.{ l_user; l_full; l_stmt } ->
-                Proof.{ l_user; l_full; l_form = Fo.Translate.to_form l_stmt }
-            end
-            lemmas
-        in
-        let env = Hidmap.State.run (Fo.Translate.to_env env) Hidmap.empty in
         (* Check the lemmas are all well-typed in the database environment. *)
-        List.iter (fun lemma -> Fo.Form.recheck env lemma.Proof.l_form) lemmas;
-        (* Create the lemma database. First we have to assign a handle to each lemma. *)
-        let db =
-          Proof.Lemmas.extend_env env
-          @@ Proof.Lemmas.of_list
-          @@ List.mapi (fun _ lemma -> (Handle.fresh (), lemma)) lemmas
-        in
+        List.iter
+          begin
+            fun lemma ->
+              try ignore @@ Typing.check env lemma.l_form
+              with Typing.TypingError err ->
+                Js_log.log
+                @@ Format.sprintf "In lemma %s\n%s\nTyping Error\n%s\n"
+                     (Name.show lemma.l_full)
+                     (Notation.term_to_string env lemma.l_form)
+                     (Typing.show_typeError err)
+          end
+          lemmas;
+        (* Create the lemma database. *)
+        let db = Lemmas.of_list lemmas |> Lemmas.extend_env env in
         (* Print debug info. *)
-        js_log
+        Js_log.log
         @@ Format.sprintf "Received lemmas (count=%d)\n" (List.length lemmas);
-        (*List.iter (fun (name, _) -> js_log name) lemmas;*)
+        List.iter
+          begin
+            fun lemma ->
+              Js_log.log
+              @@ Format.sprintf "%s :: %s" (Name.show lemma.l_full)
+                   (Notation.term_to_string env lemma.l_form)
+          end
+          (List.take 10 lemmas);
         (* Load the lemmas in the database. *)
         let new_proof = Proof.set_db _self##.proof db in
         js_proof_engine new_proof
+      in
+      !!doit ()
 
-      (** Serialize the current lemma database into a JS array.
+    (*(** Serialize the current lemma database into a JS array.
              Returns an array of lemmas. Each lemma contains the following :
                (handle (int), name (string), pretty-printed-formula (string)).
              For performance reasons, we only return a limited amount of lemmas. *)

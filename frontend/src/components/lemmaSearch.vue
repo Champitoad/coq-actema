@@ -103,15 +103,12 @@ export default {
         searchLemmas: function () {
             try {
                 console.log("Requesting lemmas\n");
+
+                // Hide the "Search" button (as visual feedback that we are doing something).
                 let button = document.getElementById("lemmas");
                 button.style.display = "none";
 
-                let pattern = this.lemmaSearchText;
-                let selection = this.$parent.getActiveSelection();
-                let proofState = this.$parent.getProofState();
-                let msg = proofState.lemmareqb(selection, pattern);
-
-                window.ipcRenderer.send('request_lemmas', msg);
+                window.ipcRenderer.send('request_lemmas');
             } catch (e) {
                 this.$parent.showErrorMessage(e);
                 window.ipcRenderer.send('error', this.$parent.errorMsg);
@@ -125,6 +122,7 @@ export default {
                 return { handle: l[1][0], name: l[1][1], form: l[1][2] }
             });
 
+            // Un-hide the "Search" button.
             let button = document.getElementById("lemmas");
             button.style.display = "block";
         },

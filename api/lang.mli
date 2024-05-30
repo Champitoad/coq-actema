@@ -311,6 +311,9 @@ module Typing : sig
   (** [typeof ?context env t] gets the type of the term [t]. 
       This assumes that [t] is well-typed, and is faster than [check env t]. *)
   val typeof : ?context:Context.t -> Env.t -> Term.t -> Term.t
+
+  (** [well_typed ?context env t] checks that [t] is well-typed. *)
+  val well_typed : ?context:Context.t -> Env.t -> Term.t -> bool
 end
 
 (** This module defines functions for generating arbitrary terms. 

@@ -11,15 +11,22 @@ exception UnsupportedHttpResponseCode of int
 (** The plugin sends the goals (in API format) to the frontend, 
     which sends back an action. *)
 type action =
+  (* The user made an action in the frontend (e.g. a drag-and-drop).
+     The [int] argument is the index of the subgoal the action takes places in. *)
   | Do of int * Logic.action
+  (* The user is finished in Actema. This does not mean that the proof is complete :
+     the user may continue the proof using e.g. Ltac. *)
   | Done
+  (* Undo the last Actema action. *)
   | Undo
+  (* Redo the last undone Actema action. *)
   | Redo
-  | Lemmas of string option * Term.t option
-      (** The frontend asks the plugin for a list of lemmas.
-          The parameters are used to perform a pre-selection of lemmas : 
-          - The string is a pattern to match against the lemma name.
-          - The term is the selected subterm. It can have free variables. *)
+  (* The prover requires us to send the list of (all) lemmas.
+
+     We only do this on request (and not by default) because sending the lemmas
+     over HTTP and then parsing them in the prover can take a bit of time (around 1 second).
+     This delay would be a bit annoying if it happened on every actema action. *)
+  | Lemmas
 
 (** Tell the frontend that the proof is complete, and receive an (empty) response. *)
 val send_qed : unit -> unit Lwt.t

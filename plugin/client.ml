@@ -8,14 +8,7 @@ exception ActemaError of string
 exception UnsupportedRequestMethod of string
 exception UnsupportedHttpResponseCode of int
 
-(** The plugin sends the goals (in API format) to the frontend, 
-    which sends back an action. *)
-type action =
-  | Do of int * Logic.action
-  | Done
-  | Undo
-  | Redo
-  | Lemmas of string option * Term.t option
+type action = Do of int * Logic.action | Done | Undo | Redo | Lemmas
 
 (** The IP address of the frontend (server). *)
 let addr =
@@ -57,10 +50,7 @@ let receive_action (resp : Response.t) (body : Cohttp_lwt.Body.t) : action Lwt.t
   | 253 -> Lwt.return Redo
   | 254 ->
       (* The frontend requested a list of lemmas. *)
-      let (pattern, selection) : string option * Term.t option =
-        body |> Base64.decode_exn |> Fun.flip Marshal.from_string 0
-      in
-      Lwt.return @@ Lemmas (pattern, selection)
+      Lwt.return Lemmas
   | 501 -> raise (UnsupportedRequestMethod body)
   | 550 -> raise (ActemaError body)
   | _ -> raise (UnsupportedHttpResponseCode code)
