@@ -9,28 +9,27 @@ exception InvalidLemmaName of Name.t
 (***************************************************************************************)
 (** First-order. *)
 
-(** Extracting the first-order skeleton of terms. *)
 module FirstOrder : sig
   type bkind = Forall | Exist [@@deriving show]
   type conn = True | False | Not | Or | And | Equiv [@@deriving show]
 
   (** This type represents a term and gives us additional information about
       its first-order structure. *)
-  type t =
+  type t = private
     | FAtom of Term.t (* A wrapper around an arbitrary term. *)
-    | FConn of conn * t list (* A logical connective, EXCEPT implication. *)
-    | FImpl of t * t (* Logical implication. *)
-    | FBind of bkind * Term.binder * Term.t * t (* Logical quantifier. *)
+    | FConn of
+        conn * Term.t list (* A logical connective, EXCEPT implication. *)
+    | FImpl of Term.t * Term.t (* Logical implication. *)
+    | FBind of bkind * FVarId.t * Term.t (* Logical quantifier. *)
   [@@deriving show]
 
-  (** [of_term ?context env t] destructs the term [t] into an element of the inductive type [t].
-      For instance the term [forall x : nat, x = x + 1 \/ P] gets destructed into
-      [FBind (Forall, x, nat, FConn (Or, [FAtom (x = x + 1); FAtom P]))]. *)
-  val of_term : ?context:Context.t -> Env.t -> Term.t -> t
+  (** [view ?context env term] destructs the term [term] into an element of the inductive type [t].
+      This assumes [term] contains no loose BVar.
 
-  (** [to_term fo] is the inverse of [term_to_fo]. It takes an element of the inductive type
-      [t] and reconstructs the term that it represents. *)
-  val to_term : t -> Term.t
+      For instance the term [forall x : nat, x = x + 1 \/ P] gets destructed into
+      [ctx, FBind (Forall, fvar, x = x + 1 \/ P)] where [ctx] contains the binding
+      [fvar --> { name = x ; type_ = nat }]. *)
+  val view : ?context:Context.t -> Env.t -> Term.t -> Context.t * t
 end
 
 (***************************************************************************************)

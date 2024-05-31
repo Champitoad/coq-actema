@@ -128,7 +128,6 @@ module Term = struct
     let cdata = merge_cdata (get_cdata ty) (lift_cdata @@ get_cdata body) in
     Prod (cdata, binder, ty, body)
 
-  
   let contains_fvars term = (get_cdata term).contains_fvars
   let loose_bvar_range term = (get_cdata term).loose_bvar_range
   let contains_loose_bvars term = (get_cdata term).loose_bvar_range > 0
@@ -163,33 +162,41 @@ module Term = struct
     | [] -> failwith "Term.mkArrows : got an empty list."
     | t :: ts -> List.fold_right mkArrow (List.rev ts) t
 
-
-  (** [abs_rec depth fvar term] replaces [FVar fvar] by [BVar depth] in [term]. 
+  (** [fsubst_rec depth fvar s term] replaces [FVar fvar] by [lift depth s] in [term]. 
       This takes advantage of [cdata] to speed things up. *)
-  let rec abs_rec depth fvar term =
+  let rec fsubst_rec depth fvar s term =
     match term with
-    | FVar fvar' when FVarId.equal fvar fvar' -> BVar depth
+    | FVar fvar' when FVarId.equal fvar fvar' -> lift depth s
     | BVar _ | FVar _ | Cst _ | Sort _ -> term
     | App (cdata, f, args) ->
         if not cdata.contains_fvars
         then term
-        else mkApps (abs_rec depth fvar f) @@ List.map (abs_rec depth fvar) args
+        else
+          mkApps (fsubst_rec depth fvar s f)
+          @@ List.map (fsubst_rec depth fvar s) args
     | Lambda (cdata, x, ty, body) ->
         if not cdata.contains_fvars
         then term
-        else mkLambda x (abs_rec depth fvar ty) (abs_rec (depth + 1) fvar body)
+        else
+          mkLambda x
+            (fsubst_rec depth fvar s ty)
+            (fsubst_rec (depth + 1) fvar s body)
     | Prod (cdata, x, ty, body) ->
         if not cdata.contains_fvars
         then term
-        else mkProd x (abs_rec depth fvar ty) (abs_rec (depth + 1) fvar body)
+        else
+          mkProd x
+            (fsubst_rec depth fvar s ty)
+            (fsubst_rec (depth + 1) fvar s body)
 
-  let abstract fvar term = abs_rec 0 fvar term
+  let fsubst fvar s term = fsubst_rec 0 fvar s term
+  let abstract fvar term = fsubst fvar (BVar 0) term
 
-  (** [subst_rec depth s term] replaces bvar [BVar depth] by [s] in [term],
+  (** [bsubst_rec depth s term] replaces bvar [BVar depth] by [s] in [term],
     and lowers by [1] every other BVar of [term] that is greater than [depth].
     We also lift [s] by [depth].
     This takes advantage of [cdata] to speed things up. *)
-  let rec subst_rec depth s term =
+  let rec bsubst_rec depth s term =
     match term with
     | BVar n when n = depth -> lift depth s
     | BVar n when n > depth -> mkBVar (n - 1)
@@ -197,18 +204,18 @@ module Term = struct
     | App (cdata, f, args) ->
         if cdata.loose_bvar_range <= depth
         then term
-        else mkApps (subst_rec depth s f) @@ List.map (subst_rec depth s) args
+        else mkApps (bsubst_rec depth s f) @@ List.map (bsubst_rec depth s) args
     | Lambda (cdata, x, ty, body) ->
         if cdata.loose_bvar_range <= depth
         then term
-        else mkLambda x (subst_rec depth s ty) (subst_rec (depth + 1) s body)
+        else mkLambda x (bsubst_rec depth s ty) (bsubst_rec (depth + 1) s body)
     | Prod (cdata, x, ty, body) ->
         if cdata.loose_bvar_range <= depth
         then term
-        else mkProd x (subst_rec depth s ty) (subst_rec (depth + 1) s body)
+        else mkProd x (bsubst_rec depth s ty) (bsubst_rec (depth + 1) s body)
 
-  let subst s term = subst_rec 0 s term
-  let instantiate fvar term = subst (FVar fvar) term
+  let bsubst s term = bsubst_rec 0 s term
+  let instantiate fvar term = bsubst (FVar fvar) term
 
   let rec alpha_equiv t1 t2 : bool =
     match (t1, t2) with
@@ -525,7 +532,7 @@ module TermUtils = struct
     match (f_ty : Term.t) with
     | Prod (_, x, a, b) ->
         if arg_ty = a
-        then (Term.mkApp f arg, Term.subst arg b)
+        then (Term.mkApp f arg, Term.bsubst arg b)
         else raise @@ TypingError (ExpectedType (arg, arg_ty, a))
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
 
