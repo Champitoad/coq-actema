@@ -17,49 +17,65 @@ module FirstOrder = struct
     | FAtom of Term.t
     | FConn of conn * t list
     | FImpl of t * t
-    | FBind of bkind * Name.t * Term.t * t
+    | FBind of bkind * Term.binder * Term.t * t
   [@@deriving show]
 
   let rec to_term fo : Term.t =
     let open Term in
     match fo with
     | FAtom t -> t
-    | FConn (True, []) -> mkCst Name.true_
-    | FConn (False, []) -> mkCst Name.false_
-    | FConn (Not, [ t ]) -> mkApp (mkCst Name.not) (to_term t)
+    | FConn (True, []) -> mkCst Constants.true_
+    | FConn (False, []) -> mkCst Constants.false_
+    | FConn (Not, [ t ]) -> mkApp (mkCst Constants.not) (to_term t)
     | FConn (And, [ t1; t2 ]) ->
-        mkApps (mkCst Name.and_) [ to_term t1; to_term t2 ]
+        mkApps (mkCst Constants.and_) [ to_term t1; to_term t2 ]
     | FConn (Or, [ t1; t2 ]) ->
-        mkApps (mkCst Name.or_) [ to_term t1; to_term t2 ]
+        mkApps (mkCst Constants.or_) [ to_term t1; to_term t2 ]
     | FImpl (t1, t2) -> mkArrow (to_term t1) (to_term t2)
     | FConn (Equiv, [ t1; t2 ]) ->
-        mkApps (mkCst Name.equiv) [ to_term t1; to_term t2 ]
+        mkApps (mkCst Constants.equiv) [ to_term t1; to_term t2 ]
     | FBind (Forall, x, ty, body) -> mkProd x ty (to_term body)
     | FBind (Exist, x, ty, body) ->
-        mkApps (mkCst Name.ex) [ ty; mkLambda x ty (to_term body) ]
+        mkApps (mkCst Constants.ex) [ ty; mkLambda x ty (to_term body) ]
     | FConn _ -> assert false
 
   (* We need the context and environment be able to compute the type of the term. *)
   let rec of_term ?(context = Context.empty) env (t : Term.t) : t =
     match t with
-    | Cst true_ when Name.equal true_ Name.true_ -> FConn (True, [])
-    | Cst false_ when Name.equal false_ Name.false_ -> FConn (False, [])
-    | App (Cst not, [ arg ]) when Name.equal not Name.not ->
+    | Cst true_ when Name.equal true_ Constants.true_ -> FConn (True, [])
+    | Cst false_ when Name.equal false_ Constants.false_ -> FConn (False, [])
+    | App (_, Cst not, [ arg ]) when Name.equal not Constants.not ->
         FConn (Not, [ of_term ~context env arg ])
-    | App (Cst and_, [ arg1; arg2 ]) when Name.equal and_ Name.and_ ->
+    | App (_, Cst and_, [ arg1; arg2 ]) when Name.equal and_ Constants.and_ ->
         FConn (And, [ of_term ~context env arg1; of_term ~context env arg2 ])
-    | App (Cst or_, [ arg1; arg2 ]) when Name.equal or_ Name.or_ ->
+    | App (_, Cst or_, [ arg1; arg2 ]) when Name.equal or_ Constants.or_ ->
         FConn (Or, [ of_term ~context env arg1; of_term ~context env arg2 ])
-    | App (Cst equiv, [ arg1; arg2 ]) when Name.equal equiv Name.equiv ->
+    | App (_, Cst equiv, [ arg1; arg2 ]) when Name.equal equiv Constants.equiv
+      ->
         FConn (Equiv, [ of_term ~context env arg1; of_term ~context env arg2 ])
-    | Arrow (t1, t2) when Typing.typeof ~context env t = Term.mkProp ->
+    (* Implication. *)
+    | Prod (_, _, t1, t2)
+      when TermUtils.typeof ~context env t = Term.mkProp
+           && not (Term.contains_loose_bvars t2) ->
         FImpl (of_term ~context env t1, of_term ~context env t2)
-    | Prod (x, ty, body) when Typing.typeof ~context env t = Term.mkProp ->
-        FBind
-          (Forall, x, ty, of_term ~context:(Context.push x ty context) env body)
-    | App (Cst ex, [ ty; Lambda (x, _, body) ]) when Name.equal ex Name.ex ->
-        FBind
-          (Exist, x, ty, of_term ~context:(Context.push x ty context) env body)
+    (* Forall. *)
+    | Prod (_, x, ty, body) when TermUtils.typeof ~context env t = Term.mkProp
+      ->
+        failwith "first_order.of_term : todo"
+    (*let fvar, new_ctx =
+        Context.add_fresh { name = x; type_ = ty } context
+      in
+      let new_body = Term.instantiate fvar body in
+      FBind (Forall, x, ty, of_term ~context:new_ctx env new_body)*)
+    (* Exist. *)
+    | App (_, Cst ex, [ ty; Lambda (_, x, _, body) ])
+      when Name.equal ex Constants.ex ->
+        failwith "first_order.of_term : todo"
+        (*let fvar, new_ctx =
+            Context.add_fresh { name = x; type_ = ty } context
+          in
+          let new_body = Term.instantiate fvar body in
+          FBind (Exist, x, ty, of_term ~context:new_ctx env new_body)*)
     | _ -> FAtom t
 end
 

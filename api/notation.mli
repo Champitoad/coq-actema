@@ -1,4 +1,7 @@
-(** This module handles pretty-printing of terms to string/xml. *)
+(** This module handles pretty-printing of terms to string/xml. 
+    All pretty-printing functions in this module assume that terms
+    contain no loose bound variables.
+*)
 
 open Lang
 open Logic

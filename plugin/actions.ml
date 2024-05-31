@@ -550,26 +550,30 @@ let execute_aintro (api_goal : Logic.pregoal) side : unit tactic =
   let open Lang in
   let open Term in
   match (api_goal.g_concl, side) with
-  | Cst true_, 0 when Name.equal true_ Name.true_ ->
+  | Cst true_, 0 when Name.equal true_ Constants.true_ ->
       Tactics.one_constructor 1 Tactypes.NoBindings
-  | Arrow _, 0 ->
+  | Prod (_, x, ty, body), 0 when not (Term.contains_loose_bvars body) ->
       let pat = mk_intro_patterns [ "h" ] in
       Tactics.intro_patterns false pat
-  | App (Cst not_, _), 0 when Name.equal not_ Name.not ->
+  | App (_, Cst not_, _), 0 when Name.equal not_ Constants.not ->
       let pat = mk_intro_patterns [ "h" ] in
       Tactics.intro_patterns false pat
-  | App (Cst and_, _), 0 when Name.equal and_ Name.and_ ->
+  | App (_, Cst and_, _), 0 when Name.equal and_ Constants.and_ ->
       Tactics.split Tactypes.NoBindings
-  | App (Cst equiv, _), 0 when Name.equal equiv Name.equiv ->
+  | App (_, Cst equiv, _), 0 when Name.equal equiv Constants.equiv ->
       Tactics.split Tactypes.NoBindings
-  | App (Cst or_, _), 0 when Name.equal or_ Name.or_ ->
+  | App (_, Cst or_, _), 0 when Name.equal or_ Constants.or_ ->
       Tactics.left Tactypes.NoBindings
-  | App (Cst or_, _), 1 when Name.equal or_ Name.or_ ->
+  | App (_, Cst or_, _), 1 when Name.equal or_ Constants.or_ ->
       Tactics.right Tactypes.NoBindings
-  | Prod (x, _, _), 0 ->
-      let pat = mk_intro_patterns [ Name.show x ] in
+  | Prod (_, x, _, _), 0 ->
+      let pat =
+        match x with
+        | Anonymous -> mk_intro_patterns [ "x" ]
+        | Named name -> mk_intro_patterns [ Name.show name ]
+      in
       Tactics.intro_patterns false pat
-  | App (Cst eq, _), 0 when Name.equal eq Name.eq ->
+  | App (_, Cst eq, _), 0 when Name.equal eq Constants.eq ->
       (* Here we are not sure that the two sides of the equality are indeed equal.
 
          The frontend can only handle syntactic equality : it delegates to the plugin
@@ -592,14 +596,16 @@ let execute_aelim (api_goal : Logic.pregoal) hyp_name i : unit tactic =
   let hyp_id = Names.Id.of_string @@ Name.show hyp_name in
   let hyp = Logic.Hyps.by_name api_goal.g_hyps hyp_name in
   match hyp.h_form with
-  | Cst c when Name.equal c Name.true_ || Name.equal c Name.false_ ->
+  | Cst c when Name.equal c Constants.true_ || Name.equal c Constants.false_ ->
       let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
       Tactics.default_elim false (Some true) bindings
-  | App (Cst not_, _) when Name.equal not_ Name.not ->
+  | App (_, Cst not_, _) when Name.equal not_ Constants.not ->
       let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
       Tactics.default_elim false (Some true) bindings
-  | Arrow _ -> Tactics.apply @@ EConstr.mkVar hyp_id
-  | App (Cst c, _) when Name.equal c Name.and_ || Name.equal c Name.equiv ->
+  | Prod (_, x, ty, body) when not (Term.contains_loose_bvars body) ->
+      Tactics.apply @@ EConstr.mkVar hyp_id
+  | App (_, Cst c, _)
+    when Name.equal c Constants.and_ || Name.equal c Constants.equiv ->
       (* First eliminate the hypothesis, then introduce the hypotheses we created. *)
       let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
       Tacticals.tclTHENS
@@ -607,7 +613,7 @@ let execute_aelim (api_goal : Logic.pregoal) hyp_name i : unit tactic =
         [ Tactics.intro_patterns false
           @@ mk_intro_patterns [ Name.show hyp_name; Name.show hyp_name ]
         ]
-  | App (Cst or_, _) when Name.equal or_ Name.or_ ->
+  | App (_, Cst or_, _) when Name.equal or_ Constants.or_ ->
       (* First eliminate the hypothesis, then introduce the hypotheses we created. *)
       let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
       Tacticals.tclTHENS
@@ -617,17 +623,21 @@ let execute_aelim (api_goal : Logic.pregoal) hyp_name i : unit tactic =
         ; Tactics.intro_patterns false
           @@ mk_intro_patterns [ Name.show hyp_name ]
         ]
-  | App (Cst ex, [ _; Lambda (x, _, _) ]) when Name.equal ex Name.ex ->
+  | App (_, Cst ex, [ _; Lambda (_, x, _, _) ]) when Name.equal ex Constants.ex
+    ->
       (* First eliminate the hypothesis, then introduce the variable and hypothesis we created. *)
       let bindings = (EConstr.mkVar hyp_id, Tactypes.NoBindings) in
+      let var_name =
+        match x with Anonymous -> "x" | Named name -> Name.show name
+      in
       Tacticals.tclTHENS
         (Tactics.default_elim false (Some true) bindings)
         [ Tactics.intro_patterns false
-          @@ mk_intro_patterns [ Name.show x; Name.show hyp_name ]
+          @@ mk_intro_patterns [ var_name; Name.show hyp_name ]
         ]
-  | App (Cst eq, [ _; _; _ ]) when Name.equal eq Name.eq && i = 0 ->
+  | App (_, Cst eq, [ _; _; _ ]) when Name.equal eq Constants.eq && i = 0 ->
       calltac (tactic_kname "rew_all_left") [ EConstr.mkVar hyp_id ]
-  | App (Cst eq, [ _; _; _ ]) when Name.equal eq Name.eq && i = 1 ->
+  | App (_, Cst eq, [ _; _; _ ]) when Name.equal eq Constants.eq && i = 1 ->
       calltac (tactic_kname "rew_all_right") [ EConstr.mkVar hyp_id ]
   | _ ->
       let msg = "Could not apply elimination action." in
@@ -741,7 +751,7 @@ let execute_alemma_add coq_goal full_name =
 
   let stmt, basename =
     let open Utils.Monad.Option in
-    let name_str = Lang.Name.show full_name in
+    let name_str = Name.show full_name in
     let res_opt =
       decode_constant <$> decode_lemma_name name_str
       <|> (decode_constructor <$> decode_constructor_name name_str)
@@ -760,19 +770,19 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   match action with
   | Logic.AId -> Tacticals.tclIDTAC
   | Logic.ADuplicate hyp_name ->
-      let hyp_name = Lang.Name.show hyp_name in
+      let hyp_name = Name.show hyp_name in
       let new_name =
         Goal.fresh_name ~basename:hyp_name coq_goal () |> Names.Name.mk_name
       in
       let hyp = EConstr.mkVar @@ Names.Id.of_string hyp_name in
       Tactics.pose_proof new_name hyp
   | Logic.AClear hyp_name ->
-      Tactics.clear [ Names.Id.of_string @@ Lang.Name.show hyp_name ]
+      Tactics.clear [ Names.Id.of_string @@ Name.show hyp_name ]
   | Logic.AExact name ->
-      let name = Names.Id.of_string @@ Lang.Name.show name in
+      let name = Names.Id.of_string @@ Name.show name in
       Tactics.exact_check (EConstr.mkVar name)
   | Logic.AGeneralize name ->
-      let name = Names.Id.of_string @@ Lang.Name.show name in
+      let name = Names.Id.of_string @@ Name.show name in
       Generalize.generalize_dep (EConstr.mkVar name)
   | Logic.AIntro side -> execute_aintro api_goal side
   | Logic.AElim (hyp_name, i) -> execute_aelim api_goal hyp_name i

@@ -30,32 +30,39 @@ let name_info env name =
 (** Pretty-print a global variable using its symbol. *)
 let pp_global env name =
   let info = name_info env name in
-  Pp.string info.symbol
-
-(** Pretty-print a local variable. *)
-let pp_local env name = Pp.string @@ Name.show name
+  (* Take care that the symbol can use utf-8 characters. *)
+  Pp.utf8string info.symbol
 
 (** Pretty-print a binder. *)
-let pp_binder env name = Pp.string @@ Name.show name
+let pp_binder env (binder : Term.binder) =
+  match binder with
+  | Anonymous -> Pp.char '_'
+  | Named name -> Pp.utf8string @@ Name.show name
 
 (** [is_nat_constant t] checks if [t] is a natural number of the form [S (S (... O))]. *)
 let rec is_nat_constant (t : Term.t) : bool =
   match t with
-  | Cst c when c = Name.zero -> true
-  | App (f, [ arg ]) when f = Term.mkCst Name.succ -> is_nat_constant arg
+  | Cst c when c = Constants.zero -> true
+  | App (_, f, [ arg ]) when f = Term.mkCst Constants.succ ->
+      is_nat_constant arg
   | _ -> false
 
 (** [get_nat_constant t] gets [t] the natural number corresponding to [t]. *)
 let rec get_nat_constant (t : Term.t) : int =
   match t with
-  | Cst c when c = Name.zero -> 0
-  | App (f, [ arg ]) when f = Term.mkCst Name.succ -> get_nat_constant arg + 1
+  | Cst c when c = Constants.zero -> 0
+  | App (_, f, [ arg ]) when f = Term.mkCst Constants.succ ->
+      get_nat_constant arg + 1
   | _ -> assert false
 
-let is_prod = function Term.Prod _ -> true | _ -> false
+let is_dep_prod (term : Term.t) : bool =
+  match term with
+  | Term.Prod (_, x, ty, body) when Term.contains_loose_bvars body -> true
+  | _ -> false
 
 let is_exist = function
-  | Term.App (Cst ex, [ _; Lambda _ ]) when Name.equal ex Name.ex -> true
+  | Term.App (_, Cst ex, [ _; Lambda _ ]) when Name.equal ex Constants.ex ->
+      true
   | _ -> false
 
 let extend i (path : Path.t) : Path.t = { path with sub = i :: path.sub }
@@ -70,29 +77,32 @@ let rec pp_term ?(paren = false) env (path : Path.t) ctx (t : Term.t) :
   let open Pp in
   let content =
     match t with
+    | BVar _ -> failwith "Notation.pp_term : loose bvar"
     (* We have to print natural numbers e.g. [S (S (O))] in a special way. *)
     | _ when is_nat_constant t ->
         (* Traversing [t] twice is not ideal but oh well... *)
         let n = get_nat_constant t in
         string @@ string_of_int n
-    | Var v ->
-        let name, _ = Option.get @@ Context.get v ctx in
-        pp_local env name
+    | FVar fvar ->
+        let entry = Option.get @@ Context.find fvar ctx in
+        pp_binder env entry.binder
     | Cst name -> pp_global env name
     | Sort `Prop -> string "Prop"
     | Sort `Type -> string "Type"
-    | Lambda (name, ty, body) ->
-        let pp_binder = string "λ" ^+^ pp_binder env name ^+^ string ":" in
+    | Lambda (_, x, ty, body) ->
+        let fvar, new_ctx = Context.add_fresh x ty ctx in
+        let pp_binder = string "λ" ^+^ pp_binder env x ^+^ string ":" in
         let pp_ty = pp_term env (extend 0 path) ctx ty ^+^ utf8string "⇒" in
         let pp_body =
-          pp_term env (extend 1 path) (Context.push name ty ctx) body
+          pp_term env (extend 1 path) new_ctx @@ Term.instantiate fvar body
         in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
-    | Arrow (t1, t2) ->
+    (* Non-dependent product. *)
+    | Prod (_, _, t1, t2) when not (Term.contains_loose_bvars t2) ->
         (* We might or might not need to add parentheses around [t1]. *)
         let paren_t1 =
           match t1 with
-          | Var _ | Cst _ | App _ | Sort _ -> false
+          | FVar _ | Cst _ | App _ | Sort _ -> false
           | _ when is_nat_constant t1 -> false
           | _ -> true
         in
@@ -101,30 +111,34 @@ let rec pp_term ?(paren = false) env (path : Path.t) ctx (t : Term.t) :
         let pp_t2 = pp_term env (extend 1 path) ctx t2 in
         (* Combine the results. *)
         (pp_t1 ^+^ utf8string "➞") ^//^ pp_t2
-    | Prod (name, ty, body) ->
-        let pp_binder = utf8string "∀" ^+^ pp_binder env name ^+^ string ":" in
-        let paren_ty = is_prod ty || is_exist ty in
+    (* Dependent product. *)
+    | Prod (_, x, ty, body) ->
+        let fvar, new_ctx = Context.add_fresh x ty ctx in
+        let pp_binder = utf8string "∀" ^+^ pp_binder env x ^+^ string ":" in
+        let paren_ty = is_dep_prod ty || is_exist ty in
         let pp_ty =
           pp_term ~paren:paren_ty env (extend 0 path) ctx ty ^^ string ","
         in
         let pp_body =
-          pp_term env (extend 1 path) (Context.push name ty ctx) body
+          pp_term env (extend 1 path) new_ctx @@ Term.instantiate fvar body
         in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
-    | App (Cst ex, [ _; Lambda (name, ty, body) ]) when Name.equal ex Name.ex ->
-        let pp_binder = utf8string "∃" ^+^ pp_binder env name ^+^ string ":" in
-        let paren_ty = is_prod ty || is_exist ty in
+    (* Existential quantifier. *)
+    | App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
+      when Name.equal ex Constants.ex ->
+        let fvar, new_ctx = Context.add_fresh x ty ctx in
+        let pp_binder = utf8string "∃" ^+^ pp_binder env x ^+^ string ":" in
+        let paren_ty = is_dep_prod ty || is_exist ty in
         let pp_ty =
           pp_term ~paren:paren_ty env (extend 0 @@ extend 2 path) ctx ty
           ^^ string ","
         in
         let pp_body =
-          pp_term env
-            (extend 1 @@ extend 2 path)
-            (Context.push name ty ctx) body
+          pp_term env (extend 1 @@ extend 2 path) new_ctx
+          @@ Term.instantiate fvar body
         in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
-    | App (f, args) ->
+    | App (_, f, args) ->
         (* Applications are a bit tricky : we have to check if the function is a constant,
            and if so take into account the formatting information about that constant.
 
@@ -152,7 +166,7 @@ let rec pp_term ?(paren = false) env (path : Path.t) ctx (t : Term.t) :
                  (* Decide whether we need parentheses around [t]. *)
                  let paren_t =
                    match (t : Term.t) with
-                   | Var _ | Cst _ | Sort _ -> false
+                   | FVar _ | Cst _ | Sort _ -> false
                    | _ when is_nat_constant t -> false
                    | _ -> true
                  in

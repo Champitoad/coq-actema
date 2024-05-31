@@ -1,3 +1,4 @@
+open Utils.Pervasive
 open Lang
 
 exception InvalidGoalId of int
@@ -19,7 +20,7 @@ module FirstOrder : sig
     | FAtom of Term.t (* A wrapper around an arbitrary term. *)
     | FConn of conn * t list (* A logical connective, EXCEPT implication. *)
     | FImpl of t * t (* Logical implication. *)
-    | FBind of bkind * Name.t * Term.t * t (* Logical quantifier. *)
+    | FBind of bkind * Term.binder * Term.t * t (* Logical quantifier. *)
   [@@deriving show]
 
   (** [of_term ?context env t] destructs the term [t] into an element of the inductive type [t].

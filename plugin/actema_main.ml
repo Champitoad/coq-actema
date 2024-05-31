@@ -1,3 +1,4 @@
+open Utils.Pervasive
 open Proofview
 open CoqUtils
 open Api
@@ -168,10 +169,10 @@ let test_tac () : unit tactic =
         (* Type check the term in Actema and print its type. *)
         begin
           try
-            let ty = Typing.check env term in
+            let ty = TermUtils.check env term in
             Log.printf "TYPE %s" (Notation.term_to_string env ty)
-          with Typing.TypingError err ->
-            Log.printf "TYPING ERROR\n%s" (Typing.show_typeError err)
+          with TermUtils.TypingError err ->
+            Log.printf "TYPING ERROR\n%s" (TermUtils.show_typeError err)
         end;
         Tacticals.tclIDTAC
     end
