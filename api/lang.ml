@@ -8,6 +8,7 @@ module FVarId : sig
 
   val equal : t -> t -> bool
   val compare : t -> t -> int
+  val hash : t -> int
 
   module Set : Set.S with type elt = t
   module Map : Map.S with type key = t
@@ -26,6 +27,7 @@ end = struct
 
   let equal = Int.equal
   let compare = Int.compare
+  let hash = Hashtbl.hash
 
   module Set = IntSet
   module Map = IntMap
@@ -321,8 +323,10 @@ module Context = struct
     in
     (fvar, add fvar binder type_ ctx)
 
+  let mem fvar ctx = FVarId.Map.mem fvar ctx.map
   let find fvar ctx = FVarId.Map.find_opt fvar ctx.map
   let remove fvar ctx = { map = FVarId.Map.remove fvar ctx.map }
+  let domain ctx = List.of_enum @@ FVarId.Map.keys ctx.map
 end
 
 (***************************************************************************************)

@@ -22,6 +22,7 @@ module Option = BatOption
 module Seq = BatSeq
 module Map = BatMap
 module Set = BatSet
+module Enum = BatEnum
 
 (** Instantiate modules to some common types. *)
 

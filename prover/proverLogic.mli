@@ -5,6 +5,7 @@
     - The notion of polarity of a (sub)formula (module [Polarity]). 
 *)
 
+open Utils.Pervasive
 open Api
 open Lang
 open Logic

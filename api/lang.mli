@@ -17,6 +17,7 @@ module FVarId : sig
 
   val equal : t -> t -> bool
   val compare : t -> t -> int
+  val hash : t -> int
 
   module Set : Set.S with type elt = t
   module Map : Map.S with type key = t
@@ -210,11 +211,17 @@ module Context : sig
       [fvar] is guaranteed to be distinct from any free variable index already present in the context. *)
   val add_fresh : Term.binder -> Term.t -> t -> FVarId.t * t
 
+  (** [mem fvar ctx] checks whether [fvar] is bound in [ctx]. *)
+  val mem : FVarId.t -> t -> bool
+
   (** [find fvar ctx] retrieves the entry associated to [fvar] in [ctx]. *)
   val find : FVarId.t -> t -> entry option
 
   (** [remove fvar ctx] removes the binding associated to [fvar] from [ctx]. *)
   val remove : FVarId.t -> t -> t
+
+  (** [domain ctx] returns the list of free variable indices bound by the context. *)
+  val domain : t -> FVarId.t list
 end
 
 (** [InvalidSubtermPath (t, sub)] indicates that the term [t] has no 

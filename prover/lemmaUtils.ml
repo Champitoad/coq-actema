@@ -1,7 +1,6 @@
 open Utils.Pervasive
 open Api
 open Logic
-open Lang
 open ProverLogic
 
 module Pred = struct

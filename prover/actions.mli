@@ -5,9 +5,9 @@
     when the user starts dragging an item (for instance a hypothesis), 
     the frontend will highlight all the places where dropping the item makes sense. *)
 
+open Utils.Pervasive
 open Api
 open Logic
-open Lang
 open ProverLogic
 
 (** An [action_kind] discriminates between :
