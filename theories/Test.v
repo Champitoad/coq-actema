@@ -11,7 +11,7 @@ Proof. test_tac.*)
 Parameter (A : Prop) (B : Prop).
 
 Lemma test (h : forall x, x = 0 \/ x = 3) : forall y, y = 3.
-Proof. actema_force. 
+Proof. test_tac. 
 
 
 Lemma test (v : nat) : v = 0.

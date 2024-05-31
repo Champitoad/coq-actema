@@ -163,8 +163,8 @@ let test_tac () : unit tactic =
               (Notation.term_to_string env ty))
         @@ Name.Map.bindings env.constants;
         (* Print the term. *)
-        Log.printf "TERM %s" (Notation.term_to_string env term);
         Log.printf "RAW TERM %s" (Term.show term);
+        Log.printf "TERM %s" (Notation.term_to_string env term);
 
         (* Type check the term in Actema and print its type. *)
         begin

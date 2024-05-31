@@ -128,18 +128,10 @@ module Term = struct
     let cdata = merge_cdata (get_cdata ty) (lift_cdata @@ get_cdata body) in
     Prod (cdata, binder, ty, body)
 
-  let mkArrow t1 t2 =
-    let cdata = merge_cdata (get_cdata t1) (lift_cdata @@ get_cdata t2) in
-    Prod (cdata, Anonymous, t1, t2)
-
-  let mkArrows ts =
-    match List.rev ts with
-    | [] -> failwith "Term.mkArrows : got an empty list."
-    | t :: ts -> List.fold_right mkArrow (List.rev ts) t
-
+  
   let contains_fvars term = (get_cdata term).contains_fvars
   let loose_bvar_range term = (get_cdata term).loose_bvar_range
-  let contains_loose_bvars term = (get_cdata term).loose_bvar_range = 0
+  let contains_loose_bvars term = (get_cdata term).loose_bvar_range > 0
 
   (** [lift_rec depth n term] adds [n] to every loose bvar of [term] that is greater or equal to [depth].
       This takes advantage of [cdata] to speed things up. *)
@@ -161,6 +153,16 @@ module Term = struct
         else mkProd x (lift_rec depth n ty) (lift_rec (depth + 1) n body)
 
   let lift n term = lift_rec 0 n term
+
+  let mkArrow t1 t2 =
+    let cdata = merge_cdata (get_cdata t1) (lift_cdata @@ get_cdata t2) in
+    Prod (cdata, Anonymous, t1, lift 1 t2)
+
+  let mkArrows ts =
+    match List.rev ts with
+    | [] -> failwith "Term.mkArrows : got an empty list."
+    | t :: ts -> List.fold_right mkArrow (List.rev ts) t
+
 
   (** [abs_rec depth fvar term] replaces [FVar fvar] by [BVar depth] in [term]. 
       This takes advantage of [cdata] to speed things up. *)

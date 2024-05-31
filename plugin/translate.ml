@@ -91,21 +91,13 @@ let rec translate_term state (t : EConstr.t) : Lang.Term.t =
     (* Translate the type and body. *)
     let ty = translate_term state ty in
     let body = translate_term state body in
-    (* Decide whether this is a dependent or non-dependent product. *)
-    if List.mem 0 @@ Term.loose_bvars body
-    then
-      (* Dependent product. *)
       let binder =
         match coq_binder.binder_name with
         | Anonymous -> Term.Anonymous
         | Name name -> Term.Named (Name.make @@ Names.Id.to_string name)
       in
       Term.mkProd binder ty body
-    else
-      (* Non-dependent product.
-         We have to take care to lower the body by [1] since we remove the binder. *)
-      Term.mkArrow ty (Term.lift (-1) body)
-  else if EConstr.isConst state.sigma t
+   else if EConstr.isConst state.sigma t
   then
     (* Constant. *)
     let cname, _ = EConstr.destConst state.sigma t in
