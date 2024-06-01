@@ -37,6 +37,7 @@
        is non-confluent (see the paper "A drag and drop proof tactic"). *)
 
 open Api
+open Lang
 open Logic
 open ProverLogic
 
@@ -52,9 +53,17 @@ type hyperlink = Path.t list * Path.t list [@@deriving show]
 type linkaction =
   | Nothing
   | Both of linkaction * linkaction
-  (* Subformula linking. This includes deep rewrites.
-      The substitution here is closed (and acyclic of course). *)
-  | Subform of Unif.subst
+  (* [Subform (xs, ys, subst)] represents subformula linking, including deep rewrites.
+     - [xs] contains the identifers of the bound variables on the left path.
+       The variables are ordered from the root to the pointed subterm.
+     - [ys] is analogous to [xs] but for the right path.
+     - [subst] is a closed and acyclic substitution with domain [xs @ ys],
+       which unifies the left and right subterm of the link.
+
+       For instance a link [forall x, exists y, {x + y} <link> {2 + 3}] yields :
+         Subform ([fvar_x, fvar_y], [], [fvar_x := 2; fvar_y := 3])
+  *)
+  | Subform of FVarId.t list * FVarId.t list * Unif.subst
 (*| Instantiate of Term.t * Path.t
   | Rewrite of Term.t * Term.t * Path.t list
       (** Rewrite expression [e1] into [e2] at several paths. *)

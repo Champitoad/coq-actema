@@ -2,15 +2,14 @@
     This is not general-purpose unification : it is tailored to the issues
     we have to solve in subformula linking. *)
 
-open Utils.Pervasive
 open Api
 open Lang
 
 (** A substitution is a mapping from free variables to terms 
     (which may themselves contain free variables). *)
-type subst
+type subst [@@deriving show]
 
-(** [apply ~repeat subst term] substitutes every free-variable in [term] that is bound by [subst]. *)
+(** [apply subst term] substitutes every free variable of [term] that is bound by [subst]. *)
 val apply : subst -> Term.t -> Term.t
 
 (** [unify env ctx ?rigid_fvars ?forbidden_deps t1 t2] performs syntactic unification on the terms [t1] and [t2].
@@ -24,6 +23,7 @@ val apply : subst -> Term.t -> Term.t
     If this succeeds this will return a substitution [Some subst] such that : 
     - [apply subst t1] and [apply subst t2] are alpha equivalent.
     - The dependency graph associated to [subst] is acyclic. 
+    - [subst] is closed.
     
     It will return [None] only if no such substitution exists. *)
 val unify :

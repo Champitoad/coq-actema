@@ -39,7 +39,7 @@ module Proof = struct
     List.iter
       begin
         fun { g_id; g_pregoal } ->
-          let check f = ignore (Typing.check g_pregoal.g_env f) in
+          let check f = ignore (TermUtils.check g_pregoal.g_env f) in
           check g_pregoal.g_concl;
           Hyps.iter
             (fun { h_name; h_gen; h_form } -> check h_form)
@@ -190,8 +190,7 @@ module Polarity = struct
 
   let opp = function Pos -> Neg | Neg -> Pos | Sup -> Sup
 
-  let rec of_subterm_rec pol context (fo : FirstOrder.t) sub :
-      t * (Context.t * Term.t) =
+  let rec of_subterm_rec env context pol term sub : t * Context.t * Term.t =
     match (sub, fo) with
     | [], _ -> (pol, (context, FirstOrder.to_term fo))
     (* Inverse the polarity. *)

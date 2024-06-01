@@ -10,7 +10,7 @@ type hyperlink = Path.t list * Path.t list [@@deriving show]
 type linkaction =
   | Nothing
   | Both of linkaction * linkaction
-  | Subform of Unif.subst
+  | Subform of FVarId.t list * FVarId.t list * Unif.subst
     (*| Instantiate of Term.t * Path.t
       | Rewrite of Term.t * Term.t * Path.t list
       | Fold of Name.t * Path.t list
@@ -31,53 +31,51 @@ let rec remove_nothing action =
     end
   | _ -> Some action
 
-(** [traverse_rec pol acc fo sub] traverses [term] along the path [sub], 
-    and recording an [SFlex] or [SRigid] sitem for each binder we cross.
-    This assumes the path [sub] points to a sub-formula in the first-order skeleton,
-    and raises an exception if it doesn't. *)
-let rec traverse_rec pol acc (fo : FirstOrder.t) sub : Unif.sitem list =
-  let open Unif in
-  match (sub, fo) with
-  | [], _ -> acc
-  (* Inverse the polarity. *)
-  | 1 :: sub, FConn (Not, [ t1 ]) -> traverse_rec (Polarity.opp pol) acc t1 sub
-  | 0 :: sub, FImpl (t1, t2) -> traverse_rec (Polarity.opp pol) acc t1 sub
-  (* Recurse in the formula. *)
-  | 1 :: sub, FImpl (t1, t2) -> traverse_rec pol acc t2 sub
-  | i :: sub, FConn (conn, ts) when 1 <= i && i <= List.length ts ->
-      traverse_rec pol acc (List.at ts (i - 1)) sub
-  (* Binders. *)
-  | 1 :: sub, FBind (Forall, x, ty, body) ->
-      let sitem = if pol = Polarity.Neg then SFlex else SRigid in
-      traverse_rec pol (sitem :: acc) body sub
-  | 2 :: 1 :: sub, FBind (Exist, x, ty, body) ->
-      let sitem = if pol = Polarity.Pos then SFlex else SRigid in
-      traverse_rec pol (sitem :: acc) body sub
-  (* Equality. *)
-  | [ 2 ], FAtom (App (Cst eq, [ _; _; _ ]))
-  | [ 3 ], FAtom (App (Cst eq, [ _; _; _ ]))
-    when Name.equal eq Name.eq ->
-      acc
-  (* The path is either invalid or escapes the first-order skeleton. *)
-  | _ -> raise @@ InvalidSubtermPath (FirstOrder.to_term fo, sub)
-
-(** [traverse path proof] traverses [path], deciding whether each traversed 
-    binder is [SFlex] or [SRigid]. It returns the list of sitems computed,
-    along with the subterm pointed at by [path]. 
-
-    [path] should point to a something in the first-order skeleton,
-    or to an argument of an equality which itself is in the first-order skeleton.
+(** [traverse_rec env context  rigid_fvars fvars pol term sub] traverses [term] along the path [sub], 
+    recording in [rigid_fvars] which variables are rigid, and returning the list of free variables 
+    and the list of rigid variables.
     
-    @raise Path.InvalidPath if [path] is invalid.
-    @raise Invalid_argument if [path] points to a variable item.
-    @raise InvalidSubtermPath if [path] points to something outside the first-order skeleton. *)
-let traverse (path : Path.t) (proof : Proof.t) :
-    Unif.sitem list * Context.t * Term.t =
-  let goal, item, context, subterm = PathUtils.destr path proof in
-  let env = goal.g_pregoal.g_env in
-  let fo_term = FirstOrder.of_term ~context env @@ term_of_item item in
-  let sitems = traverse_rec (Polarity.of_item item) [] fo_term path.sub in
-  (sitems, context, subterm)
+    This assumes the path [sub] points to a sub-formula in the first-order skeleton + equality,
+    and raises an exception if it doesn't. *)
+let rec traverse_rec env context rigid_fvars fvars pol term sub :
+    FVarId.t list * FVarId.t list * Context.t * Term.t =
+  let context, fo = FirstOrder.view ~context env term in
+  match (sub, fo) with
+  | [], _ -> (rigid_fvars, List.rev fvars, context, term)
+  (* Inverse the polarity. *)
+  | 1 :: sub, FConn (Not, [ t1 ]) ->
+      traverse_rec env context rigid_fvars fvars (Polarity.opp pol) t1 sub
+  | 0 :: sub, FImpl (t1, t2) ->
+      traverse_rec env context rigid_fvars fvars (Polarity.opp pol) t1 sub
+  (* Recurse in the formula. *)
+  | 1 :: sub, FImpl (t1, t2) ->
+      traverse_rec env context rigid_fvars fvars pol t2 sub
+  | i :: sub, FConn (conn, ts) when 1 <= i && i <= List.length ts ->
+      traverse_rec env context rigid_fvars fvars pol (List.at ts (i - 1)) sub
+  (* Binders. *)
+  | 1 :: sub, FBind (Forall, x, body) ->
+      let rigid_fvars =
+        match pol with
+        | Polarity.Pos | Polarity.Sup -> x :: rigid_fvars
+        | _ -> rigid_fvars
+      in
+      traverse_rec env context rigid_fvars (x :: fvars) pol body sub
+  | 2 :: 1 :: sub, FBind (Exist, x, body) ->
+      let rigid_fvars =
+        match pol with
+        | Polarity.Neg | Polarity.Sup -> x :: rigid_fvars
+        | _ -> rigid_fvars
+      in
+      traverse_rec env context rigid_fvars (x :: fvars) pol body sub
+  (* Equality. *)
+  | [ 2 ], FAtom (App (_, Cst eq, [ _; t1; t2 ]))
+    when Name.equal eq Constants.eq ->
+      (rigid_fvars, List.rev fvars, context, t2)
+  | [ 3 ], FAtom (App (_, Cst eq, [ _; t1; t2 ]))
+    when Name.equal eq Constants.eq ->
+      (rigid_fvars, List.rev fvars, context, t2)
+  (* The path is either invalid or escapes the first-order skeleton. *)
+  | _ -> raise @@ InvalidSubtermPath (term, sub)
 
 (*******************************************************************************************)
 (* Link predicates. *)
@@ -108,21 +106,37 @@ module Pred = struct
   let unifiable : lpred =
    fun proof (src, dst) ->
     try
-      let goal = PathUtils.goal src proof in
+      let goal, src_item, _, _ = PathUtils.destr src proof in
+      let _, dst_item, _, _ = PathUtils.destr dst proof in
+      let env = goal.g_pregoal.g_env in
 
-      (* Unify the two subterms. *)
-      let solutions =
-        Unif.unify goal.g_pregoal.g_env (traverse src proof)
-          (traverse dst proof)
+      let src_rigid, src_fvars, context, src_subterm =
+        traverse_rec env Context.empty [] []
+          (Polarity.of_item src_item)
+          (Logic.term_of_item src_item)
+          src.sub
       in
-      (* Get the first (acyclic) solution. *)
-      match solutions () with
-      (* The terms are unifiable. Don't forget to close the substitution. *)
-      | Cons (subst, _) -> [ Subform (Unif.close subst) ]
-      (* The terms are not unifiable. *)
-      | Nil -> []
+      (* We reuse in [dst] the context we built for [src],
+         to avoid clashes between free variables of [src] and [dst]. *)
+      let dst_rigid, dst_fvars, context, dst_subterm =
+        traverse_rec env context [] []
+          (Polarity.of_item dst_item)
+          (Logic.term_of_item dst_item)
+          dst.sub
+      in
+      (* Unify the two subterms. *)
+      (* TODO : add the forbidden dependencies. *)
+      let subst =
+        Unif.unify env context ~rigid_fvars:(src_rigid @ dst_rigid) src_subterm
+          dst_subterm
+      in
+
+      (* Check there is a solution. *)
+      match subst with
+      | Some subst -> [ Subform (src_fvars, dst_fvars, subst) ]
+      | None -> []
     with InvalidSubtermPath _ | Invalid_argument _ ->
-      (* We got an exception : most likely [traverse] raised an exception because a path was invalid. *)
+      (* We got an exception : most likely [traverse_rec] raised an exception because a path was invalid. *)
       []
 
   let opposite_pol_formulas : lpred =
@@ -148,7 +162,9 @@ module Pred = struct
             eq_sub
         with
         (* TODO: should we also allow the [Sup] polarity ? *)
-        | Neg, _, App (Cst eq, [ _; _; _ ]) when Name.equal eq Name.eq -> true
+        | Neg, _, App (_, Cst eq, [ _; _; _ ]) when Name.equal eq Constants.eq
+          ->
+            true
         | _ -> false
       with Invalid_argument _ | InvalidSubtermPath _ -> false
     in

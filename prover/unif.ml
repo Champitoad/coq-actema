@@ -28,6 +28,45 @@ type subst =
   }
 [@@deriving show]
 
+(** The [repeat] flag controls what we do when we substitute a bound variable. *)
+let rec apply_rec ~repeat subst (term : Term.t) : Term.t =
+  match term with
+  | Cst _ | Sort _ | BVar _ -> term
+  | FVar v -> begin
+      match FVarId.Map.find_opt v subst.map with
+      | Some (SBound t) -> if repeat then apply_rec ~repeat subst t else t
+      | _ -> term
+    end
+  | Lambda (_, x, ty, body) ->
+      let ty = apply_rec ~repeat subst ty in
+      let body = apply_rec ~repeat subst body in
+      Term.mkLambda x ty body
+  | Prod (_, x, ty, body) ->
+      let ty = apply_rec ~repeat subst ty in
+      let body = apply_rec ~repeat subst body in
+      Term.mkProd x ty body
+  | App (_, f, args) ->
+      let f = apply_rec ~repeat subst f in
+      let args = List.map (apply_rec ~repeat subst) args in
+      Term.mkApps f args
+
+let apply subst term : Term.t = apply_rec ~repeat:false subst term
+
+(** This assumes that the substitution is acyclic. *)
+let close subst : subst =
+  let map =
+    FVarId.Map.mapi
+      begin
+        fun var sitem ->
+          match sitem with
+          | SRigid -> SRigid
+          | SFlex -> SFlex
+          | SBound term -> SBound (apply_rec ~repeat:true subst term)
+      end
+      subst.map
+  in
+  { map }
+
 let unify_cond env context subst fvar term =
   (* [fvar] has to be in the domain of [subst] and be flex. *)
   FVarId.Map.find_opt fvar subst.map = Some SFlex
@@ -47,9 +86,9 @@ let is_bound fvar subst : bool =
 let get_bound fvar subst : Term.t =
   match FVarId.Map.find fvar subst.map with SBound t -> t | _ -> assert false
 
-(** [unify_rec subst t1 t2] performs syntactic unification on the terms [t1] and [t2], 
-    starting with a substitution [subst]. 
-    This doesn't check for cycles, but instead returns a lazy list of all unifiers. *)
+(** [unify_rec subst t1 t2] performs syntactic unification on the terms [t1] and [t2],
+      starting with a substitution [subst].
+      This doesn't check for cycles, but instead returns a lazy list of all unifiers. *)
 let rec unify_rec env context subst ((t1, t2) : Term.t * Term.t) : subst Seq.t =
   let open Utils.Monad.Seq in
   match (t1, t2) with
@@ -149,37 +188,7 @@ let unify env context ?(rigid_fvars = []) ?(forbidden_deps = []) t1 t2 :
     end
     solutions
 
-(** The [repeat] flag controls what we do when we substitute a bound variable. *)
-(*let rec apply_rec ~repeat depth subst (term : Term.t) : Term.t =
-    match term with
-    | Cst _ | Sort _ -> term
-    | Var v -> begin
-        match IntMap.find_opt (v - depth) subst.mapping with
-        | Some (SBound t) ->
-            let t = TermUtils.lift_free depth t in
-            if repeat then apply_rec ~repeat depth subst t else t
-        | _ -> term
-      end
-    | Lambda (x, ty, body) ->
-        let ty = apply_rec ~repeat depth subst ty in
-        let body = apply_rec ~repeat (depth + 1) subst body in
-        Term.mkLambda x ty body
-    | Prod (x, ty, body) ->
-        let ty = apply_rec ~repeat depth subst ty in
-        let body = apply_rec ~repeat (depth + 1) subst body in
-        Term.mkProd x ty body
-    | Arrow (t1, t2) ->
-        let t1 = apply_rec ~repeat depth subst t1 in
-        let t2 = apply_rec ~repeat depth subst t2 in
-        Term.mkArrow t1 t2
-    | App (f, args) ->
-        let f = apply_rec ~repeat depth subst f in
-        let args = List.map (apply_rec ~repeat depth subst) args in
-        Term.mkApps f args
-
-  let apply ~repeat subst term : Term.t = apply_rec ~repeat 0 subst term
-
-  let not_bound fvar subst : bool =
+(*let not_bound fvar subst : bool =
     match IntMap.find_opt fvar subst.mapping with
     | Some (SBound _) -> false
     | _ -> true
@@ -201,18 +210,4 @@ let unify env context ?(rigid_fvars = []) ?(forbidden_deps = []) t1 t2 :
                 (TermUtils.free_vars term)
       end
       subst.mapping
-
-  let close subst : subst =
-    let mapping =
-      IntMap.mapi
-        begin
-          fun var sitem ->
-            match sitem with
-            | SRigid -> SRigid
-            | SFlex -> SFlex
-            | SBound term -> SBound (apply ~repeat:true subst term)
-        end
-        subst.mapping
-    in
-
-    { subst with mapping }*)
+*)
