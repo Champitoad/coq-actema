@@ -191,54 +191,57 @@ module Polarity = struct
   let opp = function Pos -> Neg | Neg -> Pos | Sup -> Sup
 
   let rec of_subterm_rec env context pol term sub : t * Context.t * Term.t =
+    let context, fo = FirstOrder.view ~context env term in
     match (sub, fo) with
-    | [], _ -> (pol, (context, FirstOrder.to_term fo))
+    | [], _ -> (pol, context, term)
     (* Inverse the polarity. *)
-    | 1 :: sub, FConn (Not, [ t1 ]) -> of_subterm_rec (opp pol) context t1 sub
-    | 0 :: sub, FImpl (t1, t2) -> of_subterm_rec (opp pol) context t1 sub
+    | 1 :: sub, FConn (Not, [ t1 ]) ->
+        of_subterm_rec env context (opp pol) t1 sub
+    | 0 :: sub, FImpl (t1, t2) -> of_subterm_rec env context (opp pol) t1 sub
     (* Switch to [Sup] polarity. *)
-    | 1 :: sub, FConn (Equiv, [ t1; t2 ]) -> of_subterm_rec Sup context t1 sub
-    | 2 :: sub, FConn (Equiv, [ t1; t2 ]) -> of_subterm_rec Sup context t2 sub
+    | 1 :: sub, FConn (Equiv, [ t1; t2 ]) ->
+        of_subterm_rec env context Sup t1 sub
+    | 2 :: sub, FConn (Equiv, [ t1; t2 ]) ->
+        of_subterm_rec env context Sup t2 sub
     (* Recurse in the formula. *)
-    | 1 :: sub, FImpl (t1, t2) -> of_subterm_rec pol context t2 sub
+    | 1 :: sub, FImpl (t1, t2) -> of_subterm_rec env context pol t2 sub
     | i :: sub, FConn (conn, ts) when 1 <= i && i <= List.length ts ->
-        of_subterm_rec pol context (List.at ts (i - 1)) sub
+        of_subterm_rec env context pol (List.at ts (i - 1)) sub
     (* Binders. *)
-    | 1 :: sub, FBind (Forall, x, ty, body) ->
-        of_subterm_rec pol (Context.push x ty context) body sub
-    | 2 :: 1 :: sub, FBind (Exist, x, ty, body) ->
-        of_subterm_rec pol (Context.push x ty context) body sub
+    | 1 :: sub, FBind (Forall, x, body) ->
+        of_subterm_rec env context pol body sub
+    | 2 :: 1 :: sub, FBind (Exist, x, body) ->
+        of_subterm_rec env context pol body sub
     (* The path is either invalid or escapes the first-order skeleton. *)
-    | _ -> raise @@ InvalidSubtermPath (FirstOrder.to_term fo, sub)
+    | _ -> raise @@ InvalidSubtermPath (term, sub)
 
   let of_subterm env pol term sub : t * Context.t * Term.t =
-    let fo = FirstOrder.of_term env term in
-    let pol, (ctx, t) = of_subterm_rec pol Context.empty fo sub in
-    (pol, ctx, t)
+    of_subterm_rec env Context.empty pol term sub
 
   (** This assumes that [t] has type [Prop]. *)
-  let rec neg_count_rec negs context (fo : FirstOrder.t) sub :
-      int * (Context.t * Term.t) =
+  let rec neg_count_rec env context negs (term : Term.t) sub :
+      int * Context.t * Term.t =
+    let context, fo = FirstOrder.view env ~context term in
     match (sub, fo) with
-    | [], _ -> (negs, (context, FirstOrder.to_term fo))
+    | [], _ -> (negs, context, term)
     (* Increase the negation count. *)
-    | 1 :: sub, FConn (Not, [ t1 ]) -> neg_count_rec (negs + 1) context t1 sub
-    | 0 :: sub, FImpl (t1, t2) -> neg_count_rec (negs + 1) context t1 sub
+    | 1 :: sub, FConn (Not, [ t1 ]) ->
+        neg_count_rec env context (negs + 1) t1 sub
+    | 0 :: sub, FImpl (t1, t2) -> neg_count_rec env context (negs + 1) t1 sub
     (* Recurse in the formula. *)
-    | 1 :: sub, FImpl (t1, t2) -> neg_count_rec negs context t2 sub
+    | 1 :: sub, FImpl (t1, t2) -> neg_count_rec env context negs t2 sub
     | i :: sub, FConn (conn, ts) when 1 <= i && i <= List.length ts ->
-        neg_count_rec negs context (List.at ts (i - 1)) sub
+        neg_count_rec env context negs (List.at ts (i - 1)) sub
     (* Binders. *)
-    | 1 :: sub, FBind (Forall, x, ty, body) ->
-        neg_count_rec negs (Context.push x ty context) body sub
-    | 2 :: 1 :: sub, FBind (Exist, x, ty, body) ->
-        neg_count_rec negs (Context.push x ty context) body sub
+    | 1 :: sub, FBind (Forall, x, body) ->
+        neg_count_rec env context negs body sub
+    | 2 :: 1 :: sub, FBind (Exist, x, body) ->
+        neg_count_rec env context negs body sub
     (* The path is either invalid or escapes the first-order skeleton. *)
-    | _ -> raise @@ InvalidSubtermPath (FirstOrder.to_term fo, sub)
+    | _ -> raise @@ InvalidSubtermPath (term, sub)
 
   let neg_count env term sub : int =
-    let fo = FirstOrder.of_term env term in
-    let negs, _ = neg_count_rec 0 Context.empty fo sub in
+    let negs, _, _ = neg_count_rec env Context.empty 0 term sub in
     negs
 
   let of_item item : t = match item with Concl _ -> Pos | Var _ | Hyp _ -> Neg

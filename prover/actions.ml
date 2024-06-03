@@ -32,23 +32,20 @@ type aoutput =
 (** [is_nat_constant t] checks if [t] is a natural number of the form [S (S (... O))]. *)
 let rec is_nat_constant (t : Term.t) : bool =
   match t with
-  | Cst c when c = Name.zero -> true
-  | App (f, [ arg ]) when f = Term.mkCst Name.succ -> is_nat_constant arg
+  | Cst c when c = Constants.zero -> true
+  | App (_, f, [ arg ]) when f = Term.mkCst Constants.succ ->
+      is_nat_constant arg
   | _ -> false
 
 let rec displayed_subs_rec env (term : Term.t) sub acc : int list list =
   match term with
-  | Var _ | Cst _ | Sort _ -> sub :: acc
-  | Arrow (t1, t2) ->
-      let acc = displayed_subs_rec env t1 (0 :: sub) acc in
-      let acc = displayed_subs_rec env t2 (1 :: sub) acc in
-      sub :: acc
-  | Lambda (x, ty, body) | Prod (x, ty, body) ->
+  | FVar _ | BVar _ | Cst _ | Sort _ -> sub :: acc
+  | Lambda (_, x, ty, body) | Prod (_, x, ty, body) ->
       let acc = displayed_subs_rec env ty (0 :: sub) acc in
       let acc = displayed_subs_rec env body (1 :: sub) acc in
       sub :: acc
   | _ when is_nat_constant term -> sub :: acc
-  | App (f, args) ->
+  | App (_, f, args) ->
       let elts =
         match f with
         | Cst name ->
@@ -259,16 +256,18 @@ let ctxt_actions (sel : Path.t list) (proof : Proof.t) : aoutput list = []
     in the conclusion which should be highlighted. *)
 let intro_variants goal : (string * int list) list =
   match goal.g_concl with
-  | App (Cst eq, [ _; _; _ ]) when Name.equal eq Name.eq ->
+  | App (_, Cst eq, [ _; _; _ ]) when Name.equal eq Constants.eq ->
       [ ("reflexivity", []) ]
-  | App (Cst and_, [ _; _ ]) when Name.equal and_ Name.and_ -> [ ("split", []) ]
-  | App (Cst or_, [ _; _ ]) when Name.equal or_ Name.or_ ->
-      [ ("left", [ 1 ]); ("right", [ 2 ]) ]
-  | App (Cst equiv_, [ _; _ ]) when Name.equal equiv_ Name.equiv ->
+  | App (_, Cst and_, [ _; _ ]) when Name.equal and_ Constants.and_ ->
       [ ("split", []) ]
-  | App (Cst not_, [ _ ]) when Name.equal not_ Name.not -> [ ("intro", []) ]
-  | Cst true_ when true_ = Name.true_ -> [ ("constructor", []) ]
-  | Arrow _ | Prod _ | Lambda _ -> [ ("intro", []) ]
+  | App (_, Cst or_, [ _; _ ]) when Name.equal or_ Constants.or_ ->
+      [ ("left", [ 1 ]); ("right", [ 2 ]) ]
+  | App (_, Cst equiv_, [ _; _ ]) when Name.equal equiv_ Constants.equiv ->
+      [ ("split", []) ]
+  | App (_, Cst not_, [ _ ]) when Name.equal not_ Constants.not ->
+      [ ("intro", []) ]
+  | Cst true_ when true_ = Constants.true_ -> [ ("constructor", []) ]
+  | Prod _ | Lambda _ -> [ ("intro", []) ]
   | _ -> []
 
 let is_cst = function Term.Cst _ -> true | _ -> false
@@ -278,19 +277,21 @@ let is_cst = function Term.Cst _ -> true | _ -> false
     in the hypothesis which should be highlighted. *)
 let elim_variants hyp : (string * int list) list =
   match hyp.h_form with
-  | App (Cst eq, [ _; t1; t2 ]) when Name.equal eq Name.eq ->
+  | App (_, Cst eq, [ _; t1; t2 ]) when Name.equal eq Constants.eq ->
       [ ("rewrite->", [ 2 ]); ("rewrite<-", [ 3 ]) ]
-  | App (Cst equiv, [ _; _ ]) when Name.equal equiv Name.equiv ->
+  | App (_, Cst equiv, [ _; _ ]) when Name.equal equiv Constants.equiv ->
       [ ("destruct", []) ]
-  | App (Cst and_, [ _; _ ]) when Name.equal and_ Name.and_ ->
+  | App (_, Cst and_, [ _; _ ]) when Name.equal and_ Constants.and_ ->
       [ ("destruct", []) ]
-  | App (Cst or_, [ _; _ ]) when Name.equal or_ Name.or_ -> [ ("destruct", []) ]
-  | App (Cst not, [ _ ]) when Name.equal not Name.not -> [ ("apply", []) ]
-  | App (Cst ex, [ _; Lambda _ ]) when Name.equal ex Name.ex ->
+  | App (_, Cst or_, [ _; _ ]) when Name.equal or_ Constants.or_ ->
       [ ("destruct", []) ]
-  | Cst true_ when Name.equal true_ Name.true_ -> [ ("destruct", []) ]
-  | Cst false_ when Name.equal false_ Name.false_ -> [ ("destruct", []) ]
-  | Arrow _ -> [ ("apply", []) ]
+  | App (_, Cst not, [ _ ]) when Name.equal not Constants.not ->
+      [ ("apply", []) ]
+  | App (_, Cst ex, [ _; Lambda _ ]) when Name.equal ex Constants.ex ->
+      [ ("destruct", []) ]
+  | Cst true_ when Name.equal true_ Constants.true_ -> [ ("destruct", []) ]
+  | Cst false_ when Name.equal false_ Constants.false_ -> [ ("destruct", []) ]
+  | Prod (_, Anonymous, _, _) -> [ ("apply", []) ]
   | _ -> []
 
 let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
@@ -331,7 +332,7 @@ let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
       in
       (* Exact. *)
       let exact_actions =
-        if TermUtils.alpha_equiv hyp.h_form goal.g_pregoal.g_concl
+        if Term.alpha_equiv hyp.h_form goal.g_pregoal.g_concl
         then
           let path = Path.make goal.g_id ~kind:(Hyp hyp_name) in
           [ { description = "exact"

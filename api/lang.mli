@@ -165,7 +165,7 @@ module Term : sig
   val abstract : FVarId.t -> t -> t
 
   (** [alpha_equiv t1 t2] checks whether [t1] and [t2] are alpha-equivalent,
-      i.e. are equal up to binder names. *)
+      i.e. are equal up to binder names. This assumes [t1] and [t2] live in the same context. *)
   val alpha_equiv : t -> t -> bool
 
   (** [free_vars t] computes the list of free variables in [t]. *)

@@ -58,8 +58,8 @@ let () =
         match exn with
         | MoveOnlyHyps name ->
             Some ("Reordering variables is not supported : " ^ name)
-        | Typing.TypingError err ->
-            Some ("Typing error\n" ^ Typing.show_typeError err)
+        | TermUtils.TypingError err ->
+            Some ("Typing error\n" ^ TermUtils.show_typeError err)
         | _ -> None
     end
 
@@ -235,13 +235,13 @@ let rec js_proof_engine (proof : Proof.t) =
         List.iter
           begin
             fun lemma ->
-              try ignore @@ Typing.check env lemma.l_form
-              with Typing.TypingError err ->
+              try ignore @@ TermUtils.well_typed env lemma.l_form
+              with TermUtils.TypingError err ->
                 Js_log.log
                 @@ Format.sprintf "In lemma %s\n%s\nTyping Error\n%s\n"
                      (Name.show lemma.l_full)
                      (Notation.term_to_string env lemma.l_form)
-                     (Typing.show_typeError err)
+                     (TermUtils.show_typeError err)
           end
           lemmas;
         (* Create the lemma database. *)
