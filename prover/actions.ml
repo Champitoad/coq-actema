@@ -291,7 +291,8 @@ let elim_variants hyp : (string * int list) list =
       [ ("destruct", []) ]
   | Cst true_ when Name.equal true_ Constants.true_ -> [ ("destruct", []) ]
   | Cst false_ when Name.equal false_ Constants.false_ -> [ ("destruct", []) ]
-  | Prod (_, Anonymous, _, _) -> [ ("apply", []) ]
+  | Prod (_, x, ty, body) when not @@ Term.contains_loose_bvars body ->
+      [ ("apply", []) ]
   | _ -> []
 
 let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :

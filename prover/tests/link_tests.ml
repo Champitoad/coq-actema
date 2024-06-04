@@ -323,18 +323,29 @@ let rec subterm (t : Term.t) sub vars =
   | App (_, f, args), i :: sub, vars when 0 <= i && i < List.length (f :: args)
     ->
       subterm (List.at (f :: args) i) sub vars
-  | Lambda (_, x, ty, body), 0 :: sub, vars -> subterm ty sub vars
-  | Prod (_, x, ty, body), 0 :: sub, vars -> subterm ty sub vars
-  | Lambda (_, x, ty, body), 1 :: sub, v :: vars ->
+  | Lambda (_, x, ty, body), 0 :: sub, vars
+  | Prod (_, x, ty, body), 0 :: sub, vars ->
+      subterm ty sub vars
+  | Lambda (_, x, ty, body), 1 :: sub, v :: vars
+  | Prod (_, x, ty, body), 1 :: sub, v :: vars
+    when Term.contains_loose_bvars body ->
       subterm (Term.instantiate v body) sub vars
-  | Prod (_, x, ty, body), 1 :: sub, v :: vars ->
-      subterm (Term.instantiate v body) sub vars
-  | _ -> failwith "Link_tests.subterm : invalid path"
+  | Lambda (_, x, ty, body), 1 :: sub, vars
+  | Prod (_, x, ty, body), 1 :: sub, vars ->
+      subterm body sub vars
+  | _ ->
+      failwith
+      @@ Format.sprintf "Link_tests.subterm : in term\n%s\nInvalid path %s"
+           (Term.show t)
+           (List.to_string string_of_int sub)
 
-let check_subst subst (t1, sub1, vars1) (t2, sub2, vars2) =
-  Term.alpha_equiv
-    (Unif.apply subst @@ subterm t1 sub1 vars1)
-    (Unif.apply subst @@ subterm t2 sub2 vars2)
+let check_subform actions (t1, sub1) (t2, sub2) =
+  check_linkactions actions @@ function
+  | Subform (vars1, vars2, subst) ->
+      Term.alpha_equiv
+        (Unif.apply subst @@ subterm t1 sub1 vars1)
+        (Unif.apply subst @@ subterm t2 sub2 vars2)
+  | _ -> false
 
 let test_unif_0 () =
   let open Term in
@@ -344,12 +355,7 @@ let test_unif_0 () =
   let hyp2 = mkCst Constants.true_ in
   let sub2 = [] in
   let actions = link_forward hyp1 sub1 hyp2 sub2 hlpred in
-  check_linkactions actions @@ function
-  | Subform (xs, ys, subst) ->
-      List.length xs = 0
-      && List.length ys = 0
-      && check_subst subst (hyp1, sub1, xs) (hyp2, sub2, ys)
-  | _ -> false
+  check_subform actions (hyp1, sub1) (hyp2, sub2)
 
 let test_unif_1 () =
   let open Term in
@@ -365,12 +371,7 @@ let test_unif_1 () =
   in
   let concl_sub = [ 1; 1 ] in
   let actions = link_backward hyp hyp_sub concl concl_sub hlpred in
-  check_linkactions actions @@ function
-  | Subform (xs, ys, subst) ->
-      List.length xs = 1
-      && List.length ys = 2
-      && check_subst subst (hyp, hyp_sub, xs) (concl, concl_sub, ys)
-  | _ -> false
+  check_subform actions (hyp, hyp_sub) (concl, concl_sub)
 
 let test_unif_2 () =
   let open Term in
@@ -394,12 +395,7 @@ let test_unif_2 () =
   in
   let concl_sub = [ 1; 1; 2; 1; 1 ] in
   let actions = link_backward hyp hyp_sub concl concl_sub hlpred in
-  check_linkactions actions @@ function
-  | Subform (xs, ys, subst) ->
-      List.length xs = 3
-      && List.length ys = 3
-      && check_subst subst (hyp, hyp_sub, xs) (concl, concl_sub, ys)
-  | _ -> false
+  check_subform actions (hyp, hyp_sub) (concl, concl_sub)
 
 let test_unif_3 () =
   let open Term in
@@ -420,16 +416,9 @@ let test_unif_3 () =
   in
   let concl_sub = [ 2; 1; 2; 1; 1; 1; 1 ] in
   let actions = link_backward hyp hyp_sub concl concl_sub hlpred in
-  check_linkactions actions @@ function
-  | Subform (xs, ys, subst) ->
-      List.length xs = 3
-      && List.length ys = 4
-      && check_subst subst (hyp, hyp_sub, xs) (concl, concl_sub, ys)
-  | _ -> false
+  check_subform actions (hyp, hyp_sub) (concl, concl_sub)
 
-(* This is the same as test_unif_3, but we swapped [exist l1] to [forall l1] in the conclusion.
-   This has the effect of making [l1] SRigid in the conclusion,
-   and it prevents us from finding an acyclic substitution. *)
+(* This is the same as test_unif_3, but we swapped [exist l1] to [forall l1] in the conclusion. *)
 let test_unif_4 () =
   let open Term in
   let hlpred = Link.Pred.(lift unifiable) in
@@ -440,16 +429,16 @@ let test_unif_4 () =
          ; mkApps cons_nat [ mkBVar 2; mkBVar 0 ]
          ]
   in
+  let hyp_sub = [ 1; 1; 2; 1 ] in
   let concl =
     exist "x" nat @@ forall "l1" list_nat
     @@ mkApp (mkCst Constants.not)
     @@ forall "l2" list_nat @@ forall "l0" list_nat
     @@ mkApps perm_nat [ mkApps cons_nat [ mkBVar 3; mkBVar 2 ]; mkBVar 0 ]
   in
-  let actions =
-    link_backward hyp [ 1; 1; 2; 1 ] concl [ 2; 1; 1; 1; 1; 1 ] hlpred
-  in
-  check_empty actions
+  let concl_sub = [ 2; 1; 1; 1; 1; 1 ] in
+  let actions = link_backward hyp hyp_sub concl concl_sub hlpred in
+  check_subform actions (hyp, hyp_sub) (concl, concl_sub)
 
 let test_unif_5 () =
   let open Term in
@@ -459,12 +448,7 @@ let test_unif_5 () =
   let concl = forall "x" nat @@ mkApps eq_nat [ mkBVar 0; mkBVar 0 ] in
   let concl_sub = [ 1; 2 ] in
   let actions = link_backward hyp hyp_sub concl concl_sub hlpred in
-  check_linkactions actions @@ function
-  | Subform (xs, ys, subst) ->
-      List.length xs = 1
-      && List.length ys = 1
-      && check_subst subst (hyp, hyp_sub, xs) (concl, concl_sub, ys)
-  | _ -> false
+  check_subform actions (hyp, hyp_sub) (concl, concl_sub)
 
 let test_unif_6 () =
   let open Term in
@@ -596,15 +580,15 @@ let () =
         [ test_pol_0; test_pol_1; test_pol_2; test_pol_3 ]
     ; test_group "neg-polarity-eq-operand"
         [ test_eq_0; test_eq_1; test_eq_2; test_eq_3; test_eq_4 ]
-      (*; test_group "unification"
-          [ test_unif_0
-          ; test_unif_1
-          ; test_unif_2
-          ; test_unif_3
-          ; test_unif_4
-          ; test_unif_5
-          ; test_unif_6
-          ]*)
+    ; test_group "unification"
+        [ test_unif_0
+        ; test_unif_1
+        ; test_unif_2
+        ; test_unif_3
+        ; test_unif_4
+        ; test_unif_5
+        ; test_unif_6
+        ]
       (*; test_group "subformula-linking"
             [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3; test_sfl_4 ]
         ; test_group "deep-rewrite" [ test_drw_0 ]*)

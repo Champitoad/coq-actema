@@ -157,7 +157,7 @@ module Term : sig
       This is O(1) if [term] has no free variables. *)
   val fsubst : FVarId.t -> t -> t -> t
 
-  (** [instantiate fvar term] is equivalent to [bsubst (FVar fvar) term]. *)
+  (** [instantiate fvar term] replaces the loose [BVar 0] by [FVar fvar] in [term]. *)
   val instantiate : FVarId.t -> t -> t
 
   (** [abstract fvar term] replaces [fvar] by the loose [BVar 0] in [term]. 
