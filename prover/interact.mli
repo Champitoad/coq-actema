@@ -7,6 +7,8 @@
     a link and a substitution. Not sure it is worth the effort though. *)
 
 open Api
+open Lang
+open Logic
 open ProverLogic
 
 (** [dlink] stands for deep linking, and implements the deep interaction phase
@@ -14,4 +16,9 @@ open ProverLogic
     The list of rules and explanations are available in :
       "A Drag-and-Drop Proof Tactic"
       http://www.lix.polytechnique.fr/Labo/Pablo.DONATO/papers/cpp-article.pdf *)
-val dlink : Link.link -> Unif.subst -> Proof.t -> Logic.itrace
+val dlink :
+     Path.t * FVarId.t list
+  -> Path.t * FVarId.t list
+  -> Unif.subst
+  -> Proof.t
+  -> Logic.itrace

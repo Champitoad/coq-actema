@@ -191,7 +191,7 @@ module Polarity = struct
   let opp = function Pos -> Neg | Neg -> Pos | Sup -> Sup
 
   let rec of_subterm_rec env context pol term sub : t * Context.t * Term.t =
-    let context, fo = FirstOrder.view ~context env term in
+    let fo = FirstOrder.view env context term in
     match (sub, fo) with
     | [], _ -> (pol, context, term)
     (* Inverse the polarity. *)
@@ -208,9 +208,13 @@ module Polarity = struct
     | i :: sub, FConn (conn, ts) when 1 <= i && i <= List.length ts ->
         of_subterm_rec env context pol (List.at ts (i - 1)) sub
     (* Binders. *)
-    | 1 :: sub, FBind (Forall, x, body) ->
+    | 1 :: sub, FBind (Forall, x, ty, body) ->
+        let fvar, context = Context.add_fresh x ty context in
+        let body = Term.instantiate fvar body in
         of_subterm_rec env context pol body sub
-    | 2 :: 1 :: sub, FBind (Exist, x, body) ->
+    | 2 :: 1 :: sub, FBind (Exist, x, ty, body) ->
+        let fvar, context = Context.add_fresh x ty context in
+        let body = Term.instantiate fvar body in
         of_subterm_rec env context pol body sub
     (* The path is either invalid or escapes the first-order skeleton. *)
     | _ -> raise @@ InvalidSubtermPath (term, sub)
@@ -221,7 +225,7 @@ module Polarity = struct
   (** This assumes that [t] has type [Prop]. *)
   let rec neg_count_rec env context negs (term : Term.t) sub :
       int * Context.t * Term.t =
-    let context, fo = FirstOrder.view env ~context term in
+    let fo = FirstOrder.view env context term in
     match (sub, fo) with
     | [], _ -> (negs, context, term)
     (* Increase the negation count. *)
@@ -233,9 +237,13 @@ module Polarity = struct
     | i :: sub, FConn (conn, ts) when 1 <= i && i <= List.length ts ->
         neg_count_rec env context negs (List.at ts (i - 1)) sub
     (* Binders. *)
-    | 1 :: sub, FBind (Forall, x, body) ->
+    | 1 :: sub, FBind (Forall, x, ty, body) ->
+        let fvar, context = Context.add_fresh x ty context in
+        let body = Term.instantiate fvar body in
         neg_count_rec env context negs body sub
-    | 2 :: 1 :: sub, FBind (Exist, x, body) ->
+    | 2 :: 1 :: sub, FBind (Exist, x, ty, body) ->
+        let fvar, context = Context.add_fresh x ty context in
+        let body = Term.instantiate fvar body in
         neg_count_rec env context negs body sub
     (* The path is either invalid or escapes the first-order skeleton. *)
     | _ -> raise @@ InvalidSubtermPath (term, sub)

@@ -20,16 +20,16 @@ module FirstOrder : sig
     | FConn of
         conn * Term.t list (* A logical connective, EXCEPT implication. *)
     | FImpl of Term.t * Term.t (* Logical implication. *)
-    | FBind of bkind * FVarId.t * Term.t (* Logical quantifier. *)
+    | FBind of bkind * Term.binder * Term.t * Term.t
+      (* Logical quantifier. It contains the binder, the type and the body. *)
   [@@deriving show]
 
-  (** [view ?context env term] destructs the term [term] into an element of the inductive type [t].
+  (** [view context env term] destructs the term [term] into an element of the inductive type [t].
       This assumes [term] contains no loose BVar.
 
       For instance the term [forall x : nat, x = x + 1 \/ P] gets destructed into
-      [ctx, FBind (Forall, fvar, x = x + 1 \/ P)] where [ctx] contains the binding
-      [fvar --> { name = x ; type_ = nat }]. *)
-  val view : ?context:Context.t -> Env.t -> Term.t -> Context.t * t
+      [FBind (Forall, x, nat, x = x + 1 \/ P)]. *)
+  val view : Env.t -> Context.t -> Term.t -> t
 end
 
 (***************************************************************************************)
@@ -193,17 +193,21 @@ end
 (***************************************************************************************)
 (** Actions *)
 
+type side = Left | Right [@@deriving show]
+
+(** Maps [Left] to [Right] and vice-versa. *)
+val opp_side : side -> side
+
 (** A [choice] corresponds to a single choice of rule.
 
-    The [int] is used in case several rules are applicable to a link.
+    The [side] is used in case both a left and right rule are applicable to a link.
     For instance in [A ∧ {B} |- {B} ∧ A], we could apply :
-    - (L∧₂) corresponding to 0
-    - (R∧₁) corresponding to 1
-    In general 0 is for the left-hand-side rule and 1 is for the right-hand-side rule.
+    - (L∧₂) corresponding to Left
+    - (R∧₁) corresponding to Right
 
     The optional argument is used for binders, to indicate whether the bound variable is instantiated,
     and if yes with what expression (which depends on the variables bound in each linked formula). *)
-type choice = int * Term.t option [@@deriving show]
+type choice = side * Term.t option [@@deriving show]
 
 type itrace = choice list [@@deriving show]
 

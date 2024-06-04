@@ -17,41 +17,37 @@ module FirstOrder = struct
     | FAtom of Term.t
     | FConn of conn * Term.t list
     | FImpl of Term.t * Term.t
-    | FBind of bkind * FVarId.t * Term.t
+    | FBind of bkind * Term.binder * Term.t * Term.t
   [@@deriving show]
 
   (* We need the context and environment to be able to compute the type of the term. *)
-  let view ?(context = Context.empty) env (t : Term.t) : Context.t * t =
+  let view env context (t : Term.t) : t =
     match t with
-    | Cst true_ when Name.equal true_ Constants.true_ ->
-        (context, FConn (True, []))
-    | Cst false_ when Name.equal false_ Constants.false_ ->
-        (context, FConn (False, []))
+    | Cst true_ when Name.equal true_ Constants.true_ -> FConn (True, [])
+    | Cst false_ when Name.equal false_ Constants.false_ -> FConn (False, [])
     | App (_, Cst not, [ arg ]) when Name.equal not Constants.not ->
-        (context, FConn (Not, [ arg ]))
+        FConn (Not, [ arg ])
     | App (_, Cst and_, [ arg1; arg2 ]) when Name.equal and_ Constants.and_ ->
-        (context, FConn (And, [ arg1; arg2 ]))
+        FConn (And, [ arg1; arg2 ])
     | App (_, Cst or_, [ arg1; arg2 ]) when Name.equal or_ Constants.or_ ->
-        (context, FConn (Or, [ arg1; arg2 ]))
+        FConn (Or, [ arg1; arg2 ])
     | App (_, Cst equiv, [ arg1; arg2 ]) when Name.equal equiv Constants.equiv
       ->
-        (context, FConn (Equiv, [ arg1; arg2 ]))
+        FConn (Equiv, [ arg1; arg2 ])
     (* Implication. *)
     | Prod (_, _, t1, t2)
       when TermUtils.typeof ~context env t = Term.mkProp
            && not (Term.contains_loose_bvars t2) ->
-        (context, FImpl (t1, t2))
+        FImpl (t1, t2)
     (* Forall. *)
     | Prod (_, x, ty, body) when TermUtils.typeof ~context env t = Term.mkProp
       ->
-        let fvar, new_ctx = Context.add_fresh x ty context in
-        (new_ctx, FBind (Forall, fvar, Term.instantiate fvar body))
+        FBind (Forall, x, ty, body)
     (* Exist. *)
     | App (_, Cst ex, [ ty; Lambda (_, x, _, body) ])
       when Name.equal ex Constants.ex ->
-        let fvar, new_ctx = Context.add_fresh x ty context in
-        (new_ctx, FBind (Exist, fvar, Term.instantiate fvar body))
-    | _ -> (context, FAtom t)
+        FBind (Exist, x, ty, body)
+    | _ -> FAtom t
 end
 
 (***************************************************************************************)
@@ -315,7 +311,11 @@ end
 (***************************************************************************************)
 (** Actions *)
 
-type choice = int * Term.t option [@@deriving show]
+type side = Left | Right [@@deriving show]
+
+let opp_side = function Left -> Right | Right -> Left
+
+type choice = side * Term.t option [@@deriving show]
 type itrace = choice list [@@deriving show]
 
 type action =

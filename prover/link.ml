@@ -39,7 +39,7 @@ let rec remove_nothing action =
     and raises an exception if it doesn't. *)
 let rec traverse_rec env context rigid_fvars fvars pol term sub :
     FVarId.t list * FVarId.t list * Context.t * Term.t =
-  let context, fo = FirstOrder.view ~context env term in
+  let fo = FirstOrder.view env context term in
   match (sub, fo) with
   | [], _ -> (rigid_fvars, List.rev fvars, context, term)
   (* Inverse the polarity. *)
@@ -53,20 +53,24 @@ let rec traverse_rec env context rigid_fvars fvars pol term sub :
   | i :: sub, FConn (conn, ts) when 1 <= i && i <= List.length ts ->
       traverse_rec env context rigid_fvars fvars pol (List.at ts (i - 1)) sub
   (* Binders. *)
-  | 1 :: sub, FBind (Forall, x, body) ->
+  | 1 :: sub, FBind (Forall, x, ty, body) ->
+      let fvar, context = Context.add_fresh x ty context in
+      let body = Term.instantiate fvar body in
       let rigid_fvars =
         match pol with
-        | Polarity.Pos | Polarity.Sup -> x :: rigid_fvars
+        | Polarity.Pos | Polarity.Sup -> fvar :: rigid_fvars
         | _ -> rigid_fvars
       in
-      traverse_rec env context rigid_fvars (x :: fvars) pol body sub
-  | 2 :: 1 :: sub, FBind (Exist, x, body) ->
+      traverse_rec env context rigid_fvars (fvar :: fvars) pol body sub
+  | 2 :: 1 :: sub, FBind (Exist, x, ty, body) ->
+      let fvar, context = Context.add_fresh x ty context in
+      let body = Term.instantiate fvar body in
       let rigid_fvars =
         match pol with
-        | Polarity.Neg | Polarity.Sup -> x :: rigid_fvars
+        | Polarity.Neg | Polarity.Sup -> fvar :: rigid_fvars
         | _ -> rigid_fvars
       in
-      traverse_rec env context rigid_fvars (x :: fvars) pol body sub
+      traverse_rec env context rigid_fvars (fvar :: fvars) pol body sub
   (* Equality. *)
   | [ 2 ], FAtom (App (_, Cst eq, [ _; t1; t2 ]))
     when Name.equal eq Constants.eq ->

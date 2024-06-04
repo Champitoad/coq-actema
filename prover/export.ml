@@ -12,9 +12,8 @@ let export_action proof goal_id preaction : Logic.action =
       match (hyperlink, linkactions) with
       | ([ src ], [ dst ]), [ Subform (xs, ys, subst) ] ->
           (* This is where we perform deep interaction. *)
-          (*let itrace = Interact.dlink (src, dst) (xs, ys) subst proof in
-            Logic.ALink (src, dst, itrace)*)
-          failwith "export_action : subform: todo"
+          let itrace = Interact.dlink (src, xs) (dst, ys) subst proof in
+          Logic.ALink (src, dst, itrace)
       | _ -> raise @@ UnsupportedAction preaction
     end
   (*| `Lemma name -> return (Logic.ALemma name)

@@ -14,5 +14,20 @@
 
 # Topics for the report 
 
-- Talk about the pretty-printer (it's a GADT lol).
+- Talk about the pretty-printer (it's a GADT).
 - Talk about the lemma search "fast" unification.
+- Unification : describe the problem formally and the solution.
+
+# Scratch
+
+forall R, exists x, R x x /\ exists y, {y = x}  
+=?= 
+exists a, {a = 3} 
+
+-------------------------------------
+
+sigma = (x := 3, y := a)
+
+-------------------------------------
+
+forall R, R 3 3 /\ exists a, a = 3 ==> a = 3

@@ -138,7 +138,7 @@ module Term = struct
       This takes advantage of [cdata] to speed things up. *)
   let rec lift_rec depth n term =
     match term with
-    | BVar n when n >= depth -> mkBVar (n + depth)
+    | BVar idx when idx >= depth -> mkBVar (idx + n)
     | FVar _ | Cst _ | Sort _ | BVar _ -> term
     | App (cdata, f, args) ->
         if cdata.loose_bvar_range <= depth
@@ -535,7 +535,7 @@ module TermUtils = struct
     let arg_ty = check_rec env ctx arg in
     match (f_ty : Term.t) with
     | Prod (_, x, a, b) ->
-        if arg_ty = a
+        if Term.alpha_equiv arg_ty a
         then (Term.mkApp f arg, Term.bsubst arg b)
         else raise @@ TypingError (ExpectedType (arg, arg_ty, a))
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
