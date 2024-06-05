@@ -67,17 +67,6 @@ let close subst : subst =
   in
   { map }
 
-let unify_cond env context subst fvar term =
-  (* [fvar] has to be in the domain of [subst] and be flex. *)
-  FVarId.Map.find_opt fvar subst.map = Some SFlex
-  (* All the free variables of [term] have to be in the domain of [subst]. *)
-  && List.for_all
-       (fun tvar -> FVarId.Map.mem tvar subst.map)
-       (Term.free_vars term)
-  && (* [fvar] and [term] must have the same type. *)
-  TermUtils.typeof ~context env (Term.mkFVar fvar)
-  = TermUtils.typeof ~context env term
-
 let is_bound fvar subst : bool =
   match FVarId.Map.find_opt fvar subst.map with
   | Some (SBound _) -> true
@@ -86,37 +75,61 @@ let is_bound fvar subst : bool =
 let get_bound fvar subst : Term.t =
   match FVarId.Map.find fvar subst.map with SBound t -> t | _ -> assert false
 
+(** [unify_cond env context subst fvar term] checks whether we are allowed to instantiate 
+    the variable [fvar] with [term]. This does *not* however unify the types of [fvar] and [term]. *)
+let unify_cond env context subst fvar term : bool =
+  let free_vars = Term.free_vars term in
+  (* [fvar] has to be in the domain of [subst] and be flex. *)
+  FVarId.Map.find_opt fvar subst.map = Some SFlex
+  (* All the free variables of [term] have to be in the domain of [subst]. *)
+  && List.for_all (fun tvar -> FVarId.Map.mem tvar subst.map) free_vars
+  (* Check [fvar] is not free in [term] (this is known as an occur-check).  *)
+  && (not @@ List.mem fvar free_vars)
+
 (** [unify_rec subst t1 t2] performs syntactic unification on the terms [t1] and [t2],
-      starting with a substitution [subst].
-      This doesn't check for cycles, but instead returns a lazy list of all unifiers. *)
+    starting with a substitution [subst].
+    This doesn't check for cycles, but instead returns a lazy list of all unifiers. *)
 let rec unify_rec env context subst ((t1, t2) : Term.t * Term.t) : subst Seq.t =
   let open Utils.Monad.Seq in
   match (t1, t2) with
+  (*************************************************************************)
   (* Trivial cases. *)
   | FVar v1, FVar v2 when FVarId.equal v1 v2 -> return subst
   | Sort s1, Sort s2 when s1 = s2 -> return subst
   | Cst c1, Cst c2 when Name.equal c1 c2 -> return subst
+  (*************************************************************************)
   (* Expand a variable that is in the substitution. *)
   | FVar v, t when is_bound v subst ->
       unify_rec env context subst (get_bound v subst, t)
   | t, FVar v when is_bound v subst ->
       unify_rec env context subst (get_bound v subst, t)
-  (* Add a mapping to the substitution.
-     This is a choice point : we try both [v1 --> v2] and [v2 --> v1].
-     Since we are using lazy lists this simulates backtracking. *)
+  (*************************************************************************)
+  (* Extend the substitution. *)
   | FVar v1, FVar v2
     when unify_cond env context subst v1 (Term.mkFVar v2)
          && unify_cond env context subst v2 (Term.mkFVar v1) ->
+      (* Unify the types of [v1] and [v2]. *)
+      let* subst =
+        unify_types env context subst (Term.mkFVar v1, Term.mkFVar v2)
+      in
+      (* This is a choice point : we try both [v1 --> v2] and [v2 --> v1].
+         Since we are using lazy lists this simulates backtracking. *)
       List.to_seq
         [ { map = FVarId.Map.add v1 (SBound (Term.mkFVar v2)) subst.map }
         ; { map = FVarId.Map.add v2 (SBound (Term.mkFVar v1)) subst.map }
         ]
-  (* Extend the substitution with a mapping [v --> SBound t]. *)
   | FVar v, t when unify_cond env context subst v t ->
+      (* Unify the types of [v] and [t]. *)
+      let* subst = unify_types env context subst (Term.mkFVar v, t) in
+      (* Extend the substitution with a mapping [v --> SBound t]. *)
       return { map = FVarId.Map.add v (SBound t) subst.map }
   | t, FVar v when unify_cond env context subst v t ->
+      (* Unify the types of [v] and [t]. *)
+      let* subst = unify_types env context subst (Term.mkFVar v, t) in
+      (* Extend the substitution with a mapping [v --> SBound t]. *)
       return { map = FVarId.Map.add v (SBound t) subst.map }
-      (* Recursive cases. *)
+  (*************************************************************************)
+  (* Recursive cases. *)
   | App (_, f1, args1), App (_, f2, args2)
     when List.length args1 = List.length args2 ->
       foldM (unify_rec env context) subst
@@ -130,8 +143,15 @@ let rec unify_rec env context subst ((t1, t2) : Term.t * Term.t) : subst Seq.t =
       let new_body1 = Term.instantiate fvar body1 in
       let new_body2 = Term.instantiate fvar body2 in
       unify_rec env new_context subst (new_body1, new_body2)
+  (*************************************************************************)
   (* We failed to unify. *)
   | _ -> Seq.empty
+
+(** Same as [unify_rec], but unififes the types of the terms instead of unifying the terms. *)
+and unify_types env context subst (t1, t2) : subst Seq.t =
+  let ty1 = TermUtils.typeof env ~context t1 in
+  let ty2 = TermUtils.typeof env ~context t2 in
+  unify_rec env context subst (ty1, ty2)
 
 let subst_bindings subst : (FVarId.t * Term.t) list =
   subst.map |> FVarId.Map.bindings

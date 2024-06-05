@@ -461,6 +461,24 @@ let test_unif_6 () =
   (* The two linked variables are of different types. *)
   check_empty actions
 
+let test_unif_7 () =
+  let open Term in
+  let hlpred = Link.Pred.(lift unifiable) in
+  let hyp =
+    forall "A" mkType
+    @@ forall "x" (mkBVar 0)
+    @@ mkApps (mkCst Constants.eq) [ mkBVar 1; mkBVar 0; mkBVar 0 ]
+  in
+  let hyp_sub = [ 1; 1; 2 ] in
+  let concl =
+    forall "B" mkType
+    @@ forall "y" (mkBVar 0)
+    @@ mkApps (mkCst Constants.eq) [ mkBVar 1; mkBVar 0; mkBVar 0 ]
+  in
+  let concl_sub = [ 1; 1; 2 ] in
+  let actions = link_backward hyp hyp_sub concl concl_sub hlpred in
+  check_subform actions (hyp, hyp_sub) (concl, concl_sub)
+
 (**********************************************************************************************)
 (** Testing [Pred.wf_subform]. *)
 
@@ -588,6 +606,7 @@ let () =
         ; test_unif_4
         ; test_unif_5
         ; test_unif_6
+        ; test_unif_7
         ]
       (*; test_group "subformula-linking"
             [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3; test_sfl_4 ]

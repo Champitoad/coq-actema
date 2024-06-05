@@ -18,6 +18,13 @@
 - Talk about the lemma search "fast" unification.
 - Unification : describe the problem formally and the solution.
 
+# Formalizing the unification algorithm
+
+Define a judgement in the style of :
+  A Unification Algorithm for COQ Featuring Universe Polymorphism and Overloading, Ziliani & Sozeau
+
+We will also need an aliasing relation on metavariables. 
+
 # Scratch
 
 forall R, exists x, R x x /\ exists y, {y = x}  
