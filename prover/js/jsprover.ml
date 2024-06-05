@@ -99,7 +99,7 @@ let rec js_proof_engine (proof : Proof.t) =
     (** Return the given action as a binary, base64-encoded string. *)
     method encodeaction (goal_id, preaction) =
       let action = !!(Export.export_action _self##.proof goal_id) preaction in
-      Js_log.log @@ Api.Logic.show_action action;
+      (*Js_log.log @@ Api.Logic.show_action action;*)
       action
       |> Fun.flip Marshal.to_string []
       |> Base64.encode_string |> Js.string

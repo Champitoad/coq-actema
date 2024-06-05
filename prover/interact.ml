@@ -38,7 +38,7 @@ type state =
     in [subst]. *)
 let is_bound fvar subst =
   let expr = Term.mkFVar fvar in
-  Unif.apply subst expr = expr
+  Unif.apply subst expr != expr
 
 (* Step into the left formula. *)
 let left_step state ?(invert = false) ?(binder = None) t1 sub1 =
@@ -56,7 +56,7 @@ let left_step state ?(invert = false) ?(binder = None) t1 sub1 =
       ( { state with
           itrace = (Left, witness) :: state.itrace
         ; context
-        ; t1
+        ; t1 = Term.instantiate fvar t1
         ; sub1
         ; fvars_1 = List.tl state.fvars_1
         }
@@ -77,7 +77,7 @@ let right_step state ?(invert = false) ?(binder = None) t2 sub2 =
       ( { state with
           itrace = (Right, witness) :: state.itrace
         ; context
-        ; t2
+        ; t2 = Term.instantiate fvar t2
         ; sub2
         ; fvars_2 = List.tl state.fvars_2
         }
@@ -175,7 +175,7 @@ let backward_step (state : state) : state * bool =
   (* Rule L⇒₂ *)
   | (FImpl (f0, f1), 1 :: sub), _ -> left_step state f1 sub
   (* Rules L∧₁ and Rule L⇔₁ *)
-  | (FConn (conn, [ f1; f2 ]), 1 :: sub), _ when conn = Or || conn = Equiv ->
+  | (FConn (conn, [ f1; f2 ]), 1 :: sub), _ when conn = And || conn = Equiv ->
       left_step state f1 sub
   (* Rules L∧₂ and L⇔₂ *)
   | (FConn (conn, [ f1; f2 ]), 2 :: sub), _ when conn = And || conn = Equiv ->
@@ -241,13 +241,62 @@ type dnd_mode = Forward | Backward
 
 let invert_mode = function Forward -> Backward | Backward -> Forward
 
+(** Print some debug information about the state. *)
+let dump_state ?(verbose = false) state mode : unit =
+  let pp_term t =
+    Notation.term_to_string state.env ~ctx:state.context
+    @@ Unif.apply state.subst t
+  in
+  let pp_var v =
+    let term = Unif.apply state.subst @@ Term.mkFVar v in
+    Format.sprintf "%s --> %s" (FVarId.show v) (Term.show term)
+  in
+
+  if verbose
+  then begin
+    Js_log.log "------------------";
+
+    (* Print the raw linkage. *)
+    Js_log.log @@ Format.sprintf "RAW t1 : %s" @@ Term.show state.t1;
+    Js_log.log @@ Format.sprintf "RAW t2 : %s" @@ Term.show state.t2;
+
+    (* Print the subs. *)
+    Js_log.log @@ Format.sprintf "sub1 : %s"
+    @@ List.to_string string_of_int state.sub1;
+    Js_log.log @@ Format.sprintf "sub2 : %s"
+    @@ List.to_string string_of_int state.sub2;
+
+    (* Print the raw substitution on the remaining free variables. *)
+    Js_log.log
+    @@ Format.sprintf "RAW fvars_1 : %s"
+    @@ List.to_string ~sep:" | " pp_var state.fvars_1;
+    Js_log.log
+    @@ Format.sprintf "RAW fvars_2 : %s"
+    @@ List.to_string ~sep:" | " pp_var state.fvars_2
+  end;
+
+  (* Print the pretty linkage. *)
+  Js_log.log
+  @@ Format.sprintf "%s %s %s" (pp_term state.t1)
+       (match mode with Forward -> "*" | Backward -> "|-")
+       (pp_term state.t2)
+
+(** Print the last choice that was taken in the itrace. *)
+let dump_last_choice state : unit =
+  let side, witness = List.hd state.itrace in
+  let pp_side = function Left -> "[left]" | Right -> "[right]" in
+  match witness with
+  | None -> Js_log.log @@ Format.sprintf ">>> go %s" (pp_side side)
+  | Some term ->
+      Js_log.log
+      @@ Format.sprintf ">>> instantiate %s with [%s]" (pp_side side)
+           (Notation.term_to_string state.env ~ctx:state.context
+           @@ Unif.apply state.subst term)
+
 (** The main interaction loop. *)
 let rec interact (state : state) mode : itrace =
-  Js_log.log
-  @@ Format.sprintf "%s %s %s"
-       (Notation.term_to_string state.env ~ctx:state.context state.t1)
-       (match mode with Forward -> "*" | Backward -> "|-")
-       (Notation.term_to_string state.env ~ctx:state.context state.t2);
+  (* Print some debug info. *)
+  dump_state state mode;
 
   if state.sub1 = [] && state.sub2 = []
   then (* We finished the interaction. *)
@@ -259,6 +308,8 @@ let rec interact (state : state) mode : itrace =
       | Forward -> forward_step state
       | Backward -> backward_step state
     in
+    (* Print some debug info. *)
+    dump_last_choice state;
     (* Decide on the next interaction mode. *)
     let mode = if invert then invert_mode mode else mode in
     (* Continue. *)
