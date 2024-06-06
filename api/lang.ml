@@ -488,8 +488,8 @@ module TermUtils = struct
   exception TypingError of typeError
 
   (** There is no need for unification here :
-        all binders are annotated with the type of the bound variable. *)
-  let rec check_rec env (ctx : Context.t) t : Term.t =
+      all binders are annotated with the type of the bound variable. *)
+  let rec check env ctx t : Term.t =
     match (t : Term.t) with
     | BVar n -> raise @@ TypingError (LooseBVar n)
     | FVar fvar -> begin
@@ -505,23 +505,23 @@ module TermUtils = struct
     | Sort _ -> Sort `Type
     | Lambda (_, x, ty, body) ->
         (* Check the type. *)
-        let _ = check_rec env ctx ty in
+        let _ = check env ctx ty in
         (* Check the body. *)
         let fvar, new_ctx = Context.add_fresh x ty ctx in
-        let body_ty = check_rec env new_ctx @@ Term.instantiate fvar body in
+        let body_ty = check env new_ctx @@ Term.instantiate fvar body in
         (* Don't forget to abstract the body type. *)
         Term.mkProd x ty @@ Term.abstract fvar body_ty
     | App (_, f, args) ->
         let _, res_ty =
-          List.fold_left (check_app env ctx) (f, check_rec env ctx f) args
+          List.fold_left (check_app env ctx) (f, check env ctx f) args
         in
         res_ty
     | Prod (_, x, ty, body) -> begin
         (* Type check the type. *)
-        let ty_ty = check_rec env ctx ty in
+        let ty_ty = check env ctx ty in
         (* Type check the body. *)
         let fvar, ctx = Context.add_fresh x ty ctx in
-        let body_ty = check_rec env ctx @@ Term.instantiate fvar body in
+        let body_ty = check env ctx @@ Term.instantiate fvar body in
         (* Decide on the type of the product. *)
         match (ty_ty, body_ty) with
         | Sort _, Sort _ -> body_ty
@@ -532,7 +532,7 @@ module TermUtils = struct
   (** Type-check an application with a single argument.
         It takes as argument (and returns) a pair [term, type_]. *)
   and check_app env ctx (f, f_ty) arg =
-    let arg_ty = check_rec env ctx arg in
+    let arg_ty = check env ctx arg in
     match (f_ty : Term.t) with
     | Prod (_, x, a, b) ->
         if Term.alpha_equiv arg_ty a
@@ -540,14 +540,43 @@ module TermUtils = struct
         else raise @@ TypingError (ExpectedType (arg, arg_ty, a))
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
 
-  let check ?(context = Context.empty) env t = check_rec env context t
-
-  let well_typed ?(context = Context.empty) env t =
+  let well_typed env context t =
     try
-      ignore (check ~context env t);
+      ignore (check env context t);
       true
     with TypingError _ -> false
 
-  (** TODO: actually makes this faster. *)
-  let typeof ?(context = Context.empty) env t = check ~context env t
+  let rec typeof env ctx t =
+    match (t : Term.t) with
+    | BVar n -> raise @@ TypingError (LooseBVar n)
+    | FVar fvar -> begin
+        match Context.find fvar ctx with
+        | None -> raise @@ TypingError (UnboundFVar fvar)
+        | Some entry -> entry.type_
+      end
+    | Cst c -> begin
+        match Name.Map.find_opt c env.Env.constants with
+        | None -> raise @@ TypingError (UnboundCst c)
+        | Some ty -> ty
+      end
+    | Sort _ -> Sort `Type
+    | Lambda (_, x, ty, body) ->
+        let fvar, new_ctx = Context.add_fresh x ty ctx in
+        let body_ty = typeof env new_ctx @@ Term.instantiate fvar body in
+        Term.mkProd x ty @@ Term.abstract fvar body_ty
+    | App (_, f, args) ->
+        let _, res_ty =
+          List.fold_left (typeof_app env ctx) (f, typeof env ctx f) args
+        in
+        res_ty
+    | Prod (_, x, ty, body) ->
+        let fvar, ctx = Context.add_fresh x ty ctx in
+        typeof env ctx @@ Term.instantiate fvar body
+
+  (** Get the type of an application with a single argument.
+      It takes as argument (and returns) a pair [term, type_]. *)
+  and typeof_app env ctx (f, f_ty) arg =
+    match (f_ty : Term.t) with
+    | Prod (_, x, a, b) -> (Term.mkApp f arg, Term.bsubst arg b)
+    | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
 end

@@ -149,8 +149,8 @@ let rec unify_rec env context subst ((t1, t2) : Term.t * Term.t) : subst Seq.t =
 
 (** Same as [unify_rec], but unififes the types of the terms instead of unifying the terms. *)
 and unify_types env context subst (t1, t2) : subst Seq.t =
-  let ty1 = TermUtils.typeof env ~context t1 in
-  let ty2 = TermUtils.typeof env ~context t2 in
+  let ty1 = TermUtils.typeof env context t1 in
+  let ty2 = TermUtils.typeof env context t2 in
   unify_rec env context subst (ty1, ty2)
 
 let subst_bindings subst : (FVarId.t * Term.t) list =

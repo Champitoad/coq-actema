@@ -169,7 +169,7 @@ let test_tac () : unit tactic =
         (* Type check the term in Actema and print its type. *)
         begin
           try
-            let ty = TermUtils.check env term in
+            let ty = TermUtils.check env Context.empty term in
             Log.printf "TYPE %s" (Notation.term_to_string env ty)
           with TermUtils.TypingError err ->
             Log.printf "TYPING ERROR\n%s" (TermUtils.show_typeError err)

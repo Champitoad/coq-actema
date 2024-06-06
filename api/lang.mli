@@ -347,20 +347,19 @@ module TermUtils : sig
 
   exception TypingError of typeError
 
-  (** [check ?context env t] checks that [t] is well-typed, and returns the
+  (** [check env context t] checks that [t] is well-typed, and returns the
         type of [t] or raises a typing error.
-        The argument [context] gives the type of the free variables of [t]
-        (by default [context] is empty and [t] is assumed to be closed).
+        The argument [context] gives the type of the free variables of [t].
 
-        If you already know [t] is well-typed use [typeof ?context env t] instead. *)
-  val check : ?context:Context.t -> Env.t -> Term.t -> Term.t
+        If you already know [t] is well-typed use [typeof env context t] instead. *)
+  val check : Env.t -> Context.t -> Term.t -> Term.t
 
-  (** [typeof ?context env t] gets the type of the term [t].
+  (** [typeof env context t] gets the type of the term [t].
         This assumes that [t] is well-typed, and is faster than [check env t]. *)
-  val typeof : ?context:Context.t -> Env.t -> Term.t -> Term.t
+  val typeof : Env.t -> Context.t -> Term.t -> Term.t
 
-  (** [well_typed ?context env t] checks that [t] is well-typed. *)
-  val well_typed : ?context:Context.t -> Env.t -> Term.t -> bool
+  (** [well_typed env context t] checks that [t] is well-typed. *)
+  val well_typed : Env.t -> Context.t -> Term.t -> bool
 
   (** [subterm ?context t sub] returns the subterm of [t] at path [sub]
         together with its local context. The argument [context] gives the initial

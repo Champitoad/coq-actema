@@ -39,7 +39,9 @@ module Proof = struct
     List.iter
       begin
         fun { g_id; g_pregoal } ->
-          let check f = ignore (TermUtils.check g_pregoal.g_env f) in
+          let check f =
+            ignore (TermUtils.check g_pregoal.g_env Context.empty f)
+          in
           check g_pregoal.g_concl;
           Hyps.iter
             (fun { h_name; h_gen; h_form } -> check h_form)

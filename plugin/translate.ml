@@ -91,13 +91,13 @@ let rec translate_term state (t : EConstr.t) : Lang.Term.t =
     (* Translate the type and body. *)
     let ty = translate_term state ty in
     let body = translate_term state body in
-      let binder =
-        match coq_binder.binder_name with
-        | Anonymous -> Term.Anonymous
-        | Name name -> Term.Named (Name.make @@ Names.Id.to_string name)
-      in
-      Term.mkProd binder ty body
-   else if EConstr.isConst state.sigma t
+    let binder =
+      match coq_binder.binder_name with
+      | Anonymous -> Term.Anonymous
+      | Name name -> Term.Named (Name.make @@ Names.Id.to_string name)
+    in
+    Term.mkProd binder ty body
+  else if EConstr.isConst state.sigma t
   then
     (* Constant. *)
     let cname, _ = EConstr.destConst state.sigma t in
@@ -340,7 +340,7 @@ let lemmas coq_goal : Logic.lemma list * Lang.Env.t =
           (not (List.mem Constants.dummy @@ Term.constants form))
           (* Check the lemma type-checks. This can sometimes fail because Coq
              uses beta-conversion when type-checking, but Actema does not. *)
-          && TermUtils.well_typed state.env form
+          && TermUtils.well_typed state.env Context.empty form
       end
       (l1 @ l2)
   in

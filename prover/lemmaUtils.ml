@@ -113,6 +113,9 @@ module Pred = struct
     List.exists
       begin
         fun sub ->
+          Js_log.log
+          @@ Format.sprintf "  sub = %s"
+          @@ List.to_string string_of_int sub;
           not @@ List.is_empty
           @@ hlpred proof ([ subpath lemma_path sub ], [ selection ])
       end
@@ -137,7 +140,13 @@ module Pred = struct
 end
 
 let filter pred proof =
-  let new_db = Lemmas.filter (pred proof) (Proof.get_db proof) in
+  let new_db =
+    Lemmas.filter
+      (fun lemma ->
+        Js_log.log ("filtering " ^ Name.show lemma.l_user);
+        pred proof lemma)
+      (Proof.get_db proof)
+  in
   (*Js_log.log
     @@ Format.sprintf "Filtered lemmas : %d\n"
          (List.length @@ Lemmas.names new_db);*)

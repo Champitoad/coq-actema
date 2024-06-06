@@ -235,7 +235,7 @@ let rec js_proof_engine (proof : Proof.t) =
         List.iter
           begin
             fun lemma ->
-              try ignore @@ TermUtils.well_typed env lemma.l_form
+              try ignore @@ TermUtils.well_typed env Context.empty lemma.l_form
               with TermUtils.TypingError err ->
                 Js_log.log
                 @@ Format.sprintf "In lemma %s\n%s\nTyping Error\n%s\n"
@@ -284,29 +284,26 @@ let rec js_proof_engine (proof : Proof.t) =
         |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
       in
       (* Convert the selection from JS to ocaml. *)
-      (*let selection =
-          selection |> Js.Optdef.to_option |> Option.map ipath_of_array
-        in*)
-      (* Construct the filtering predicate. *)
-      let pred =
-        (*Pred.and_*)
-        begin
-          match pattern with
-          | None | Some "" -> Pred.true_
-          | Some pattern ->
-              Js_log.log "match_name_pattern";
-              Pred.match_name pattern
-        end
-        (*begin
-            match selection with
-            | None | Some [] -> Pred.true_
-            | Some [ selection ] ->
-                Pred.or_ (Pred.link_sfl selection)
-                  (Pred.link_drewrite selection)
-            | _ ->
-                failwith "Jsapi.filterlemmas: only supports a single selection."
-          end*)
+      let selection =
+        selection |> Js.Optdef.to_option |> Option.map ipath_of_array
       in
+      (* Construct the filtering predicate. *)
+      let pattern_pred =
+        match pattern with
+        | None | Some "" -> Pred.true_
+        | Some pattern ->
+            Js_log.log "match_name_pattern";
+            Pred.match_name pattern
+      in
+      let selection_pred =
+        match selection with
+        | None | Some [] -> Pred.true_
+        | Some [ selection ] ->
+            (*Pred.or_ (Pred.link_sfl selection) (Pred.link_drewrite selection)*)
+            Pred.link_sfl selection
+        | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
+      in
+      let pred = Pred.and_ pattern_pred selection_pred in
       (* Filter the lemma database. *)
       let start = Sys.time () in
       let proof = filter pred _self##.proof in
