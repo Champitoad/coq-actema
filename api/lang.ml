@@ -546,14 +546,20 @@ module TermUtils = struct
       true
     with TypingError _ -> false
 
-  let rec typeof env ctx t =
+  (* We make a couple performance optimizations compared to [check] :
+     - We don't re-check the type of the argument in lambdas and products.
+     - We operate on pure de Bruijn indices instead of a locally nameless representation.
+       This way we avoid repeatedly instantiating/abstracting terms when traversing binders.
+     - We use a mutable (resizeable) array to store the types of bound variables. *)
+  let rec typeof_rec depth env context (bvars_type : Term.t BatDynArray.t) t =
     match (t : Term.t) with
-    | BVar n -> raise @@ TypingError (LooseBVar n)
-    | FVar fvar -> begin
-        match Context.find fvar ctx with
-        | None -> raise @@ TypingError (UnboundFVar fvar)
-        | Some entry -> entry.type_
-      end
+    | FVar fvar ->
+        let entry = Option.get @@ Context.find fvar context in
+        entry.type_
+    | BVar n ->
+        let len = BatDynArray.length bvars_type in
+        let ty = BatDynArray.get bvars_type (len - 1 - n) in
+        Term.lift depth ty
     | Cst c -> begin
         match Name.Map.find_opt c env.Env.constants with
         | None -> raise @@ TypingError (UnboundCst c)
@@ -561,22 +567,32 @@ module TermUtils = struct
       end
     | Sort _ -> Sort `Type
     | Lambda (_, x, ty, body) ->
-        let fvar, new_ctx = Context.add_fresh x ty ctx in
-        let body_ty = typeof env new_ctx @@ Term.instantiate fvar body in
-        Term.mkProd x ty @@ Term.abstract fvar body_ty
+        BatDynArray.add bvars_type ty;
+        let body_ty = typeof_rec (depth + 1) env context bvars_type body in
+        BatDynArray.delete_last bvars_type;
+        Term.mkProd x ty body_ty
     | App (_, f, args) ->
         let _, res_ty =
-          List.fold_left (typeof_app env ctx) (f, typeof env ctx f) args
+          List.fold_left
+            (typeof_app depth env bvars_type)
+            (f, typeof_rec depth env context bvars_type f)
+            args
         in
         res_ty
     | Prod (_, x, ty, body) ->
-        let fvar, ctx = Context.add_fresh x ty ctx in
-        typeof env ctx @@ Term.instantiate fvar body
+        BatDynArray.add bvars_type ty;
+        let body_ty = typeof_rec (depth + 1) env context bvars_type body in
+        BatDynArray.delete_last bvars_type;
+        body_ty
 
   (** Get the type of an application with a single argument.
       It takes as argument (and returns) a pair [term, type_]. *)
-  and typeof_app env ctx (f, f_ty) arg =
+  and typeof_app depth env ctx (f, f_ty) arg =
     match (f_ty : Term.t) with
     | Prod (_, x, a, b) -> (Term.mkApp f arg, Term.bsubst arg b)
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
+
+  let typeof env ctx term =
+    let bvars_type = BatDynArray.make 8 in
+    typeof_rec 0 env ctx bvars_type term
 end
