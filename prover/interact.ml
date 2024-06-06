@@ -281,7 +281,7 @@ let dump_state ?(verbose = false) state mode : unit =
        (match mode with Forward -> "*" | Backward -> "|-")
        (pp_term state.t2)
 
-(** Print the last choice that was taken in the itrace. *)
+(** Print the most recent choice that was added to the itrace. *)
 let dump_last_choice state : unit =
   let side, witness = List.hd state.itrace in
   let pp_side = function Left -> "[left]" | Right -> "[right]" in

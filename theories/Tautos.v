@@ -8,6 +8,9 @@ Context (Mortal Human : nat -> Prop).
 (*Lemma test : Human 0 -> Mortal 0.
 actema_force.*)
 
+Lemma test : forall x, Mortal x.
+Admitted.
+
 Lemma Aristoteles (hm : forall x, Human x -> Mortal x) 
   (hh : Human Socrates) : Mortal Socrates.
     actema_force.

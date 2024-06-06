@@ -1,7 +1,62 @@
 open Utils.Pervasive
 open Api
+open Lang
 open Logic
 open ProverLogic
+
+(** Compute all the paths in a formula that lead to a subformula in the first order skeleton. *)
+let f_subs env context f : int list list =
+  let rec loop context f sub acc =
+    let fo = FirstOrder.view env context f in
+    match fo with
+    | FAtom _ -> sub :: acc
+    | FConn (conn, args) ->
+        List.fold_lefti
+          (fun acc i arg -> loop context arg ((i + 1) :: sub) acc)
+          (sub :: acc) args
+    | FImpl (f0, f1) ->
+        let acc = sub :: acc in
+        let acc = loop context f0 (0 :: sub) acc in
+        loop context f1 (1 :: sub) acc
+    | FBind (Forall, x, ty, body) ->
+        let fvar, new_context = Context.add_fresh x ty context in
+        let acc = sub :: acc in
+        let acc = loop context ty (0 :: sub) acc in
+        loop new_context (Term.instantiate fvar body) (1 :: sub) acc
+    | FBind (Exist, x, ty, body) ->
+        let fvar, new_context = Context.add_fresh x ty context in
+        let acc = sub :: acc in
+        let acc = loop context ty (1 :: sub) acc in
+        loop new_context (Term.instantiate fvar body) (1 :: 2 :: sub) acc
+  in
+  List.map List.rev @@ loop context f [] []
+
+(** Compute all the paths in a formula that lead to the left or right side of an equality
+    which is in the first-order skeleton. *)
+let eq_subs env context f : int list list =
+  let rec loop context f sub acc =
+    let fo = FirstOrder.view env context f in
+    match fo with
+    | FAtom (App (_, Cst eq, [ ty; t1; t2 ])) when Name.equal eq Constants.eq ->
+        (2 :: sub) :: (3 :: sub) :: acc
+    | FAtom _ -> acc
+    | FConn (conn, args) ->
+        List.fold_lefti
+          (fun acc i arg -> loop context arg ((i + 1) :: sub) acc)
+          acc args
+    | FImpl (f0, f1) ->
+        let acc = loop context f0 (0 :: sub) acc in
+        loop context f1 (1 :: sub) acc
+    | FBind (Forall, x, ty, body) ->
+        let fvar, new_context = Context.add_fresh x ty context in
+        let acc = loop context ty (0 :: sub) acc in
+        loop new_context (Term.instantiate fvar body) (1 :: sub) acc
+    | FBind (Exist, x, ty, body) ->
+        let fvar, new_context = Context.add_fresh x ty context in
+        let acc = loop context ty (1 :: sub) acc in
+        loop new_context (Term.instantiate fvar body) (1 :: 2 :: sub) acc
+  in
+  List.map List.rev @@ loop context f [] []
 
 module Pred = struct
   type t = Proof.t -> Logic.lemma -> bool
@@ -23,44 +78,36 @@ module Pred = struct
       true
     with Not_found -> false
 
-  (*let prepare_goal proof stmt selection : Proof.t * Path.t * Path.t =
-      let Proof.{ g_id; g_pregoal = sub } = PathUtils.goal proof selection in
-      (* Make a new goal that has :
-         - the lemma as a local hypothesis.
-         - its environment extended with the environment of the lemma database. *)
-      let hd = Handle.fresh () in
-      let sub =
-        let hyp = Proof.mk_hyp stmt in
-        let g_hyps = Proof.Hyps.add sub.g_hyps hd hyp in
-        let g_env =
-          Env.union (Proof.Lemmas.env @@ Proof.get_db proof) sub.g_env
-        in
-        Proof.{ sub with g_hyps; g_env }
+  let prepare_goal proof lemma selection : Proof.t * Path.t * Path.t =
+    let { g_id; g_pregoal = pregoal } = PathUtils.goal selection proof in
+    (* Make a new (pre)goal that has :
+       - the lemma as a local hypothesis.
+       - its environment extended with the environment of the lemma database. *)
+    let new_pregoal =
+      let g_hyps =
+        Hyps.add pregoal.g_hyps
+          { h_name = lemma.l_full; h_form = lemma.l_form; h_gen = 0 }
       in
-      (* Replace the current goal by the new goal. *)
-      let g_ids, proof = Proof.Tactics.xprogress proof g_id [ sub ] in
-      let g_id = List.hd g_ids in
-      (* Create a path to the root of the new hypothesis (representing the lemma). *)
-      let lemma_path =
-        IPath.make
-          ~ctxt:{ kind = `Hyp; handle = Handle.toint hd }
-          (Handle.toint g_id)
-      in
-      (* Make sure the path to the selection is in the new goal. *)
-      let selection =
-        IPath.make ~ctxt:selection.ctxt ~sub:selection.sub (Handle.toint g_id)
-      in
-      (proof, lemma_path, selection)
-
-    let subpath p sub = IPath.{ root = p.root; ctxt = p.ctxt; sub = p.sub @ sub }*)
-
-  let link_sfl selection proof lemma = failwith "link_sfl: todo"
-  (* Create a link predicate for subformula linking. *)
-  (*let hlpred = Link.Pred.wf_subform in
-    (* Prepare the goal. *)
-    let proof, lemma_path, selection =
-      prepare_goal proof lemma.Proof.l_form selection
+      let g_env = Env.union (Lemmas.env @@ Proof.get_db proof) pregoal.g_env in
+      { pregoal with g_hyps; g_env }
     in
+    (* Replace the current goal by the new goal. *)
+    let new_g_ids, proof = Proof.xprogress proof g_id [ new_pregoal ] in
+    let new_g_id = List.hd new_g_ids in
+    (* Create a path to the root of the new hypothesis (representing the lemma). *)
+    let lemma_path = Path.make ~kind:(Hyp lemma.l_full) new_g_id in
+    (* Make sure the path to the selection is in the new goal. *)
+    let selection = { selection with goal = new_g_id } in
+    (proof, lemma_path, selection)
+
+  let subpath p sub = Path.{ p with sub = p.sub @ sub }
+
+  let link_sfl selection proof lemma =
+    (* Create a link predicate for subformula linking. *)
+    let hlpred = Link.Pred.wf_subform in
+    (* Prepare the goal. *)
+    let proof, lemma_path, selection = prepare_goal proof lemma selection in
+    let goal = Proof.byid proof lemma_path.goal in
     (* Test against relevant links. As we are testing for subformula linking,
        we only select subpaths of the lemma that lead to a formula. *)
     List.exists
@@ -69,28 +116,14 @@ module Pred = struct
           not @@ List.is_empty
           @@ hlpred proof ([ subpath lemma_path sub ], [ selection ])
       end
-      (f_subs lemma.Proof.l_form)*)
+      (f_subs goal.g_env Context.empty lemma.l_form)
 
-  (** Compute all the paths in a formula that lead to the left or right side of an equality. *)
-  (*let eq_subs (f : form) : int list list =
-    let rec aux (f : form) sub =
-      match f with
-      | FTrue | FFalse -> []
-      | FBind (_, _, _, f) -> aux f (0 :: sub)
-      | FConn (_, fs) ->
-          fs |> List.mapi (fun i f -> aux f (i :: sub)) |> List.concat
-      | FPred ("_EQ", [ e1; e2 ]) -> List.map List.rev [ 0 :: sub; 1 :: sub ]
-      | FPred (_, _) -> []
-    in
-    aux f []*)
-
-  let link_drewrite selection proof lemma = failwith "link_drewrite : todo"
-  (*(* Create a link predicate for subformula linking. *)
+  let link_drewrite selection proof lemma =
+    (* Create a link predicate for subformula linking. *)
     let hlpred = Link.Pred.deep_rewrite in
     (* Prepare the goal. *)
-    let proof, lemma_path, selection =
-      prepare_goal proof lemma.Proof.l_form selection
-    in
+    let proof, lemma_path, selection = prepare_goal proof lemma selection in
+    let goal = Proof.byid proof lemma_path.goal in
     (* Test against relevant links.  As we are testing for deep rewrites,
        we only select subpaths of the lemma that lead to the left or right of an equality.
        This looses a bit of generality as we may miss some links that allow the selection to rewrite in the lemma. *)
@@ -100,12 +133,12 @@ module Pred = struct
           not @@ List.is_empty
           @@ hlpred proof ([ subpath lemma_path sub ], [ selection ])
       end
-      (eq_subs lemma.Proof.l_form)*)
+      (eq_subs goal.g_env Context.empty lemma.l_form)
 end
 
-let filter pred proof = proof
-(*let new_db = Proof.Lemmas.filter (pred proof) (Proof.get_db proof) in
-  js_log
-  @@ Format.sprintf "Filtered lemmas : %d\n"
-       (List.length @@ Proof.Lemmas.ids new_db);
-  Proof.set_db proof new_db*)
+let filter pred proof =
+  let new_db = Lemmas.filter (pred proof) (Proof.get_db proof) in
+  (*Js_log.log
+    @@ Format.sprintf "Filtered lemmas : %d\n"
+         (List.length @@ Lemmas.names new_db);*)
+  Proof.set_db proof new_db

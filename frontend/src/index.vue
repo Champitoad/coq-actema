@@ -48,9 +48,9 @@ export default {
                 // Load the lemmas in the proof engine.
                 proofState = proofState.loadlemmas(datab);
                 // Filter the lemma database.            
-                //let selection = this.$refs.proofCanvas.getActiveSelection();
-                //let pattern = lemmaSearch.getLemmaSearchText();
-                //proofState = proofState.filterlemmas(selection, pattern);
+                let selection = this.$refs.proofCanvas.getActiveSelection();
+                let pattern = lemmaSearch.getLemmaSearchText();
+                proofState = proofState.filterlemmas(selection, pattern);
                 // Load the new proof engine.
                 this.$refs.proofCanvas.setProofState(proofState);
 

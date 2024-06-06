@@ -246,17 +246,6 @@ let rec js_proof_engine (proof : Proof.t) =
           lemmas;
         (* Create the lemma database. *)
         let db = Lemmas.of_list lemmas |> Lemmas.extend_env env in
-        (* Print debug info. *)
-        Js_log.log
-        @@ Format.sprintf "Received lemmas (count=%d)\n" (List.length lemmas);
-        List.iter
-          begin
-            fun lemma ->
-              Js_log.log
-              @@ Format.sprintf "%s :: %s" (Name.show lemma.l_full)
-                   (Notation.term_to_string env lemma.l_form)
-          end
-          (List.take 10 lemmas);
         (* Load the lemmas in the database. *)
         let new_proof = Proof.set_db _self##.proof db in
         js_proof_engine new_proof
@@ -283,44 +272,48 @@ let rec js_proof_engine (proof : Proof.t) =
            end
       |> Array.of_list |> Js.array
 
-    (*(** Filter the lemma database according to :
-             - the current selection.
-             - a text pattern (usually the text in the lemma search-bar's input-box).
-             Both arguments are optional (in javascript-land, they can be undefined). *)
-      method filterlemmas selection pattern =
-        let open LemmaUtils in
-        (* Convert the pattern from JS to ocaml. *)
-        let pattern =
-          pattern |> Js.Optdef.to_option
-          |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
-        in
-        (* Convert the selection from JS to ocaml. *)
-        let selection =
+    (** Filter the lemma database according to :
+        - the current selection.
+        - a text pattern (usually the text in the lemma search-bar's input-box).
+        Both arguments are optional (in javascript-land, they can be undefined). *)
+    method filterlemmas selection pattern =
+      let open LemmaUtils in
+      (* Convert the pattern from JS to ocaml. *)
+      let pattern =
+        pattern |> Js.Optdef.to_option
+        |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
+      in
+      (* Convert the selection from JS to ocaml. *)
+      (*let selection =
           selection |> Js.Optdef.to_option |> Option.map ipath_of_array
-        in
-        (* Construct the filtering predicate. *)
-        let pred =
-          Pred.and_
-            begin
-              match pattern with
-              | None | Some "" -> Pred.true_
-              | Some pattern -> Pred.match_name pattern
-            end
-            begin
-              match selection with
-              | None | Some [] -> Pred.true_
-              | Some [ selection ] ->
-                  Pred.or_ (Pred.link_sfl selection)
-                    (Pred.link_drewrite selection)
-              | _ ->
-                  failwith "Jsapi.filterlemmas: only supports a single selection."
-            end
-        in
-        (* Filter the lemma database. *)
-        let proof =
-          Utils.time "filter-lemmas" @@ fun () -> filter pred _self##.proof
-        in
-        js_proof_engine proof*)
+        in*)
+      (* Construct the filtering predicate. *)
+      let pred =
+        (*Pred.and_*)
+        begin
+          match pattern with
+          | None | Some "" -> Pred.true_
+          | Some pattern ->
+              Js_log.log "match_name_pattern";
+              Pred.match_name pattern
+        end
+        (*begin
+            match selection with
+            | None | Some [] -> Pred.true_
+            | Some [ selection ] ->
+                Pred.or_ (Pred.link_sfl selection)
+                  (Pred.link_drewrite selection)
+            | _ ->
+                failwith "Jsapi.filterlemmas: only supports a single selection."
+          end*)
+      in
+      (* Filter the lemma database. *)
+      let start = Sys.time () in
+      let proof = filter pred _self##.proof in
+      let stop = Sys.time () in
+      Js_log.log
+      @@ Format.sprintf "Time to [filter-lemmas] : %.2fs" (stop -. start);
+      js_proof_engine proof
   end
 
 (* -------------------------------------------------------------------- *)
