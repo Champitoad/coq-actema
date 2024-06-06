@@ -95,12 +95,17 @@ module Pred : sig
   (** Lift a link predicate to a hyperlink predicate. *)
   val lift : lpred -> hlpred
 
-  (** [Pred.mult lps] returns a hyperlink predicate that denotes the cartesian
-      product of the actions denoted by the hyperlink predicates in [lps]. *)
+  (** [Pred.mult preds] returns a hyperlink predicate that denotes the cartesian
+      product of the actions denoted by the hyperlink predicates in [preds]. 
+      
+      This evaluates the predicates left to right, 
+      and stops as soon as a predicate returns an empty list of linkactions. 
+      If e.g. the first predicate returns an empty list,
+      the next predicates are not evaluated. *)
   val mult : hlpred list -> hlpred
 
-  (** [Pred.add lps] returns a hyperlink predicate that denotes the disjoint
-      union of the actions denoted by the hyperlink predicates in [lps]. *)
+  (** [Pred.add preds] returns a hyperlink predicate that denotes the disjoint
+      union of the actions denoted by the hyperlink predicates in [preds]. *)
   val add : hlpred list -> hlpred
 
   (** [Pred.if_empty p1 p2] is equivalent to [p1] at links where it is non-empty, 

@@ -122,66 +122,64 @@ module Proof = struct
 end
 
 module PathUtils = struct
-  let destr path proof : goal * item * Context.t * Term.t =
-    let exn = Path.InvalidPath (Path.to_string path) in
-    let pregoal =
-      try Proof.byid proof path.goal with InvalidGoalId _ -> raise exn
-    in
+  let goal (path : Path.t) proof : goal =
+    try { g_id = path.goal; g_pregoal = Proof.byid proof path.goal }
+    with InvalidGoalId _ -> raise @@ Path.InvalidPath (Path.to_string path)
 
-    let item, i_term =
-      match path.kind with
-      | Path.Concl -> (Concl pregoal.g_concl, pregoal.g_concl)
-      | Path.Hyp hname ->
-          let hyp =
-            try Hyps.by_name pregoal.g_hyps hname
-            with InvalidHyphName _ -> raise exn
-          in
-          (Hyp (hname, hyp), hyp.h_form)
-      | Path.VarHead vname ->
-          let var =
-            try Vars.by_name pregoal.g_vars vname
-            with InvalidVarName _ -> raise exn
-          in
-          (Var (vname, var.v_type, var.v_body), Term.mkCst vname)
-      | Path.VarType vname ->
-          let var =
-            try Vars.by_name pregoal.g_vars vname
-            with InvalidVarName _ -> raise exn
-          in
-          (Var (vname, var.v_type, var.v_body), var.v_type)
-      | Path.VarBody vname ->
-          let var =
-            try Vars.by_name pregoal.g_vars vname
-            with InvalidVarName _ -> raise exn
-          in
-          let body = Option.get_exn var.v_body exn in
-          (Var (vname, var.v_type, var.v_body), body)
-    in
+  (** This is fast. *)
+  let destr_aux (path : Path.t) proof : goal * item * Term.t =
+    let goal = goal path proof in
+    let pregoal = goal.g_pregoal in
+    let exn = Path.InvalidPath (Path.to_string path) in
+    match path.kind with
+    | Path.Concl -> (goal, Concl pregoal.g_concl, pregoal.g_concl)
+    | Path.Hyp hname ->
+        let hyp =
+          try Hyps.by_name pregoal.g_hyps hname
+          with InvalidHyphName _ -> raise exn
+        in
+        (goal, Hyp (hname, hyp), hyp.h_form)
+    | Path.VarHead vname ->
+        let var =
+          try Vars.by_name pregoal.g_vars vname
+          with InvalidVarName _ -> raise exn
+        in
+        (goal, Var (vname, var.v_type, var.v_body), Term.mkCst vname)
+    | Path.VarType vname ->
+        let var =
+          try Vars.by_name pregoal.g_vars vname
+          with InvalidVarName _ -> raise exn
+        in
+        (goal, Var (vname, var.v_type, var.v_body), var.v_type)
+    | Path.VarBody vname ->
+        let var =
+          try Vars.by_name pregoal.g_vars vname
+          with InvalidVarName _ -> raise exn
+        in
+        let body = Option.get_exn var.v_body exn in
+        (goal, Var (vname, var.v_type, var.v_body), body)
+
+  (** This can take some time if [path.sub] is long. *)
+  let destr path proof : goal * item * Context.t * Term.t =
+    let goal, item, i_term = destr_aux path proof in
     let ctx, term =
       try TermUtils.subterm i_term path.sub
-      with InvalidSubtermPath _ -> raise exn
+      with InvalidSubtermPath _ ->
+        raise @@ Path.InvalidPath (Path.to_string path)
     in
-    ({ g_id = path.goal; g_pregoal = pregoal }, item, ctx, term)
-
-  let goal path proof : goal =
-    let g, _, _, _ = destr path proof in
-    g
-
-  let gid path proof : int = (goal path proof).g_id
+    (goal, item, ctx, term)
 
   let item path proof : item =
-    let _, item, _, _ = destr path proof in
+    let _, item, _ = destr_aux path proof in
     item
 
   let term path proof : Term.t =
-    let _, _, _, t = destr path proof in
-    t
+    let _, _, term = destr_aux path proof in
+    term
 
   let ctx path proof : Context.t =
     let _, _, ctx, _ = destr path proof in
     ctx
-
-  let to_concl { g_id; _ } = Path.make g_id
 end
 
 (* -------------------------------------------------------------------- *)

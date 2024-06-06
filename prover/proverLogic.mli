@@ -91,9 +91,6 @@ end
 
 (** Utilities for the module [Logic.Path]. *)
 module PathUtils : sig
-  (** Make a path to the (root of the) conclusion of a goal. *)
-  val to_concl : goal -> Path.t
-
   (** Destruct a path, i.e. get all the information relevant to a path.
       @raise Path.InvalidPath if [path] is invalid. *)
   val destr : Path.t -> Proof.t -> goal * item * Context.t * Term.t
@@ -101,10 +98,6 @@ module PathUtils : sig
   (** Return the goal that contains the path. 
       @raise Path.InvalidPath if [path] is invalid. *)
   val goal : Path.t -> Proof.t -> goal
-
-  (** Return the identifer of the goal that contains the path. 
-      @raise Path.InvalidPath if [path] is invalid. *)
-  val gid : Path.t -> Proof.t -> int
 
   (** Return the item that a path point to. 
       @raise Path.InvalidPath if [path] is invalid. *)
