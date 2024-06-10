@@ -76,8 +76,7 @@ module Pred = struct
       true
     with Not_found -> false
 
-  let[@landmark] prepare_goal proof lemma selection : Proof.t * Path.t * Path.t
-      =
+  let prepare_goal proof lemma selection : Proof.t * Path.t * Path.t =
     let { g_id; g_pregoal = pregoal } = PathUtils.goal selection proof in
     (* Make a new (pre)goal that has :
        - the lemma as a local hypothesis.
@@ -88,8 +87,8 @@ module Pred = struct
           { h_name = lemma.l_full; h_form = lemma.l_form; h_gen = 0 }
       in
       let g_env =
-        (*Env.union (Lemmas.env @@ Proof.get_db proof) pregoal.g_env*)
-        Lemmas.env @@ Proof.get_db proof
+        Env.union (Lemmas.env @@ Proof.get_db proof) pregoal.g_env
+        (*Lemmas.env @@ Proof.get_db proof*)
       in
       { pregoal with g_hyps; g_env }
     in
@@ -104,7 +103,7 @@ module Pred = struct
 
   let subpath p sub = Path.{ p with sub = p.sub @ sub }
 
-  let[@landmark] link_sfl selection proof lemma =
+  let link_sfl selection proof lemma =
     (* Create a link predicate for subformula linking. *)
     let hlpred = Link.Pred.wf_subform in
     (* Prepare the goal. *)
@@ -112,17 +111,14 @@ module Pred = struct
     let goal = Proof.byid proof lemma_path.goal in
     (* Test against relevant links. As we are testing for subformula linking,
        we only select subpaths of the lemma that lead to a formula. *)
-    let[@landmark] subs = f_subs goal.g_env Context.empty lemma.l_form in
-    let[@landmark] res =
-      List.exists
-        begin
-          fun sub ->
-            not @@ List.is_empty
-            @@ hlpred proof ([ subpath lemma_path sub ], [ selection ])
-        end
-        subs
-    in
-    res
+    let subs = f_subs goal.g_env Context.empty lemma.l_form in
+    List.exists
+      begin
+        fun sub ->
+          not @@ List.is_empty
+          @@ hlpred proof ([ subpath lemma_path sub ], [ selection ])
+      end
+      subs
 
   let link_drewrite selection proof lemma =
     (* Create a link predicate for subformula linking. *)
@@ -142,16 +138,7 @@ module Pred = struct
       (eq_subs goal.g_env Context.empty lemma.l_form)
 end
 
-let[@landmark] filter pred proof =
+let filter pred proof =
   let old_db = Proof.get_db proof in
-  let[@landmark] new_db =
-    Lemmas.filter
-      (fun lemma ->
-        (*Js_log.log ("filtering " ^ Name.show lemma.l_user);*)
-        pred proof lemma)
-      old_db
-  in
-  (*Js_log.log
-    @@ Format.sprintf "Filtered lemmas : %d\n"
-         (List.length @@ Lemmas.names new_db);*)
+  let new_db = Lemmas.filter (fun lemma -> pred proof lemma) old_db in
   Proof.set_db proof new_db

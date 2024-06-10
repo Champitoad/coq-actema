@@ -8,4 +8,6 @@
  (public_name coq-actema.api)
  (libraries qcheck-core qcheck-alcotest coq-actema.utils)
  (preprocess
-  (pps ppx_deriving.show)))
+  (pps ppx_deriving.show))
+ (flags
+  (:standard -w -37)))

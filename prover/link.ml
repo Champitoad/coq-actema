@@ -156,8 +156,9 @@ module Pred = struct
     if not (List.is_empty actions) then actions else p2 pr lnk
 
   (** This should be fast. *)
-  let pre_unifiable : lpred = fun proof (src, dst) -> []
-  (*try
+  let pre_unifiable : lpred =
+   fun proof (src, dst) ->
+    try
       let src_term = Logic.term_of_item @@ PathUtils.item src proof in
       let dst_term = Logic.term_of_item @@ PathUtils.item dst proof in
       let not_unif =
@@ -167,7 +168,7 @@ module Pred = struct
       if not_unif
       then (* These terms are definitely not unifiable. *) []
       else (* We still don't known. *) [ Nothing ]
-    with InvalidSubtermPath _ | Invalid_argument _ -> []*)
+    with InvalidSubtermPath _ | Invalid_argument _ -> []
 
   let unifiable : lpred =
    fun proof (src, dst) ->
@@ -262,9 +263,9 @@ module Pred = struct
   let wf_subform : hlpred =
     mult
       [ lift pre_unifiable
-        (*; lift opposite_pol_formulas
-          ; lift intuitionistic
-          ; lift unifiable*)
+      ; lift opposite_pol_formulas
+      ; lift intuitionistic
+      ; lift unifiable
       ]
 
   (* A deep rewrite link is not required to be intuitionistic. *)
