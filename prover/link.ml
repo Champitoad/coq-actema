@@ -93,32 +93,6 @@ let rec subterm_raw (term : Term.t) sub : Term.t =
       subterm_raw body sub
   | _ -> failwith "Link.subterm_raw : invalid subpath"
 
-(** Function to test whether two terms [t1] and [t2] are *not* unifiable.
-    - If it returns [true] then [t1] and [t2] are *not* unifiable. 
-    - If it returns [false] we didn't gain any information. 
-    
-    For efficiency reasons this function operates directly on de Bruijn syntax 
-    instead of locally nameless syntax. *)
-let rec not_unifiable_fast depth ((t1, t2) : Term.t * Term.t) : bool =
-  match (t1, t2) with
-  | FVar _, _ | _, FVar _ ->
-      failwith "Link.not_unifiable_fast : unexpected FVar"
-  (* A free variable (i.e. a BVar that lives above [depth]) might get unified with anything. *)
-  | BVar n, _ when n >= depth -> false
-  | _, BVar n when n >= depth -> false
-  (* A sort is unifiable only with the same sort. *)
-  | Sort s1, Sort s2 when s1 = s2 -> false
-  (* A constant is unificable only with the same constant. *)
-  | Cst c1, Cst c2 when Name.equal c1 c2 -> false
-  | App (_, f1, args1), App (_, f2, args2) ->
-      List.exists (not_unifiable_fast depth)
-      @@ List.combine (f1 :: args1) (f2 :: args2)
-  | Lambda (_, x1, ty1, body1), Lambda (_, x2, ty2, body2)
-  | Prod (_, x1, ty1, body1), Prod (_, x2, ty2, body2) ->
-      not_unifiable_fast depth (ty1, ty2)
-      || not_unifiable_fast (depth + 1) (body1, body2)
-  | _ -> true
-
 (*******************************************************************************************)
 (* Link predicates. *)
 
@@ -154,21 +128,6 @@ module Pred = struct
    fun p1 p2 pr lnk ->
     let actions = p1 pr lnk in
     if not (List.is_empty actions) then actions else p2 pr lnk
-
-  (** This should be fast. *)
-  let pre_unifiable : lpred =
-   fun proof (src, dst) ->
-    try
-      let src_term = Logic.term_of_item @@ PathUtils.item src proof in
-      let dst_term = Logic.term_of_item @@ PathUtils.item dst proof in
-      let not_unif =
-        not_unifiable_fast 0
-          (subterm_raw src_term src.sub, subterm_raw dst_term dst.sub)
-      in
-      if not_unif
-      then (* These terms are definitely not unifiable. *) []
-      else (* We still don't known. *) [ Nothing ]
-    with InvalidSubtermPath _ | Invalid_argument _ -> []
 
   let unifiable : lpred =
    fun proof (src, dst) ->
@@ -261,16 +220,10 @@ module Pred = struct
     with InvalidSubtermPath _ | Invalid_argument _ -> []
 
   let wf_subform : hlpred =
-    mult
-      [ lift pre_unifiable
-      ; lift opposite_pol_formulas
-      ; lift intuitionistic
-      ; lift unifiable
-      ]
+    mult [ lift opposite_pol_formulas; lift intuitionistic; lift unifiable ]
 
   (* A deep rewrite link is not required to be intuitionistic. *)
-  let deep_rewrite : hlpred =
-    mult [ lift pre_unifiable; lift neg_eq_operand; lift unifiable ]
+  let deep_rewrite : hlpred = mult [ lift neg_eq_operand; lift unifiable ]
 
   let instantiate : hlpred =
    fun proof (src, dst) -> failwith "instantiate: todo"

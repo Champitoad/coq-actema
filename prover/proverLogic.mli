@@ -28,7 +28,10 @@ module Proof : sig
   val is_closed : t -> bool
 
   (** Return a list of all active goals in the proof. *)
-  val opened : t -> int list
+  val opened : t -> goal list
+
+  (** Return a list of all active goal identifers in the proof. *)
+  val opened_ids : t -> int list
 
   (** Retrieve an active goal by its handle. *)
   val byid : t -> int -> pregoal

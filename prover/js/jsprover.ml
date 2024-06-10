@@ -89,7 +89,7 @@ let rec js_proof_engine (proof : Proof.t) =
 
     (* Return a [js_subgoal] array of all the opened subgoals *)
     method subgoals =
-      let subgoals = Proof.opened proof in
+      let subgoals = Proof.opened_ids proof in
       let subgoals = List.map (js_subgoal _self) subgoals in
       Js.array (Array.of_list subgoals)
 
@@ -282,31 +282,21 @@ let rec js_proof_engine (proof : Proof.t) =
       let pattern =
         pattern |> Js.Optdef.to_option
         |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
+        |> function
+        | Some "" -> None
+        | pattern -> pattern
       in
       (* Convert the selection from JS to ocaml. *)
       let selection =
         selection |> Js.Optdef.to_option |> Option.map ipath_of_array
-      in
-      (* Construct the filtering predicate. *)
-      let pattern_pred =
-        match pattern with
-        | None | Some "" -> Pred.true_
-        | Some pattern ->
-            Js_log.log "match_name_pattern";
-            Pred.match_name pattern
-      in
-      let selection_pred =
-        match selection with
-        | None | Some [] -> Pred.true_
-        | Some [ selection ] ->
-            (*Pred.or_ (Pred.link_sfl selection) (Pred.link_drewrite selection)*)
-            Pred.link_sfl selection
+        |> function
+        | None | Some [] -> None
+        | Some [ selection ] -> Some selection
         | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
       in
-      let pred = Pred.and_ pattern_pred selection_pred in
       (* Filter the lemma database. *)
       let start = Sys.time () in
-      let proof = filter pred _self##.proof in
+      let proof = filter pattern selection _self##.proof in
       let stop = Sys.time () in
       Js_log.log
       @@ Format.sprintf "Time to [filter-lemmas] : %.2fs" (stop -. start);

@@ -68,7 +68,8 @@ module Proof = struct
 
   let get_meta proof key : mdata option = MKeyMap.find_opt key !(proof.p_meta)
   let is_closed (proof : t) = IntMap.is_empty proof.p_goals
-  let opened (proof : t) = IntMap.keys proof.p_goals |> List.of_enum
+  let opened_ids (proof : t) = IntMap.keys proof.p_goals |> List.of_enum
+  let opened (proof : t) = IntMap.values proof.p_goals |> List.of_enum
 
   let byid (proof : t) (goal_id : int) : pregoal =
     let goal =
