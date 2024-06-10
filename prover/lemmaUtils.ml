@@ -7,10 +7,11 @@ open ProverLogic
 (** Function to test whether two terms [t1] and [t2] are *not* unifiable.
     - If it returns [true] then [t1] and [t2] are *not* unifiable. 
     - If it returns [false] we didn't gain any information. 
-    
+    This assumes syntactic unification.
+
     For efficiency reasons this function operates directly on de Bruijn syntax 
     instead of locally nameless syntax. *)
-let rec not_unifiable_fast depth ((t1, t2) : Term.t * Term.t) : bool =
+let rec not_unifiable depth ((t1, t2) : Term.t * Term.t) : bool =
   match (t1, t2) with
   | FVar _, _ | _, FVar _ ->
       failwith "Link.not_unifiable_fast : unexpected FVar"
@@ -24,67 +25,56 @@ let rec not_unifiable_fast depth ((t1, t2) : Term.t * Term.t) : bool =
   (* Recursive cases. *)
   | App (_, f1, args1), App (_, f2, args2)
     when List.length args1 = List.length args2 ->
-      List.exists (not_unifiable_fast depth)
+      List.exists (not_unifiable depth)
       @@ List.combine (f1 :: args1) (f2 :: args2)
   | Lambda (_, x1, ty1, body1), Lambda (_, x2, ty2, body2)
   | Prod (_, x1, ty1, body1), Prod (_, x2, ty2, body2) ->
-      not_unifiable_fast depth (ty1, ty2)
-      || not_unifiable_fast (depth + 1) (body1, body2)
+      not_unifiable depth (ty1, ty2) || not_unifiable (depth + 1) (body1, body2)
   (* In every other case [t1] and [t2] are *not* unifiable. *)
   | _ -> true
 
-(** Compute all the paths in a formula that lead to a subformula that :
-    - is in the first order skeleton.
-    - is possibly unifiable with [target]. *)
-let f_subs target f : int list list =
-  let rec loop f sub acc =
-    (* Get the paths to all subformulas. *)
-    let acc =
-      let fo = FirstOrder.view Env.empty Context.empty f in
-      match fo with
-      | FAtom _ -> acc
-      | FConn (conn, args) ->
-          List.fold_lefti
-            (fun acc i arg -> loop arg ((i + 1) :: sub) acc)
-            acc args
-      | FImpl (f0, f1) ->
-          let acc = loop f0 (0 :: sub) acc in
-          loop f1 (1 :: sub) acc
-      (* For Forall/Exist we don't recurse in the type of the binder. *)
-      | FBind (Forall, x, ty, body) -> loop body (1 :: sub) acc
-      | FBind (Exist, x, ty, body) -> loop body (1 :: 2 :: sub) acc
-    in
-    (* Check if [target] and [f] are *not* unifiable. *)
-    if not_unifiable_fast 0 (target, f) then acc else sub :: acc
-  in
-  List.map List.rev @@ loop f [] []
-
-(** Compute all the paths in a formula that lead to the left or right side of an equality
-    which is in the first-order skeleton. *)
-(*let eq_subs env context f : int list list =
-  let rec loop context f sub acc =
-    let fo = FirstOrder.view env context f in
-    match fo with
-    | FAtom (App (_, Cst eq, [ ty; t1; t2 ])) when Name.equal eq Constants.eq ->
-        (2 :: sub) :: (3 :: sub) :: acc
+let rec compute_subs_rec target f sub acc =
+  (* Deal with subformulas. *)
+  let acc =
+    match FirstOrder.view Env.empty Context.empty f with
+    (* Equality : we might be able to perform a deep rewrite. *)
+    | FAtom (App (_, Cst eq, [ _; arg2; arg3 ])) when Name.equal eq Constants.eq
+      ->
+        let acc =
+          if not_unifiable 0 (target, arg2)
+          then acc
+          else (2 :: sub, Link.Pred.deep_rewrite) :: acc
+        in
+        let acc =
+          if not_unifiable 0 (target, arg3)
+          then acc
+          else (3 :: sub, Link.Pred.deep_rewrite) :: acc
+        in
+        acc
     | FAtom _ -> acc
     | FConn (conn, args) ->
         List.fold_lefti
-          (fun acc i arg -> loop context arg ((i + 1) :: sub) acc)
+          (fun acc i arg -> compute_subs_rec target arg ((i + 1) :: sub) acc)
           acc args
     | FImpl (f0, f1) ->
-        let acc = loop context f0 (0 :: sub) acc in
-        loop context f1 (1 :: sub) acc
-    | FBind (Forall, x, ty, body) ->
-        let fvar, new_context = Context.add_fresh x ty context in
-        let acc = loop context ty (0 :: sub) acc in
-        loop new_context (Term.instantiate fvar body) (1 :: sub) acc
+        let acc = compute_subs_rec target f0 (0 :: sub) acc in
+        compute_subs_rec target f1 (1 :: sub) acc
+    (* For Forall/Exist we don't recurse in the type of the binder. *)
+    | FBind (Forall, x, ty, body) -> compute_subs_rec target body (1 :: sub) acc
     | FBind (Exist, x, ty, body) ->
-        let fvar, new_context = Context.add_fresh x ty context in
-        let acc = loop context ty (1 :: sub) acc in
-        loop new_context (Term.instantiate fvar body) (1 :: 2 :: sub) acc
+        compute_subs_rec target body (1 :: 2 :: sub) acc
   in
-  List.map List.rev @@ loop context f [] []*)
+  (* We might be able to perform subformula linking. *)
+  if not_unifiable 0 (target, f)
+  then acc
+  else (sub, Link.Pred.wf_subform) :: acc
+
+(** Compute all the paths in a formula that lead to a subformula that :
+    - is in the first order skeleton (including equality arguments).
+    - is possibly unifiable with [target]. *)
+let compute_subs target f : (int list * Link.Pred.hlpred) list =
+  compute_subs_rec target f [] []
+  |> List.map (fun (sub, pred) -> (List.rev sub, pred))
 
 let match_name pattern lemma : bool =
   (* Check that the pattern is an exact substring of the lemma's name.
@@ -120,39 +110,20 @@ let prepare_goal env proof lemma selection : Proof.t * Path.t * Path.t =
 
 let subpath p sub = Path.{ p with sub = p.sub @ sub }
 
-(*let link_sfl selection proof lemma =
-    (* Create a link predicate for subformula linking. *)
-    let hlpred = Link.Pred.wf_subform in
-    (* Prepare the goal. *)
-    let proof, lemma_path, selection = prepare_goal proof lemma selection in
-    let goal = Proof.byid proof lemma_path.goal in
-    (* Test against relevant links. As we are testing for subformula linking,
-       we only select subpaths of the lemma that lead to a formula. *)
-    let subs = f_subs goal.g_env Context.empty lemma.l_form in
-    List.exists
-      begin
-        fun sub ->
-          not @@ List.is_empty
-          @@ hlpred proof ([ subpath lemma_path sub ], [ selection ])
-      end
-      subs
-
-  let link_drewrite selection proof lemma =
-    (* Create a link predicate for subformula linking. *)
-    let hlpred = Link.Pred.deep_rewrite in
-    (* Prepare the goal. *)
-    let proof, lemma_path, selection = prepare_goal proof lemma selection in
-    let goal = Proof.byid proof lemma_path.goal in
-    (* Test against relevant links.  As we are testing for deep rewrites,
-       we only select subpaths of the lemma that lead to the left or right of an equality.
-       This looses a bit of generality as we may miss some links that allow the selection to rewrite in the lemma. *)
-    List.exists
-      begin
-        fun sub ->
-          not @@ List.is_empty
-          @@ hlpred proof ([ subpath lemma_path sub ], [ selection ])
-      end
-      (eq_subs goal.g_env Context.empty lemma.l_form)*)
+(** For efficiency reasons we move as much computation as possible out of this function. *)
+let linkable proof lemma env selection sel_subterm =
+  (* Prepare the goal. *)
+  let proof, lemma_path, selection = prepare_goal env proof lemma selection in
+  (* Test against relevant links. As we are testing for subformula linking,
+     we only select subpaths of the lemma that lead to a formula. *)
+  let subs = compute_subs sel_subterm lemma.l_form in
+  List.exists
+    begin
+      fun (sub, pred) ->
+        not @@ List.is_empty
+        @@ pred proof ([ subpath lemma_path sub ], [ selection ])
+    end
+    subs
 
 let filter pattern_opt selection_opt proof =
   (* Get the list of lemmas. *)
@@ -178,27 +149,9 @@ let filter pattern_opt selection_opt proof =
             (Lemmas.env old_db) (Proof.opened proof)
         in
 
+        (* Test if each lemma is linkable with the selected subterm. *)
         let sel_subterm = PathUtils.term selection proof in
-        List.filter
-          begin
-            fun l ->
-              (* Prepare the goal. *)
-              let proof, lemma_path, selection =
-                prepare_goal env proof l selection
-              in
-              (* Test against relevant links. As we are testing for subformula linking,
-                 we only select subpaths of the lemma that lead to a formula. *)
-              let subs = f_subs sel_subterm l.l_form in
-              let hlpred = Link.Pred.wf_subform in
-              List.exists
-                begin
-                  fun sub ->
-                    not @@ List.is_empty
-                    @@ hlpred proof ([ subpath lemma_path sub ], [ selection ])
-                end
-                subs
-          end
-          lemmas
+        List.filter (fun l -> linkable proof l env selection sel_subterm) lemmas
   in
 
   (* Compute the new lemma database and proof. *)
