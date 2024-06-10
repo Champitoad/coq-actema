@@ -545,6 +545,10 @@ let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
       CAst.make @@ IntroNaming (Namegen.IntroFresh (Names.Id.of_string name)))
     names
 
+(*********************************************************************************)
+(** [AIntro] actions. *)
+(*********************************************************************************)
+
 (** Execute an [AIntro] action. *)
 let execute_aintro (api_goal : Logic.pregoal) side : unit tactic =
   let open Lang in
@@ -586,6 +590,10 @@ let execute_aintro (api_goal : Logic.pregoal) side : unit tactic =
         "The goal has an invalid head connective/predicate for an introduction."
       in
       raise @@ UnsupportedAction (Logic.AIntro side, msg)
+
+(*********************************************************************************)
+(** [AElim] actions. *)
+(*********************************************************************************)
 
 (** Execute an [AElim] action. This action eliminates the hypothesis named [hyp_name].
     The hypothesis is cleared and replaced by (possibly several) goals which contain derived hypotheses.
@@ -642,6 +650,10 @@ let execute_aelim (api_goal : Logic.pregoal) hyp_name i : unit tactic =
   | _ ->
       let msg = "Could not apply elimination action." in
       raise @@ UnsupportedAction (Logic.AElim (hyp_name, i), msg)
+
+(*********************************************************************************)
+(** [ALemmaAdd] actions. *)
+(*********************************************************************************)
 
 (** Decode a lemma name, as encoded by Translate.encode_lemma_name. *)
 let decode_lemma_name (name : string) : Names.Constant.t option =
@@ -765,6 +777,66 @@ let execute_alemma_add coq_goal full_name =
   (* Add the lemma as a hypothesis. *)
   Tactics.pose_proof hyp_name stmt
 
+(*********************************************************************************)
+(** [ALink] actions. *)
+(*********************************************************************************)
+
+(** Abstract an itrace, i.e. replace any FVars by BVars in the instantiation witnesses. *)
+let abstract_itrace itrace : Logic.choice list =
+  let open Lang in
+  (* Compute the de Bruijn index associated to the free variable [fvar].
+     The lists [passed1] and [passed2] contain the free variables
+     that are bound on each side, the most recently bound variable first. *)
+  let fvar_index passed1 passed2 fvar : int =
+    match List.index_of fvar passed1 with
+    | Some idx -> idx
+    | None -> begin
+        match List.index_of fvar passed2 with
+        | Some idx -> idx + List.length passed1
+        | None -> failwith "Actions.abstract_itrace: unbound free variable"
+      end
+  in
+  let rec loop passed1 passed2 = function
+    (* Simply descend on a side or another. *)
+    | Logic.Side side :: choices, fvars1, fvars2 ->
+        Logic.Side side :: loop passed1 passed2 (choices, fvars1, fvars2)
+    (* Traverse a binder without instantiating. *)
+    | Logic.Binder (Left, None) :: choices, v1 :: fvars1, fvars2 ->
+        Logic.Binder (Left, None)
+        :: loop (v1 :: passed1) passed2 (choices, fvars1, fvars2)
+    | Logic.Binder (Right, None) :: choices, fvars1, v2 :: fvars2 ->
+        Logic.Binder (Right, None)
+        :: loop passed1 (v2 :: passed2) (choices, fvars1, fvars2)
+    (* Traverse a binder with instantiating. *)
+    | Logic.Binder (Left, Some witness) :: choices, v1 :: fvars1, fvars2 ->
+        (* Abstract the free variables in the witness. *)
+        let witness =
+          Term.fsubst (Term.mkBVar <<< fvar_index passed1 passed2) witness
+        in
+        (* Don't add [v1] to [passed1] : [v1] is instantiated,
+           and thus is not usable by subsequent witnesses. *)
+        Logic.Binder (Left, Some witness)
+        :: loop passed1 passed2 (choices, fvars1, fvars2)
+    | Logic.Binder (Right, Some witness) :: choices, fvars1, v2 :: fvars2 ->
+        (* Abstract the free variables in the witness. *)
+        let witness =
+          Term.fsubst (Term.mkBVar <<< fvar_index passed1 passed2) witness
+        in
+        (* Don't add [v2] to [passed2]. *)
+        Logic.Binder (Right, Some witness)
+        :: loop passed1 passed2 (choices, fvars1, fvars2)
+    | _ -> []
+  in
+  loop [] [] itrace
+
+let execute_alink coq_goal src dst (itrace : Logic.itrace) : unit tactic =
+  let _ = abstract_itrace itrace in
+  Tacticals.tclIDTAC
+
+(*********************************************************************************)
+(** Putting it all together. *)
+(*********************************************************************************)
+
 let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   let api_goal = Translate.goal coq_goal in
   match action with
@@ -787,10 +859,7 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.AIntro side -> execute_aintro api_goal side
   | Logic.AElim (hyp_name, i) -> execute_aelim api_goal hyp_name i
   | Logic.ALemmaAdd full_name -> execute_alemma_add coq_goal full_name
-  | Logic.ALink _ ->
-      raise
-        (UnsupportedAction
-           (action, "Link actions are not yet supported in the plugin"))
+  | Logic.ALink (src, dst, itrace) -> execute_alink coq_goal src dst itrace
 (* _ ->
     raise
     @@ UnsupportedAction

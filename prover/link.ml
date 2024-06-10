@@ -81,18 +81,6 @@ let rec traverse_rec env context rigid_fvars fvars pol term sub :
   (* The path is either invalid or escapes the first-order skeleton. *)
   | _ -> raise @@ InvalidSubtermPath (term, sub)
 
-(** Get the raw subterm of a term, i.e. without instantiating BVars with FVars. *)
-let rec subterm_raw (term : Term.t) sub : Term.t =
-  match (sub, term) with
-  | [], _ -> term
-  | i :: sub, App (_, f, args) when 0 <= i && i < List.length (f :: args) ->
-      subterm_raw (List.at (f :: args) i) sub
-  | 0 :: sub, Lambda (_, x, ty, body) | 0 :: sub, Prod (_, x, ty, body) ->
-      subterm_raw ty sub
-  | 1 :: sub, Lambda (_, x, ty, body) | 1 :: sub, Prod (_, x, ty, body) ->
-      subterm_raw body sub
-  | _ -> failwith "Link.subterm_raw : invalid subpath"
-
 (*******************************************************************************************)
 (* Link predicates. *)
 

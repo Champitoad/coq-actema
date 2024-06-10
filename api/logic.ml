@@ -151,11 +151,14 @@ type lemma = { l_full : Name.t; l_user : Name.t; l_form : Term.t }
 (** A module to handle a collection of lemmas together with an environment to type the lemmas.
     This environment is kept seperate from the environment of each subgoal.  *)
 module Lemmas = struct
-  (** Abstract type of a collection of lemmas. It consists in a map from the lemma handle 
-      to the lemma statement and (user-facing) name, and an environment to type the lemmas. *)
-  type t = { db_env : Env.t; db_map : lemma Name.Map.t }
+  (** Abstract type of a collection of lemmas. 
+      It consists in :
+      - an environment to type the lemmas, 
+      - a map from lemma name to lemma, 
+      - an *ordered* list of lemmas. *)
+  type t = { db_env : Env.t; db_map : lemma Name.Map.t; db_list : lemma list }
 
-  let empty = { db_env = Env.empty; db_map = Name.Map.empty }
+  let empty = { db_env = Env.empty; db_map = Name.Map.empty; db_list = [] }
 
   let extend_env env lemmas =
     { lemmas with db_env = Env.union lemmas.db_env env }
@@ -168,10 +171,10 @@ module Lemmas = struct
       (InvalidLemmaName name)
 
   let add lemmas l =
-    { lemmas with db_map = Name.Map.add l.l_full l lemmas.db_map }
-
-  let remove lemmas name =
-    { lemmas with db_map = Name.Map.remove name lemmas.db_map }
+    { lemmas with
+      db_map = Name.Map.add l.l_full l lemmas.db_map
+    ; db_list = l :: lemmas.db_list
+    }
 
   let names lemmas = Name.Map.bindings lemmas.db_map |> List.map fst
   let map f lemmas = { lemmas with db_map = Name.Map.map f lemmas.db_map }
@@ -180,12 +183,14 @@ module Lemmas = struct
   let filter pred lemmas =
     { lemmas with db_map = Name.Map.filter (const pred) lemmas.db_map }
 
-  let to_list lemmas = Name.Map.bindings lemmas.db_map |> List.map snd
+  let sort comp lemmas = { lemmas with db_list = List.sort comp lemmas.db_list }
+  let to_list lemmas = lemmas.db_list
 
   let of_list ls =
     { db_env = Env.empty
     ; db_map =
         Name.Map.of_seq @@ List.to_seq @@ List.map (fun l -> (l.l_full, l)) ls
+    ; db_list = ls
     }
 end
 
@@ -316,8 +321,8 @@ type side = Left | Right [@@deriving show]
 
 let opp_side = function Left -> Right | Right -> Left
 
-type choice = side * Term.t option [@@deriving show]
-type itrace = choice list [@@deriving show]
+type choice = Side of side | Binder of side * Term.t option [@@deriving show]
+type itrace = choice list * FVarId.t list * FVarId.t list [@@deriving show]
 
 type action =
   | AId

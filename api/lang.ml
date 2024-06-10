@@ -164,60 +164,73 @@ module Term = struct
     | [] -> failwith "Term.mkArrows : got an empty list."
     | t :: ts -> List.fold_right mkArrow (List.rev ts) t
 
-  (** [fsubst_rec depth fvar s term] replaces [FVar fvar] by [lift depth s] in [term]. 
+  (** [fsubst_rec depth subst term] replaces each [FVar fvar] 
+      by [lift depth @@ subst fvar] in [term]. 
       This takes advantage of [cdata] to speed things up. *)
-  let rec fsubst_rec depth fvar s term =
+  let rec fsubst_rec depth subst term =
     match term with
-    | FVar fvar' when FVarId.equal fvar fvar' -> lift depth s
-    | BVar _ | FVar _ | Cst _ | Sort _ -> term
+    | FVar fvar -> lift depth @@ subst fvar
+    | BVar _ | Cst _ | Sort _ -> term
     | App (cdata, f, args) ->
         if not cdata.contains_fvars
         then term
         else
-          mkApps (fsubst_rec depth fvar s f)
-          @@ List.map (fsubst_rec depth fvar s) args
+          mkApps (fsubst_rec depth subst f)
+          @@ List.map (fsubst_rec depth subst) args
     | Lambda (cdata, x, ty, body) ->
         if not cdata.contains_fvars
         then term
         else
           mkLambda x
-            (fsubst_rec depth fvar s ty)
-            (fsubst_rec (depth + 1) fvar s body)
+            (fsubst_rec depth subst ty)
+            (fsubst_rec (depth + 1) subst body)
     | Prod (cdata, x, ty, body) ->
         if not cdata.contains_fvars
         then term
         else
           mkProd x
-            (fsubst_rec depth fvar s ty)
-            (fsubst_rec (depth + 1) fvar s body)
+            (fsubst_rec depth subst ty)
+            (fsubst_rec (depth + 1) subst body)
 
-  let fsubst fvar s term = fsubst_rec 0 fvar s term
-  let abstract fvar term = fsubst fvar (BVar 0) term
+  let fsubst subst term = fsubst_rec 0 subst term
 
-  (** [bsubst_rec depth s term] replaces bvar [BVar depth] by [s] in [term],
-      and lowers by [1] every other BVar of [term] that is greater than [depth].
-      We also lift [s] by [depth].
+  let abstract fvar term =
+    let subst fvar' =
+      if FVarId.equal fvar fvar' then mkBVar 0 else mkFVar fvar'
+    in
+    fsubst subst term
+
+  (** [bsubst_rec depth subst term] replaces bvar [BVar n] for [n >= depth] 
+      by [lift depth @@ subst (n - depth)] in [term].
       This takes advantage of [cdata] to speed things up. *)
-  let rec bsubst_rec depth s term =
+  let rec bsubst_rec depth subst term =
     match term with
-    | BVar n when n = depth -> lift depth s
-    | BVar n when n > depth -> mkBVar (n - 1)
+    | BVar n when n >= depth -> lift depth @@ subst (n - depth)
     | Cst _ | FVar _ | Sort _ | BVar _ -> term
     | App (cdata, f, args) ->
         if cdata.loose_bvar_range <= depth
         then term
-        else mkApps (bsubst_rec depth s f) @@ List.map (bsubst_rec depth s) args
+        else
+          mkApps (bsubst_rec depth subst f)
+          @@ List.map (bsubst_rec depth subst) args
     | Lambda (cdata, x, ty, body) ->
         if cdata.loose_bvar_range <= depth
         then term
-        else mkLambda x (bsubst_rec depth s ty) (bsubst_rec (depth + 1) s body)
+        else
+          mkLambda x
+            (bsubst_rec depth subst ty)
+            (bsubst_rec (depth + 1) subst body)
     | Prod (cdata, x, ty, body) ->
         if cdata.loose_bvar_range <= depth
         then term
-        else mkProd x (bsubst_rec depth s ty) (bsubst_rec (depth + 1) s body)
+        else
+          mkProd x
+            (bsubst_rec depth subst ty)
+            (bsubst_rec (depth + 1) subst body)
 
-  let bsubst s term = bsubst_rec 0 s term
-  let instantiate fvar term = bsubst (FVar fvar) term
+  let bsubst subst term = bsubst_rec 0 subst term
+  let bsubst0 s term = bsubst (function 0 -> s | n -> mkBVar (n - 1)) term
+  let instantiate fvar term = bsubst0 (mkFVar fvar) term
 
   let rec alpha_equiv t1 t2 : bool =
     match (t1, t2) with
@@ -529,7 +542,7 @@ module TermUtils = struct
     match (f_ty : Term.t) with
     | Prod (_, x, a, b) ->
         if Term.alpha_equiv arg_ty a
-        then (Term.mkApp f arg, Term.bsubst arg b)
+        then (Term.mkApp f arg, Term.bsubst0 arg b)
         else raise @@ TypingError (ExpectedType (arg, arg_ty, a))
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
 
@@ -578,7 +591,7 @@ module TermUtils = struct
       It takes as argument (and returns) a pair [term, type_]. *)
   and typeof_app env ctx (f, f_ty) arg =
     match (f_ty : Term.t) with
-    | Prod (_, x, a, b) -> (Term.mkApp f arg, Term.bsubst arg b)
+    | Prod (_, x, a, b) -> (Term.mkApp f arg, Term.bsubst0 arg b)
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
 
   let typeof env ctx term = typeof_rec env ctx term

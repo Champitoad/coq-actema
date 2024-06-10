@@ -39,7 +39,6 @@ export default {
         // update the lemma database when lemmas are received.
         window.ipcRenderer.on('received_lemmas', (_, datab) => {
             try {
-                console.log("Received lemmas");
 
                 let proofState = this.$refs.proofCanvas.getProofState();
                 let subgoal_idx = this.$refs.proofCanvas.getActiveSubgoal();

@@ -4,6 +4,26 @@ open Lang
 open Logic
 open ProverLogic
 
+(** [term_size term] computes the number of nodes in [term] (including leaves). *)
+let rec term_size (term : Term.t) : int =
+  match term with
+  | BVar _ | FVar _ | Sort _ | Cst _ -> 1
+  | App (_, f, args) -> List.sum @@ List.map term_size (f :: args)
+  | Lambda (_, x, ty, body) | Prod (_, x, ty, body) ->
+      term_size ty + term_size body
+
+(** Get the raw subterm of a term, i.e. without instantiating BVars with FVars. *)
+let rec subterm_raw (term : Term.t) sub : Term.t =
+  match (sub, term) with
+  | [], _ -> term
+  | i :: sub, App (_, f, args) when 0 <= i && i < List.length (f :: args) ->
+      subterm_raw (List.at (f :: args) i) sub
+  | 0 :: sub, Lambda (_, x, ty, body) | 0 :: sub, Prod (_, x, ty, body) ->
+      subterm_raw ty sub
+  | 1 :: sub, Lambda (_, x, ty, body) | 1 :: sub, Prod (_, x, ty, body) ->
+      subterm_raw body sub
+  | _ -> failwith "Link.subterm_raw : invalid subpath"
+
 (** Function to test whether two terms [t1] and [t2] are *not* unifiable.
     - If it returns [true] then [t1] and [t2] are *not* unifiable. 
     - If it returns [false] we didn't gain any information. 
@@ -33,6 +53,13 @@ let rec not_unifiable depth ((t1, t2) : Term.t * Term.t) : bool =
   (* In every other case [t1] and [t2] are *not* unifiable. *)
   | _ -> true
 
+(** A predicate type. *)
+type hlpred_type = WfSubform | DeepRewrite
+
+let eval_hlpred_type = function
+  | WfSubform -> Link.Pred.wf_subform
+  | DeepRewrite -> Link.Pred.deep_rewrite
+
 let rec compute_subs_rec target f sub acc =
   (* Deal with subformulas. *)
   let acc =
@@ -43,12 +70,12 @@ let rec compute_subs_rec target f sub acc =
         let acc =
           if not_unifiable 0 (target, arg2)
           then acc
-          else (2 :: sub, Link.Pred.deep_rewrite) :: acc
+          else (2 :: sub, DeepRewrite) :: acc
         in
         let acc =
           if not_unifiable 0 (target, arg3)
           then acc
-          else (3 :: sub, Link.Pred.deep_rewrite) :: acc
+          else (3 :: sub, DeepRewrite) :: acc
         in
         acc
     | FAtom _ -> acc
@@ -65,26 +92,14 @@ let rec compute_subs_rec target f sub acc =
         compute_subs_rec target body (1 :: 2 :: sub) acc
   in
   (* We might be able to perform subformula linking. *)
-  if not_unifiable 0 (target, f)
-  then acc
-  else (sub, Link.Pred.wf_subform) :: acc
+  if not_unifiable 0 (target, f) then acc else (sub, WfSubform) :: acc
 
 (** Compute all the paths in a formula that lead to a subformula that :
     - is in the first order skeleton (including equality arguments).
     - is possibly unifiable with [target]. *)
-let compute_subs target f : (int list * Link.Pred.hlpred) list =
+let compute_subs target f : (int list * hlpred_type) list =
   compute_subs_rec target f [] []
   |> List.map (fun (sub, pred) -> (List.rev sub, pred))
-
-let match_name pattern lemma : bool =
-  (* Check that the pattern is an exact substring of the lemma's name.
-     The test is case-insensitive. *)
-  let user_name = String.lowercase_ascii @@ Name.show lemma.l_user in
-  let pattern = String.lowercase_ascii pattern in
-  try
-    ignore (String.find user_name pattern);
-    true
-  with Not_found -> false
 
 let prepare_goal env proof lemma selection : Proof.t * Path.t * Path.t =
   let { g_id; g_pregoal = pregoal } = PathUtils.goal selection proof in
@@ -110,20 +125,80 @@ let prepare_goal env proof lemma selection : Proof.t * Path.t * Path.t =
 
 let subpath p sub = Path.{ p with sub = p.sub @ sub }
 
+(** This is the information that is gathered when a lemma matches a given selection. *)
+type lemma_match =
+  { (* The lemma that matches the selection. *)
+    lemma : lemma
+  ; (* The size of the lemma's formula. *)
+    size : int
+  ; (* The path to the subterm of the lemma that matches. *)
+    sub : int list
+  ; (* The size of the subterm of the lemma that matches. *)
+    subterm_size : int
+  ; (* The hyperlink predicate used for matching. *)
+    pred : hlpred_type
+  }
+
 (** For efficiency reasons we move as much computation as possible out of this function. *)
-let linkable proof lemma env selection sel_subterm =
+let match_selection proof lemma env selection sel_subterm : lemma_match list =
   (* Prepare the goal. *)
   let proof, lemma_path, selection = prepare_goal env proof lemma selection in
   (* Test against relevant links. As we are testing for subformula linking,
      we only select subpaths of the lemma that lead to a formula. *)
   let subs = compute_subs sel_subterm lemma.l_form in
-  List.exists
+  List.filter_map
     begin
       fun (sub, pred) ->
-        not @@ List.is_empty
-        @@ pred proof ([ subpath lemma_path sub ], [ selection ])
+        let hlpred = eval_hlpred_type pred in
+        if not @@ List.is_empty
+           @@ hlpred proof ([ subpath lemma_path sub ], [ selection ])
+        then
+          Some
+            { lemma
+            ; size = term_size lemma.l_form
+            ; sub
+            ; subterm_size = term_size @@ subterm_raw lemma.l_form sub
+            ; pred
+            }
+        else None
     end
     subs
+
+let best_match matches : lemma_match option =
+  List.find_max (fun m -> term_size @@ subterm_raw m.lemma.l_form m.sub) matches
+
+let match_name pattern lemma : bool =
+  (* Check that the pattern is an exact substring of the lemma's name.
+     The test is case-insensitive. *)
+  let user_name = String.lowercase_ascii @@ Name.show lemma.l_user in
+  let pattern = String.lowercase_ascii pattern in
+  try
+    ignore (String.find user_name pattern);
+    true
+  with Not_found -> false
+
+(** Lexicographic ordering of names. *)
+let name_compare n1 n2 : int =
+  lex_compare Char.compare
+    (String.explode @@ Name.show n1)
+    (String.explode @@ Name.show n2)
+
+(** Compare lemma matches. *)
+let match_compare m1 m2 : int =
+  (* We want a big subterm size but a small size. *)
+  triple_compare (Fun.flip Int.compare) Int.compare name_compare
+    (m1.subterm_size, m1.size, m1.lemma.l_user)
+    (m2.subterm_size, m2.size, m2.lemma.l_user)
+
+let nub_matches matches =
+  let rec loop found acc = function
+    | [] -> List.rev acc
+    | m :: matches when Name.Set.mem m.lemma.l_full found ->
+        loop found acc matches
+    | m :: matches ->
+        loop (Name.Set.add m.lemma.l_full found) (m :: acc) matches
+  in
+  loop Name.Set.empty [] matches
 
 let filter pattern_opt selection_opt proof =
   (* Get the list of lemmas. *)
@@ -137,10 +212,12 @@ let filter pattern_opt selection_opt proof =
     | Some pattern -> List.filter (match_name pattern) lemmas
   in
 
-  (* Filter the lemmas by selection. *)
+  (* Filter the lemmas by selection and sort them based on how well they match the selection. *)
   let lemmas =
     match selection_opt with
-    | None -> lemmas
+    | None ->
+        (* If there is no selection, simply sort the lemmas by name. *)
+        List.sort (fun l1 l2 -> name_compare l1.l_user l2.l_user) lemmas
     | Some selection ->
         (* Compute the environment of the lemmas and of all the goals. *)
         let env =
@@ -149,11 +226,22 @@ let filter pattern_opt selection_opt proof =
             (Lemmas.env old_db) (Proof.opened proof)
         in
 
-        (* Test if each lemma is linkable with the selected subterm. *)
         let sel_subterm = PathUtils.term selection proof in
-        List.filter (fun l -> linkable proof l env selection sel_subterm) lemmas
+        let matches =
+          lemmas
+          |> (* Get the list of matches. *)
+          List.concat_map (fun l ->
+              match_selection proof l env selection sel_subterm)
+          |> (* Sort the matches from best to worst. *)
+          List.sort match_compare
+          |> (* Keep only one match per lemma. *)
+          nub_matches
+        in
+        Js_log.log @@ Format.sprintf "%d matches" (List.length matches);
+        (* Get the (sorted) list of lemmas that match the selection. *)
+        List.map (fun m -> m.lemma) matches
   in
 
-  (* Compute the new lemma database and proof. *)
+  (* Reconstruct the lemma database. *)
   let new_db = Lemmas.of_list lemmas |> Lemmas.extend_env (Lemmas.env old_db) in
   Proof.set_db proof new_db

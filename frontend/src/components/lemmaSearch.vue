@@ -103,8 +103,6 @@ export default {
         // Called when the "Search" button is clicked.
         searchLemmas: function () {
             try {
-                console.log("Requesting lemmas\n");
-
                 // Hide the "Search" button (as visual feedback that we are doing something).
                 let button = document.getElementById("lemmas");
                 button.style.display = "none";

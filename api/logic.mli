@@ -94,11 +94,11 @@ module Lemmas : sig
   val env : t -> Env.t
   val by_name : t -> Name.t -> lemma
   val add : t -> lemma -> t
-  val remove : t -> Name.t -> t
   val names : t -> Name.t list
   val map : (lemma -> lemma) -> t -> t
   val iter : (lemma -> unit) -> t -> unit
   val filter : (lemma -> bool) -> t -> t
+  val sort : (lemma -> lemma -> int) -> t -> t
   val to_list : t -> lemma list
   val of_list : lemma list -> t
 end
@@ -194,6 +194,7 @@ end
 (***************************************************************************************)
 (** Actions *)
 
+(** A side in a link. *)
 type side = Left | Right [@@deriving show]
 
 (** Maps [Left] to [Right] and vice-versa. *)
@@ -203,14 +204,26 @@ val opp_side : side -> side
 
     The [side] is used in case both a left and right rule are applicable to a link.
     For instance in [A ∧ {B} |- {B} ∧ A], we could apply :
-    - (L∧₂) corresponding to Left
-    - (R∧₁) corresponding to Right
+    - (L∧₂) corresponding to Side Left
+    - (R∧₁) corresponding to Side Right
 
-    The optional argument is used for binders, to indicate whether the bound variable is instantiated,
-    and if yes with what expression (which depends on the variables bound in each linked formula). *)
-type choice = side * Term.t option [@@deriving show]
+    The optional argument in Binder indicates whether the bound variable is instantiated,
+    and if yes with what witness (which depends on the variables bound in each linked formula).
+    The witness contains BVars from the left *and* right sides. *)
+type choice =
+  | (* Simply descent in the subformula on the given side. *)
+    Side of side
+  | (* Traverse a binder on the given side. The optional argument contains the
+       instantiation witness. *)
+    Binder of side * Term.t option
+[@@deriving show]
 
-type itrace = choice list [@@deriving show]
+(** An itrace [fvars_left, fvars_right, choices] contains : 
+    - The list of choices made during the interaction (see prover/interact.ml). 
+      The witnesses have free variables in [fvars_left @ fvars_right].
+    - The list of FVars bound in the left subterm.
+    - The list of FVars bound in the right subterm. *)
+type itrace = choice list * FVarId.t list * FVarId.t list [@@deriving show]
 
 type action =
   (* The empty action which does nothing *)

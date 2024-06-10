@@ -30,8 +30,8 @@ type state =
   ; (* The global substitution. This has domain :
        [domain context + fvars_1 + fvars_2]. *)
     subst : Unif.subst
-  ; (* The itrace generated so far. The most recent choice is first. *)
-    itrace : itrace
+  ; (* The choices generated so far. The most recent choice is first. *)
+    choices : choice list
   }
 
 (** [is_bound fvar subst] checks whether [fvar] is bound (to something other than [FVar fvar]) 
@@ -44,7 +44,7 @@ let is_bound fvar subst =
 let left_step state ?(invert = false) ?(binder = None) t1 sub1 =
   match (binder : Context.entry option) with
   | None ->
-      ({ state with itrace = (Left, None) :: state.itrace; t1; sub1 }, invert)
+      ({ state with choices = Side Left :: state.choices; t1; sub1 }, invert)
   | Some { binder; type_ } ->
       let fvar = List.hd state.fvars_1 in
       let context = Context.add fvar binder type_ state.context in
@@ -54,7 +54,7 @@ let left_step state ?(invert = false) ?(binder = None) t1 sub1 =
         else None
       in
       ( { state with
-          itrace = (Left, witness) :: state.itrace
+          choices = Binder (Left, witness) :: state.choices
         ; context
         ; t1 = Term.instantiate fvar t1
         ; sub1
@@ -65,7 +65,7 @@ let left_step state ?(invert = false) ?(binder = None) t1 sub1 =
 let right_step state ?(invert = false) ?(binder = None) t2 sub2 =
   match (binder : Context.entry option) with
   | None ->
-      ({ state with itrace = (Right, None) :: state.itrace; t2; sub2 }, invert)
+      ({ state with choices = Side Right :: state.choices; t2; sub2 }, invert)
   | Some { binder; type_ } ->
       let fvar = List.hd state.fvars_2 in
       let context = Context.add fvar binder type_ state.context in
@@ -75,7 +75,7 @@ let right_step state ?(invert = false) ?(binder = None) t2 sub2 =
         else None
       in
       ( { state with
-          itrace = (Right, witness) :: state.itrace
+          choices = Binder (Right, witness) :: state.choices
         ; context
         ; t2 = Term.instantiate fvar t2
         ; sub2
@@ -283,24 +283,26 @@ let dump_state ?(verbose = false) state mode : unit =
 
 (** Print the most recent choice that was added to the itrace. *)
 let dump_last_choice state : unit =
-  let side, witness = List.hd state.itrace in
+  let choice = List.hd state.choices in
   let pp_side = function Left -> "[left]" | Right -> "[right]" in
-  match witness with
-  | None -> Js_log.log @@ Format.sprintf ">>> go %s" (pp_side side)
-  | Some term ->
+  match choice with
+  | Side side -> Js_log.log @@ Format.sprintf ">>> side %s" (pp_side side)
+  | Binder (side, None) ->
+      Js_log.log @@ Format.sprintf ">>> binder %s" (pp_side side)
+  | Binder (side, Some witness) ->
       Js_log.log
-      @@ Format.sprintf ">>> instantiate %s with [%s]" (pp_side side)
+      @@ Format.sprintf ">>> binder %s instantiate [%s]" (pp_side side)
            (Notation.term_to_string state.env ~ctx:state.context
-           @@ Unif.apply state.subst term)
+           @@ Unif.apply state.subst witness)
 
 (** The main interaction loop. *)
-let rec interact (state : state) mode : itrace =
+let rec interact (state : state) mode : choice list =
   (* Print some debug info. *)
   dump_state state mode;
 
   if state.sub1 = [] && state.sub2 = []
   then (* We finished the interaction. *)
-    List.rev state.itrace
+    List.rev state.choices
   else
     (* Perform one interaction step. *)
     let state, invert =
@@ -324,10 +326,12 @@ let swap_sides state : state =
   ; t2 = state.t1
   ; sub2 = state.sub1
   ; fvars_2 = state.fvars_1
-  ; itrace =
+  ; choices =
       List.map
-        (fun (side, witness) -> (Logic.opp_side side, witness))
-        state.itrace
+        (function
+          | Side side -> Side (Logic.opp_side side)
+          | Binder (side, witness) -> Binder (Logic.opp_side side, witness))
+        state.choices
   ; env = state.env
   ; context = state.context
   ; subst = state.subst
@@ -350,13 +354,16 @@ let dlink (src, src_fvars) (dst, dst_fvars) subst proof : itrace =
     ; fvars_1 = src_fvars
     ; fvars_2 = dst_fvars
     ; subst
-    ; itrace = []
+    ; choices = []
     }
   in
 
   (* Compute the interaction. *)
-  match (src.kind, dst.kind) with
-  | Hyp _, Concl -> interact state Backward
-  | Concl, Hyp _ -> interact (swap_sides state) Backward
-  | Hyp _, Hyp _ -> interact state Forward
-  | _ -> failwith "Interact.dlink : invalid link."
+  let choices =
+    match (src.kind, dst.kind) with
+    | Hyp _, Concl -> interact state Backward
+    | Concl, Hyp _ -> interact (swap_sides state) Backward
+    | Hyp _, Hyp _ -> interact state Forward
+    | _ -> failwith "Interact.dlink : invalid link."
+  in
+  (choices, src_fvars, dst_fvars)

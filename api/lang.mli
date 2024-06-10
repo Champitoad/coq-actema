@@ -147,21 +147,21 @@ module Term : sig
       This is O(1) if [term] has no loose BVar. *)
   val lift : int -> t -> t
 
-  (** [bsubst s term] replaces the loose [BVar 0] in [term] by [s],
-      and lowers by [1] every other BVar of [term]. 
+  (** [bsubst subst term] replaces each loose [BVar n] in [term] by [subst n].
+      Each substituted term [subst n] is lifted appropriately.   
       This is O(1) if [term] has no loose BVar. *)
-  val bsubst : t -> t -> t
+  val bsubst : (int -> t) -> t -> t
 
-  (** [fsubst fvar s term] replaces the [FVar fvar] in [term] by [s].
-      [s] is lifted appropriately.  
+  (** [fsubst subst term] replaces each [FVar fvar] in [term] by [subst fvar].
+      Each substituted term [subst fvar] is lifted appropriately.  
       This is O(1) if [term] has no free variables. *)
-  val fsubst : FVarId.t -> t -> t -> t
+  val fsubst : (FVarId.t -> t) -> t -> t
 
-  (** [instantiate fvar term] replaces the loose [BVar 0] by [FVar fvar] in [term]. *)
+  (** [instantiate fvar term] replaces the loose [BVar 0] by [FVar fvar] in [term],
+      and lowers other loose BVars by [1]. *)
   val instantiate : FVarId.t -> t -> t
 
-  (** [abstract fvar term] replaces [fvar] by the loose [BVar 0] in [term]. 
-      This is equivalent to [fsubst fvar (BVar 0) term]. *)
+  (** [abstract fvar term] replaces [fvar] by the loose [BVar 0] in [term]. *)
   val abstract : FVarId.t -> t -> t
 
   (** [alpha_equiv t1 t2] checks whether [t1] and [t2] are alpha-equivalent,

@@ -14,6 +14,32 @@ let indices ?(start = 0) xs = List.mapi (fun i x -> (start + i, x)) xs
 (** [pair_map f (a, b) = (f a, f b)]. *)
 let pair_map f (a, b) = (f a, f b)
 
+(** [pair_compare comp1 comp2] implements lexicographic comparison on pairs ['a * 'b] 
+    (in the sense of Stdlib.Compare), assuming comparison functions [comp1] on ['a] and [comp2] on ['b]. *)
+let pair_compare comp1 comp2 ((a1, b1) : 'a * 'b) ((a2, b2) : 'a * 'b) : int =
+  match comp1 a1 a2 with 0 -> comp2 b1 b2 | n -> n
+
+(** Same as [pair_compare] but for triples. *)
+let triple_compare comp1 comp2 comp3 ((a1, b1, c1) : 'a * 'b * 'c)
+    ((a2, b2, c2) : 'a * 'b * 'c) : int =
+  match comp1 a1 a2 with
+  | 0 -> begin match comp2 b1 b2 with 0 -> comp3 c1 c2 | n -> n end
+  | n -> n
+
+(** [lex_compare comp] implements lexicographic comparison on list ['a list] 
+    (in the sense of Stdlib.Compare), assuming a comparison function [comp] on ['a]. *)
+let lex_compare comp (xs : 'a list) (ys : 'a list) : int =
+  let rec loop xs ys =
+    match (xs, ys) with
+    | [], [] -> 0
+    | [], _ :: _ -> -1
+    | _ :: _, [] -> 1
+    | x :: xs, y :: ys -> begin
+        match comp x y with 0 -> loop xs ys | n -> n
+      end
+  in
+  loop xs ys
+
 (** Shorthands for batteries modules. *)
 
 module Int = BatInt
@@ -43,6 +69,16 @@ module List = struct
 
   let to_string ?(sep = "; ") ?(left = "[") ?(right = "]") print =
     List.map print >>> String.join sep >>> fun s -> left ^ s ^ right
+
+  (** [find_max f xs] finds the element [x] of [xs] that has the largest value when mapped by [f].
+      Returns [None] if [xs] is empty. *)
+  let find_max (f : 'a -> 'b) (xs : 'a list) : 'a option =
+    let rec loop x_max = function
+      | [] -> x_max
+      | hd :: tl when f x_max < f hd -> loop hd tl
+      | hd :: tl -> loop x_max tl
+    in
+    match xs with [] -> None | x :: xs -> Some (loop x xs)
 end
 
 (** Names : wrappers around strings. *)
