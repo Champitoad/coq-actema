@@ -5,31 +5,29 @@ open Logic
 open ProverLogic
 
 (** Compute all the paths in a formula that lead to a subformula in the first order skeleton. *)
-let f_subs env context f : int list list =
-  let rec loop context f sub acc =
-    let fo = FirstOrder.view env context f in
+let f_subs _env _context f : int list list =
+  let rec loop f sub acc =
+    let fo = FirstOrder.view _env _context f in
     match fo with
     | FAtom _ -> sub :: acc
     | FConn (conn, args) ->
         List.fold_lefti
-          (fun acc i arg -> loop context arg ((i + 1) :: sub) acc)
+          (fun acc i arg -> loop arg ((i + 1) :: sub) acc)
           (sub :: acc) args
     | FImpl (f0, f1) ->
         let acc = sub :: acc in
-        let acc = loop context f0 (0 :: sub) acc in
-        loop context f1 (1 :: sub) acc
+        let acc = loop f0 (0 :: sub) acc in
+        loop f1 (1 :: sub) acc
     | FBind (Forall, x, ty, body) ->
-        let fvar, new_context = Context.add_fresh x ty context in
         let acc = sub :: acc in
-        let acc = loop context ty (0 :: sub) acc in
-        loop new_context (Term.instantiate fvar body) (1 :: sub) acc
+        let acc = loop ty (0 :: sub) acc in
+        loop body (1 :: sub) acc
     | FBind (Exist, x, ty, body) ->
-        let fvar, new_context = Context.add_fresh x ty context in
         let acc = sub :: acc in
-        let acc = loop context ty (1 :: sub) acc in
-        loop new_context (Term.instantiate fvar body) (1 :: 2 :: sub) acc
+        let acc = loop ty (1 :: sub) acc in
+        loop body (1 :: 2 :: sub) acc
   in
-  List.map List.rev @@ loop context f [] []
+  List.map List.rev @@ loop f [] []
 
 (** Compute all the paths in a formula that lead to the left or right side of an equality
     which is in the first-order skeleton. *)
@@ -78,7 +76,8 @@ module Pred = struct
       true
     with Not_found -> false
 
-  let prepare_goal proof lemma selection : Proof.t * Path.t * Path.t =
+  let[@landmark] prepare_goal proof lemma selection : Proof.t * Path.t * Path.t
+      =
     let { g_id; g_pregoal = pregoal } = PathUtils.goal selection proof in
     (* Make a new (pre)goal that has :
        - the lemma as a local hypothesis.
@@ -88,7 +87,10 @@ module Pred = struct
         Hyps.add pregoal.g_hyps
           { h_name = lemma.l_full; h_form = lemma.l_form; h_gen = 0 }
       in
-      let g_env = Env.union (Lemmas.env @@ Proof.get_db proof) pregoal.g_env in
+      let g_env =
+        (*Env.union (Lemmas.env @@ Proof.get_db proof) pregoal.g_env*)
+        Lemmas.env @@ Proof.get_db proof
+      in
       { pregoal with g_hyps; g_env }
     in
     (* Replace the current goal by the new goal. *)
@@ -102,7 +104,7 @@ module Pred = struct
 
   let subpath p sub = Path.{ p with sub = p.sub @ sub }
 
-  let link_sfl selection proof lemma =
+  let[@landmark] link_sfl selection proof lemma =
     (* Create a link predicate for subformula linking. *)
     let hlpred = Link.Pred.wf_subform in
     (* Prepare the goal. *)
@@ -110,13 +112,17 @@ module Pred = struct
     let goal = Proof.byid proof lemma_path.goal in
     (* Test against relevant links. As we are testing for subformula linking,
        we only select subpaths of the lemma that lead to a formula. *)
-    List.exists
-      begin
-        fun sub ->
-          not @@ List.is_empty
-          @@ hlpred proof ([ subpath lemma_path sub ], [ selection ])
-      end
-      (f_subs goal.g_env Context.empty lemma.l_form)
+    let[@landmark] subs = f_subs goal.g_env Context.empty lemma.l_form in
+    let[@landmark] res =
+      List.exists
+        begin
+          fun sub ->
+            not @@ List.is_empty
+            @@ hlpred proof ([ subpath lemma_path sub ], [ selection ])
+        end
+        subs
+    in
+    res
 
   let link_drewrite selection proof lemma =
     (* Create a link predicate for subformula linking. *)
@@ -136,13 +142,14 @@ module Pred = struct
       (eq_subs goal.g_env Context.empty lemma.l_form)
 end
 
-let filter pred proof =
-  let new_db =
+let[@landmark] filter pred proof =
+  let old_db = Proof.get_db proof in
+  let[@landmark] new_db =
     Lemmas.filter
       (fun lemma ->
         (*Js_log.log ("filtering " ^ Name.show lemma.l_user);*)
         pred proof lemma)
-      (Proof.get_db proof)
+      old_db
   in
   (*Js_log.log
     @@ Format.sprintf "Filtered lemmas : %d\n"

@@ -487,52 +487,81 @@ module TermUtils = struct
 
   exception TypingError of typeError
 
+  (** This is the state we maintain while typechecking a term. *)
+  type typing_state =
+    { depth : int
+    ; env : Env.t
+    ; context : Context.t
+    ; bvars_type : Term.t BatDynArray.t
+    }
+
+  (** Create an initial typing state, at depth [0]. *)
+  let create_typing_state env context : typing_state =
+    let bvars_type = BatDynArray.make 16 in
+    { depth = 0; env; context; bvars_type }
+
+  (** [under_binder state ty k] executes a computation [k] under a binder of type [ty]. *)
+  let under_binder state ty k =
+    BatDynArray.add state.bvars_type ty;
+    let res = k { state with depth = state.depth + 1 } in
+    BatDynArray.delete_last state.bvars_type;
+    res
+
   (** There is no need for unification here :
-      all binders are annotated with the type of the bound variable. *)
-  let rec check env ctx t : Term.t =
+      all binders are annotated with the type of the bound variable.
+      We use some tricks for performance :
+      - We operate on pure de Bruijn indices instead of a locally nameless representation.
+        This way we avoid repeatedly instantiating/abstracting terms when traversing binders.
+      - We use a mutable (resizeable) array to store the types of bound variables. *)
+  let rec check_rec state t : Term.t =
     match (t : Term.t) with
-    | BVar n -> raise @@ TypingError (LooseBVar n)
+    | BVar n ->
+        let len = BatDynArray.length state.bvars_type in
+        let ty =
+          try BatDynArray.get state.bvars_type (len - 1 - n)
+          with BatDynArray.Invalid_arg _ -> raise @@ TypingError (LooseBVar n)
+        in
+        Term.lift state.depth ty
     | FVar fvar -> begin
-        match Context.find fvar ctx with
+        match Context.find fvar state.context with
         | None -> raise @@ TypingError (UnboundFVar fvar)
-        | Some entry -> entry.type_
+        | Some entry ->
+            (* No need to lift : there should be no bound variables in this type. *)
+            entry.type_
       end
     | Cst c -> begin
-        match Name.Map.find_opt c env.Env.constants with
+        match Name.Map.find_opt c state.env.constants with
         | None -> raise @@ TypingError (UnboundCst c)
         | Some ty -> ty
       end
     | Sort _ -> Sort `Type
     | Lambda (_, x, ty, body) ->
         (* Check the type. *)
-        let _ = check env ctx ty in
+        let _ = check_sort state ty in
         (* Check the body. *)
-        let fvar, new_ctx = Context.add_fresh x ty ctx in
-        let body_ty = check env new_ctx @@ Term.instantiate fvar body in
-        (* Don't forget to abstract the body type. *)
-        Term.mkProd x ty @@ Term.abstract fvar body_ty
+        let body_ty =
+          under_binder state ty @@ fun state -> check_rec state body
+        in
+        Term.mkProd x ty body_ty
     | App (_, f, args) ->
         let _, res_ty =
-          List.fold_left (check_app env ctx) (f, check env ctx f) args
+          List.fold_left (check_app state) (f, check_rec state f) args
         in
         res_ty
     | Prod (_, x, ty, body) -> begin
         (* Type check the type. *)
-        let ty_ty = check env ctx ty in
+        let _ = check_sort state ty in
         (* Type check the body. *)
-        let fvar, ctx = Context.add_fresh x ty ctx in
-        let body_ty = check env ctx @@ Term.instantiate fvar body in
-        (* Decide on the type of the product. *)
-        match (ty_ty, body_ty) with
-        | Sort _, Sort _ -> body_ty
-        | Sort _, _ -> raise @@ TypingError (ExpectedSort (body, body_ty))
-        | _, _ -> raise @@ TypingError (ExpectedSort (ty, ty_ty))
+        let body_sort =
+          under_binder state ty @@ fun state -> check_sort state body
+        in
+        Term.mkSort body_sort
       end
 
   (** Type-check an application with a single argument.
-        It takes as argument (and returns) a pair [term, type_]. *)
-  and check_app env ctx (f, f_ty) arg =
-    let arg_ty = check env ctx arg in
+      It takes as argument (and returns) a pair [term, type_]. *)
+  and check_app state (f, f_ty) arg =
+    let arg_ty = check_rec state arg in
     match (f_ty : Term.t) with
     | Prod (_, x, a, b) ->
         if Term.alpha_equiv arg_ty a
@@ -540,59 +569,66 @@ module TermUtils = struct
         else raise @@ TypingError (ExpectedType (arg, arg_ty, a))
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
 
+  (** Type check a term and verify that the result is a sort. *)
+  and check_sort state term : [ `Prop | `Type ] =
+    let ty = check_rec state term in
+    match ty with
+    | Sort s -> s
+    | _ -> raise @@ TypingError (ExpectedSort (term, ty))
+
+  let check env context term =
+    let state = create_typing_state env context in
+    check_rec state term
+
   let well_typed env context t =
     try
       ignore (check env context t);
       true
     with TypingError _ -> false
 
-  (* We make a couple performance optimizations compared to [check] :
-     - We don't re-check the type of the argument in lambdas and products.
-     - We operate on pure de Bruijn indices instead of a locally nameless representation.
-       This way we avoid repeatedly instantiating/abstracting terms when traversing binders.
-     - We use a mutable (resizeable) array to store the types of bound variables. *)
-  let rec typeof_rec depth env context (bvars_type : Term.t BatDynArray.t) t =
+  (* We some performance optimizations compared to [check] :
+     - We don't re-check the type of the arguments in applications
+       and the type of the binder in lambda abstractions and products.
+  *)
+  let rec typeof_rec state t : Term.t =
     match (t : Term.t) with
     | FVar fvar ->
-        let entry = Option.get @@ Context.find fvar context in
+        let entry = Option.get @@ Context.find fvar state.context in
         entry.type_
     | BVar n ->
-        let len = BatDynArray.length bvars_type in
-        let ty = BatDynArray.get bvars_type (len - 1 - n) in
-        Term.lift depth ty
+        let len = BatDynArray.length state.bvars_type in
+        let ty = BatDynArray.get state.bvars_type (len - 1 - n) in
+        Term.lift state.depth ty
     | Cst c -> begin
-        match Name.Map.find_opt c env.Env.constants with
+        match Name.Map.find_opt c state.env.constants with
         | None -> raise @@ TypingError (UnboundCst c)
         | Some ty -> ty
       end
     | Sort _ -> Sort `Type
     | Lambda (_, x, ty, body) ->
-        BatDynArray.add bvars_type ty;
-        let body_ty = typeof_rec (depth + 1) env context bvars_type body in
-        BatDynArray.delete_last bvars_type;
+        let body_ty =
+          under_binder state ty @@ fun state -> typeof_rec state body
+        in
         Term.mkProd x ty body_ty
     | App (_, f, args) ->
         let _, res_ty =
-          List.fold_left
-            (typeof_app depth env bvars_type)
-            (f, typeof_rec depth env context bvars_type f)
-            args
+          List.fold_left (typeof_app state) (f, typeof_rec state f) args
         in
         res_ty
     | Prod (_, x, ty, body) ->
-        BatDynArray.add bvars_type ty;
-        let body_ty = typeof_rec (depth + 1) env context bvars_type body in
-        BatDynArray.delete_last bvars_type;
+        let body_ty =
+          under_binder state ty @@ fun state -> typeof_rec state body
+        in
         body_ty
 
   (** Get the type of an application with a single argument.
       It takes as argument (and returns) a pair [term, type_]. *)
-  and typeof_app depth env ctx (f, f_ty) arg =
+  and typeof_app state (f, f_ty) arg : Term.t * Term.t =
     match (f_ty : Term.t) with
     | Prod (_, x, a, b) -> (Term.mkApp f arg, Term.bsubst arg b)
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
 
   let typeof env ctx term =
-    let bvars_type = BatDynArray.make 8 in
-    typeof_rec 0 env ctx bvars_type term
+    let state = create_typing_state env ctx in
+    typeof_rec state term
 end

@@ -50,6 +50,9 @@ module type S = sig
   (** Sequence a list of monadic actions, one after the other. *)
   val sequence : 'a t list -> 'a list t
 
+  (** Repeat a monadic action a given number of times, then [sequence] the actions. *)
+  val repeatM : int -> 'a t -> 'a list t
+
   (** Map a monadic action over a list. *)
   val mapM : ('a -> 'b t) -> 'a list -> 'b list t
 

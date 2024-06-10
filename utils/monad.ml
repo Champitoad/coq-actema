@@ -16,6 +16,7 @@ module type S = sig
   val ( let+ ) : 'a t -> ('a -> 'b) -> 'b t
   val ( let* ) : 'a t -> ('a -> 'b t) -> 'b t
   val sequence : 'a t list -> 'a list t
+  val repeatM : int -> 'a t -> 'a list t
   val mapM : ('a -> 'b t) -> 'a list -> 'b list t
   val mapM_ : ('a -> 'b t) -> 'a list -> unit t
   val foldM : ('acc -> 'a -> 'acc t) -> 'acc -> 'a list -> 'acc t
@@ -67,6 +68,7 @@ struct
   let rec sequence ms =
     match ms with [] -> return [] | m :: ms -> List.cons <$> m <*> sequence ms
 
+  let repeatM count m = sequence @@ List.init count (fun _ -> m)
   let mapM f xs = sequence @@ List.map f xs
 
   let mapM_ f xs =

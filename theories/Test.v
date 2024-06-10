@@ -2,6 +2,9 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 
+Lemma test : forall x, forall y, x = y + 1.
+test_tac.
+
 (*Require Import mathcomp.ssreflect.seq.
 Lemma test : 
   forall (T : eqtype.Equality.type) (x : eqtype.Equality.sort T),

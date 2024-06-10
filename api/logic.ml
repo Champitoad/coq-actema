@@ -21,7 +21,7 @@ module FirstOrder = struct
   [@@deriving show]
 
   (* We need the context and environment to be able to compute the type of the term. *)
-  let view env context (t : Term.t) : t =
+  let view _env _context (t : Term.t) : t =
     match t with
     | Cst true_ when Name.equal true_ Constants.true_ -> FConn (True, [])
     | Cst false_ when Name.equal false_ Constants.false_ -> FConn (False, [])
@@ -36,11 +36,13 @@ module FirstOrder = struct
         FConn (Equiv, [ arg1; arg2 ])
     (* Implication. *)
     | Prod (_, _, t1, t2)
-      when TermUtils.typeof env context t = Term.mkProp
-           && not (Term.contains_loose_bvars t2) ->
+      when (*TermUtils.typeof env context t = Term.mkProp
+             &&*)
+           not (Term.contains_loose_bvars t2) ->
         FImpl (t1, t2)
     (* Forall. *)
-    | Prod (_, x, ty, body) when TermUtils.typeof env context t = Term.mkProp ->
+    | Prod (_, x, ty, body)
+    (*when TermUtils.typeof env context t = Term.mkProp*) ->
         FBind (Forall, x, ty, body)
     (* Exist. *)
     | App (_, Cst ex, [ ty; Lambda (_, x, _, body) ])
