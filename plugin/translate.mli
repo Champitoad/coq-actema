@@ -1,19 +1,25 @@
-(** This module translates Coq term into Actema terms. *)
+(** This module implements translations between Coq terms and Actema terms. *)
 
 open Api
 open CoqUtils
 open Lang
 
-(** Translate a Coq term to an Actema term. 
+(** Translating from Coq to Actema. *)
+module Export : sig
+  (** Translate a Coq term to an Actema term. 
     Also returns the environment needed to type the term. *)
-val econstr : Goal.t -> EConstr.t -> Term.t * Env.t
+  val econstr : Goal.t -> EConstr.t -> Term.t * Env.t
 
-(** Translate a Coq goal to an Actema goal. This includes : 
+  (** Translate a Coq goal to an Actema goal. This includes : 
     - Translating the conclusion. 
     - Translating the hypotheses and variables. 
     - Building the environment needed to type the goal. *)
-val goal : Goal.t -> Logic.pregoal
+  val goal : Goal.t -> Logic.pregoal
 
-(** Translate all the lemmas we can to Actema, along with 
+  (** Translate all the lemmas we can to Actema, along with 
     the environment needed to type them. *)
-val lemmas : Goal.t -> Logic.lemma list * Env.t
+  val lemmas : Goal.t -> Logic.lemma list * Env.t
+end
+
+(** Translating from Actema to Coq. *)
+module Import : sig end

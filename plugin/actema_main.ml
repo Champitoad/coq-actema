@@ -2,6 +2,7 @@ open Utils.Pervasive
 open Proofview
 open CoqUtils
 open Api
+open Translate
 
 (* -------------------------------------------------------------------- *)
 (** The actema tactic *)
@@ -12,10 +13,8 @@ type proof = (int * Logic.action) list
 let export_goals () : Logic.goal list tactic =
   let open PVMonad in
   let* coq_goals = Goal.goals in
-  let+ pregoals = mapM (map Translate.goal) coq_goals in
-  Stdlib.List.mapi
-    (fun i pgoal -> Logic.{ g_id = i; g_pregoal = pgoal })
-    pregoals
+  let+ pregoals = mapM (map Export.goal) coq_goals in
+  List.mapi (fun i pgoal -> Logic.{ g_id = i; g_pregoal = pgoal }) pregoals
 
 let export_lemmas () : (Logic.lemma list * Lang.Env.t) tactic =
   let open PVMonad in
@@ -25,7 +24,7 @@ let export_lemmas () : (Logic.lemma list * Lang.Env.t) tactic =
       fun coq_goal_tac acc ->
         let* coq_goal = coq_goal_tac in
         let* lemmas, sign = acc in
-        let new_lemmas, new_env = Translate.lemmas coq_goal in
+        let new_lemmas, new_env = Export.lemmas coq_goal in
         return (new_lemmas @ lemmas, new_env)
     end
     coq_goals
@@ -133,7 +132,7 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
   Goal.enter
     begin
       fun coq_goal ->
-        let goal = Translate.goal coq_goal in
+        let goal = Export.goal coq_goal in
         let id = (action_name, Logic.Hyps.to_list goal.g_hyps, goal.g_concl) in
         let interactive () =
           let* prf = interactive_proof () in

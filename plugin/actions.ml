@@ -2,6 +2,7 @@ open Utils.Pervasive
 open Api
 open Proofview
 open CoqUtils
+open Translate
 
 exception UnsupportedAction of Logic.action * string
 exception UnexpectedDnD
@@ -838,7 +839,7 @@ let execute_alink coq_goal src dst (itrace : Logic.itrace) : unit tactic =
 (*********************************************************************************)
 
 let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
-  let api_goal = Translate.goal coq_goal in
+  let api_goal = Export.goal coq_goal in
   match action with
   | Logic.AId -> Tacticals.tclIDTAC
   | Logic.ADuplicate hyp_name ->
