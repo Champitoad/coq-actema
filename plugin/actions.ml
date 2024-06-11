@@ -554,7 +554,7 @@ let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
 let execute_aintro (coq_goal : Goal.t) side : unit tactic =
   let open Lang in
   let open Term in
-  let api_goal, _ = Export.goal coq_goal in
+  let api_goal = Export.goal coq_goal in
   match (api_goal.g_concl, side) with
   | Cst true_, 0 when Name.equal true_ Constants.true_ ->
       Tactics.one_constructor 1 Tactypes.NoBindings
@@ -603,7 +603,7 @@ let execute_aintro (coq_goal : Goal.t) side : unit tactic =
 let execute_aelim (coq_goal : Goal.t) hyp_name i : unit tactic =
   let open Lang in
   let open Term in
-  let api_goal, _ = Export.goal coq_goal in
+  let api_goal = Export.goal coq_goal in
   let hyp_id = Names.Id.of_string @@ Name.show hyp_name in
   let hyp = Logic.Hyps.by_name api_goal.g_hyps hyp_name in
   match hyp.h_form with

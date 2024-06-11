@@ -6,38 +6,50 @@ open CoqUtils
 open Lang
 module Bimap = Utils.Bimap
 
-(** When translating Coq terms to Actema terms, we loose the distinction 
-    between related but different Coq names. A [symbol] allows us to 
-    remember the correspondance between an Actema name and a Coq name. *)
-type symbol =
-  (* Constant symbol. *)
-  | SCst of Names.Constant.t
-  (* Constructor symbol. *)
-  | SCtr of Names.Construct.t
-  (* Inductive symbol. *)
-  | SInd of Names.Ind.t
-  (* Local variable (from Coq's local context). *)
-  | SVar of Names.Id.t
-
-(** A symbol table is a (bi-directional) mapping between symbols and Actema names. *)
-module SymbolTable : Bimap.S with type key = Name.t and type value = symbol
-
 (** Translating from Coq to Actema. *)
 module Export : sig
   (** Translate a Coq term to an Actema term. 
-    Also returns the environment and symbol table needed to type the term. *)
-  val econstr : Goal.t -> EConstr.t -> Term.t * Env.t * SymbolTable.t
+      Also returns the environment needed to type the term. *)
+  val econstr : Goal.t -> EConstr.t -> Term.t * Env.t
 
   (** Translate a Coq goal to an Actema goal. This includes : 
     - Translating the conclusion. 
     - Translating the hypotheses and variables. 
-    - Building the environment needed to type the goal.
-    - Recording the mapping between Actema names and Coq names in a symbol table. *)
-  val goal : Goal.t -> Logic.pregoal * SymbolTable.t
+    - Building the environment needed to type the goal. *)
+  val goal : Goal.t -> Logic.pregoal
 
   (** Translate all the lemmas we can to Actema, along with 
-    the environment needed to type them. *)
-  val lemmas : Goal.t -> Logic.lemma list * Env.t * SymbolTable.t
+      the environment needed to type them. *)
+  val lemmas : Goal.t -> Logic.lemma list * Env.t
+end
+
+(** When translating Coq terms to Actema terms, we loose the distinction 
+    between related but different Coq names, i.e. we translate everything to [Term.Cst]. 
+    Symbols allows us to remember the correspondance between Actema names and Coq names. *)
+module Symbols : sig
+  type symbol =
+    (* Constant symbol. *)
+    | SCst of Names.Constant.t
+    (* Constructor symbol. *)
+    | SCtr of Names.Construct.t
+    (* Inductive symbol. *)
+    | SInd of Names.Ind.t
+    (* Local variable (from Coq's local context). *)
+    | SVar of Names.Id.t
+
+  (** A symbol table is a (bi-directional) mapping between symbols and Actema names.
+    Symbol tables are used only in the plugin (not in the prover). *)
+  module Table : Bimap.S with type key = Name.t and type value = symbol
+
+  (** Extract all the symbols corresponding to global constants, 
+      inductives and constructors registered in Coq's environment. *)
+  val globals : Goal.t -> Table.t
+
+  (** Extract all the symbols corresponding to local variables in a Coq goal. *)
+  val locals : Goal.t -> Table.t
+
+  (** Extract both local and global symbols. *)
+  val all : Goal.t -> Table.t
 end
 
 (** Translating from Actema to Coq. *)

@@ -3,23 +3,111 @@ open Api
 open CoqUtils
 module Bimap = Utils.Bimap
 
+(** Fold a function on each inductive type in the environment. *)
+let fold_inductives
+    (f : Names.Ind.t -> Declarations.one_inductive_body -> 'acc -> 'acc)
+    (coq_env : Environ.env) (acc : 'acc) : 'acc =
+  Environ.fold_inductives
+    begin
+      fun mut_name mut_body acc ->
+        List.fold_lefti (fun acc i body -> f (mut_name, i) body acc) acc
+        @@ Array.to_list mut_body.mind_packets
+    end
+    coq_env acc
+
+(** Fold a function on each inductive constructor in the environment. *)
+let fold_constructors (f : Names.Construct.t -> Constr.types -> 'acc -> 'acc)
+    (coq_env : Environ.env) (acc : 'acc) : 'acc =
+  fold_inductives
+    begin
+      fun i_name i_body acc ->
+        List.fold_lefti (fun acc j ty -> f (i_name, j) ty acc) acc
+        @@ Array.to_list i_body.mind_user_lc
+    end
+    coq_env acc
+
+let fold_context (f : Constr.named_declaration -> 'acc -> 'acc)
+    (coq_env : Environ.env) (acc : 'acc) : 'acc =
+  let context = coq_env.env_named_context.env_named_ctx in
+  List.fold_left (Fun.flip f) acc context
+
 (***********************************************************************************)
 (** Symbols. *)
 
-type symbol =
-  | SCst of Names.Constant.t
-  | SCtr of Names.Construct.t
-  | SInd of Names.Ind.t
-  | SVar of Names.Id.t
+module Symbols = struct
+  type symbol =
+    | SCst of Names.Constant.t
+    | SCtr of Names.Construct.t
+    | SInd of Names.Ind.t
+    | SVar of Names.Id.t
 
-module SymbolTable =
-  Bimap.Make
-    (Name)
-    (struct
-      type t = symbol
+  module Table =
+    Bimap.Make
+      (Name)
+      (struct
+        type t = symbol
 
-      let compare = Stdlib.compare
-    end)
+        let compare = Stdlib.compare
+      end)
+
+  let extract_constants coq_goal table : Table.t =
+    Environ.fold_constants
+      begin
+        fun c_name _ table ->
+          let name = c_name |> Names.Constant.to_string |> Name.make in
+          Table.add name (SCst c_name) table
+      end
+      (Goal.env coq_goal) table
+
+  let extract_inductives coq_goal table : Table.t =
+    fold_inductives
+      begin
+        fun i_name _ table ->
+          let name =
+            kname_of_inductive (Goal.env coq_goal) i_name
+            |> Names.KerName.to_string |> Name.make
+          in
+          Table.add name (SInd i_name) table
+      end
+      (Goal.env coq_goal) table
+
+  let extract_constructors coq_goal table : Table.t =
+    fold_constructors
+      begin
+        fun ctr_name _ table ->
+          let name =
+            kname_of_constructor (Goal.env coq_goal) ctr_name
+            |> Names.KerName.to_string |> Name.make
+          in
+          Table.add name (SCtr ctr_name) table
+      end
+      (Goal.env coq_goal) table
+
+  let extract_context coq_goal table : Table.t =
+    fold_context
+      begin
+        fun decl table ->
+          match decl with
+          | LocalAssum (binder, _) | LocalDef (binder, _, _) ->
+              let name = Name.make @@ Names.Id.to_string binder.binder_name in
+              Table.add name (SVar binder.binder_name) table
+      end
+      (Goal.env coq_goal) table
+
+  let globals coq_goal =
+    Table.empty
+    |> extract_constructors coq_goal
+    |> extract_inductives coq_goal
+    |> extract_constants coq_goal
+
+  let locals coq_goal = extract_context coq_goal Table.empty
+
+  let all coq_goal =
+    Table.empty
+    |> extract_constructors coq_goal
+    |> extract_inductives coq_goal
+    |> extract_constants coq_goal |> extract_context coq_goal
+end
 
 (***********************************************************************************)
 (** Translate Coq to Actema. *)
@@ -33,15 +121,12 @@ module Export = struct
     ; (* Coq's unification state. *) sigma : Evd.evar_map
     ; (* The actema environment which contains the constants translated so far. *)
       mutable env : Lang.Env.t
-    ; (* The symbol table which contains all the Coq constants translated so far. *)
-      mutable table : SymbolTable.t
     }
 
   let initial_state coq_goal =
     { coq_env = Goal.env coq_goal
     ; sigma = Goal.sigma coq_goal
     ; env = Lang.Env.empty
-    ; table = SymbolTable.empty
     }
 
   (** We manually set pretty-printing information for specific Coq terms. *)
@@ -134,14 +219,14 @@ module Export = struct
       let cname, _ = EConstr.destConst state.sigma t in
       let name = Name.make @@ Names.Constant.to_string cname in
       let cdecl = Environ.lookup_constant cname state.coq_env in
-      handle_cst state name (SCst cname) @@ EConstr.of_constr cdecl.const_type
+      handle_cst state name @@ EConstr.of_constr cdecl.const_type
     else if EConstr.isVar state.sigma t
     then
       (* Local context variable. *)
       let vname = EConstr.destVar state.sigma t in
       let name = vname |> Names.Id.to_string |> Name.make in
       let ty = type_of_variable state.coq_env vname in
-      handle_cst state name (SVar vname) ty
+      handle_cst state name ty
     else if EConstr.isConstruct state.sigma t
     then
       (* Constructor. *)
@@ -151,7 +236,7 @@ module Export = struct
         |> Names.KerName.to_string |> Name.make
       in
       let ty = type_of_constructor state.coq_env cname in
-      handle_cst state name (SCtr cname) ty
+      handle_cst state name ty
     else if EConstr.isInd state.sigma t
     then
       (* Inductive. *)
@@ -165,7 +250,7 @@ module Export = struct
           ^ Names.Id.to_string body.mind_typename)
       in
       let ty = Retyping.get_type_of state.coq_env state.sigma t in
-      handle_cst state name (SInd iname) ty
+      handle_cst state name ty
     else if EConstr.isApp state.sigma t
     then
       (* Application. *)
@@ -180,7 +265,7 @@ module Export = struct
   (** Constants (i.e. Coq constants, constructors, inductives) need special care. 
       We have to check if we've already seen this constant, and if not 
       we have to translate the constant's type. *)
-  and handle_cst state name symbol (ty : EConstr.t) =
+  and handle_cst state name (ty : EConstr.t) =
     let open Lang in
     match Name.Map.find_opt name state.env.constants with
     | Some _ -> Term.mkCst name
@@ -190,20 +275,19 @@ module Export = struct
         let ty = translate_term state ty in
         let pp = get_pp_info name in
         state.env <- Env.add_constant name ty ~pp state.env;
-        state.table <- SymbolTable.add name symbol state.table;
         Term.mkCst name
 
-  let econstr coq_goal t : Lang.Term.t * Lang.Env.t * SymbolTable.t =
+  let econstr coq_goal t : Lang.Term.t * Lang.Env.t =
     (* Create an initial state. *)
     let state = initial_state coq_goal in
     (* Translate the term. *)
     let res = translate_term state t in
-    (res, state.env, state.table)
+    (res, state.env)
 
   (***********************************************************************************)
   (** Translate goals. *)
 
-  let goal coq_goal : Logic.pregoal * SymbolTable.t =
+  let goal coq_goal : Logic.pregoal =
     (* Create an initial state. *)
     let state = initial_state coq_goal in
     (* Translate the conclusion. *)
@@ -251,13 +335,12 @@ module Export = struct
         (Environ.named_context state.coq_env)
     in
     (* Construct the actema pregoal. *)
-    ( Logic.
-        { g_env = state.env
-        ; g_vars = Vars.of_list vars
-        ; g_hyps = Hyps.of_list hyps
-        ; g_concl = concl
-        }
-    , state.table )
+    Logic.
+      { g_env = state.env
+      ; g_vars = Vars.of_list vars
+      ; g_hyps = Hyps.of_list hyps
+      ; g_concl = concl
+      }
 
   (***********************************************************************************)
   (** Translate lemmas. *)
@@ -359,7 +442,7 @@ module Export = struct
                  Some Logic.{ l_user; l_full = Name.make l_full; l_form }
          end
 
-  let lemmas coq_goal : Logic.lemma list * Lang.Env.t * SymbolTable.t =
+  let lemmas coq_goal : Logic.lemma list * Lang.Env.t =
     let open Lang in
     let state = initial_state coq_goal in
     let l1 = constant_lemmas state in
@@ -379,7 +462,7 @@ module Export = struct
         end
         (l1 @ l2)
     in
-    (lemmas, state.env, state.table)
+    (lemmas, state.env)
 end
 
 (***********************************************************************************)
