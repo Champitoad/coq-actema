@@ -208,15 +208,19 @@ let forward_step (state : state) : state * bool =
   (***********************************************************************)
   (* Non invertible rules. *)
   (***********************************************************************)
-  (* Rules F∧₁ and F∨₁ *)
-  | _, (FConn (conn, [ f1; f2 ]), 1 :: sub) when conn = And || conn = Or ->
+  (* Rules F∧₁ and F∨₁ and F⇔₁ *)
+  | _, (FConn (conn, [ f1; f2 ]), 1 :: sub)
+    when conn = And || conn = Or || conn = Equiv ->
       right_step state f1 sub
-  | (FConn (conn, [ f1; f2 ]), 1 :: sub), _ when conn = And || conn = Or ->
+  | (FConn (conn, [ f1; f2 ]), 1 :: sub), _
+    when conn = And || conn = Or || conn = Equiv ->
       left_step state f1 sub
-  (* Rules F∧₂ and F∨₂ *)
-  | _, (FConn (conn, [ f1; f2 ]), 2 :: sub) when conn = And || conn = Or ->
+  (* Rules F∧₂ and F∨₂ and F⇔₂ *)
+  | _, (FConn (conn, [ f1; f2 ]), 2 :: sub)
+    when conn = And || conn = Or || conn = Equiv ->
       right_step state f2 sub
-  | (FConn (conn, [ f1; f2 ]), 2 :: sub), _ when conn = And || conn = Or ->
+  | (FConn (conn, [ f1; f2 ]), 2 :: sub), _
+    when conn = And || conn = Or || conn = Equiv ->
       left_step state f2 sub
   (* Rule F⇒₁ *)
   | _, (FImpl (f0, f1), 0 :: sub) -> right_step state ~invert:true f0 sub

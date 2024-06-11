@@ -33,15 +33,15 @@ let rec remove_nothing action =
 
 (** [traverse_rec env context  rigid_fvars fvars pol term sub] traverses [term] along the path [sub], 
     recording in [rigid_fvars] which variables are rigid, and returning the list of free variables 
-    and the list of rigid variables.
+    and the list of rigid variables (topmost first).
     
     This assumes the path [sub] points to a sub-formula in the first-order skeleton + equality,
     and raises an exception if it doesn't. *)
 let rec traverse_rec env context rigid_fvars fvars pol term sub :
     FVarId.t list * FVarId.t list * Context.t * Term.t =
-  let fo = FirstOrder.view env context term in
-  match (sub, fo) with
-  | [], _ -> (rigid_fvars, List.rev fvars, context, term)
+  let ret t = (List.rev rigid_fvars, List.rev fvars, context, t) in
+  match (sub, FirstOrder.view env context term) with
+  | [], _ -> ret term
   (* Inverse the polarity. *)
   | 1 :: sub, FConn (Not, [ t1 ]) ->
       traverse_rec env context rigid_fvars fvars (Polarity.opp pol) t1 sub
@@ -74,12 +74,20 @@ let rec traverse_rec env context rigid_fvars fvars pol term sub :
   (* Equality. *)
   | [ 2 ], FAtom (App (_, Cst eq, [ _; t1; t2 ]))
     when Name.equal eq Constants.eq ->
-      (rigid_fvars, List.rev fvars, context, t2)
+      ret t1
   | [ 3 ], FAtom (App (_, Cst eq, [ _; t1; t2 ]))
     when Name.equal eq Constants.eq ->
-      (rigid_fvars, List.rev fvars, context, t2)
+      ret t2
   (* The path is either invalid or escapes the first-order skeleton. *)
   | _ -> raise @@ InvalidSubtermPath (term, sub)
+
+(** [consecutive_pairs [x0; x1; x2; ... ]] returns the list [(x0, x1); (x1; x2); (x2, x3); ...]. *)
+let consecutive_pairs (xs : 'a list) : ('a * 'a) list =
+  let rec loop = function
+    | [] | [ _ ] -> []
+    | x1 :: x2 :: xs -> (x1, x2) :: loop (x2 :: xs)
+  in
+  loop xs
 
 (*******************************************************************************************)
 (* Link predicates. *)
@@ -139,11 +147,13 @@ module Pred = struct
           (Logic.term_of_item dst_item)
           dst.sub
       in
+
       (* Unify the two subterms. *)
-      (* TODO : add the forbidden dependencies. *)
       let subst =
-        Unif.unify env context ~rigid_fvars:(src_rigid @ dst_rigid) src_subterm
-          dst_subterm
+        Unif.unify env context
+          ~forbidden_deps:
+            (consecutive_pairs src_fvars @ consecutive_pairs dst_fvars)
+          ~rigid_fvars:(src_rigid @ dst_rigid) src_subterm dst_subterm
       in
 
       (* Check there is a solution. *)
