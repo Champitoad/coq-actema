@@ -10,25 +10,26 @@ open Translate
 type proof = (int * Logic.action) list
 
 (** Export each coq goal to Actema. *)
-let export_goals () : Logic.goal list tactic =
+let export_goals () : (Logic.goal list * SymbolTable.t) tactic =
   let open PVMonad in
   let* coq_goals = Goal.goals in
-  let+ pregoals = mapM (map Export.goal) coq_goals in
-  List.mapi (fun i pgoal -> Logic.{ g_id = i; g_pregoal = pgoal }) pregoals
+  let+ pregoals, tables = List.split <$> mapM (map Export.goal) coq_goals in
+  let goals =
+    List.mapi (fun i pgoal -> Logic.{ g_id = i; g_pregoal = pgoal }) pregoals
+  in
+  let table = List.fold SymbolTable.union SymbolTable.empty tables in
+  (goals, table)
 
-let export_lemmas () : (Logic.lemma list * Lang.Env.t) tactic =
+let export_lemmas () : (Logic.lemma list * Lang.Env.t * SymbolTable.t) tactic =
   let open PVMonad in
   let* coq_goals = Goal.goals in
-  Stdlib.List.fold_right
-    begin
-      fun coq_goal_tac acc ->
-        let* coq_goal = coq_goal_tac in
-        let* lemmas, sign = acc in
-        let new_lemmas, new_env = Export.lemmas coq_goal in
-        return (new_lemmas @ lemmas, new_env)
-    end
-    coq_goals
-    (return ([], Lang.Env.empty))
+  let+ lemmas, envs, tables =
+    List.split3 <$> mapM (map Export.lemmas) coq_goals
+  in
+  let lemmas = List.concat lemmas in
+  let env = List.fold Lang.Env.union Lang.Env.empty envs in
+  let table = List.fold SymbolTable.union SymbolTable.empty tables in
+  (lemmas, env, table)
 
 let get_user_action (goals : Logic.goal list) : Client.action =
   if goals = []
@@ -50,7 +51,7 @@ let interactive_proof () : proof tactic =
 
   (* At the start of the proof translate the lemmas to the Actema format. *)
   let start = Sys.time () in
-  let* lemmas, lemmas_env = export_lemmas () in
+  let* lemmas, lemmas_env, lemmas_table = export_lemmas () in
   let stop = Sys.time () in
   Log.printf "Exported %d lemmas in %.2fs" (List.length lemmas) (stop -. start);
 
@@ -93,7 +94,7 @@ let interactive_proof () : proof tactic =
     in
 
     (* Export the goals and get the next action. *)
-    let* goals = export_goals () in
+    let* goals, _ = export_goals () in
     let act = handle_lemmas (get_user_action goals) in
     (* Handle the action. *)
     begin
@@ -132,7 +133,7 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
   Goal.enter
     begin
       fun coq_goal ->
-        let goal = Export.goal coq_goal in
+        let goal, _ = Export.goal coq_goal in
         let id = (action_name, Logic.Hyps.to_list goal.g_hyps, goal.g_concl) in
         let interactive () =
           let* prf = interactive_proof () in

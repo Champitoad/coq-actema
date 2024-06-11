@@ -13,259 +13,259 @@ exception InvalidPath of Logic.Path.t
 
 (* let kname = kername ["Actema"; "DnD"] *)
 (*let kname = kername [ "Actema"; "HOL" ]
+  <
+    let symbol (sy : symbol) : EConstr.t =
+      match sy with
+      | Cst c -> EConstr.UnsafeMonomorphic.mkConst c
+      | Ctr c -> EConstr.UnsafeMonomorphic.mkConstruct c
+      | Ind i -> EConstr.UnsafeMonomorphic.mkInd i
+      | Var x -> EConstr.mkVar x
 
-  let symbol (sy : symbol) : EConstr.t =
-    match sy with
-    | Cst c -> EConstr.UnsafeMonomorphic.mkConst c
-    | Ctr c -> EConstr.UnsafeMonomorphic.mkConstruct c
-    | Ind i -> EConstr.UnsafeMonomorphic.mkInd i
-    | Var x -> EConstr.mkVar x
+    let sort_index (sign : FOSign.t) (s : string) : int =
+      FOSign.sort_symbols sign |> FOSign.SymbolNames.values |> List.nth_index 0 s
 
-  let sort_index (sign : FOSign.t) (s : string) : int =
-    FOSign.sort_symbols sign |> FOSign.SymbolNames.values |> List.nth_index 0 s
+    let infer_sort (env : Logic.env) (e : Logic.expr) : string =
+      match einfer env e with Logic.TVar name -> name
 
-  let infer_sort (env : Logic.env) (e : Logic.expr) : string =
-    match einfer env e with Logic.TVar name -> name
+    let tdyn_ty () : EConstr.t =
+      EConstr.UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "TDYN"), 0)
 
-  let tdyn_ty () : EConstr.t =
-    EConstr.UnsafeMonomorphic.mkInd (Names.MutInd.make1 (kname "TDYN"), 0)
-
-  let tdyn sort =
-    let open EConstr in
-    let tdyn =
-      UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 (kname "TDYN"), 0), 1)
-    in
-    mkApp (tdyn, [| sort |])
-
-  let sorts env (sign : FOSign.t) : EConstr.t =
-    FOSign.sort_symbols sign |> FOSign.SymbolNames.keys
-    |> List.map (fun sort_sy -> tdyn (symbol sort_sy))
-    |> Trm.Datatypes.of_list env (tdyn_ty ()) identity
-
-  let sort_ty ts (s : EConstr.t) : EConstr.t =
-    let name = Names.Constant.make1 (kname "sort") in
-    let ty = EConstr.UnsafeMonomorphic.mkConst name in
-    EConstr.mkApp (ty, [| ts; s |])
-
-  let env_ty ts () : EConstr.t =
-    let name = Names.Constant.make1 (kname "env") in
-    let ty = EConstr.UnsafeMonomorphic.mkConst name in
-    EConstr.mkApp (ty, [| ts |])
-
-  let clos_ty ts () : EConstr.t =
-    let open EConstr in
-    let sort_s = sort_ty ts (Trm.mkVar "s") in
-    mkArrowR (env_ty ts ()) (mkArrowR (env_ty ts ()) sort_s)
-
-  let inst1_ty ts () : EConstr.t =
-    let name = Names.Constant.make1 (kname "inst1") in
-    let ty = EConstr.UnsafeMonomorphic.mkConst name in
-    EConstr.mkApp (ty, [| ts |])
-
-  let type_ (sign : FOSign.t) (ty : Logic.type_) : EConstr.t =
-    match ty with
-    | Logic.TVar x -> symbol (FOSign.SymbolNames.dnif x sign.symbols)
-
-  let rec expr (sign : FOSign.t) (lenv : Logic.lenv) (e : Logic.expr) : EConstr.t
-      =
-    match e with
-    | Logic.EVar x ->
-        if LEnv.exists lenv x
-        then begin
-          let index : int = List.(lenv |> split |> fst |> nth_index 0 x) in
-          EConstr.mkRel (index + 1)
-        end
-        else Trm.mkVar x
-    | Logic.EFun (f, args) ->
-        let head = symbol (FOSign.SymbolNames.dnif f sign.symbols) in
-        let args = List.map (expr sign lenv) args in
-        EConstr.mkApp (head, Array.of_list args)
-
-  let rec expr_itrace coq_env (sign : FOSign.t) (env : Logic.env)
-      (lenv : Logic.lenv) (side : int) (e : Logic.expr) : EConstr.t =
-    match e with
-    | Logic.EVar x ->
-        if LEnv.exists lenv x
-        then begin
-          let s =
-            sort_index sign (infer_sort (Utils.Vars.push_lenv env lenv) e)
-          in
-          let index : int = List.(lenv |> split |> fst |> nth_index 0 x) in
-          let env_index = if side = 0 then 2 else 1 in
-          EConstr.(
-            mkApp
-              ( mkRel env_index
-              , Trm.Datatypes.[| of_nat coq_env s; of_nat coq_env index |] ))
-        end
-        else Trm.mkVar x
-    | Logic.EFun (f, args) ->
-        let head = symbol (FOSign.SymbolNames.dnif f sign.symbols) in
-        let args = List.map (expr_itrace coq_env sign env lenv side) args in
-        EConstr.mkApp (head, Array.of_list args)
-
-  let rec form coq_env sigma (sign : FOSign.t) (env : Logic.env)
-      (lenv : Logic.lenv) (f : Logic.form) : EConstr.t =
-    let form = form coq_env sigma sign env in
-    match f with
-    | Logic.FPred ("_EQ", [ t1; t2 ]) ->
-        let ty = einfer (Vars.push_lenv env lenv) t1 |> type_ sign in
-        let t1 = expr sign lenv t1 in
-        let t2 = expr sign lenv t2 in
-        EConstr.mkApp (Trm.Logic.eq coq_env ty, [| t1; t2 |])
-    | Logic.FPred (p, args) ->
-        let head = symbol (FOSign.SymbolNames.dnif p sign.symbols) in
-        let args = List.map (expr sign lenv) args in
-        EConstr.mkApp (head, Array.of_list args)
-    | Logic.FTrue -> Trm.Logic.true_ coq_env
-    | Logic.FFalse -> Trm.Logic.false_ coq_env
-    | Logic.FConn (Logic.And, [ f1; f2 ]) ->
-        Trm.Logic.and_ coq_env (form lenv f1) (form lenv f2)
-    | Logic.FConn (Logic.Or, [ f1; f2 ]) ->
-        Trm.Logic.or_ coq_env (form lenv f1) (form lenv f2)
-    | Logic.FConn (Logic.Imp, [ f1; f2 ]) ->
-        Trm.Logic.imp (form lenv f1) (form lenv f2)
-    | Logic.FConn (Logic.Equiv, [ f1; f2 ]) ->
-        Trm.Logic.iff coq_env (form lenv f1) (form lenv f2)
-    | Logic.FConn (Logic.Not, [ f1 ]) -> Trm.Logic.not coq_env (form lenv f1)
-    | Logic.FBind (Logic.Forall, x, typ, body) ->
-        let ty = type_ sign typ in
-        let lenv = LEnv.enter lenv x typ in
-        Trm.Logic.fa x ty (form lenv body)
-    | Logic.FBind (Logic.Exist, x, typ, body) ->
-        let ty = type_ sign typ in
-        let lenv = LEnv.enter lenv x typ in
-        Trm.Logic.ex coq_env sigma x ty (form lenv body)
-    | _ -> failwith "Unsupported formula"
-
-  let boollist_of_intlist =
-    Stdlib.List.map (fun n -> if n = 0 then false else true)
-
-  let itrace coq_env sigma ts (sign : FOSign.t) (env : Logic.env)
-      (mode : [ `Back | `Forw ]) (lp : int list) (rp : int list) (lf : Logic.form)
-      (rf : Logic.form) (itr : Logic.itrace) : bool list * EConstr.t =
-    let focus, inst = Stdlib.List.split itr in
-    let t = focus |> boollist_of_intlist in
-    let i =
-      let rec filtered_quant acc mode itr lp lf rp rf =
-        begin
-          match itr with
-          | [] -> acc
-          | ((side, _) as step) :: subitr -> (
-              let p, f = if side = 0 then (lp, lf) else (rp, rf) in
-              match p with
-              | [] -> acc
-              | i :: subp ->
-                  let subf = direct_subform f i in
-                  let lp, lf, rp, rf =
-                    if side = 0 then (subp, subf, rp, rf) else (lp, lf, subp, subf)
-                  in
-                  begin
-                    match (f, (mode, side, i)) with
-                    | Logic.FBind (q, _, _, _), _ ->
-                        let instantiable =
-                          begin
-                            match (mode, side, q) with
-                            | `Back, 0, Logic.Forall
-                            | `Back, 1, Logic.Exist
-                            | `Forw, _, Logic.Forall ->
-                                true
-                            | _ -> false
-                          end
-                        in
-                        if instantiable
-                        then
-                          filtered_quant (acc @ [ step ]) mode subitr lp lf rp rf
-                        else filtered_quant acc mode subitr lp lf rp rf
-                    | ( Logic.FConn ((Logic.Not | Logic.Imp), _)
-                      , (`Forw, _, 0 | `Back, 1, 0) ) ->
-                        let mode, (lp, lf, rp, rf) =
-                          begin
-                            match mode with
-                            | `Back -> (`Forw, (lp, lf, rp, rf))
-                            | `Forw ->
-                                ( `Back
-                                , if side = 0
-                                  then (rp, rf, lp, lf)
-                                  else (lp, lf, rp, rf) )
-                          end
-                        in
-                        filtered_quant acc mode subitr lp lf rp rf
-                    | _ -> filtered_quant acc mode subitr lp lf rp rf
-                  end)
-        end
+    let tdyn sort =
+      let open EConstr in
+      let tdyn =
+        UnsafeMonomorphic.mkConstruct ((Names.MutInd.make1 (kname "TDYN"), 0), 1)
       in
-      let i =
-        filtered_quant [] mode itr lp lf rp rf
-        |> List.map
-             begin
-               fun (side, w) ->
-                 Option.map
-                   begin
-                     fun (le1, le2, e) ->
-                       let lenv = if side = 0 then le2 else le1 in
-                       let ty = infer_sort (Utils.Vars.push_lenv env lenv) e in
-                       let s =
-                         Trm.Datatypes.of_nat coq_env (sort_index sign ty)
-                       in
-                       let e =
-                         let body =
-                           expr_itrace coq_env sign env lenv (1 - side) e
-                         in
-                         Trm.lambda sigma "env1" (env_ty ts ())
-                           (Trm.lambda sigma "env2" (env_ty ts ()) body)
-                       in
-                       Trm.Specif.existT coq_env sigma "s"
-                         (Trm.Datatypes.nat coq_env)
-                         (clos_ty ts ()) s e
-                   end
-                   w
-             end
-      in
-      Trm.Datatypes.of_list coq_env
-        (Trm.Datatypes.option coq_env (inst1_ty ts ()))
-        (Trm.Datatypes.of_option coq_env (inst1_ty ts ()) identity)
-        i
-    in
-    (t, i)
+      mkApp (tdyn, [| sort |])
 
+    let sorts env (sign : FOSign.t) : EConstr.t =
+      FOSign.sort_symbols sign |> FOSign.SymbolNames.keys
+      |> List.map (fun sort_sy -> tdyn (symbol sort_sy))
+      |> Trm.Datatypes.of_list env (tdyn_ty ()) identity
 
-  let bool_path coq_env (sub : int list) : EConstr.t =
+    let sort_ty ts (s : EConstr.t) : EConstr.t =
+      let name = Names.Constant.make1 (kname "sort") in
+      let ty = EConstr.UnsafeMonomorphic.mkConst name in
+      EConstr.mkApp (ty, [| ts; s |])
+
+    let env_ty ts () : EConstr.t =
+      let name = Names.Constant.make1 (kname "env") in
+      let ty = EConstr.UnsafeMonomorphic.mkConst name in
+      EConstr.mkApp (ty, [| ts |])
+
+    let clos_ty ts () : EConstr.t =
+      let open EConstr in
+      let sort_s = sort_ty ts (Trm.mkVar "s") in
+      mkArrowR (env_ty ts ()) (mkArrowR (env_ty ts ()) sort_s)
+
+    let inst1_ty ts () : EConstr.t =
+      let name = Names.Constant.make1 (kname "inst1") in
+      let ty = EConstr.UnsafeMonomorphic.mkConst name in
+      EConstr.mkApp (ty, [| ts |])
+
+    let type_ (sign : FOSign.t) (ty : Logic.type_) : EConstr.t =
+      match ty with
+      | Logic.TVar x -> symbol (FOSign.SymbolNames.dnif x sign.symbols)
+
+    let rec expr (sign : FOSign.t) (lenv : Logic.lenv) (e : Logic.expr) : EConstr.t
+        =
+      match e with
+      | Logic.EVar x ->
+          if LEnv.exists lenv x
+          then begin
+            let index : int = List.(lenv |> split |> fst |> nth_index 0 x) in
+            EConstr.mkRel (index + 1)
+          end
+          else Trm.mkVar x
+      | Logic.EFun (f, args) ->
+          let head = symbol (FOSign.SymbolNames.dnif f sign.symbols) in
+          let args = List.map (expr sign lenv) args in
+          EConstr.mkApp (head, Array.of_list args)
+
+    let rec expr_itrace coq_env (sign : FOSign.t) (env : Logic.env)
+        (lenv : Logic.lenv) (side : int) (e : Logic.expr) : EConstr.t =
+      match e with
+      | Logic.EVar x ->
+          if LEnv.exists lenv x
+          then begin
+            let s =
+              sort_index sign (infer_sort (Utils.Vars.push_lenv env lenv) e)
+            in
+            let index : int = List.(lenv |> split |> fst |> nth_index 0 x) in
+            let env_index = if side = 0 then 2 else 1 in
+            EConstr.(
+              mkApp
+                ( mkRel env_index
+                , Trm.Datatypes.[| of_nat coq_env s; of_nat coq_env index |] ))
+          end
+          else Trm.mkVar x
+      | Logic.EFun (f, args) ->
+          let head = symbol (FOSign.SymbolNames.dnif f sign.symbols) in
+          let args = List.map (expr_itrace coq_env sign env lenv side) args in
+          EConstr.mkApp (head, Array.of_list args)
+
+    let rec form coq_env sigma (sign : FOSign.t) (env : Logic.env)
+        (lenv : Logic.lenv) (f : Logic.form) : EConstr.t =
+      let form = form coq_env sigma sign env in
+      match f with
+      | Logic.FPred ("_EQ", [ t1; t2 ]) ->
+          let ty = einfer (Vars.push_lenv env lenv) t1 |> type_ sign in
+          let t1 = expr sign lenv t1 in
+          let t2 = expr sign lenv t2 in
+          EConstr.mkApp (Trm.Logic.eq coq_env ty, [| t1; t2 |])
+      | Logic.FPred (p, args) ->
+          let head = symbol (FOSign.SymbolNames.dnif p sign.symbols) in
+          let args = List.map (expr sign lenv) args in
+          EConstr.mkApp (head, Array.of_list args)
+      | Logic.FTrue -> Trm.Logic.true_ coq_env
+      | Logic.FFalse -> Trm.Logic.false_ coq_env
+      | Logic.FConn (Logic.And, [ f1; f2 ]) ->
+          Trm.Logic.and_ coq_env (form lenv f1) (form lenv f2)
+      | Logic.FConn (Logic.Or, [ f1; f2 ]) ->
+          Trm.Logic.or_ coq_env (form lenv f1) (form lenv f2)
+      | Logic.FConn (Logic.Imp, [ f1; f2 ]) ->
+          Trm.Logic.imp (form lenv f1) (form lenv f2)
+      | Logic.FConn (Logic.Equiv, [ f1; f2 ]) ->
+          Trm.Logic.iff coq_env (form lenv f1) (form lenv f2)
+      | Logic.FConn (Logic.Not, [ f1 ]) -> Trm.Logic.not coq_env (form lenv f1)
+      | Logic.FBind (Logic.Forall, x, typ, body) ->
+          let ty = type_ sign typ in
+          let lenv = LEnv.enter lenv x typ in
+          Trm.Logic.fa x ty (form lenv body)
+      | Logic.FBind (Logic.Exist, x, typ, body) ->
+          let ty = type_ sign typ in
+          let lenv = LEnv.enter lenv x typ in
+          Trm.Logic.ex coq_env sigma x ty (form lenv body)
+      | _ -> failwith "Unsupported formula"
+
     let boollist_of_intlist =
       Stdlib.List.map (fun n -> if n = 0 then false else true)
-    in
-    sub |> boollist_of_intlist |> Trm.Datatypes.boollist coq_env
 
-  let fix_sub_eq (t : Logic.term) (sub : int list) : int list =
-    let rec aux acc t sub =
-      begin
-        match sub with
-        | [] -> Stdlib.List.rev acc
-        | i :: sub ->
-            let j =
-              begin
-                match t with Logic.F (Logic.FPred ("_EQ", _)) -> i + 1 | _ -> i
-              end
-            in
-            aux (j :: acc) (Utils.direct_subterm t i) sub
-      end
-    in
-    aux [] t sub
+    let itrace coq_env sigma ts (sign : FOSign.t) (env : Logic.env)
+        (mode : [ `Back | `Forw ]) (lp : int list) (rp : int list) (lf : Logic.form)
+        (rf : Logic.form) (itr : Logic.itrace) : bool list * EConstr.t =
+      let focus, inst = Stdlib.List.split itr in
+      let t = focus |> boollist_of_intlist in
+      let i =
+        let rec filtered_quant acc mode itr lp lf rp rf =
+          begin
+            match itr with
+            | [] -> acc
+            | ((side, _) as step) :: subitr -> (
+                let p, f = if side = 0 then (lp, lf) else (rp, rf) in
+                match p with
+                | [] -> acc
+                | i :: subp ->
+                    let subf = direct_subform f i in
+                    let lp, lf, rp, rf =
+                      if side = 0 then (subp, subf, rp, rf) else (lp, lf, subp, subf)
+                    in
+                    begin
+                      match (f, (mode, side, i)) with
+                      | Logic.FBind (q, _, _, _), _ ->
+                          let instantiable =
+                            begin
+                              match (mode, side, q) with
+                              | `Back, 0, Logic.Forall
+                              | `Back, 1, Logic.Exist
+                              | `Forw, _, Logic.Forall ->
+                                  true
+                              | _ -> false
+                            end
+                          in
+                          if instantiable
+                          then
+                            filtered_quant (acc @ [ step ]) mode subitr lp lf rp rf
+                          else filtered_quant acc mode subitr lp lf rp rf
+                      | ( Logic.FConn ((Logic.Not | Logic.Imp), _)
+                        , (`Forw, _, 0 | `Back, 1, 0) ) ->
+                          let mode, (lp, lf, rp, rf) =
+                            begin
+                              match mode with
+                              | `Back -> (`Forw, (lp, lf, rp, rf))
+                              | `Forw ->
+                                  ( `Back
+                                  , if side = 0
+                                    then (rp, rf, lp, lf)
+                                    else (lp, lf, rp, rf) )
+                            end
+                          in
+                          filtered_quant acc mode subitr lp lf rp rf
+                      | _ -> filtered_quant acc mode subitr lp lf rp rf
+                    end)
+          end
+        in
+        let i =
+          filtered_quant [] mode itr lp lf rp rf
+          |> List.map
+               begin
+                 fun (side, w) ->
+                   Option.map
+                     begin
+                       fun (le1, le2, e) ->
+                         let lenv = if side = 0 then le2 else le1 in
+                         let ty = infer_sort (Utils.Vars.push_lenv env lenv) e in
+                         let s =
+                           Trm.Datatypes.of_nat coq_env (sort_index sign ty)
+                         in
+                         let e =
+                           let body =
+                             expr_itrace coq_env sign env lenv (1 - side) e
+                           in
+                           Trm.lambda sigma "env1" (env_ty ts ())
+                             (Trm.lambda sigma "env2" (env_ty ts ()) body)
+                         in
+                         Trm.Specif.existT coq_env sigma "s"
+                           (Trm.Datatypes.nat coq_env)
+                           (clos_ty ts ()) s e
+                     end
+                     w
+               end
+        in
+        Trm.Datatypes.of_list coq_env
+          (Trm.Datatypes.option coq_env (inst1_ty ts ()))
+          (Trm.Datatypes.of_option coq_env (inst1_ty ts ()) identity)
+          i
+      in
+      (t, i)
 
-  let mpath_to_string mpath =
-    let prefix =
-      match mpath with
-      | Names.ModPath.MPfile _ -> "MPfile::"
-      | Names.ModPath.MPbound _ -> "MPbound::"
-      | Names.ModPath.MPdot _ -> "MPdot::"
-    in
-    prefix ^ Names.ModPath.to_string mpath
 
-  let print_kername kname =
-    let mpath = Names.KerName.modpath kname in
-    let label = Names.KerName.label kname in
-    Log.str
-    @@ Format.sprintf "%s::%s" (mpath_to_string mpath)
-         (Names.Label.to_string label)
+    let bool_path coq_env (sub : int list) : EConstr.t =
+      let boollist_of_intlist =
+        Stdlib.List.map (fun n -> if n = 0 then false else true)
+      in
+      sub |> boollist_of_intlist |> Trm.Datatypes.boollist coq_env
+
+    let fix_sub_eq (t : Logic.term) (sub : int list) : int list =
+      let rec aux acc t sub =
+        begin
+          match sub with
+          | [] -> Stdlib.List.rev acc
+          | i :: sub ->
+              let j =
+                begin
+                  match t with Logic.F (Logic.FPred ("_EQ", _)) -> i + 1 | _ -> i
+                end
+              in
+              aux (j :: acc) (Utils.direct_subterm t i) sub
+        end
+      in
+      aux [] t sub
+
+    let mpath_to_string mpath =
+      let prefix =
+        match mpath with
+        | Names.ModPath.MPfile _ -> "MPfile::"
+        | Names.ModPath.MPbound _ -> "MPbound::"
+        | Names.ModPath.MPdot _ -> "MPdot::"
+      in
+      prefix ^ Names.ModPath.to_string mpath
+
+    let print_kername kname =
+      let mpath = Names.KerName.modpath kname in
+      let label = Names.KerName.label kname in
+      Log.str
+      @@ Format.sprintf "%s::%s" (mpath_to_string mpath)
+           (Names.Label.to_string label)
 *)
 (*
 
@@ -551,9 +551,10 @@ let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
 (*********************************************************************************)
 
 (** Execute an [AIntro] action. *)
-let execute_aintro (api_goal : Logic.pregoal) side : unit tactic =
+let execute_aintro (coq_goal : Goal.t) side : unit tactic =
   let open Lang in
   let open Term in
+  let api_goal, _ = Export.goal coq_goal in
   match (api_goal.g_concl, side) with
   | Cst true_, 0 when Name.equal true_ Constants.true_ ->
       Tactics.one_constructor 1 Tactypes.NoBindings
@@ -599,9 +600,10 @@ let execute_aintro (api_goal : Logic.pregoal) side : unit tactic =
 (** Execute an [AElim] action. This action eliminates the hypothesis named [hyp_name].
     The hypothesis is cleared and replaced by (possibly several) goals which contain derived hypotheses.
     The integer index is used when eliminating an equality, to decide which way (left/right) to rewrite. *)
-let execute_aelim (api_goal : Logic.pregoal) hyp_name i : unit tactic =
+let execute_aelim (coq_goal : Goal.t) hyp_name i : unit tactic =
   let open Lang in
   let open Term in
+  let api_goal, _ = Export.goal coq_goal in
   let hyp_id = Names.Id.of_string @@ Name.show hyp_name in
   let hyp = Logic.Hyps.by_name api_goal.g_hyps hyp_name in
   match hyp.h_form with
@@ -839,7 +841,6 @@ let execute_alink coq_goal src dst (itrace : Logic.itrace) : unit tactic =
 (*********************************************************************************)
 
 let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
-  let api_goal = Export.goal coq_goal in
   match action with
   | Logic.AId -> Tacticals.tclIDTAC
   | Logic.ADuplicate hyp_name ->
@@ -857,8 +858,8 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.AGeneralize name ->
       let name = Names.Id.of_string @@ Name.show name in
       Generalize.generalize_dep (EConstr.mkVar name)
-  | Logic.AIntro side -> execute_aintro api_goal side
-  | Logic.AElim (hyp_name, i) -> execute_aelim api_goal hyp_name i
+  | Logic.AIntro side -> execute_aintro coq_goal side
+  | Logic.AElim (hyp_name, i) -> execute_aelim coq_goal hyp_name i
   | Logic.ALemmaAdd full_name -> execute_alemma_add coq_goal full_name
   | Logic.ALink (src, dst, itrace) -> execute_alink coq_goal src dst itrace
 (* _ ->

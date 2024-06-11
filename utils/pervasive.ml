@@ -68,6 +68,14 @@ module List = struct
     | x :: xs, y :: ys -> x = y && is_prefix xs ys
     | _ -> false
 
+  (** [split3] is the same as [split] but for lists of triples. *)
+  let rec split3 (xs : ('a * 'b * 'c) list) : 'a list * 'b list * 'c list =
+    match xs with
+    | [] -> ([], [], [])
+    | (a, b, c) :: xs ->
+        let xa, xb, xc = split3 xs in
+        (a :: xa, b :: xb, c :: xc)
+
   let to_string ?(sep = "; ") ?(left = "[") ?(right = "]") print =
     List.map print >>> String.join sep >>> fun s -> left ^ s ^ right
 
