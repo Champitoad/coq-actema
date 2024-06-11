@@ -401,12 +401,16 @@ and js_subgoal parent (handle : int) =
         of the corresponding ALemmaAdd action. *)
     method encodelemmaadd handle =
       let doit () =
-        (* Find the lemma (and raise an exception if it is not found). *)
+        (* Due to a questionable design decision, the lemma might not be in the lemma database anymore.
+           For instance when the proof state is reset, the lemma database is cleared
+           but the frontend can still allow the user to add a lemma that was in the old version
+           of the database.
+
+           This is not an issue as long as we don't try to find the lemma in the current database
+           within this function. *)
         let full_name = Name.make @@ Js.to_string handle in
-        let db = Proof.get_db parent##.proof in
-        let lemma = Lemmas.by_name db full_name in
         (* Construct the action and encode it. *)
-        Logic.ALemmaAdd lemma.l_full
+        Logic.ALemmaAdd full_name
         |> Fun.flip Marshal.to_string []
         |> Base64.encode_string |> Js.string
       in
