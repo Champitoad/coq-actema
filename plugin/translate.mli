@@ -38,7 +38,7 @@ module Symbols : sig
     | SVar of Names.Id.t
 
   (** A symbol table is a (bi-directional) mapping between symbols and Actema names.
-    Symbol tables are used only in the plugin (not in the prover). *)
+      Symbol tables are used only in the plugin (not in the prover). *)
   module Table : Bimap.S with type key = Name.t and type value = symbol
 
   (** Extract all the symbols corresponding to global constants, 

@@ -43,6 +43,39 @@ module Log = struct
     result
 end
 
+(** Fold a function on each inductive type in the environment. *)
+let fold_inductives
+    (f : Names.Ind.t -> Declarations.one_inductive_body -> 'acc -> 'acc)
+    (coq_env : Environ.env) (acc : 'acc) : 'acc =
+  Environ.fold_inductives
+    begin
+      fun mut_name mut_body acc ->
+        List.fold_lefti (fun acc i body -> f (mut_name, i) body acc) acc
+        @@ Array.to_list mut_body.mind_packets
+    end
+    coq_env acc
+
+(** Fold a function on each inductive constructor in the environment. *)
+let fold_constructors (f : Names.Construct.t -> Constr.types -> 'acc -> 'acc)
+    (coq_env : Environ.env) (acc : 'acc) : 'acc =
+  fold_inductives
+    begin
+      fun i_name i_body acc ->
+        List.fold_lefti
+          (fun acc j ty ->
+            (* Constructors in an inductive are indexed starting at 1. *)
+            f (i_name, j + 1) ty acc)
+          acc
+        @@ Array.to_list i_body.mind_user_lc
+    end
+    coq_env acc
+
+(** Fold a function on each declaration in the local context attached to an environment. *)
+let fold_context (f : Constr.named_declaration -> 'acc -> 'acc)
+    (coq_env : Environ.env) (acc : 'acc) : 'acc =
+  let context = coq_env.env_named_context.env_named_ctx in
+  List.fold_left (Fun.flip f) acc context
+
 let name_of_const evd t =
   EConstr.destConst evd t |> fst |> Names.Constant.label
   |> Names.Label.to_string

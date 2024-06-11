@@ -3,112 +3,6 @@ open Api
 open CoqUtils
 module Bimap = Utils.Bimap
 
-(** Fold a function on each inductive type in the environment. *)
-let fold_inductives
-    (f : Names.Ind.t -> Declarations.one_inductive_body -> 'acc -> 'acc)
-    (coq_env : Environ.env) (acc : 'acc) : 'acc =
-  Environ.fold_inductives
-    begin
-      fun mut_name mut_body acc ->
-        List.fold_lefti (fun acc i body -> f (mut_name, i) body acc) acc
-        @@ Array.to_list mut_body.mind_packets
-    end
-    coq_env acc
-
-(** Fold a function on each inductive constructor in the environment. *)
-let fold_constructors (f : Names.Construct.t -> Constr.types -> 'acc -> 'acc)
-    (coq_env : Environ.env) (acc : 'acc) : 'acc =
-  fold_inductives
-    begin
-      fun i_name i_body acc ->
-        List.fold_lefti (fun acc j ty -> f (i_name, j) ty acc) acc
-        @@ Array.to_list i_body.mind_user_lc
-    end
-    coq_env acc
-
-let fold_context (f : Constr.named_declaration -> 'acc -> 'acc)
-    (coq_env : Environ.env) (acc : 'acc) : 'acc =
-  let context = coq_env.env_named_context.env_named_ctx in
-  List.fold_left (Fun.flip f) acc context
-
-(***********************************************************************************)
-(** Symbols. *)
-
-module Symbols = struct
-  type symbol =
-    | SCst of Names.Constant.t
-    | SCtr of Names.Construct.t
-    | SInd of Names.Ind.t
-    | SVar of Names.Id.t
-
-  module Table =
-    Bimap.Make
-      (Name)
-      (struct
-        type t = symbol
-
-        let compare = Stdlib.compare
-      end)
-
-  let extract_constants coq_goal table : Table.t =
-    Environ.fold_constants
-      begin
-        fun c_name _ table ->
-          let name = c_name |> Names.Constant.to_string |> Name.make in
-          Table.add name (SCst c_name) table
-      end
-      (Goal.env coq_goal) table
-
-  let extract_inductives coq_goal table : Table.t =
-    fold_inductives
-      begin
-        fun i_name _ table ->
-          let name =
-            kname_of_inductive (Goal.env coq_goal) i_name
-            |> Names.KerName.to_string |> Name.make
-          in
-          Table.add name (SInd i_name) table
-      end
-      (Goal.env coq_goal) table
-
-  let extract_constructors coq_goal table : Table.t =
-    fold_constructors
-      begin
-        fun ctr_name _ table ->
-          let name =
-            kname_of_constructor (Goal.env coq_goal) ctr_name
-            |> Names.KerName.to_string |> Name.make
-          in
-          Table.add name (SCtr ctr_name) table
-      end
-      (Goal.env coq_goal) table
-
-  let extract_context coq_goal table : Table.t =
-    fold_context
-      begin
-        fun decl table ->
-          match decl with
-          | LocalAssum (binder, _) | LocalDef (binder, _, _) ->
-              let name = Name.make @@ Names.Id.to_string binder.binder_name in
-              Table.add name (SVar binder.binder_name) table
-      end
-      (Goal.env coq_goal) table
-
-  let globals coq_goal =
-    Table.empty
-    |> extract_constructors coq_goal
-    |> extract_inductives coq_goal
-    |> extract_constants coq_goal
-
-  let locals coq_goal = extract_context coq_goal Table.empty
-
-  let all coq_goal =
-    Table.empty
-    |> extract_constructors coq_goal
-    |> extract_inductives coq_goal
-    |> extract_constants coq_goal |> extract_context coq_goal
-end
-
 (***********************************************************************************)
 (** Translate Coq to Actema. *)
 
@@ -294,9 +188,9 @@ module Export = struct
     let concl = translate_term state (Goal.concl coq_goal) in
     (* Translate the hypotheses and variables. *)
     let hyps, vars =
-      List.fold_left
+      fold_context
         begin
-          fun (hyps, vars) decl ->
+          fun decl (hyps, vars) ->
             let name =
               Context.Named.Declaration.get_id decl
               |> Names.Id.to_string |> Name.make
@@ -331,8 +225,7 @@ module Export = struct
               in
               (hyps, new_var :: vars)
         end
-        ([], [])
-        (Environ.named_context state.coq_env)
+        state.coq_env ([], [])
     in
     (* Construct the actema pregoal. *)
     Logic.
@@ -345,102 +238,41 @@ module Export = struct
   (***********************************************************************************)
   (** Translate lemmas. *)
 
-  (** Split a module path into a directory path and the rest. *)
-  let rec split_mpath mpath =
-    match mpath with
-    | Names.ModPath.MPfile dirpath ->
-        (List.rev_map Names.Id.to_string (Names.DirPath.repr dirpath), [])
-    | Names.ModPath.MPdot (mpath, label) ->
-        let dirpath, rest = split_mpath mpath in
-        (dirpath, rest @ [ Names.Label.to_string label ])
-    | Names.ModPath.MPbound _ ->
-        (* Functor arguments are not supported (yet). *)
-        raise @@ Invalid_argument "split_mpath"
+  (** Compute the user name associated to a lemma. 
+      Currently we simply discard the module path, but this could change in the future. *)
+  let lemma_user_name l_full : Name.t =
+    let raw = Name.show l_full in
+    let segments = String.split_on_char '.' raw in
+    Name.make @@ List.last segments
 
-  (** Encode the full name of a lemma. *)
-  let encode_lemma_name (name : Names.Constant.t) : string option =
-    try
-      let dirpath, modpath = split_mpath @@ Names.Constant.modpath name in
-      let res =
-        Format.sprintf "C%s/%s/%s"
-          (List.to_string ~sep:"." ~left:"" ~right:"" Fun.id dirpath)
-          (List.to_string ~sep:"." ~left:"" ~right:"" Fun.id modpath)
-          (Names.Label.to_string @@ Names.Constant.label name)
-      in
-      Some res
-    with Invalid_argument _ -> None
-
-  (** Encode the name of an inductive constructor that we want to use as a lemma. *)
-  let encode_constructor_name (name : Names.Construct.t) : string option =
-    try
-      let (name, i), j = name in
-      let dirpath, modpath = split_mpath @@ Names.MutInd.modpath name in
-      let res =
-        Format.sprintf "I%s/%s/%s/%d/%d"
-          (List.to_string ~sep:"." ~left:"" ~right:"" Fun.id dirpath)
-          (List.to_string ~sep:"." ~left:"" ~right:"" Fun.id modpath)
-          (Names.Label.to_string @@ Names.MutInd.label name)
-          i j
-      in
-      Some res
-    with Invalid_argument _ -> None
-
-  (** Collect all the lemmas from coq_env.env_globals.constants we can translate to Actema. *)
+  (** Collect constant lemmas. *)
   let constant_lemmas state : Logic.lemma list =
-    (Environ.Globals.view state.coq_env.env_globals).constants
-    |> Names.Cmap_env.bindings
-    |> List.filter_map
-         begin
-           fun (id, (ckey, _)) ->
-             (* First check whether we can encode the lemma name. *)
-             match encode_lemma_name id with
-             | None -> None
-             | Some l_full ->
-                 let l_user =
-                   id |> Names.Constant.label |> Names.Label.to_string
-                   |> Name.make
-                 in
-                 let ty = ckey.Declarations.const_type |> EConstr.of_constr in
-                 let l_form = translate_term state ty in
-                 Some Logic.{ l_user; l_full = Name.make l_full; l_form }
-         end
+    Environ.fold_constants
+      begin
+        fun cname cbody lemmas ->
+          let l_full = cname |> Names.Constant.to_string |> Name.make in
+          let l_user = lemma_user_name l_full in
+          let l_form =
+            translate_term state @@ EConstr.of_constr cbody.const_type
+          in
+          Logic.{ l_user; l_full; l_form } :: lemmas
+      end
+      state.coq_env []
 
-  (** Collect all the lemmas from coq_env.env_globals.inductives we can translate to Actema. *)
+  (** Collect constructor lemmas. *)
   let constructor_lemmas state : Logic.lemma list =
-    (* Get the list of all mutual inductives. *)
-    (Environ.Globals.view state.coq_env.env_globals).inductives
-    |> Names.Mindmap_env.bindings
-    (* Get the list of all inductives.
-       Inductives in a block are indexed starting at 0. *)
-    |> List.concat_map
-         begin
-           fun (mind_name, (mind_body, _)) ->
-             List.init mind_body.Declarations.mind_ntypes @@ fun i ->
-             ((mind_name, i), mind_body.Declarations.mind_packets.(i))
-         end
-    (* Get the list of all inductive constructors (with their type).
-       Constructors in an inductive are indexed starting at 1. *)
-    |> List.concat_map
-         begin
-           fun (ind_name, ind_body) ->
-             ind_body.Declarations.mind_user_lc |> Array.to_list
-             |> List.mapi (fun j ty -> (ind_body, (ind_name, j + 1), ty))
-         end
-    |> List.filter_map
-         begin
-           fun (ind_body, cname, ctype) ->
-             (* First check whether we can encode the constructor name. *)
-             match encode_constructor_name cname with
-             | None -> None
-             | Some l_full ->
-                 let _, j = cname in
-                 let l_user =
-                   ind_body.Declarations.mind_consnames.(j - 1)
-                   |> Names.Id.to_string |> Name.make
-                 in
-                 let l_form = translate_term state @@ EConstr.of_constr ctype in
-                 Some Logic.{ l_user; l_full = Name.make l_full; l_form }
-         end
+    fold_constructors
+      begin
+        fun ctr_name ctr_type lemmas ->
+          let l_full =
+            kname_of_constructor state.coq_env ctr_name
+            |> Names.KerName.to_string |> Name.make
+          in
+          let l_user = lemma_user_name l_full in
+          let l_form = translate_term state @@ EConstr.of_constr ctr_type in
+          Logic.{ l_user; l_full; l_form } :: lemmas
+      end
+      state.coq_env []
 
   let lemmas coq_goal : Logic.lemma list * Lang.Env.t =
     let open Lang in
@@ -463,6 +295,84 @@ module Export = struct
         (l1 @ l2)
     in
     (lemmas, state.env)
+end
+
+(***********************************************************************************)
+(** Symbols. *)
+
+module Symbols = struct
+  type symbol =
+    | SCst of Names.Constant.t
+    | SCtr of Names.Construct.t
+    | SInd of Names.Ind.t
+    | SVar of Names.Id.t
+
+  module Table =
+    Bimap.Make
+      (Name)
+      (struct
+        type t = symbol
+
+        let compare = Stdlib.compare
+      end)
+
+  let extract_constants coq_goal table : Table.t =
+    Environ.fold_constants
+      begin
+        fun c_name _ table ->
+          let name = c_name |> Names.Constant.to_string |> Name.make in
+          Table.add name (SCst c_name) table
+      end
+      (Goal.env coq_goal) table
+
+  let extract_inductives coq_goal table : Table.t =
+    fold_inductives
+      begin
+        fun i_name _ table ->
+          let name =
+            kname_of_inductive (Goal.env coq_goal) i_name
+            |> Names.KerName.to_string |> Name.make
+          in
+          Table.add name (SInd i_name) table
+      end
+      (Goal.env coq_goal) table
+
+  let extract_constructors coq_goal table : Table.t =
+    fold_constructors
+      begin
+        fun ctr_name _ table ->
+          let name =
+            kname_of_constructor (Goal.env coq_goal) ctr_name
+            |> Names.KerName.to_string |> Name.make
+          in
+          Table.add name (SCtr ctr_name) table
+      end
+      (Goal.env coq_goal) table
+
+  let extract_context coq_goal table : Table.t =
+    fold_context
+      begin
+        fun decl table ->
+          match decl with
+          | LocalAssum (binder, _) | LocalDef (binder, _, _) ->
+              let name = Name.make @@ Names.Id.to_string binder.binder_name in
+              Table.add name (SVar binder.binder_name) table
+      end
+      (Goal.env coq_goal) table
+
+  let globals coq_goal =
+    Table.empty
+    |> extract_constructors coq_goal
+    |> extract_inductives coq_goal
+    |> extract_constants coq_goal
+
+  let locals coq_goal = extract_context coq_goal Table.empty
+
+  let all coq_goal =
+    Table.empty
+    |> extract_constructors coq_goal
+    |> extract_inductives coq_goal
+    |> extract_constants coq_goal |> extract_context coq_goal
 end
 
 (***********************************************************************************)

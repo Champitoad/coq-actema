@@ -17,9 +17,15 @@ module type S = sig
   val replace : key -> value -> t -> t
   val remove : key -> t -> t
   val mem : key -> t -> bool
+
+  (** @raise [Not_found] if the requested key is not in the map. *)
   val find : key -> t -> value
+
   val find_opt : key -> t -> value option
+
+  (** @raise [Not_found] if the requested value is not in the map. *)
   val dnif : value -> t -> key
+
   val dnif_opt : value -> t -> key option
   val filter : (key -> value -> bool) -> t -> t
 end
