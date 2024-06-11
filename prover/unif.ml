@@ -195,7 +195,7 @@ let unify env context ?(rigid_fvars = []) ?(forbidden_deps = []) t1 t2 :
   in
   let subst = { map = FVarId.Map.of_list bindings } in
 
-  (* Compute all solutions (acyclic or not). *)
+  (* Compute all solutions - acyclic or not - *on demand* using a lazy list. *)
   let solutions = unify_rec env context subst (t1, t2) in
 
   (* Find the first acyclic solution. *)
@@ -207,27 +207,3 @@ let unify env context ?(rigid_fvars = []) ?(forbidden_deps = []) t1 t2 :
         if Dfs.has_cycle deps then None else Some (close subst)
     end
     solutions
-
-(*let not_bound fvar subst : bool =
-    match IntMap.find_opt fvar subst.mapping with
-    | Some (SBound _) -> false
-    | _ -> true
-
-  let is_closed subst : bool =
-    IntMap.for_all
-      begin
-        (* For each [var] in the domain of [subst]. *)
-        fun var sitem ->
-          match sitem with
-          | SFlex | SRigid -> true
-          | SBound term ->
-              (* If [var] is bound to [term]. *)
-              IntSet.for_all
-                (fun fvar ->
-                  (* And [fvar] is a free variable of [term]. *)
-                  (* Then [fvar] is not bound in [subst]. *)
-                  not_bound fvar subst)
-                (TermUtils.free_vars term)
-      end
-      subst.mapping
-*)

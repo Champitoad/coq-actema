@@ -1,4 +1,4 @@
-(** This module implements Backtraking random generators. 
+(** This module implements backtraking random generators. 
     These are quickcheck-like generators that can fail and backtrack.
     
     Author : Mathis Bouverot-Dupuis. *)

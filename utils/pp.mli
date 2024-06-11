@@ -6,7 +6,7 @@
     To print to plain text, we could simply ignore these annotations.
 
     I developed this library in order to format text in Html. 
-    In this setting annotations correspond to a div and its attributes.
+    In this setting annotations correspond to a div (possibly with attributes).
     
     Author : Mathis Bouverot-Dupuis. *)
 

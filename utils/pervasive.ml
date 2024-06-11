@@ -1,4 +1,5 @@
-(** This module implements miscelaneous utility functions. *)
+(** This module implements miscelaneous utility functions. 
+    This includes stuff from Batteries. *)
 
 include BatPervasives
 

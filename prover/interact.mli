@@ -1,9 +1,9 @@
 (** This module defines deep interaction between formulas,
-    which is the next step after subformula linking.
+    which is the next step after linking.
     See the comment at the start of [link.mli] for an overview.
     
     Deep interaction could eventually migrate to the plugin side : 
-    instead of returning a list of [choice] to the plugin, we would return 
+    instead of returning an [itrace] to the plugin, we would return 
     a link and a substitution. Not sure it is worth the effort though. *)
 
 open Api

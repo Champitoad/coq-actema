@@ -1,4 +1,4 @@
-(** This module implements bijections between finite sets, i.e. bi-directional maps. 
+(** This module implements bijections between finite sets i.e. bi-directional maps. 
     Author : Pablo Donato. *)
 
 module Make (K : Map.OrderedType) (V : Map.OrderedType) : sig

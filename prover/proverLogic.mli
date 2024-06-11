@@ -1,5 +1,4 @@
-(** This module defines some core utilities to manipulate proofs 
-    and perform formula linking & interaction. It includes :
+(** This module defines some core utilities used in the prover. It includes :
     - The notion of proof (module [Proof]) which is the main state of the prover. 
     - Utility functions on paths in a term (module [PathUtils]). 
     - The notion of polarity of a (sub)formula (module [Polarity]). 

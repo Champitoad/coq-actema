@@ -1,3 +1,8 @@
+(** This module translates preactions [Actions.preaction] into real actions 
+    [Logic.action]. The only interesting case is for linkactions, for which
+    we need to perform deep interaction to choose an order for the interaction rules
+    (see interactl.ml). *)
+
 open Api
 open ProverLogic
 

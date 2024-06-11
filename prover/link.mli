@@ -1,4 +1,4 @@
-(** This module implements subformula linking as defined in :
+(** This module implements subformula *linking* as defined in :
       "A Drag-and-Drop Proof Tactic"
       http://www.lix.polytechnique.fr/Labo/Pablo.DONATO/papers/cpp-article.pdf
 
@@ -13,28 +13,17 @@
 
     Consider the following example. The user performs the following link 
     (where the linked items are denoted by curly braces) :
-      [C ⇒ (A ∧ {B}) |- D ∧ {B}]
+      [C ⇒ (A ∧ {B}) * D ∧ {B}]
     The process unfolds as follows :
     1. The user links the two occurences of the formula {B}.
-    2. Subformula linking checks that these subformulas are unifiable. 
+    2. Subformula *linking* checks (among other things) that these subformulas are unifiable
+       and of opposite polarities. 
        In this case it is trivial, but in general there can be quantifiers above 
        each linked subformula, making this more tricky. 
-       We also check that the link verifies other properties (related to polarities for instance).
-    3. We now know that the linked formulas can interact, but they might have more than one possible interaction. 
-       For instance we could get the interaction :
-             C ⇒ A ∧ {B} |- D ∧ {B} 
-       (R∧₂) D ∧ (C ⇒ A ∧ {B} |- {B})
-       (L⇒₂) D ∧ C ∧ (A ∧ {B} |- {B})
-       ...
-
-       Or we could get the interaction :
-             C ⇒ A ∧ {B} |- D ∧ {B} 
-       (L⇒₂) C ∧ (A ∧ {B} |- D ∧ {B})
-       (R∧₂) C ∧ D ∧ (A ∧ {B} |- {B})
-       ...
-
+    3. We now know that the linked formulas can interact, 
+       but they might have more than one possible interaction. 
        Choosing an order for the rules is important as the rewrite system 
-       is non-confluent (see the paper "A drag and drop proof tactic"). *)
+       is non-confluent (see the paper for more details). *)
 
 open Api
 open Lang

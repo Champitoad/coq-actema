@@ -1,6 +1,10 @@
-(** This module handles unifying terms. 
+(** This module handles unification of terms. 
     This is not general-purpose unification : it is tailored to the issues
-    we have to solve in subformula linking. *)
+    we have to solve in subformula linking, such as dealing with dependencies between 
+    unification variables.
+    
+    For the moment we implement syntactic unification only (no beta or eta reduction, 
+    no unfolding of constants). *)
 
 open Api
 open Lang
@@ -34,22 +38,3 @@ val unify :
   -> Term.t
   -> Term.t
   -> subst option
-
-(*= { context : Context.t; map : sitem FVarId.Map.t ; deps : FVarGraph.t}*)
-
-(** Test whether the dependency graph of the substitution contains a cycle. *)
-(*val is_cyclic : subst -> bool
-
-  (** Recursively close an acyclic substitution.
-
-      For example the open substitution
-        [x -> y + z ; y -> z ; z -> a * a]
-      is equivalent to the closed substitution
-        [x -> (a * a) + (a * a) ; y -> a ; z -> a * a]
-
-      This process does not terminate for a cyclic substitution.
-  *)
-  val close : subst -> subst
-
-  (** Test whether a substitution is closed. See [close] for more details. *)
-  val is_closed : subst -> bool*)
