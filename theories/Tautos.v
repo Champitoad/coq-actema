@@ -11,8 +11,11 @@ actema_force.*)
 Lemma test : forall x, Mortal x.
 Admitted.
 
+Lemma test2 : exists x, Mortal x.
+actema_force.
+
 Lemma Aristoteles (hm : forall x, Human x -> Mortal x) 
-  (hh : Human Socrates) : Mortal Socrates.
+  (hh : Human Socrates) : exists x, Mortal Socrates.
     actema_force.
 Admitted. 
 

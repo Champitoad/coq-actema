@@ -9,6 +9,8 @@ let export_action proof goal_id preaction : Logic.action =
   | Intro side -> Logic.AIntro side
   | Elim (hyp_name, i) -> Logic.AElim (hyp_name, i)
   | Simpl path -> Logic.ASimpl path
+  | Case term -> Logic.ACase term
+  | Ind term -> Logic.AInd term
   | Hyperlink (hyperlink, linkactions) -> begin
       match (hyperlink, linkactions) with
       | ([ src ], [ dst ]), [ Subform (xs, ys, subst) ] ->

@@ -8,6 +8,7 @@
 open Utils.Pervasive
 open Api
 open Logic
+open Lang
 open ProverLogic
 
 (** An [action_kind] discriminates between :
@@ -36,6 +37,8 @@ type preaction =
   | Elim of Name.t * int
   (* Simplify the subterm pointed at by a path. *)
   | Simpl of Path.t
+  | Case of Term.t
+  | Ind of Term.t
   (* Fold all occurences of a local variable. *)
   | Fold of Name.t
   (* Unfold all occurences of a local variable. *)

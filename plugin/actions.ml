@@ -810,21 +810,38 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.AElim (hyp_name, i) -> execute_aelim coq_goal hyp_name i
   | Logic.ALemmaAdd full_name -> execute_alemma_add coq_goal full_name
   | Logic.ALink (src, dst, itrace) -> execute_alink coq_goal src dst itrace
-  | Logic.ASimpl path ->
-      (* Convert the path to a Coq format. *)
-      let coq_sub = compile_path coq_goal path in
-      (* Get the Ltac tactic name and arguments. *)
-      let tac_name, args =
-        match path.kind with
-        | Hyp name ->
-            let id = Names.Id.of_string @@ Name.show name in
-            ("simpl_path_hyp", [ EConstr.mkVar id; coq_sub ])
-        | Concl -> ("simpl_path", [ coq_sub ])
-        | VarHead _ | VarBody _ | VarType _ ->
-            raise @@ UnsupportedAction (action, "Can't simplify in variable")
-      in
-      (* Call the Ltac tactic. *)
-      calltac (tactic_kname tac_name) args
+  | Logic.ASimpl path -> begin
+      match path.kind with
+      | Hyp name ->
+          let id = EConstr.mkVar @@ Names.Id.of_string @@ Name.show name in
+          let path = compile_path coq_goal path in
+          calltac (tactic_kname "simpl_path_hyp") [ id; path ]
+      | Concl ->
+          let path = compile_path coq_goal path in
+          calltac (tactic_kname "simpl_path") [ path ]
+      | VarHead _ | VarBody _ | VarType _ ->
+          raise @@ UnsupportedAction (action, "Can't simplify in variable")
+    end
+  | Logic.ACase term ->
+      let symbol_table = Symbols.all coq_goal in
+      let coq_term = Import.term coq_goal symbol_table term in
+      Log.str "[ACase]";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_term;
+      Induction.destruct false (Some true) coq_term None None
+  | Logic.AInd term ->
+      let symbol_table = Symbols.all coq_goal in
+      let coq_term = Import.term coq_goal symbol_table term in
+      Induction.induction false (Some true) coq_term None None
+(*begin
+    match path.kind with
+    | VarHead var ->
+        let id = EConstr.mkVar @@ Names.Id.of_string @@ Name.show var in
+        calltac (tactic_kname "mycase_var") [ id ]
+    | Concl ->
+        let path = compile_path coq_goal path in
+        calltac (tactic_kname "mycase") [ path ]
+    | _ -> raise @@ UnsupportedAction (action, "TODO")
+  end*)
 
 (* _ ->
     raise

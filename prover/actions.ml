@@ -15,6 +15,8 @@ type preaction =
   | Intro of int
   | Elim of Name.t * int
   | Simpl of Path.t
+  | Case of Term.t
+  | Ind of Term.t
   | Fold of Name.t
   | Unfold of Name.t
   | Hyperlink of Link.hyperlink * Link.linkaction list
@@ -185,48 +187,107 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
 (** Contextual actions. *)
 (********************************************************************************)
 
-let ctxt_actions (selection : Path.t list) (proof : Proof.t) : aoutput list =
-  (*let induction tgt =
-      { description = "Induction"
-      ; icon = Some "arrow-up-right-dots"
-      ; highlights = sel
-      ; kind = `Ctxt
-      ; goal_handle = IPath.gid proof tgt
-      ; action = `Indt tgt
-      }
-    in
+let is_hyp (path : Path.t) : bool =
+  match path.kind with Hyp _ -> true | _ -> false
 
-    let case_eq tgt =
-      { description = "Case"
-      ; icon = Some "list"
-      ; highlights = sel
-      ; kind = `Ctxt
-      ; goal_handle = IPath.gid proof tgt
-      ; action = `Case tgt
-      }
-    in
+let is_concl (path : Path.t) : bool =
+  match path.kind with Concl -> true | _ -> false
 
-    let pbp tgt =
-      { description = "Point"
-      ; icon = Some "hand-pointer"
-      ; highlights = sel
-      ; kind = `Ctxt
-      ; goal_handle = IPath.gid proof tgt
-      ; action = `Pbp tgt
-      }
-    in*)
+let is_var (path : Path.t) : bool =
+  match path.kind with VarHead _ | VarType _ | VarBody _ -> true | _ -> false
+
+let is_var_head (path : Path.t) : bool =
+  match path.kind with VarHead _ -> true | _ -> false
+
+(** [Simpl] action. *)
+let simplify_actions (selection : Path.t list) proof : aoutput list =
   match selection with
+  | [ sel ] when is_hyp sel || is_concl sel -> begin
+      [ { description = "Simplify"
+        ; icon = Some "wand-magic-sparkles"
+        ; highlights = [ sel ]
+        ; kind = Ctxt
+        ; goal_id = sel.goal
+        ; preaction = Simpl sel
+        }
+      ]
+    end
+  | _ -> []
+
+(** [Case] and [Ind] action. *)
+let case_ind_actions (selection : Path.t list) proof : aoutput list =
+  match selection with
+  | [ sel ] when is_concl sel ->
+      (* Check the selected subterm contains no free variables. *)
+      let _, sel_term = TermUtils.subterm (PathUtils.term sel proof) sel.sub in
+      if Term.contains_fvars sel_term
+      then []
+      else
+        (* Rule out some subterms based on their type.
+           This probably still lets the user perform case analysis/induction on terms they should not :
+           we only perform a quick and dirty test. *)
+        let env = (Proof.byid proof sel.goal).g_env in
+        let sel_type = TermUtils.typeof env Context.empty sel_term in
+        begin
+          match sel_type with
+          | Sort _ | Prod _ -> []
+          | _ ->
+              (* We passed the tests : the action is (probably) valid. *)
+              [ { description = "Case"
+                ; icon = Some "list"
+                ; highlights = [ sel ]
+                ; kind = Ctxt
+                ; goal_id = sel.goal
+                ; preaction = Case sel_term
+                }
+              ; { description = "Induction"
+                ; icon = Some "arrow-up-right-dots"
+                ; highlights = [ sel ]
+                ; kind = Ctxt
+                ; goal_id = sel.goal
+                ; preaction = Ind sel_term
+                }
+              ]
+        end
+  | _ -> []
+
+let ctxt_actions (selection : Path.t list) (proof : Proof.t) : aoutput list =
+  simplify_actions selection proof @ case_ind_actions selection proof
+
+(*let induction tgt =
+    { description = "Induction"
+    ; icon = Some "arrow-up-right-dots"
+    ; highlights = sel
+    ; kind = `Ctxt
+    ; goal_handle = IPath.gid proof tgt
+    ; action = `Indt tgt
+    }
+  in
+
+  let case_eq tgt =
+    { description = "Case"
+    ; icon = Some "list"
+    ; highlights = sel
+    ; kind = `Ctxt
+    ; goal_handle = IPath.gid proof tgt
+    ; action = `Case tgt
+    }
+  in
+
+  let pbp tgt =
+    { description = "Point"
+    ; icon = Some "hand-pointer"
+    ; highlights = sel
+    ; kind = `Ctxt
+    ; goal_handle = IPath.gid proof tgt
+    ; action = `Pbp tgt
+    }
+  in*)
+(*match selection with
   | [ sel ] -> begin
       match sel.kind with
       | VarHead v -> [ (*induction tgt; case_eq tgt*) ]
       | _ ->
-          [ { description = "Simplify"
-            ; icon = Some "wand-magic-sparkles"
-            ; highlights = [ sel ]
-            ; kind = Ctxt
-            ; goal_id = sel.goal
-            ; preaction = Simpl sel
-            }
             (*; { description = "Unfold"
                 ; icon = Some "magnifying-glass"
                 ; highlights = sel
@@ -237,9 +298,9 @@ let ctxt_actions (selection : Path.t list) (proof : Proof.t) : aoutput list =
               ; induction tgt
               ; case_eq tgt
               ; pbp tgt*)
-          ]
+
     end
-  | _ -> []
+  | _ -> []*)
 
 (********************************************************************************)
 (** Click actions. *)

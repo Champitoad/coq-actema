@@ -243,8 +243,14 @@ type action =
      The [int] indicates which intro rule to use in case of ambiguity
      (for instance when the hypothesis is an equality, it indicates in which direction to rewrite) *)
   | AElim of Name.t * int
-  (* Apply Coq's [simpl] tactic to a subterm. *)
+  (* Apply Coq's [simpl] tactic to a subterm of an item. *)
   | ASimpl of Path.t
+  (* Apply Coq's [destruct] tactic to a term.
+     This term must be closed (in the context of the goal). *)
+  | ACase of Term.t
+  (* Apply Coq's [induction] tactic to a term.
+     This term must be closed (in the context of the goal). *)
+  | AInd of Term.t
   (* Generalize a hypothesis or local variable.
      This changes a goal of the form
         h : H |- C
@@ -258,7 +264,6 @@ type action =
   | ALemmaAdd of Name.t
   (* A link (DnD) action. The paths are the two sides of the link. *)
   | ALink of Path.t * Path.t * itrace
-(* Click on a hypothesis *)
 (*| ADef of (Name.t * Term.t * Term.t) (* Introduction of a local definition *)
   | AInd of Name.t (* Simple induction on a variable (of inductive type). *)
   | ARed of Path.t (* Unfold contextual action *)

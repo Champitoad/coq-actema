@@ -4323,12 +4323,12 @@ Ltac pcase p :=
   end.
 
 
-Ltac mydestruct e t:=
+(*Ltac mydestruct e t :=
   generalize (refl_equal t);
   destruct t at -1;
-  intro e.
+  intro e.*)
 
-Ltac mycase p :=
+(*Ltac mycase p :=
   match goal with
   | |- ?g =>
       let g' := myinduction_r p g in
@@ -4338,16 +4338,36 @@ Ltac mycase p :=
   | _ => pcase ltac:(cdr p)
   end;
   simplify_goal;
-try discriminate.
+try discriminate.*)
 
 
-Ltac mycase_hyp h p :=
+(*Ltac mycase_hyp h p :=
   let e := fresh "e" in
   let g := type of h in
   let g' := myinduction_r p g in
   mydestruct e g';
   simplify_goal;
-  try discriminate.
+  try discriminate.*)
+
+Ltac mycase_var var := 
+  destruct var.
+
+Ltac remove_last path := 
+  match path with 
+  | nil => constr:(nil)
+  | cons _ nil => constr:(nil)
+  | cons ?hd ?tl => 
+      let new_tl := remove_last tl in
+      constr:(cons hd new_tl)
+  end.
+
+Ltac mycase path := 
+  match goal with 
+  | _ => pcase path 
+  | _ => 
+      let path := remove_last path in 
+      pcase path
+  end.
 
 
 Ltac myinduction_nosimpl p :=

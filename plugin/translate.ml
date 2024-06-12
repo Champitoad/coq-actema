@@ -438,5 +438,12 @@ module Import = struct
         let ty = translate_term state ty in
         let body = translate_term state body in
         EConstr.mkProd (binder, ty, body)
-    | App (_, f, args) -> failwith "Import.app: todo"
+    | App (_, f, args) ->
+        let f = translate_term state f in
+        let args = List.map (translate_term state) args in
+        EConstr.mkApp (f, Array.of_list args)
+
+  let term coq_goal table term : EConstr.t =
+    let state = { coq_goal; table } in
+    translate_term state term
 end

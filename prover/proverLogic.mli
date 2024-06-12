@@ -105,7 +105,7 @@ module PathUtils : sig
       @raise Path.InvalidPath if [path] is invalid. *)
   val item : Path.t -> Proof.t -> item
 
-  (** Return the subterm pointed at by the path. 
+  (** Return the term - *not* the subterm - pointed at by the path. 
       @raise Path.InvalidPath if [path] is invalid. *)
   val term : Path.t -> Proof.t -> Term.t
 

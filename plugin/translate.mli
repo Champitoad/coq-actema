@@ -56,4 +56,9 @@ module Symbols : sig
 end
 
 (** Translating from Actema to Coq. *)
-module Import : sig end
+module Import : sig
+  (** Translate an Actema term into a Coq term. 
+      This requires a symbol table (as produced e.g. by [Symbols.all]) 
+      to map Actema names to Coq constants. *)
+  val term : Goal.t -> Symbols.Table.t -> Term.t -> EConstr.t
+end

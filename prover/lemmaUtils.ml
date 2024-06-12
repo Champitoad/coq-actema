@@ -226,7 +226,9 @@ let filter pattern_opt selection_opt proof =
             (Lemmas.env old_db) (Proof.opened proof)
         in
 
-        let sel_subterm = PathUtils.term selection proof in
+        let sel_subterm =
+          subterm_raw (PathUtils.term selection proof) selection.sub
+        in
         let matches =
           lemmas
           |> (* Get the list of matches. *)
