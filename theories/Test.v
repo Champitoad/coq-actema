@@ -2,7 +2,7 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 
-Lemma test : forall x, (fun _ : nat => True) x.
+Lemma test : exists x : nat, (fun _ _ _ => True) x x x.
   actema_force.
 
 

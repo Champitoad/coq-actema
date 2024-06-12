@@ -737,6 +737,17 @@ let execute_alink coq_goal src dst (itrace : Logic.itrace) : unit tactic =
 (** Putting it all together. *)
 (*********************************************************************************)
 
+(** [convert_sub term sub] converts the path [sub] (that points inside [term])
+    from the actema format to the format that the tactics expect. 
+    
+    The differences between these two formats are : 
+    - In Actema applications are n-ary, whereas the tactics expect applications to
+      be binary. For instance when pointing to [x] in [f x y z], in Actema
+      we use [[1]] but the tactics expect [[0; 0; 1]]. 
+    - In Actema existential quantification [exists x : ty, body] is represented 
+      as [App (Cst ex, [ty; Lambda (x, ty, body)])], but the tactics work with first-class 
+      existentials. For instance when pointing to [ty] or [body] in [exists x : ty, body],
+      in Actema we use [[2; 0]] or [[2; 1]], but the tactics expect [[0]] or [[1]]. *)
 let rec convert_sub (term : Lang.Term.t) (sub : int list) : int list =
   match (sub, term) with
   | [], _ -> []
@@ -765,6 +776,18 @@ let rec convert_sub (term : Lang.Term.t) (sub : int list) : int list =
   (* This should not happen. *)
   | _ -> failwith "Actions.convert_sub : invalid path"
 
+(** Turn an actema path into a Coq term that can be fed to tactics. *)
+let compile_path coq_goal (path : Logic.Path.t) : EConstr.t =
+  let open Logic in
+  let api_goal = Export.goal coq_goal in
+  let term =
+    match path.kind with
+    | Concl -> api_goal.g_concl
+    | Hyp name -> (Logic.Hyps.by_name api_goal.g_hyps name).h_form
+    | _ -> failwith "todo"
+  in
+  path.sub |> convert_sub term |> Trm.Datatypes.natlist (Goal.env coq_goal)
+
 let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   match action with
   | Logic.AId -> Tacticals.tclIDTAC
@@ -789,18 +812,7 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.ALink (src, dst, itrace) -> execute_alink coq_goal src dst itrace
   | Logic.ASimpl path ->
       (* Convert the path to a Coq format. *)
-      let api_goal = Export.goal coq_goal in
-      let term =
-        match path.kind with
-        | Concl -> api_goal.g_concl
-        | Hyp name -> (Logic.Hyps.by_name api_goal.g_hyps name).h_form
-        | _ -> failwith "todo"
-      in
-      let coq_sub =
-        path.sub |> convert_sub term
-        |> Trm.Datatypes.natlist (Goal.env coq_goal)
-      in
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sub;
+      let coq_sub = compile_path coq_goal path in
       (* Get the Ltac tactic name and arguments. *)
       let tac_name, args =
         match path.kind with
