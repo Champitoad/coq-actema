@@ -331,6 +331,7 @@ type action =
   | AExact of Name.t
   | AIntro of int
   | AElim of Name.t * int
+  | ASimpl of Path.t
   | AGeneralize of Name.t
   | ALemmaAdd of Name.t
   | ALink of Path.t * Path.t * itrace

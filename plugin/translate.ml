@@ -366,32 +366,77 @@ module Symbols = struct
     |> extract_inductives coq_goal
     |> extract_constants coq_goal
 
-  let locals coq_goal = extract_context coq_goal Table.empty
+  let locals coq_goal = Table.empty |> extract_context coq_goal
 
   let all coq_goal =
     Table.empty
     |> extract_constructors coq_goal
     |> extract_inductives coq_goal
     |> extract_constants coq_goal |> extract_context coq_goal
+
+  let to_econstr coq_goal symbol =
+    match symbol with
+    | SCst cname ->
+        let (_, inst), _ =
+          UnivGen.fresh_constant_instance (Goal.env coq_goal) cname
+        in
+        EConstr.mkConstU (cname, EConstr.EInstance.make inst)
+    | SCtr cname ->
+        let (_, inst), _ =
+          UnivGen.fresh_constructor_instance (Goal.env coq_goal) cname
+        in
+        EConstr.mkConstructU (cname, EConstr.EInstance.make inst)
+    | SInd iname ->
+        let (_, inst), _ =
+          UnivGen.fresh_inductive_instance (Goal.env coq_goal) iname
+        in
+        EConstr.mkIndU (iname, EConstr.EInstance.make inst)
+    | SVar vname -> EConstr.mkVar vname
 end
 
 (***********************************************************************************)
 (** Translate Actema to Coq. *)
 
 module Import = struct
-  (*type state = Null
+  type state = { coq_goal : Goal.t; table : Symbols.Table.t }
 
-    (** This assumes the input term contains no FVar and no loose BVar. *)
-    let rec translate_term state (term : Lang.Term.t) : EConstr.t =
-      let open Lang in
-      match term with
-      | BVar idx ->
-          (* Take care that Coq starts de Bruijn indices at 1, while Actema starts at 0. *)
-          EConstr.mkRel (idx + 1)
-      | FVar _ ->
-          failwith "Translate.Import.translate_term : unexpected free variable."
-      | Cst cname ->
-          let kname = Names.KerName.make
-          EConstr.mkConst
-      | _ -> failwith "todo"*)
+  let translate_binder (binder : Lang.Term.binder) :
+      Names.Name.t Context.binder_annot =
+    let str =
+      match binder with Named name -> Name.show name | Anonymous -> "_"
+    in
+    let name = Names.Name.mk_name @@ Names.Id.of_string str in
+    { binder_name = name; binder_relevance = Relevant }
+
+  (** This assumes the input term contains no FVar and no loose BVar. *)
+  let rec translate_term state (term : Lang.Term.t) : EConstr.t =
+    match term with
+    | BVar idx ->
+        (* Take care that Coq starts de Bruijn indices at 1, while Actema starts at 0. *)
+        EConstr.mkRel (idx + 1)
+    | FVar _ -> failwith "Import.translate_term : unexpected free variable."
+    | Cst name -> begin
+        match Symbols.Table.find_opt name state.table with
+        | Some symbol -> Symbols.to_econstr state.coq_goal symbol
+        | None ->
+            failwith
+            @@ Format.sprintf
+                 "Import.translate_term : could not find symbol for [%s]"
+                 (Name.show name)
+      end
+    | Sort `Prop -> EConstr.mkProp
+    | Sort `Type ->
+        let level = UnivGen.fresh_level () in
+        EConstr.mkType @@ Univ.Universe.make level
+    | Lambda (_, x, ty, body) ->
+        let binder = translate_binder x in
+        let ty = translate_term state ty in
+        let body = translate_term state body in
+        EConstr.mkLambda (binder, ty, body)
+    | Prod (_, x, ty, body) ->
+        let binder = translate_binder x in
+        let ty = translate_term state ty in
+        let body = translate_term state body in
+        EConstr.mkProd (binder, ty, body)
+    | App (_, f, args) -> failwith "Import.app: todo"
 end

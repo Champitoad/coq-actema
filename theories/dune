@@ -2,7 +2,7 @@
  (name Actema)
  (package coq-actema)
  (plugins coq-actema.plugin)
- (modules Loader DnD HOL)
+ (modules Loader HOL)
  ; We only need mathcomp.ssreflect, but for some reason 
  ; we have to explicitly list some dependencies of mathcomp.ssreflect.
  ; This is a dune issue : it does not happen when stepping through files

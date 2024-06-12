@@ -8,6 +8,7 @@ let export_action proof goal_id preaction : Logic.action =
   | Exact hyp_name -> Logic.AExact hyp_name
   | Intro side -> Logic.AIntro side
   | Elim (hyp_name, i) -> Logic.AElim (hyp_name, i)
+  | Simpl path -> Logic.ASimpl path
   | Hyperlink (hyperlink, linkactions) -> begin
       match (hyperlink, linkactions) with
       | ([ src ], [ dst ]), [ Subform (xs, ys, subst) ] ->
@@ -27,9 +28,6 @@ let export_action proof goal_id preaction : Logic.action =
         let* uid = find subhd in
         js_log @@ Format.sprintf "Found: %s\n" uid;
         return (Logic.AInd uid)
-    | `Simpl tgt ->
-        let* tgt = of_ipath tgt in
-        return (Logic.ASimpl tgt)
     | `Red tgt ->
         let* tgt = of_ipath tgt in
         return (Logic.ARed tgt)

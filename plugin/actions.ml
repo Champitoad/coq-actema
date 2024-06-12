@@ -11,7 +11,6 @@ exception InvalidPath of Logic.Path.t
 (* -------------------------------------------------------------------- *)
 (** * Importing Actema actions as Coq tactics *)
 
-(* let kname = kername ["Actema"; "DnD"] *)
 (*let kname = kername [ "Actema"; "HOL" ]
   <
     let symbol (sy : symbol) : EConstr.t =
@@ -664,18 +663,7 @@ let execute_alemma_add coq_goal lemma_name =
   let symbol_table = Symbols.all coq_goal in
   let hyp_form =
     match Symbols.Table.find_opt lemma_name symbol_table with
-    | Some (SCst cname) ->
-        let (_, inst), _ =
-          UnivGen.fresh_constant_instance (Goal.env coq_goal) cname
-        in
-        EConstr.mkConstU (cname, EConstr.EInstance.make inst)
-    | Some (SCtr cname) ->
-        let (_, inst), _ =
-          UnivGen.fresh_constructor_instance (Goal.env coq_goal) cname
-        in
-        EConstr.mkConstructU (cname, EConstr.EInstance.make inst)
-    | Some (SInd _) | Some (SVar _) ->
-        failwith "Actions.execute_alemma_add : unexpected symbol"
+    | Some symbol -> Symbols.to_econstr coq_goal symbol
     | None ->
         raise
         @@ UnsupportedAction
@@ -749,6 +737,34 @@ let execute_alink coq_goal src dst (itrace : Logic.itrace) : unit tactic =
 (** Putting it all together. *)
 (*********************************************************************************)
 
+let rec convert_sub (term : Lang.Term.t) (sub : int list) : int list =
+  match (sub, term) with
+  | [], _ -> []
+  (* Lambdas and products don't change. *)
+  | 0 :: sub, Lambda (_, x, ty, body) | 0 :: sub, Prod (_, x, ty, body) ->
+      0 :: convert_sub ty sub
+  | 1 :: sub, Lambda (_, x, ty, body) | 1 :: sub, Prod (_, x, ty, body) ->
+      1 :: convert_sub body sub
+  (* Handle existential quantification. *)
+  | 2 :: 0 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
+    when Name.equal ex Lang.Constants.ex ->
+      0 :: convert_sub body sub
+  | 2 :: 1 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
+    when Name.equal ex Lang.Constants.ex ->
+      1 :: convert_sub body sub
+  (* Turn n-ary applications to binary applications. *)
+  (* One argument. *)
+  | 0 :: sub, App (_, f, [ arg ]) -> 0 :: convert_sub f sub
+  | 1 :: sub, App (_, f, [ arg ]) -> 1 :: convert_sub arg sub
+  (* At least two arguments. *)
+  | n :: sub, App (_, f, args) when n = List.length args ->
+      1 :: convert_sub (List.last args) sub
+  | n :: sub, App (_, f, args) when 0 <= n && n < List.length args ->
+      let args = List.remove_at (List.length args - 1) args in
+      0 :: convert_sub (Lang.Term.mkApps f args) (n :: sub)
+  (* This should not happen. *)
+  | _ -> failwith "Actions.convert_sub : invalid path"
+
 let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   match action with
   | Logic.AId -> Tacticals.tclIDTAC
@@ -771,6 +787,33 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.AElim (hyp_name, i) -> execute_aelim coq_goal hyp_name i
   | Logic.ALemmaAdd full_name -> execute_alemma_add coq_goal full_name
   | Logic.ALink (src, dst, itrace) -> execute_alink coq_goal src dst itrace
+  | Logic.ASimpl path ->
+      (* Convert the path to a Coq format. *)
+      let api_goal = Export.goal coq_goal in
+      let term =
+        match path.kind with
+        | Concl -> api_goal.g_concl
+        | Hyp name -> (Logic.Hyps.by_name api_goal.g_hyps name).h_form
+        | _ -> failwith "todo"
+      in
+      let coq_sub =
+        path.sub |> convert_sub term
+        |> Trm.Datatypes.natlist (Goal.env coq_goal)
+      in
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sub;
+      (* Get the Ltac tactic name and arguments. *)
+      let tac_name, args =
+        match path.kind with
+        | Hyp name ->
+            let id = Names.Id.of_string @@ Name.show name in
+            ("simpl_path_hyp", [ EConstr.mkVar id; coq_sub ])
+        | Concl -> ("simpl_path", [ coq_sub ])
+        | VarHead _ | VarBody _ | VarType _ ->
+            raise @@ UnsupportedAction (action, "Can't simplify in variable")
+      in
+      (* Call the Ltac tactic. *)
+      calltac (tactic_kname tac_name) args
+
 (* _ ->
     raise
     @@ UnsupportedAction

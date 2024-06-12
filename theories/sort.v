@@ -189,6 +189,9 @@ Fixpoint insertion_sort l :=
 
 Lemma sorted_insertion : forall l,
     sorted (insertion_sort l).
+    induction l. simpl. trivial.
+    simpl.
+  actema_force.
   pose proof insert_sort.
 Admitted.
 

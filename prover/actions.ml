@@ -14,6 +14,7 @@ type preaction =
   | Exact of Name.t
   | Intro of int
   | Elim of Name.t * int
+  | Simpl of Path.t
   | Fold of Name.t
   | Unfold of Name.t
   | Hyperlink of Link.hyperlink * Link.linkaction list
@@ -28,6 +29,10 @@ type aoutput =
   ; preaction : preaction
   }
 [@@deriving show]
+
+(********************************************************************************)
+(** Drag and drop actions. *)
+(********************************************************************************)
 
 (** [is_nat_constant t] checks if [t] is a natural number of the form [S (S (... O))]. *)
 let rec is_nat_constant (t : Term.t) : bool =
@@ -176,14 +181,12 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
     ; preaction = Hyperlink ((hyper_src, hyper_dst), linkactions)
     }
 
-(*type selpred = Proof.proof -> selection -> aoutput list
+(********************************************************************************)
+(** Contextual actions. *)
+(********************************************************************************)
 
-  let selpred_add : selpred list -> selpred =
-   fun ps pr sel -> List.map (fun p -> p pr sel) ps |> List.concat
-
-  let single_subterm_sel : selpred =
-   fun proof sel ->
-    let induction tgt =
+let ctxt_actions (selection : Path.t list) (proof : Proof.t) : aoutput list =
+  (*let induction tgt =
       { description = "Induction"
       ; icon = Some "arrow-up-right-dots"
       ; highlights = sel
@@ -211,45 +214,36 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
       ; goal_handle = IPath.gid proof tgt
       ; action = `Pbp tgt
       }
-    in
+    in*)
+  match selection with
+  | [ sel ] -> begin
+      match sel.kind with
+      | VarHead v -> [ (*induction tgt; case_eq tgt*) ]
+      | _ ->
+          [ { description = "Simplify"
+            ; icon = Some "wand-magic-sparkles"
+            ; highlights = [ sel ]
+            ; kind = Ctxt
+            ; goal_id = sel.goal
+            ; preaction = Simpl sel
+            }
+            (*; { description = "Unfold"
+                ; icon = Some "magnifying-glass"
+                ; highlights = sel
+                ; kind = `Ctxt
+                ; goal_handle = IPath.gid proof tgt
+                ; action = `Red tgt
+                }
+              ; induction tgt
+              ; case_eq tgt
+              ; pbp tgt*)
+          ]
+    end
+  | _ -> []
 
-    match sel with
-    | [ tgt ] -> begin
-        match tgt.ctxt.kind with
-        | `Var `Head -> [ induction tgt; case_eq tgt ]
-        | _ ->
-            [ { description = "Simplify"
-              ; icon = Some "wand-magic-sparkles"
-              ; highlights = sel
-              ; kind = `Ctxt
-              ; goal_handle = IPath.gid proof tgt
-              ; action = `Simpl tgt
-              }
-            ; { description = "Unfold"
-              ; icon = Some "magnifying-glass"
-              ; highlights = sel
-              ; kind = `Ctxt
-              ; goal_handle = IPath.gid proof tgt
-              ; action = `Red tgt
-              }
-            ; induction tgt
-            ; case_eq tgt
-            ; pbp tgt
-            ]
-      end
-    | _ -> []*)
-
-(* This seems very hacky. *)
-(*let rebuild_pathd l i =
-  if i + 1 = l
-  then [ 1 ]
-  else
-    let rec aux = function 0 -> [] | i -> 0 :: aux (i - 1) in
-    if i = 0 then aux (l - 1) else aux (l - i - 1) @ [ 1 ]*)
-
-let ctxt_actions (sel : Path.t list) (proof : Proof.t) : aoutput list = []
-(*let selpred = selpred_add [ single_subterm_sel ] in
-  selpred proof sel*)
+(********************************************************************************)
+(** Click actions. *)
+(********************************************************************************)
 
 (** Get all the introduction variants of a given goal.
     This returns a list of [description, sub] where [sub] is the subpath
@@ -270,7 +264,7 @@ let intro_variants goal : (string * int list) list =
   | Prod _ | Lambda _ -> [ ("intro", []) ]
   | _ -> []
 
-let is_cst = function Term.Cst _ -> true | _ -> false
+let is_cst : Term.t -> bool = function Term.Cst _ -> true | _ -> false
 
 (** Get all the elimination variants of a given hypothesis. 
     This returns a list of [description, sub] where [sub] is the subpath
@@ -385,6 +379,10 @@ let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
         ]
   *)
   | _ -> []
+
+(********************************************************************************)
+(** Putting it all together. *)
+(********************************************************************************)
 
 let actions (proof : Proof.t) (source : asource) : aoutput list =
   match source.kind with

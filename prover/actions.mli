@@ -34,6 +34,8 @@ type preaction =
      The [int] indicates which intro rule to use in case of ambiguity
      (for instance when the hypothesis is an equality, it indicates in which direction to rewrite) *)
   | Elim of Name.t * int
+  (* Simplify the subterm pointed at by a path. *)
+  | Simpl of Path.t
   (* Fold all occurences of a local variable. *)
   | Fold of Name.t
   (* Unfold all occurences of a local variable. *)

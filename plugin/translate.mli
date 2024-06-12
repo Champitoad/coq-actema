@@ -50,6 +50,9 @@ module Symbols : sig
 
   (** Extract both local and global symbols. *)
   val all : Goal.t -> Table.t
+
+  (** Translate a symbol to a Coq [EConstr.t], using fresh universe instances. *)
+  val to_econstr : Goal.t -> symbol -> EConstr.t
 end
 
 (** Translating from Actema to Coq. *)

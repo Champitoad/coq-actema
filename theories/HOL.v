@@ -2337,9 +2337,9 @@ Ltac patt n p :=
 
 Ltac list_args_r t l :=
   match t with
-  | (?f ?a) =>
+  | ?f ?a =>
       let A := type of a in
-       list_args_r f (@cons DYN (mDYN A a) l)
+      list_args_r f (@cons DYN (mDYN A a) l)
   | ?t => 
       let T := type of t in
       constr:(cons (mDYN T t) l)
@@ -2446,57 +2446,62 @@ Ltac buil_imp l :=
 
 Definition imp_fun A B := A -> B.
 
-
+(* Simplify the subterm at [path] in the term [t], and return the updated term. 
+   [path] is a list of natural numbers. *)
 Ltac simpl_path_r p t :=
-  match p with
-  | nil =>  eval simpl in t
-  | cons ?n ?p' =>
-      match t with
-      | ?a -> ?b =>
-          let c := constr:(imp_fun a b) in
-          let c' := simpl_path_r p c in
-          let r := eval red in c' in r
-      |  forall x: ?T, @?body' x => 
-          constr:(forall x : T,
-                     ltac:(let body := beta1 body' x in
-                           let r := simpl_path_r p' body in
-                           exact r))
-      |  exists x: ?T, @?body' x => 
-          constr:(exists x : T,
-                     ltac:(let body := beta1 body' x in
-                           let r := simpl_path_r p' body in
-                           exact r))
-      | fun x : ?T => @?body' x => 
-          constr:(fun x : T =>
-                     ltac:(let body := beta1 body' x in
-                           let r := simpl_path_r p' body in
-                           exact r))
-      | (?f0 _) =>
-          let l := list_args t in
-          let u := simpl_path_r
-                     p'
-                     ltac:(extract ltac:(tnth l (S n))) in
-          let l' := ttreplace constr:(mDYN _ u) (S n) l in
-          let r := rebuild l'
-          in r
-      end
+  match constr:(@pair _ _ p t) with
+  (* Base case. *)
+  | (nil, _) => eval simpl in t
+  (* Lambda. *)
+  | (cons 0 ?p', fun x : ?T => ?body) => 
+      let new_T := simpl_path_r p' T in 
+      constr:(fun x : new_T => body)
+  | (cons 1 ?p', fun x : ?T => @?body' x) => 
+      constr:(fun x : T =>
+                 ltac:(let body := beta1 body' x in
+                       let r := simpl_path_r p' body in
+                       exact r))
+  (* Dependent product. *)
+  | (cons 0 ?p', forall x : ?T, ?body) => 
+      let new_T := simpl_path_r p' T in 
+      constr:(forall x : new_T, body)
+  | (cons 1 ?p', forall x: ?T, @?body' x) => 
+      constr:(forall x : T,
+                 ltac:(let body := beta1 body' x in
+                       let new_body := simpl_path_r p' body in
+                       exact new_body))
+  (* Exists. *)
+  | (cons 0 ?p', exists x : ?T, ?body) => 
+      let new_T := simpl_path_r p' T in 
+      constr:(exists x : new_T, body)
+  | (cons 1 ?p', exists x: ?T, @?body' x) => 
+      constr:(exists x : T,
+                 ltac:(let body := beta1 body' x in
+                       let new_body := simpl_path_r p' body in
+                       exact new_body))
+  (* Application. *)
+  | (cons 0 ?p', ?f ?x) =>
+      let new_f := simpl_path_r p' f in constr:(new_f x)
+  | (cons 1 ?p', ?f ?x) =>
+      let new_x := simpl_path_r p' x in constr:(f new_x)
   end.
-
-Ltac simpl_path p :=
+   
+(* Simplify the subterm at [path] in the goal. 
+   [path] is a list of natural numbers. *)
+Ltac simpl_path path :=
   match goal with
   | |- ?g =>
-      let g' := simpl_path_r p g in
+      let g' := simpl_path_r path g in
       change g'
-  end;
-  simplify_goal.
+  end.
 
-
-Ltac simpl_path_hyp h p :=
-  let g := type of h in
-  let g' := simpl_path_r p g in
-  change g' in h;
-  simplify_hyp h.
-
+(* Simplify the subterm at [path] in hypothesis [hyp].
+   [path] is a list of natural numbers. *)
+Ltac simpl_path_hyp hyp path :=
+  let g := type of hyp in
+  let g' := simpl_path_r path g in
+  change g' in hyp.
+  
 Ltac beta_head t l :=
     lazymatch t with
     | fun x : ?T => @?body x =>
