@@ -246,11 +246,25 @@ type action =
   (* Apply Coq's [simpl] tactic to a subterm of an item. *)
   | ASimpl of Path.t
   (* Apply Coq's [destruct] tactic to a term.
-     This term must be closed (in the context of the goal). *)
+     This term must be closed (in the context of the goal).
+     For instance in
+       x : nat |- forall y : nat, P (x + y)
+     we can perform case analysis on [x] in the context, on [x] in the goal,
+     but not on [y] or [x + y] in the goal (as these terms contain free variables). *)
   | ACase of Term.t
-  (* Apply Coq's [induction] tactic to a term.
-     This term must be closed (in the context of the goal). *)
+  (* [ACaseIntro n] assumes the goal starts with [n] universal quantifications or implications,
+     and will introduce them and perform case analysis on the last one.
+     For instance in
+       |- H -> forall x : nat, P x
+     performing [ACaseIntro 2] will result in the two goals
+       h : H |- P 0
+       h : H |- P (S n)
+  *)
+  | ACaseIntro of int
+  (* Same as [ACase] but for induction. *)
   | AInd of Term.t
+  (* Same as [ACaseIntro] but for induction. *)
+  | AIndIntro of int
   (* Generalize a hypothesis or local variable.
      This changes a goal of the form
         h : H |- C

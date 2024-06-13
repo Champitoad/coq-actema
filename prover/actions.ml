@@ -16,7 +16,9 @@ type preaction =
   | Elim of Name.t * int
   | Simpl of Path.t
   | Case of Term.t
+  | CaseIntro of int
   | Ind of Term.t
+  | IndIntro of int
   | Fold of Name.t
   | Unfold of Name.t
   | Hyperlink of Link.hyperlink * Link.linkaction list
@@ -214,46 +216,103 @@ let simplify_actions (selection : Path.t list) proof : aoutput list =
     end
   | _ -> []
 
+(** Some heurisistics to decide if we disallow case analysis/induction 
+    on a term. If this returns [true], then case analysis is forbidden. *)
+let forbid_case_analysis env context subterm : bool =
+  match (subterm : Term.t) with
+  | Sort _ | Lambda _ | Prod _ -> true
+  | _ -> begin
+      let subterm_ty = TermUtils.typeof env context subterm in
+      match subterm_ty with Prod _ -> true | _ -> false
+    end
+
 (** [Case] and [Ind] action. *)
 let case_ind_actions (selection : Path.t list) proof : aoutput list =
   match selection with
   (* This works for any selection path, even when it points to the head of a variable. *)
   | [ sel ] ->
       (* Check the selected subterm contains no free variables. *)
-      let _, sel_term = TermUtils.subterm (PathUtils.term sel proof) sel.sub in
-      if Term.contains_fvars sel_term
+      let goal = Proof.byid proof sel.goal in
+      let context, sel_subterm =
+        TermUtils.subterm (PathUtils.term sel proof) sel.sub
+      in
+      if Term.contains_fvars sel_subterm
+         || forbid_case_analysis goal.g_env context sel_subterm
       then []
       else
-        (* Rule out some subterms based on their type.
-           This probably still lets the user perform case analysis/induction on terms they should not :
-           we only perform a quick and dirty test. *)
-        let env = (Proof.byid proof sel.goal).g_env in
-        let sel_type = TermUtils.typeof env Context.empty sel_term in
-        begin
-          match sel_type with
-          | Sort _ | Prod _ -> []
-          | _ ->
-              (* We passed the tests : the action is (probably) valid. *)
-              [ { description = "Case"
-                ; icon = Some "list"
-                ; highlights = [ sel ]
-                ; kind = Ctxt
-                ; goal_id = sel.goal
-                ; preaction = Case sel_term
-                }
-              ; { description = "Induction"
-                ; icon = Some "arrow-up-right-dots"
-                ; highlights = [ sel ]
-                ; kind = Ctxt
-                ; goal_id = sel.goal
-                ; preaction = Ind sel_term
-                }
-              ]
-        end
+        (* We passed the tests : the action is (probably) valid. *)
+        [ { description = "Case"
+          ; icon = Some "list"
+          ; highlights = [ sel ]
+          ; kind = Ctxt
+          ; goal_id = sel.goal
+          ; preaction = Case sel_subterm
+          }
+        ; { description = "Induction"
+          ; icon = Some "arrow-up-right-dots"
+          ; highlights = [ sel ]
+          ; kind = Ctxt
+          ; goal_id = sel.goal
+          ; preaction = Ind sel_subterm
+          }
+        ]
+  | _ -> []
+
+(** Helper function for [case_ind_intro_actions]. 
+    Returns [n] the number of products traversed, and [ctx] and [term]
+    the subterm we perform case analysis on. *)
+let rec traverse_products n ctx (term : Term.t) sub :
+    (int * Context.t * Term.t) option =
+  match (sub, term) with
+  (* Base case : we point to a forall. *)
+  | [], Prod (_, x, ty, body) when Term.contains_loose_bvars body ->
+      let fvar, ctx = Context.add_fresh x ty ctx in
+      Some (n + 1, ctx, Term.mkFVar fvar)
+  (* Base case : we point to the left of an implication. *)
+  | [ 0 ], Prod (_, x, ty, body) when not @@ Term.contains_loose_bvars body ->
+      Some (n + 1, ctx, ty)
+  (* Go to the right of a forall or an implication. *)
+  | 1 :: sub, Prod (_, x, ty, body) ->
+      let fvar, ctx = Context.add_fresh x ty ctx in
+      traverse_products (n + 1) ctx (Term.instantiate fvar body) sub
+  (* Invalid cases. *)
+  | _ -> None
+
+(** [CaseIntro] and [IndIntro] action. *)
+let case_ind_intro_actions (selection : Path.t list) proof : aoutput list =
+  match selection with
+  | [ sel ] when is_concl sel ->
+      let goal = Proof.byid proof sel.goal in
+      let sel_term = PathUtils.term sel proof in
+      (* Count how many products we have to traverse to get to the selected subterm. *)
+      begin
+        match traverse_products 0 Context.empty sel_term sel.sub with
+        | Some (n, ctx, subterm)
+          when not @@ forbid_case_analysis goal.g_env ctx subterm ->
+            (* We passed the tests : the action is (probably) valid. *)
+            [ { description = "Case"
+              ; icon = Some "list"
+              ; highlights = [ sel ]
+              ; kind = Ctxt
+              ; goal_id = sel.goal
+              ; preaction = CaseIntro n
+              }
+            ; { description = "Induction"
+              ; icon = Some "arrow-up-right-dots"
+              ; highlights = [ sel ]
+              ; kind = Ctxt
+              ; goal_id = sel.goal
+              ; preaction = IndIntro n
+              }
+            ]
+        | _ -> []
+      end
   | _ -> []
 
 let ctxt_actions (selection : Path.t list) (proof : Proof.t) : aoutput list =
-  simplify_actions selection proof @ case_ind_actions selection proof
+  simplify_actions selection proof
+  @ case_ind_actions selection proof
+  @ case_ind_intro_actions selection proof
 
 (*let induction tgt =
     { description = "Induction"

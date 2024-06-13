@@ -38,17 +38,13 @@ type preaction =
   (* Simplify the subterm pointed at by a path. *)
   | Simpl of Path.t
   | Case of Term.t
+  | CaseIntro of int
   | Ind of Term.t
+  | IndIntro of int
   (* Fold all occurences of a local variable. *)
   | Fold of Name.t
   (* Unfold all occurences of a local variable. *)
   | Unfold of Name.t
-    (*| Ind of int
-      | Simpl of Path.t
-      | Red of Path.t
-      | Indt of Path.t
-      | Case of Path.t
-      | Pbp of Path.t*)
   | Hyperlink of Link.hyperlink * Link.linkaction list
 [@@deriving show]
 

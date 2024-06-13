@@ -844,6 +844,12 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
       Induction.induction false (Some true) coq_term None None
       (* For some reason [Induction.induction] does not clear [coq_term]. *)
       >> clear_if_var coq_goal coq_term
+  | Logic.ACaseIntro n ->
+      assert (n >= 0);
+      failwith "todo"
+  | Logic.AIndIntro n ->
+      assert (n >= 0);
+      failwith "todo"
 (*begin
     match path.kind with
     | VarHead var ->
