@@ -217,7 +217,8 @@ let simplify_actions (selection : Path.t list) proof : aoutput list =
 (** [Case] and [Ind] action. *)
 let case_ind_actions (selection : Path.t list) proof : aoutput list =
   match selection with
-  | [ sel ] when is_concl sel ->
+  (* This works for any selection path, even when it points to the head of a variable. *)
+  | [ sel ] ->
       (* Check the selected subterm contains no free variables. *)
       let _, sel_term = TermUtils.subterm (PathUtils.term sel proof) sel.sub in
       if Term.contains_fvars sel_term

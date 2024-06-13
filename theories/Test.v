@@ -3,7 +3,7 @@ Require Import ssreflect.
 
 Definition f := fun x => x + 1 = 3.
 
-Lemma test y : exists x : nat, f (x + y).
+Lemma test (y := 42) : forall z, exists x : nat, f (x + (y + z)).
 actema_force.
 
 

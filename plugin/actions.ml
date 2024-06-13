@@ -788,7 +788,17 @@ let compile_path coq_goal (path : Logic.Path.t) : EConstr.t =
   in
   path.sub |> convert_sub term |> Trm.Datatypes.natlist (Goal.env coq_goal)
 
+(** [clear_if_var coq_goal econstr] checks if [econstr] is a local variable, 
+    and if so clears it from the goal. *)
+let clear_if_var coq_goal econstr : unit tactic =
+  if EConstr.isVar (Goal.sigma coq_goal) econstr
+  then
+    let vname = EConstr.destVar (Goal.sigma coq_goal) econstr in
+    Tactics.clear [ vname ]
+  else Tacticals.tclIDTAC
+
 let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
+  let open PVMonad in
   match action with
   | Logic.AId -> Tacticals.tclIDTAC
   | Logic.ADuplicate hyp_name ->
@@ -825,13 +835,15 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.ACase term ->
       let symbol_table = Symbols.all coq_goal in
       let coq_term = Import.term coq_goal symbol_table term in
-      Log.str "[ACase]";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_term;
       Induction.destruct false (Some true) coq_term None None
+      (* For some reason [Induction.destruct] does not clear [coq_term]. *)
+      >> clear_if_var coq_goal coq_term
   | Logic.AInd term ->
       let symbol_table = Symbols.all coq_goal in
       let coq_term = Import.term coq_goal symbol_table term in
       Induction.induction false (Some true) coq_term None None
+      (* For some reason [Induction.induction] does not clear [coq_term]. *)
+      >> clear_if_var coq_goal coq_term
 (*begin
     match path.kind with
     | VarHead var ->
