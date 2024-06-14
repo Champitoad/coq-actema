@@ -194,37 +194,6 @@ end
 (***************************************************************************************)
 (** Actions *)
 
-(** A side in a link. *)
-type side = Left | Right [@@deriving show]
-
-(** Maps [Left] to [Right] and vice-versa. *)
-val opp_side : side -> side
-
-(** A [choice] corresponds to a single choice of rule.
-
-    The [side] is used in case both a left and right rule are applicable to a link.
-    For instance in [A ∧ {B} |- {B} ∧ A], we could apply :
-    - (L∧₂) corresponding to Side Left
-    - (R∧₁) corresponding to Side Right
-
-    The optional argument in Binder indicates whether the bound variable is instantiated,
-    and if yes with what witness (which depends on the variables bound in each linked formula).
-    The witness contains BVars from the left *and* right sides. *)
-type choice =
-  | (* Simply descent in the subformula on the given side. *)
-    Side of side
-  | (* Traverse a binder on the given side. The optional argument contains the
-       instantiation witness. *)
-    Binder of side * Term.t option
-[@@deriving show]
-
-(** An itrace [fvars_left, fvars_right, choices] contains : 
-    - The list of choices made during the interaction (see prover/interact.ml). 
-      The witnesses have free variables in [fvars_left @ fvars_right].
-    - The list of FVars bound in the left subterm.
-    - The list of FVars bound in the right subterm. *)
-type itrace = choice list * FVarId.t list * FVarId.t list [@@deriving show]
-
 type action =
   (* The empty action which does nothing *)
   | AId
@@ -277,7 +246,7 @@ type action =
      The [name] contains the full name of the lemma, slightly encoded. *)
   | ALemmaAdd of Name.t
   (* A link (DnD) action. The paths are the two sides of the link. *)
-  | ALink of Path.t * Path.t * itrace
+  | ALink of (Path.t * FVarId.t list) * (Path.t * FVarId.t list) * Unif.subst
 (*| ADef of (Name.t * Term.t * Term.t) (* Introduction of a local definition *)
   | AInd of Name.t (* Simple induction on a variable (of inductive type). *)
   | ARed of Path.t (* Unfold contextual action *)

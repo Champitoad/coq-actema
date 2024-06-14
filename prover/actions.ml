@@ -10,27 +10,13 @@ type akind = Click of Path.t | DnD of Path.t * Path.t option | Ctxt
 
 type asource = { kind : akind; selection : Path.t list } [@@deriving show]
 
-type preaction =
-  | Exact of Name.t
-  | Intro of int
-  | Elim of Name.t * int
-  | Simpl of Path.t
-  | Case of Term.t
-  | CaseIntro of int
-  | Ind of Term.t
-  | IndIntro of int
-  | Fold of Name.t
-  | Unfold of Name.t
-  | Hyperlink of Link.hyperlink * Link.linkaction list
-[@@deriving show]
-
 type aoutput =
   { description : string
   ; icon : string option
   ; highlights : Path.t list
   ; kind : akind
   ; goal_id : int
-  ; preaction : preaction
+  ; action : Logic.action
   }
 [@@deriving show]
 
@@ -171,19 +157,20 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
   let linkactions =
     hlpred proof (hyper_src, hyper_dst) |> List.filter_map Link.remove_nothing
   in
-  (* Make sure there is at least one linkaction. *)
-  let* _ = guard (linkactions <> []) in
-  (* Build the action output. *)
-  let* src = hyper_src in
-  let* dst = hyper_dst in
-  return
-    { description = "Hyperlink"
-    ; icon = None
-    ; highlights = hyper_src @ hyper_dst
-    ; kind = DnD (src, Some dst)
-    ; goal_id = goal.g_id
-    ; preaction = Hyperlink ((hyper_src, hyper_dst), linkactions)
-    }
+  match linkactions with
+  | [] -> []
+  | [ Subform (src_fvars, dst_fvars, subst) ] ->
+      let* src = hyper_src in
+      let* dst = hyper_dst in
+      return
+        { description = "Hyperlink"
+        ; icon = None
+        ; highlights = hyper_src @ hyper_dst
+        ; kind = DnD (src, Some dst)
+        ; goal_id = goal.g_id
+        ; action = ALink ((src, src_fvars), (dst, dst_fvars), subst)
+        }
+  | _ -> failwith "Prover.actions.dnd_actions : unsupported dnd action(s)."
 
 (********************************************************************************)
 (** Contextual actions. *)
@@ -201,7 +188,7 @@ let is_var (path : Path.t) : bool =
 let is_var_head (path : Path.t) : bool =
   match path.kind with VarHead _ -> true | _ -> false
 
-(** [Simpl] action. *)
+(** [ASimpl] action. *)
 let simplify_actions (selection : Path.t list) proof : aoutput list =
   match selection with
   | [ sel ] when is_hyp sel || is_concl sel -> begin
@@ -210,7 +197,7 @@ let simplify_actions (selection : Path.t list) proof : aoutput list =
         ; highlights = [ sel ]
         ; kind = Ctxt
         ; goal_id = sel.goal
-        ; preaction = Simpl sel
+        ; action = ASimpl sel
         }
       ]
     end
@@ -226,7 +213,7 @@ let forbid_case_analysis env context subterm : bool =
       match subterm_ty with Prod _ -> true | _ -> false
     end
 
-(** [Case] and [Ind] action. *)
+(** [ACase] and [AInd] action. *)
 let case_ind_actions (selection : Path.t list) proof : aoutput list =
   match selection with
   (* This works for any selection path, even when it points to the head of a variable. *)
@@ -246,14 +233,14 @@ let case_ind_actions (selection : Path.t list) proof : aoutput list =
           ; highlights = [ sel ]
           ; kind = Ctxt
           ; goal_id = sel.goal
-          ; preaction = Case sel_subterm
+          ; action = ACase sel_subterm
           }
         ; { description = "Induction"
           ; icon = Some "arrow-up-right-dots"
           ; highlights = [ sel ]
           ; kind = Ctxt
           ; goal_id = sel.goal
-          ; preaction = Ind sel_subterm
+          ; action = AInd sel_subterm
           }
         ]
   | _ -> []
@@ -278,7 +265,7 @@ let rec traverse_products n ctx (term : Term.t) sub :
   (* Invalid cases. *)
   | _ -> None
 
-(** [CaseIntro] and [IndIntro] action. *)
+(** [ACaseIntro] and [AIndIntro] action. *)
 let case_ind_intro_actions (selection : Path.t list) proof : aoutput list =
   match selection with
   | [ sel ] when is_concl sel ->
@@ -295,14 +282,14 @@ let case_ind_intro_actions (selection : Path.t list) proof : aoutput list =
               ; highlights = [ sel ]
               ; kind = Ctxt
               ; goal_id = sel.goal
-              ; preaction = CaseIntro n
+              ; action = ACaseIntro n
               }
             ; { description = "Induction"
               ; icon = Some "arrow-up-right-dots"
               ; highlights = [ sel ]
               ; kind = Ctxt
               ; goal_id = sel.goal
-              ; preaction = IndIntro n
+              ; action = AIndIntro n
               }
             ]
         | _ -> []
@@ -425,7 +412,7 @@ let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
             ; highlights = [ path ]
             ; kind = Click path
             ; goal_id = goal.g_id
-            ; preaction = Intro i
+            ; action = AIntro i
             }
         end
         (intro_variants goal.g_pregoal)
@@ -442,7 +429,7 @@ let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
             ; highlights = [ path ]
             ; kind = Click path
             ; goal_id = goal.g_id
-            ; preaction = Elim (hyp_name, i)
+            ; action = AElim (hyp_name, i)
             })
           (elim_variants hyp)
       in
@@ -456,7 +443,7 @@ let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
             ; highlights = [ path ]
             ; kind = Click path
             ; goal_id = goal.g_id
-            ; preaction = Exact hyp_name
+            ; action = AExact hyp_name
             }
           ]
         else []
@@ -464,7 +451,7 @@ let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
       (* Concatenate the results. *)
       elim_actions @ exact_actions
   (* On a variable with a body, we can fold/unfold. *)
-  | Var (vname, _, Some _) ->
+  (*| Var (vname, _, Some _) ->
       (*let rp = Vars.getid goal.g_env x |> Option.get in*)
       let unfold_path = Path.make ~kind:(VarHead vname) goal.g_id in
       let fold_path = Path.make ~kind:(VarBody vname) goal.g_id in
@@ -474,16 +461,16 @@ let click_actions (path : Path.t) (selection : Path.t list) (proof : Proof.t) :
         ; highlights = [ unfold_path ]
         ; kind = Click unfold_path
         ; goal_id = goal.g_id
-        ; preaction = Unfold vname
+        ; action = AUnfold vname
         }
       ; { description = "Fold"
         ; icon = None
         ; highlights = [ fold_path ]
         ; kind = Click fold_path
         ; goal_id = goal.g_id
-        ; preaction = Fold vname
+        ; action = AFold vname
         }
-      ]
+      ]*)
   (*| `V (x, (ty, None)) when Form.t_equal goal.g_env ty Env.nat ->
         let rp = Vars.getid goal.g_env x |> Option.get in
         let hg =

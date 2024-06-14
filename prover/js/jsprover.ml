@@ -97,8 +97,7 @@ let rec js_proof_engine (proof : Proof.t) =
     method closed = Js.bool (Proof.is_closed proof)
 
     (** Return the given action as a binary, base64-encoded string. *)
-    method encodeaction (goal_id, preaction) =
-      let action = !!(Export.export_action _self##.proof goal_id) preaction in
+    method encodeaction (goal_id, action) =
       (*Js_log.log @@ Api.Logic.show_action action;*)
       action
       |> Fun.flip Marshal.to_string []
@@ -178,7 +177,7 @@ let rec js_proof_engine (proof : Proof.t) =
                      ; icon = ic
                      ; highlights = ps
                      ; kind = aui
-                     ; preaction = a
+                     ; action = a
                      ; goal_id = g_id
                      } ->
                 let ps = List.map Path.to_string ps in

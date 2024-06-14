@@ -338,7 +338,7 @@ type action =
   | AIndIntro of int
   | AGeneralize of Name.t
   | ALemmaAdd of Name.t
-  | ALink of Path.t * Path.t * itrace
+  | ALink of (Path.t * FVarId.t list) * (Path.t * FVarId.t list) * Unif.subst
 [@@deriving show]
 
 type aident = string * hyp list * Term.t [@@deriving show]

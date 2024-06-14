@@ -5,10 +5,8 @@
     when the user starts dragging an item (for instance a hypothesis), 
     the frontend will highlight all the places where dropping the item makes sense. *)
 
-open Utils.Pervasive
 open Api
 open Logic
-open Lang
 open ProverLogic
 
 (** An [action_kind] discriminates between :
@@ -21,33 +19,6 @@ type akind = Click of Path.t | DnD of Path.t * Path.t option | Ctxt
 (** An action source. From this and a [Proof.t] we should be able to generate all valid actions. *)
 type asource = { kind : akind; selection : Path.t list } [@@deriving show]
 
-(** A [preaction] is similar to an Actema action [Logic.action], but it contains 
-    a bit less information (for instance for hyperlinks). *)
-type preaction =
-  (* Trivially solve the goal with a hypothesis. *)
-  | Exact of Name.t
-  (* Apply an introduction rule on the conclusion.
-     The [int] indicates which intro rule to use in case of ambiguity
-     (for instance when the goal is a disjunction). *)
-  | Intro of int
-  (* Apply an elimination rule on a hypothesis.
-     The name identifies the hypothesis we are eliminating.
-     The [int] indicates which intro rule to use in case of ambiguity
-     (for instance when the hypothesis is an equality, it indicates in which direction to rewrite) *)
-  | Elim of Name.t * int
-  (* Simplify the subterm pointed at by a path. *)
-  | Simpl of Path.t
-  | Case of Term.t
-  | CaseIntro of int
-  | Ind of Term.t
-  | IndIntro of int
-  (* Fold all occurences of a local variable. *)
-  | Fold of Name.t
-  (* Unfold all occurences of a local variable. *)
-  | Unfold of Name.t
-  | Hyperlink of Link.hyperlink * Link.linkaction list
-[@@deriving show]
-
 (** An action output. 
 
     This contains information useful or the frontend such as :
@@ -58,14 +29,14 @@ type preaction =
     It also contains proof-related information :
     - [kind] : the action kind.
     - [goal_id] : the identifier of the goal this action executes in.
-    - [preaction] : the corresponding preaction. *)
+    - [action] : the corresponding Actema action. *)
 type aoutput =
   { description : string
   ; icon : string option
   ; highlights : Path.t list
   ; kind : akind
   ; goal_id : int
-  ; preaction : preaction
+  ; action : Logic.action
   }
 [@@deriving show]
 

@@ -6,7 +6,7 @@
 (library
  (name api)
  (public_name coq-actema.api)
- (libraries qcheck-core qcheck-alcotest coq-actema.utils)
+ (libraries qcheck-core qcheck-alcotest coq-actema.utils ocamlgraph)
  (preprocess
   (pps ppx_deriving.show))
  (flags
