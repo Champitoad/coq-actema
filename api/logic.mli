@@ -222,7 +222,7 @@ type action =
      but not on [y] or [x + y] in the goal (as these terms contain free variables). *)
   | ACase of Term.t
   (* [ACaseIntro n] assumes the goal starts with [n] universal quantifications or implications,
-     and will introduce them and perform case analysis on the last one.
+     performs introduction on them and then case analysis on the last one.
      For instance in
        |- H -> forall x : nat, P x
      performing [ACaseIntro 2] will result in the two goals

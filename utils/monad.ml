@@ -68,7 +68,9 @@ struct
   let rec sequence ms =
     match ms with [] -> return [] | m :: ms -> List.cons <$> m <*> sequence ms
 
-  let repeatM count m = sequence @@ List.init count (fun _ -> m)
+  let repeatM count m =
+    if count >= 0 then sequence @@ List.init count (fun _ -> m) else return []
+
   let mapM f xs = sequence @@ List.map f xs
 
   let mapM_ f xs =
