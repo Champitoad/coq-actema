@@ -3,12 +3,10 @@ open Proofview
 
 (** A thin wrapper around Proofview.Monad. *)
 module PVMonad = Utils.Monad.Make (struct
-  open Proofview.Monad
+  type 'a t = 'a Proofview.Monad.t
 
-  type nonrec 'a t = 'a t
-
-  let return = return
-  let bind x f = x >>= f
+  let return = Proofview.Monad.return
+  let bind = Proofview.Monad.( >>= )
 end)
 
 (** Use this module when logging in the plugin. *)
@@ -39,7 +37,7 @@ module Log = struct
     let result = chunk () in
     let end_ = Sys.time () in
     let duration = end_ -. start in
-    str (Printf.sprintf "%s took %f seconds" name duration);
+    printf "%s took %f seconds" name duration;
     result
 end
 

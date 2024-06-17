@@ -1,16 +1,13 @@
 (** This module defines the logic to carry out the effects of an actema action in Coq.
-    It uses predefined Coq tactics for simple actions, and calls custom Ltac tactics
-    (written by Benjamin Werner, see folder theories/) for more complex actions
-    such as DnD actions. *)
+    It uses standard Coq tactics for simple actions such as introduction or induction, 
+    and calls custom Ltac tactics (written by Benjamin Werner, see file theories/HOL.v) 
+    for more complex actions such as DnD actions. *)
 
 open Api
 open Proofview
 
 (** Contains the unsupported action and a short error message. *)
 exception UnsupportedAction of Logic.action * string
-
-exception UnexpectedDnD
-exception InvalidPath of Logic.Path.t
 
 (** Execute a single action. 
     The integer is the index of the subgoal the action takes place in.

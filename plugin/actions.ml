@@ -5,8 +5,6 @@ open CoqUtils
 open Translate
 
 exception UnsupportedAction of Logic.action * string
-exception UnexpectedDnD
-exception InvalidPath of Logic.Path.t
 
 (** Return the kernel name of a tactic defined in [Actema.HOL]. *)
 let tactic_kname = kername [ "Actema"; "HOL" ]
