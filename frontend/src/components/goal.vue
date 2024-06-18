@@ -1,6 +1,7 @@
 <style>
 .pi-goal {
     position: absolute;
+    margin-left: 25px;
 }
 
 .pi-goal .MathJax_Display {
@@ -69,7 +70,7 @@ export default {
     },
     computed: {
         alignment() {
-            return "right";
+            return "left";
         }
     },
     methods: {

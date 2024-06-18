@@ -41,10 +41,7 @@ let interactive_proof () : proof tactic =
   let hist = ref { before = []; after = [] } in
 
   (* At the start of the proof translate the lemmas to the Actema format. *)
-  let start = Sys.time () in
   let* lemmas, lemmas_env = export_lemmas () in
-  let stop = Sys.time () in
-  Log.printf "Exported %d lemmas in %.2fs" (List.length lemmas) (stop -. start);
 
   (* This is the main loop of the plugin, where we handle all actions
      given by the frontend. *)

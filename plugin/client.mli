@@ -8,7 +8,7 @@ exception ActemaError of string
 exception UnsupportedRequestMethod of string
 exception UnsupportedHttpResponseCode of int
 
-(** The plugin sends the goals (in API format) to the frontend, 
+(** The plugin sends the goals to the frontend, 
     which sends back an action. *)
 type action =
   (* The user made an action in the frontend (e.g. a drag-and-drop).
@@ -21,7 +21,7 @@ type action =
   | Undo
   (* Redo the last undone Actema action. *)
   | Redo
-  (* The prover requires us to send the list of (all) lemmas.
+  (* The prover requested for the plugin to send the list of (all) lemmas.
 
      We only do this on request (and not by default) because sending the lemmas
      over HTTP and then parsing them in the prover can take a bit of time (around 1 second).

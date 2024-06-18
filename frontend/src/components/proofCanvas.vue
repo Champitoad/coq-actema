@@ -276,7 +276,7 @@ export default {
                 }
             }
         },
-        // The start of the hypotheses zone, as a percentage (between 0.0 and 1.0).
+        // The end of the hypotheses zone, as a percentage (between 0.0 and 1.0).
         hypsZoneEnd: {
             get: function () {
                 return this.hypsZoneEnd_;

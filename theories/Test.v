@@ -1,11 +1,10 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
-Definition f := fun x => x + 1 = 3.
+Parameter (A : Prop) (B : Prop).
 
-Lemma test y : forall x, forall z, z = 0 -> f (x + (y + z)).
+Lemma test (a : forall y : nat, forall z : nat, A /\ y = z) : forall x : nat, (A /\ B) \/ (A /\ x = x).
 actema_force.
-
 
 (* [get_subterm path term] gets the subterm at path [path] of the Coq term [term].
    [path] is a list of nat. 
