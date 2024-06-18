@@ -2945,26 +2945,36 @@ Ltac reify_rec ts' l n env t :=
   | (nil, _)  => constr:(Hole ts n (fun (z: ppp ts n) =>
                                ltac:(let r := wrap env z t in exact r)))
                           
-  | (cons 1 ?l', ?a -> ?b) =>
+(*  | (cons 0 ?l', ?a -> ?b) =>
       let rb := constr:(fun (z: ppp ts n) =>
                           ltac:(let r := wrap env z b in exact r)) in
       let ra := reify_rec ts l' n  env a in
-      constr:(orl _ n ra rb) 
-  | (cons 0 (cons 1 ?l'),  ?a -> ?b) =>
+      constr:(impl _ n ra rb)  *)
+  | (cons 1 ?l',  ?a -> ?b) =>
       let ra := constr:(fun (z: ppp ts n) =>
                       ltac:(let r := wrap env z a in exact r)) in
       let rb := reify_rec ts l' n  env b in
       constr:(impr _ n ra rb)
-  |  (cons 0 (cons 1 ?l'), ?a /\ ?b) => 
+  |  (cons 1 ?l', ?a /\ ?b) => 
           let ra := constr:(fun (z: ppp ts n) =>
                       ltac:(let r := wrap env z a in exact r)) in
           let rb := reify_rec ts l' n  env b in
           constr:(andr _ n ra rb) 
-    | (cons 0 (cons 1 ?l'), ?a \/ ?b) => 
+  | (cons 0 (cons 1 ?l'), ?a /\ ?b) => 
+          let rb := constr:(fun (z: ppp ts n) =>
+                      ltac:(let r := wrap env z b in exact r)) in
+          let ra := reify_rec ts l' n  env a in
+          constr:(andl _ n ra rb) 
+  | (cons 1 ?l', ?a \/ ?b) => 
         let ra := constr:(fun (z: ppp ts n) =>
                             ltac:(let r := wrap env z a in exact r)) in
         let rb := reify_rec ts l' n  env b in
         constr:(orr _ n ra rb) 
+  | (cons 0 (cons 1 ?l'), ?a \/ ?b) => 
+          let rb := constr:(fun (z: ppp ts n) =>
+                      ltac:(let r := wrap env z b in exact r)) in
+          let ra := reify_rec ts l' n  env a in
+          constr:(orl _ n ra rb) 
   | (cons 1 ?l', not ?a) =>
           let ra := reify_rec ts l' n  env a in
           constr:(cNot _ n ra)
@@ -3009,11 +3019,6 @@ Ltac reify_rec ts' l n env t :=
      | (fun _: T => ?r) => constr:(ex ts n
                                       ltac:(let s := tst ts T in exact s) (fun x:nat=>x) r)
      end   
-  | (cons 0 (cons 1 ?l'), ?a /\ ?b) => 
-          let rb := constr:(fun (z: ppp ts n) =>
-                      ltac:(let r := wrap env z b in exact r)) in
-          let ra := reify_rec ts l' n  env a in
-          constr:(andl _ n ra rb) 
                    
   | _ => constr:(Hole ts n (fun (z: ppp ts n) =>
                                ltac:(let r := wrap env z t in exact r)))
@@ -3158,57 +3163,45 @@ Ltac tp l t := match t with
 Check ltac:(let r := tp  (@nil TDYN) (fun (XX : forall T, T)=> forall x:nat, x=3) in exact r).
 
 Ltac mkSignR l p t :=
-  match p with
-  | nil =>
-      match t with
-      | fun XX : ?U => (@eq ?T _ _) => aDYN T l
-      | _ => constr:(l)
-      end
-  | cons false ?p =>
-      match t with
-      | fun XX : ?U =>  forall x : ?T, ?b =>
+  let c := eval hnf in (p, t) in
+    match c with
+    | (nil, fun XX : ?U => (@eq ?T _ _)) => aDYN T l
+    | (nil, _) => constr:(l)
+    | (cons 1 ?p, fun XX : ?U =>  forall x : ?T, ?b) =>
           let r := aDYN T l in
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => (subst! (XX T) for x in b)) in 
           mkSignR r p  nt
-     | fun XX : ?U =>  exists x : ?T, ?b =>
+    |  (cons 1 ?p, fun XX : ?U =>  exists x : ?T, ?b) =>
           let r := aDYN T l in
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => (subst! (XX T) for x in b)) in 
           mkSignR r p  nt
-     | fun XX : ?U =>  exists x : ?T, ?b =>
-          let r := aDYN T l in
+    |  (cons 1 ?p, fun XX : ?U =>  ?a /\ ?b) =>
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => b) in 
           mkSignR l p  nt
-      |  fun XX : ?U =>  ?a /\ ?b =>
+    |  (cons 0 (cons 1 ?p), fun XX : ?U =>  ?a /\ ?b) =>
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => a) in 
           mkSignR l p  nt
-      | fun XX : ?U =>  ?a \/ ?b =>
+    |  (cons 1 ?p, fun XX : ?U =>  ?a \/ ?b) =>
+          let nt :=  constr:(fun XX : (forall TT:Type , TT) => b) in 
+          mkSignR l p  nt
+    |  (cons 0 (cons 1 ?p), fun XX : ?U =>  ?a \/ ?b) =>
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => a) in 
           mkSignR l p  nt
-      |  fun XX : ?U =>  ?a -> ?b =>
+    |  (cons 0 ?p, fun XX : ?U =>  ?a -> ?b) =>
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => a) in 
           mkSignR l p  nt
-      |  fun XX : ?U => ~ ?a =>
+    |  (cons 1 ?p, fun XX : ?U =>  ?a -> ?b) =>
+          let nt :=  constr:(fun XX : (forall TT:Type , TT) => b) in 
+          mkSignR l p  nt
+      |  (cons 1 ?p, fun XX : ?U => ~ ?a) =>
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => a) in 
           mkSignR l p  nt
-  end
-  | cons true ?p =>
-            match t with
-            |  fun XX : ?U =>  ?a /\ ?b =>
-                 let nt :=  constr:(fun XX : (forall TT:Type , TT) => b) in 
-                 mkSignR l p  nt
-            | fun XX : ?U =>  ?a \/ ?b =>
-                let nt :=  constr:(fun XX : (forall TT:Type , TT) => b) in 
-                mkSignR l p  nt
-            |  fun XX : ?U =>  ?a -> ?b =>
-                 let nt :=  constr:(fun XX : (forall TT:Type , TT) => b) in 
-          mkSignR l p  nt
-            end
   end.
 
 
 Ltac mkSign p t := mkSignR (@nil TDYN) p (fun XX : (forall TT:Type, TT) => t).
 
-Check ltac:(let r := mkSign (cons false (cons true nil)) ( forall x, x=3/\true=false) in exact r).
+Check ltac:(let r := mkSign (cons 1 (cons 1 nil)) ( forall x, x=3/\true=false) in exact r).
 
 
 (*
@@ -3329,7 +3322,18 @@ Ltac reify_rec_at ts' l n env t :=
          let ra := constr:(fun (z: ppp ts n) =>
                       ltac:(let r := wrap env z a in exact r)) in
           let rb := reify_rec_at ts l' n  env b in
-          constr:(orr _ n ra rb) 
+          constr:(orr _ n ra rb)
+  | (cons 0 (cons 1 ?l'), ?a /\ ?b) => 
+          let rb := constr:(fun (z: ppp ts n) =>
+                      ltac:(let r := wrap env z b in exact r)) in
+          let ra := reify_rec_at ts l' n  env a in
+          constr:(andl _ n ra rb) 
+  |  (cons 0 (cons 1 ?l'), ?a \/ ?b) => 
+          let rb := constr:(fun (z: ppp ts n) =>
+                      ltac:(let r := wrap env z b in exact r)) in
+          let ra := reify_rec_at l' n  env a in
+          constr:(orl _ n ra rb)  
+
   | (cons 1 ?l',  ~ ?a) =>
            let ra := reify_rec_at ts l' n  env a in
           constr:(cNot _ n ra)
@@ -3365,18 +3369,7 @@ Ltac reify_rec_at ts' l n env t :=
      | (fun _: T => ?r) => constr:(ex ts n
                                       ltac:(let s := tst ts T in exact s)
                                              r)
-     end   
-  | (cons 0 (cons 1 ?l'), ?a /\ ?b) => 
-          let rb := constr:(fun (z: ppp ts n) =>
-                      ltac:(let r := wrap env z b in exact r)) in
-          let ra := reify_rec_at ts l' n  env a in
-          constr:(andl _ n ra rb) 
-  |  (cons 0 (cons 1 ?l'), ?a \/ ?b) => 
-          let rb := constr:(fun (z: ppp ts n) =>
-                      ltac:(let r := wrap env z b in exact r)) in
-          let ra := reify_rec_at l' n  env a in
-          constr:(orl _ n ra rb)  
-     
+     end        
   | _ => constr:(Hole ts n (fun (z: ppp ts n) =>
                                ltac:(let r := wrap env z t in exact r))) 
      
@@ -3848,10 +3841,10 @@ Ltac app_curry1 f a :=
 
 Ltac resize f a1 a2 n1 n2 :=
   let b1 := eval compute in (a1 - n1) in
-    let f1 := nremove f b1 in 
+    let f1 := f in (* nremove f b1 in *)
     let f2 := decurryn f1 n1 in 
     let b2 := eval compute in (a2 - n2) in
-    let f3 := nremove1 f2 b2 in 
+    let f3 := f2 in (* nremove1 f2 b2 in *) 
     let f4 := curryn f3 n1 in
     f4.
 
@@ -3913,7 +3906,7 @@ Ltac back_o ts'  h0 hp gp t i :=
              match ni with
              | (?l, ?ah, ?ag) =>
                   let l' := eval compute in (List.rev l) in
-                  let i' := dress ts l' ah ag in
+                  let i' := dress ts l' ah ag in 
                  apply (b3_corr ts true t false i' (@nil nat) tt (@nil nat) tt hc);
         [idtac|assumption];
         (apply trex_norm_apply; [simpl; try done; auto|
