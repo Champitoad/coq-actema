@@ -159,7 +159,7 @@ let abstract_itrace itrace : Interact.choice list =
   let open Interact in
   (* Compute the de Bruijn index associated to the free variable [fvar].
      The lists [passed1] and [passed2] contain the free variables
-     that are bound on each side, the most recently bound variable first. *)
+     that are bound on each side so far, the most recently bound variable first. *)
   let fvar_index passed1 passed2 fvar : int =
     match List.index_of fvar passed1 with
     | Some idx -> idx
@@ -208,7 +208,7 @@ let execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) subst : unit tactic
   (* Perform deep interaction. *)
   let itrace = Interact.dlink (src, src_fvars) (dst, dst_fvars) subst pregoal in
   (* Abstract the instantiations. *)
-  let _ = abstract_itrace itrace in
+  let choices = abstract_itrace itrace in
   (* TODO. *)
   Tacticals.tclIDTAC
 
