@@ -18,6 +18,92 @@ let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
       CAst.make @@ IntroNaming (Namegen.IntroFresh (Names.Id.of_string name)))
     names
 
+(** Turn a list of [Interact.choice] into a Coq term of type [list bool] 
+    that can be fed to tactics. *)
+let compile_sides coq_goal choices : EConstr.t =
+  let open Interact in
+  choices
+  |> List.map (function Side side -> side | Binder (side, _) -> side)
+  |> List.map (function Left -> false | Right -> true)
+  |> Trm.Datatypes.boollist (Goal.env coq_goal)
+
+(** Turn a list of [Interact.choice] into a Coq term of type [list option DYN] 
+    that can be fed to tactics. *)
+let compile_instantiations coq_goal choices : EConstr.t =
+  let open Interact in
+  let env = Goal.env coq_goal in
+  let sigma = Goal.sigma coq_goal in
+  let symbol_table = Symbols.all coq_goal in
+  (* Coq's [DYN] type. *)
+  let dyn = Trm.mkInd env [ "Actema"; "HOL" ] "DYN" in
+  (* Coq's [option DYN] type. *)
+  let opt_dyn = Trm.Datatypes.option env dyn in
+  (* Coq's [mDYN] constructor. *)
+  let mdyn =
+    Trm.mkConstruct ~constructor:1 (Goal.env coq_goal) [ "Actema"; "HOL" ] "DYN"
+  in
+  (* Wrap a Coq term in a [DYN]. *)
+  let mkDyn (econstr : EConstr.t) : EConstr.t =
+    let ty = Retyping.get_type_of env sigma econstr in
+    EConstr.mkApp (mdyn, [| ty; econstr |])
+  in
+  choices
+  |> List.filter_map (function Side _ -> None | Binder (_, inst) -> Some inst)
+  |> Trm.Datatypes.of_list (Goal.env coq_goal) opt_dyn
+       (Trm.Datatypes.of_option env dyn
+          (mkDyn <<< Import.term coq_goal symbol_table))
+
+(** [convert_sub term sub] converts the path [sub] (that points inside [term])
+    from the actema format to the format that the tactics expect. 
+    
+    The differences between these two formats are : 
+    - In Actema applications are n-ary, whereas the tactics expect applications to
+      be binary. For instance when pointing to [x] in [f x y z], in Actema
+      we use [[1]] but the tactics expect [[0; 0; 1]]. 
+    - In Actema existential quantification [exists x : ty, body] is represented 
+      as [App (Cst ex, [ty; Lambda (x, ty, body)])], but the tactics work with first-class 
+      existentials. For instance when pointing to [ty] or [body] in [exists x : ty, body],
+      in Actema we use [[2; 0]] or [[2; 1]], but the tactics expect [[0]] or [[1]]. *)
+let rec convert_sub (term : Lang.Term.t) (sub : int list) : int list =
+  match (sub, term) with
+  | [], _ -> []
+  (* Lambdas and products don't change. *)
+  | 0 :: sub, Lambda (_, x, ty, body) | 0 :: sub, Prod (_, x, ty, body) ->
+      0 :: convert_sub ty sub
+  | 1 :: sub, Lambda (_, x, ty, body) | 1 :: sub, Prod (_, x, ty, body) ->
+      1 :: convert_sub body sub
+  (* Handle existential quantification. *)
+  | 2 :: 0 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
+    when Name.equal ex Lang.Constants.ex ->
+      0 :: convert_sub body sub
+  | 2 :: 1 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
+    when Name.equal ex Lang.Constants.ex ->
+      1 :: convert_sub body sub
+  (* Turn n-ary applications to binary applications. *)
+  (* One argument. *)
+  | 0 :: sub, App (_, f, [ arg ]) -> 0 :: convert_sub f sub
+  | 1 :: sub, App (_, f, [ arg ]) -> 1 :: convert_sub arg sub
+  (* At least two arguments. *)
+  | n :: sub, App (_, f, args) when n = List.length args ->
+      1 :: convert_sub (List.last args) sub
+  | n :: sub, App (_, f, args) when 0 <= n && n < List.length args ->
+      let args = List.remove_at (List.length args - 1) args in
+      0 :: convert_sub (Lang.Term.mkApps f args) (n :: sub)
+  (* This should not happen. *)
+  | _ -> failwith "Actions.convert_sub : invalid path"
+
+(** Turn an actema path into a Coq term of type [list nat] that can be fed to tactics. *)
+let compile_path coq_goal (path : Logic.Path.t) : EConstr.t =
+  let open Logic in
+  let api_goal = Export.goal coq_goal in
+  let term =
+    match path.kind with
+    | Concl -> api_goal.g_concl
+    | Hyp name -> (Logic.Hyps.by_name api_goal.g_hyps name).h_form
+    | _ -> failwith "todo"
+  in
+  path.sub |> convert_sub term |> Trm.Datatypes.natlist (Goal.env coq_goal)
+
 (*********************************************************************************)
 (** [AIntro] actions. *)
 (*********************************************************************************)
@@ -209,63 +295,45 @@ let execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) subst : unit tactic
   let itrace = Interact.dlink (src, src_fvars) (dst, dst_fvars) subst pregoal in
   (* Abstract the instantiations. *)
   let choices = abstract_itrace itrace in
-  (* TODO. *)
-  Tacticals.tclIDTAC
+  (* Translate the choices to Coq. *)
+  let coq_sides = compile_sides coq_goal choices in
+  let coq_instantiations = compile_instantiations coq_goal choices in
+  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
+  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
+    (compile_path coq_goal src);
+  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
+    (compile_path coq_goal dst);
+  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;
+  (* TODO : rewrites. *)
+  match (src.kind, dst.kind) with
+  | Hyp hyp, Concl ->
+      calltac (tactic_kname "back")
+        [ EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp
+        ; compile_path coq_goal src
+        ; compile_path coq_goal dst
+        ; coq_sides
+        ; coq_instantiations
+        ]
+  | Hyp hyp1, Hyp hyp2 ->
+      let hyp3 = Name.make "todo" in
+      calltac (tactic_kname "forward")
+        [ EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp1
+        ; EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp2
+        ; EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp3
+        ; compile_path coq_goal src
+        ; compile_path coq_goal dst
+        ; coq_sides
+        ; coq_instantiations
+        ]
+  | _ ->
+      raise
+      @@ UnsupportedAction
+           ( ALink ((src, src_fvars), (dst, dst_fvars), subst)
+           , "Invalid items for DnD action." )
 
 (*********************************************************************************)
 (** Putting it all together. *)
 (*********************************************************************************)
-
-(** [convert_sub term sub] converts the path [sub] (that points inside [term])
-    from the actema format to the format that the tactics expect. 
-    
-    The differences between these two formats are : 
-    - In Actema applications are n-ary, whereas the tactics expect applications to
-      be binary. For instance when pointing to [x] in [f x y z], in Actema
-      we use [[1]] but the tactics expect [[0; 0; 1]]. 
-    - In Actema existential quantification [exists x : ty, body] is represented 
-      as [App (Cst ex, [ty; Lambda (x, ty, body)])], but the tactics work with first-class 
-      existentials. For instance when pointing to [ty] or [body] in [exists x : ty, body],
-      in Actema we use [[2; 0]] or [[2; 1]], but the tactics expect [[0]] or [[1]]. *)
-let rec convert_sub (term : Lang.Term.t) (sub : int list) : int list =
-  match (sub, term) with
-  | [], _ -> []
-  (* Lambdas and products don't change. *)
-  | 0 :: sub, Lambda (_, x, ty, body) | 0 :: sub, Prod (_, x, ty, body) ->
-      0 :: convert_sub ty sub
-  | 1 :: sub, Lambda (_, x, ty, body) | 1 :: sub, Prod (_, x, ty, body) ->
-      1 :: convert_sub body sub
-  (* Handle existential quantification. *)
-  | 2 :: 0 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
-    when Name.equal ex Lang.Constants.ex ->
-      0 :: convert_sub body sub
-  | 2 :: 1 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
-    when Name.equal ex Lang.Constants.ex ->
-      1 :: convert_sub body sub
-  (* Turn n-ary applications to binary applications. *)
-  (* One argument. *)
-  | 0 :: sub, App (_, f, [ arg ]) -> 0 :: convert_sub f sub
-  | 1 :: sub, App (_, f, [ arg ]) -> 1 :: convert_sub arg sub
-  (* At least two arguments. *)
-  | n :: sub, App (_, f, args) when n = List.length args ->
-      1 :: convert_sub (List.last args) sub
-  | n :: sub, App (_, f, args) when 0 <= n && n < List.length args ->
-      let args = List.remove_at (List.length args - 1) args in
-      0 :: convert_sub (Lang.Term.mkApps f args) (n :: sub)
-  (* This should not happen. *)
-  | _ -> failwith "Actions.convert_sub : invalid path"
-
-(** Turn an actema path into a Coq term that can be fed to tactics. *)
-let compile_path coq_goal (path : Logic.Path.t) : EConstr.t =
-  let open Logic in
-  let api_goal = Export.goal coq_goal in
-  let term =
-    match path.kind with
-    | Concl -> api_goal.g_concl
-    | Hyp name -> (Logic.Hyps.by_name api_goal.g_hyps name).h_form
-    | _ -> failwith "todo"
-  in
-  path.sub |> convert_sub term |> Trm.Datatypes.natlist (Goal.env coq_goal)
 
 (** [clear_if_var coq_goal econstr] checks if [econstr] is a local variable, 
     and if so clears it from the goal. *)
@@ -312,7 +380,16 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.AIntro side -> execute_aintro coq_goal side
   | Logic.AElim (hyp_name, i) -> execute_aelim coq_goal hyp_name i
   | Logic.ALemmaAdd full_name -> execute_alemma_add coq_goal full_name
-  | Logic.ALink (src, dst, itrace) -> execute_alink coq_goal src dst itrace
+  | Logic.ALink ((src, src_fvars), (dst, dst_fvars), itrace) -> begin
+      (* Check the items are valid, and swap [src] and [dst] if they point to
+         the conclusion and a hypothesis respectively. *)
+      match (src.kind, dst.kind) with
+      | Concl, Hyp _ ->
+          execute_alink coq_goal (dst, dst_fvars) (src, src_fvars) itrace
+      | Hyp _, Hyp _ | Hyp _, Concl ->
+          execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) itrace
+      | _ -> raise @@ UnsupportedAction (action, "Invalid items for DnD action.")
+    end
   | Logic.ASimpl path -> begin
       match path.kind with
       | Hyp name ->

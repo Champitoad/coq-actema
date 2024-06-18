@@ -323,8 +323,7 @@ let rec interact (state : state) mode : choice list =
 
 (** Swap the roles of [t1] and [t2] in the state. *)
 let swap_sides state : state =
-  { (* t1 receives t2. *)
-    t1 = state.t2
+  { t1 = state.t2
   ; sub1 = state.sub2
   ; fvars_1 = state.fvars_2
   ; t2 = state.t1

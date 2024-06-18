@@ -160,10 +160,10 @@ let calltac (tacname : Names.KerName.t) (args : EConstr.constr list) :
 
 (** Utilities to construct common Coq terms. *)
 module Trm = struct
-  let mkVar name = EConstr.mkVar (Names.Id.of_string name)
+  let mkVar name : EConstr.t = EConstr.mkVar (Names.Id.of_string name)
 
   (** Utility to make a constant, taking care to instantiate universes. *)
-  let mkConst env path name =
+  let mkConst env path name : EConstr.t =
     let name = Names.Constant.make1 (kername path name) in
     let (_, inst), _ = UnivGen.fresh_constant_instance env name in
     EConstr.mkConstU (name, EConstr.EInstance.make inst)
@@ -171,7 +171,7 @@ module Trm = struct
   (** Utility to make an inductive, taking care to instantiate universes.
       The integer parameter is the index of the inductive in the mutual inductive block
       (it starts at 0). *)
-  let mkInd ?(index = 0) env path name =
+  let mkInd ?(index = 0) env path name : EConstr.t =
     let name = (Names.MutInd.make1 (kername path name), index) in
     let (_, inst), _ = UnivGen.fresh_inductive_instance env name in
     EConstr.mkIndU (name, EConstr.EInstance.make inst)
@@ -179,16 +179,16 @@ module Trm = struct
   (** Utility to make an inductive constructor, taking care to instantiate universes.
       The integer parameters are the index of the inductive in the mutual inductive block
       (it starts at 0) and the index of the constructor (it starts at 1). *)
-  let mkConstruct ?(index = 0) ~constructor env path name =
+  let mkConstruct ?(index = 0) ~constructor env path name : EConstr.t =
     let name = ((Names.MutInd.make1 (kername path name), index), constructor) in
     let (_, inst), _ = UnivGen.fresh_constructor_instance env name in
     EConstr.mkConstructU (name, EConstr.EInstance.make inst)
 
-  let lambda sigma x ty body =
+  let lambda sigma x ty body : EConstr.t =
     let x = Context.annotR (Names.Id.of_string x) in
     EConstr.mkNamedLambda sigma x ty body
 
-  let dprod x ty body =
+  let dprod x ty body : EConstr.t =
     let x = Context.nameR (Names.Id.of_string x) in
     EConstr.mkProd (x, ty, body)
 

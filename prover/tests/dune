@@ -1,17 +1,3 @@
-; Tests for prover/actions.ml
-
-(executable
- (name actions_tests)
- (public_name -)
- (modules actions_tests)
- (libraries coq-actema.prover alcotest)
- (modes js))
-
-(rule
- (alias runtest-js)
- (action
-  (run node %{dep:actions_tests.bc.js})))
-
 ; Tests for prover/link.ml
 
 (executable

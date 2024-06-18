@@ -2449,7 +2449,7 @@ Definition imp_fun A B := A -> B.
 (* Simplify the subterm at [path] in the term [t], and return the updated term. 
    [path] is a list of natural numbers. *)
 Ltac simpl_path_r p t :=
-  match constr:(@pair _ _ p t) with
+  match constr:(pair p t) with
   (* Base case. *)
   | (nil, _) => eval simpl in t
   (* Lambda. *)
