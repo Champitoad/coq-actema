@@ -1,13 +1,19 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
-Parameter (A : Prop) (B : Prop).
 
-Lemma test : A -> ~A -> True.
+Context (A B  C D E F G : Prop).
+Context (P Q : nat -> Prop) (R S : nat -> nat -> Prop) (t : nat).
+
+Lemma test (H0 : A) (H : A -> B) : B.
 actema_force.
 
-Lemma test (machin := 3) :  exists x, exists y : nat, x = y.
-actema_force.
+Lemma ex_elim :
+  (exists x, P x) -> (forall y, P y -> C) -> C.
+Proof.
+  intros H H0.
+  actema_force.
+
 
 Lemma test (a : forall y : nat, forall z : nat, A /\ y = z) : forall x : nat, (A /\ B) \/ (A /\ x = 0 + x ).
 actema_force.

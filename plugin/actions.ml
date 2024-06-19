@@ -100,7 +100,9 @@ let compile_path coq_goal (path : Logic.Path.t) : EConstr.t =
     match path.kind with
     | Concl -> api_goal.g_concl
     | Hyp name -> (Logic.Hyps.by_name api_goal.g_hyps name).h_form
-    | _ -> failwith "todo"
+    | _ ->
+        failwith
+          "Actions.compile_path : can't handle paths that point to a variable."
   in
   path.sub |> convert_sub term |> Trm.Datatypes.natlist (Goal.env coq_goal)
 
@@ -307,19 +309,22 @@ let execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) subst : unit tactic
   (* TODO : rewrites. *)
   match (src.kind, dst.kind) with
   | Hyp hyp, Concl ->
+      let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
       calltac (tactic_kname "back")
-        [ EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp
+        [ hyp
         ; compile_path coq_goal src
         ; compile_path coq_goal dst
         ; coq_sides
         ; coq_instantiations
         ]
   | Hyp hyp1, Hyp hyp2 ->
-      let hyp3 = Name.make "todo" in
+      let hyp1 = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp1 in
+      let hyp2 = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp2 in
+      let hyp3 = EConstr.mkVar @@ Goal.fresh_name ~basename:"H" coq_goal () in
       calltac (tactic_kname "forward")
-        [ EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp1
-        ; EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp2
-        ; EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp3
+        [ hyp1
+        ; hyp2
+        ; hyp3
         ; compile_path coq_goal src
         ; compile_path coq_goal dst
         ; coq_sides
