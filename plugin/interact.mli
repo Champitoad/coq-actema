@@ -26,11 +26,9 @@ val opp_side : side -> side
 type choice =
   | (* Simply descent in the subformula on the given side. *)
     Side of side
-  (* Traverse a rigid (non-instantiable) binder on the given side. *)
-  | RBinder of side
-  | (* Traverse a flexible (instantiable) binder on the given side.
-       The optional argument contains the instantiation witness. *)
-    FBinder of side * Term.t option
+  | (* Traverse a binder on the given side.
+       We also store the sitem of the bound variable. *)
+    Binder of side * Unif.sitem
 [@@deriving show]
 
 (** An itrace [fvars_left, fvars_right, choices] contains :

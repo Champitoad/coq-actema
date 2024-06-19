@@ -23,7 +23,7 @@ let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
 let compile_sides coq_goal choices : EConstr.t =
   let open Interact in
   choices
-  |> List.map (function Side side | RBinder side | FBinder (side, _) -> side)
+  |> List.map (function Side side | Binder (side, _) -> side)
   |> List.map (function Left -> false | Right -> true)
   |> Trm.Datatypes.boollist (Goal.env coq_goal)
 
@@ -50,7 +50,10 @@ let compile_instantiations coq_goal choices : EConstr.t =
   in
   (* We are only interested in the choices for instantiable binders. *)
   choices
-  |> List.filter_map (function FBinder (_, inst) -> Some inst | _ -> None)
+  |> List.filter_map (function
+       | Binder (_, SFlex) -> Some None
+       | Binder (_, SBound witness) -> Some (Some witness)
+       | _ -> None)
   |> Trm.Datatypes.of_list (Goal.env coq_goal) opt_dyn
        (Trm.Datatypes.of_option env dyn
           (mkDyn <<< Import.term coq_goal symbol_table))
@@ -274,27 +277,23 @@ let abstract_itrace itrace context : Interact.choice list =
     (* Simply descend on a side or another. *)
     | Side side :: choices, fvars1, fvars2 ->
         Side side :: loop passed1 passed2 (choices, fvars1, fvars2)
-    (* Traverse a binder without instantiating. *)
-    | RBinder Left :: choices, v1 :: fvars1, fvars2 ->
-        RBinder Left :: loop (v1 :: passed1) passed2 (choices, fvars1, fvars2)
-    | FBinder (Left, None) :: choices, v1 :: fvars1, fvars2 ->
-        FBinder (Left, None)
-        :: loop (v1 :: passed1) passed2 (choices, fvars1, fvars2)
-    | RBinder Right :: choices, fvars1, v2 :: fvars2 ->
-        RBinder Right :: loop passed1 (v2 :: passed2) (choices, fvars1, fvars2)
-    | FBinder (Right, None) :: choices, fvars1, v2 :: fvars2 ->
-        FBinder (Right, None)
-        :: loop passed1 (v2 :: passed2) (choices, fvars1, fvars2)
     (* Traverse a binder with instantiating. *)
-    | FBinder (Left, Some witness) :: choices, v1 :: fvars1, fvars2 ->
+    | Binder (Left, SBound witness) :: choices, v1 :: fvars1, fvars2 ->
         (* Don't add [v1] to [passed1] : [v1] is instantiated,
            and thus is not usable by subsequent witnesses. *)
-        FBinder (Left, Some (close_witness passed1 passed2 witness))
+        Binder (Left, SBound (close_witness passed1 passed2 witness))
         :: loop passed1 passed2 (choices, fvars1, fvars2)
-    | FBinder (Right, Some witness) :: choices, fvars1, v2 :: fvars2 ->
+    | Binder (Right, SBound witness) :: choices, fvars1, v2 :: fvars2 ->
         (* Don't add [v2] to [passed2]. *)
-        FBinder (Right, Some (close_witness passed1 passed2 witness))
+        Binder (Right, SBound (close_witness passed1 passed2 witness))
         :: loop passed1 passed2 (choices, fvars1, fvars2)
+    (* Traverse a binder without instantiating. *)
+    | Binder (Left, sitem) :: choices, v1 :: fvars1, fvars2 ->
+        Binder (Left, sitem)
+        :: loop (v1 :: passed1) passed2 (choices, fvars1, fvars2)
+    | Binder (Right, sitem) :: choices, fvars1, v2 :: fvars2 ->
+        Binder (Right, sitem)
+        :: loop passed1 (v2 :: passed2) (choices, fvars1, fvars2)
     | _ -> []
   in
   loop [] [] itrace

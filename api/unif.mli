@@ -8,20 +8,23 @@
 
 open Lang
 
-(** A substitution is a mapping from free variables to terms 
-    (which may themselves contain free variables). *)
+(** In a subtitution free variables (FVar) are associated to an [sitem]. *)
+type sitem =
+  | (* This free variable can't be bound. *)
+    SRigid
+  | (* This free variable can become bound, but it is not bound yet. *)
+    SFlex
+  | (* This free variable is bound to a term.
+       This term can itself contain SBound free variables. *)
+    SBound of Term.t
+[@@deriving show]
+
+(** A substitution is essentially a mapping from free variables to sitems. *)
 type subst [@@deriving show]
 
-(** [is_rigid subst fvar] checks whether [fvar] is rigid in [subst], 
-    i.e. it can't be bound to anything. *)
-val is_rigid : subst -> FVarId.t -> bool
-
-(** [is_bound subst fvar] checks whether [fvar] is bound to a term in [subst]. *)
-val is_bound : subst -> FVarId.t -> bool
-
-(** [is_flex subst fvar] checks whether [fvar] is flex in [subst],
-    i.e. it is not bound to any term but it is not rigid. *)
-val is_flex : subst -> FVarId.t -> bool
+(** [find_sitem subst fvar] returns the [sitem] associated to the free variable [fvar],
+    or [None] if [fvar] is not in the domain of the substitution [subst]. *)
+val get_sitem : subst -> FVarId.t -> sitem option
 
 (** [apply subst term] substitutes every free variable of [term] that is bound by [subst]. *)
 val apply : subst -> Term.t -> Term.t

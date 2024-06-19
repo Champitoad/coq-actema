@@ -27,6 +27,8 @@ type subst =
   }
 [@@deriving show]
 
+let get_sitem subst fvar = FVarId.Map.find_opt fvar subst.map
+
 let is_rigid subst fvar =
   match FVarId.Map.find_opt fvar subst.map with
   | Some SRigid -> true
