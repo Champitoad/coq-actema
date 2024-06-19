@@ -3,7 +3,13 @@ Require Import ssreflect.
 
 Parameter (A : Prop) (B : Prop).
 
-Lemma test (a : forall y : nat, forall z : nat, A /\ y = z) : forall x : nat, (A /\ B) \/ (A /\ x = x).
+Lemma test : A -> ~A -> True.
+actema_force.
+
+Lemma test (machin := 3) :  exists x, exists y : nat, x = y.
+actema_force.
+
+Lemma test (a : forall y : nat, forall z : nat, A /\ y = z) : forall x : nat, (A /\ B) \/ (A /\ x = 0 + x ).
 actema_force.
 
 (* [get_subterm path term] gets the subterm at path [path] of the Coq term [term].

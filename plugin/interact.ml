@@ -140,7 +140,7 @@ let backward_step (state : state) : state * bool =
   (* Right INVERTIBLE rules. *)
   (***********************************************************************)
   (* Rule R¬ *)
-  | _, (FConn (Not, [ f0 ]), 0 :: sub) -> right_step state ~invert:true f0 sub
+  | _, (FConn (Not, [ f0 ]), 1 :: sub) -> right_step state ~invert:true f0 sub
   (* Rule R⇒₁ *)
   | _, (FImpl (f0, f1), 0 :: sub) -> right_step state ~invert:true f0 sub
   (* Rule R⇒₂ *)
@@ -236,8 +236,8 @@ let forward_step (state : state) : state * bool =
   | _, (FImpl (f0, f1), 1 :: sub) -> right_step state f1 sub
   | (FImpl (f0, f1), 1 :: sub), _ -> left_step state f1 sub
   (* Rule F¬ *)
-  | _, (FConn (Not, [ f0 ]), 0 :: sub) -> right_step state ~invert:true f0 sub
-  | (FConn (Not, [ f0 ]), 0 :: sub), _ -> left_step state ~invert:true f0 sub
+  | _, (FConn (Not, [ f0 ]), 1 :: sub) -> right_step state ~invert:true f0 sub
+  | (FConn (Not, [ f0 ]), 1 :: sub), _ -> left_step state ~invert:true f0 sub
   (* Rules F∀s and F∀i *)
   | _, (FBind (Forall, x, ty, f1), 1 :: sub)
     when head_not_bound state Right || head_instantiable state Right ->
