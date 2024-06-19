@@ -159,7 +159,7 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
   in
   match linkactions with
   | [] -> []
-  | [ Subform (src_fvars, dst_fvars, subst) ] ->
+  | [ Subform (src_fvars, dst_fvars, subst, ctx) ] ->
       let* src = hyper_src in
       let* dst = hyper_dst in
       return
@@ -168,7 +168,7 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
         ; highlights = hyper_src @ hyper_dst
         ; kind = DnD (src, Some dst)
         ; goal_id = goal.g_id
-        ; action = ALink ((src, src_fvars), (dst, dst_fvars), subst)
+        ; action = ALink ((src, src_fvars), (dst, dst_fvars), subst, ctx)
         }
   | _ -> failwith "Prover.actions.dnd_actions : unsupported dnd action(s)."
 

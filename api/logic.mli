@@ -246,12 +246,13 @@ type action =
      The [name] contains the full name of the lemma, slightly encoded. *)
   | ALemmaAdd of Name.t
   (* A link (DnD) action. The paths are the two sides of the link. *)
-  | ALink of (Path.t * FVarId.t list) * (Path.t * FVarId.t list) * Unif.subst
+  | ALink of
+      (Path.t * FVarId.t list)
+      * (Path.t * FVarId.t list)
+      * Unif.subst
+      * Context.t
 (*| ADef of (Name.t * Term.t * Term.t) (* Introduction of a local definition *)
-  | AInd of Name.t (* Simple induction on a variable (of inductive type). *)
   | ARed of Path.t (* Unfold contextual action *)
-  | AIndt of Path.t (* Induction on a variable deep in the goal. *)
-  | ACase of Path.t (* Case contextual action *)
   | ACut of Term.t (* Click on +hyp button *)
   | AInstantiate of (Term.t * Path.t)
     (* DnD action for instantiating a quantifier *)*)

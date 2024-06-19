@@ -42,17 +42,18 @@ type hyperlink = Path.t list * Path.t list [@@deriving show]
 type linkaction =
   | Nothing
   | Both of linkaction * linkaction
-  (* [Subform (xs, ys, subst)] represents subformula linking, including deep rewrites.
+  (* [Subform (xs, ys, subst, ctx)] represents subformula linking, including deep rewrites.
      - [xs] contains the identifers of the bound variables on the left path.
        The variables are ordered from the root to the pointed subterm.
      - [ys] is analogous to [xs] but for the right path.
      - [subst] is a closed and acyclic substitution with domain [xs @ ys],
        which unifies the left and right subterm of the link.
+     - [ctx] is a context with domain [xs @ ys].
 
-       For instance a link [forall x, exists y, {x + y} <link> {2 + 3}] yields :
-         Subform ([fvar_x, fvar_y], [], [fvar_x := 2; fvar_y := 3])
+     For instance a link [forall x, exists y, {x + y} <link> {2 + 3}] yields :
+       Subform ([fvar_x, fvar_y], [], [fvar_x := 2; fvar_y := 3], ctx)
   *)
-  | Subform of FVarId.t list * FVarId.t list * Unif.subst
+  | Subform of FVarId.t list * FVarId.t list * Unif.subst * Context.t
 (*| Instantiate of Term.t * Path.t
   | Rewrite of Term.t * Term.t * Path.t list
       (** Rewrite expression [e1] into [e2] at several paths. *)

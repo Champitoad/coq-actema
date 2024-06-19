@@ -341,7 +341,7 @@ let rec subterm (t : Term.t) sub vars =
 
 let check_subform actions (t1, sub1) (t2, sub2) =
   check_linkactions actions @@ function
-  | Subform (vars1, vars2, subst) ->
+  | Subform (vars1, vars2, subst, ctx) ->
       Term.alpha_equiv
         (Unif.apply subst @@ subterm t1 sub1 vars1)
         (Unif.apply subst @@ subterm t2 sub2 vars2)

@@ -242,20 +242,31 @@ let execute_alemma_add coq_goal lemma_name =
 (*********************************************************************************)
 
 (** Abstract an itrace, i.e. replace any FVars by BVars in the instantiation witnesses. *)
-let abstract_itrace itrace : Interact.choice list =
+let abstract_itrace itrace context : Interact.choice list =
   let open Lang in
   let open Interact in
   (* Compute the de Bruijn index associated to the free variable [fvar].
      The lists [passed1] and [passed2] contain the free variables
      that are bound on each side so far, the most recently bound variable first. *)
   let fvar_index passed1 passed2 fvar : int =
-    match List.index_of fvar passed1 with
+    match List.index_of fvar (passed1 @ passed2) with
     | Some idx -> idx
-    | None -> begin
-        match List.index_of fvar passed2 with
-        | Some idx -> idx + List.length passed1
-        | None -> failwith "Actions.abstract_itrace: unbound free variable"
-      end
+    | None -> failwith "Actions.abstract_itrace: unbound free variable"
+  in
+  (* Close a witness, i.e. :
+     - replace all FVars by BVars.
+     - bind all loose BVars with Lambdas.
+     The variables of [passed1] are bound *above* the variables of [passed2]. *)
+  let close_witness passed1 passed2 witness =
+    witness
+    |> Term.fsubst (Term.mkBVar <<< fvar_index passed1 passed2)
+    |> List.fold_right
+         begin
+           fun fvar body ->
+             let entry = Option.get @@ Context.find fvar context in
+             Term.mkLambda entry.Context.binder entry.Context.type_ body
+         end
+         (passed1 @ passed2)
   in
   let rec loop passed1 passed2 = function
     (* Simply descend on a side or another. *)
@@ -270,33 +281,25 @@ let abstract_itrace itrace : Interact.choice list =
         :: loop passed1 (v2 :: passed2) (choices, fvars1, fvars2)
     (* Traverse a binder with instantiating. *)
     | Binder (Left, Some witness) :: choices, v1 :: fvars1, fvars2 ->
-        (* Abstract the free variables in the witness. *)
-        let witness =
-          Term.fsubst (Term.mkBVar <<< fvar_index passed1 passed2) witness
-        in
         (* Don't add [v1] to [passed1] : [v1] is instantiated,
            and thus is not usable by subsequent witnesses. *)
-        Binder (Left, Some witness)
+        Binder (Left, Some (close_witness passed1 passed2 witness))
         :: loop passed1 passed2 (choices, fvars1, fvars2)
     | Binder (Right, Some witness) :: choices, fvars1, v2 :: fvars2 ->
-        (* Abstract the free variables in the witness. *)
-        let witness =
-          Term.fsubst (Term.mkBVar <<< fvar_index passed1 passed2) witness
-        in
         (* Don't add [v2] to [passed2]. *)
-        Binder (Right, Some witness)
+        Binder (Right, Some (close_witness passed1 passed2 witness))
         :: loop passed1 passed2 (choices, fvars1, fvars2)
     | _ -> []
   in
   loop [] [] itrace
 
-let execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) subst : unit tactic
-    =
+let execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) subst context :
+    unit tactic =
   let pregoal = Export.goal coq_goal in
   (* Perform deep interaction. *)
   let itrace = Interact.dlink (src, src_fvars) (dst, dst_fvars) subst pregoal in
   (* Abstract the instantiations. *)
-  let choices = abstract_itrace itrace in
+  let choices = abstract_itrace itrace context in
   (* Translate the choices to Coq. *)
   let coq_sides = compile_sides coq_goal choices in
   let coq_instantiations = compile_instantiations coq_goal choices in
@@ -333,7 +336,7 @@ let execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) subst : unit tactic
   | _ ->
       raise
       @@ UnsupportedAction
-           ( ALink ((src, src_fvars), (dst, dst_fvars), subst)
+           ( ALink ((src, src_fvars), (dst, dst_fvars), subst, context)
            , "Invalid items for DnD action." )
 
 (*********************************************************************************)
@@ -385,14 +388,14 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.AIntro side -> execute_aintro coq_goal side
   | Logic.AElim (hyp_name, i) -> execute_aelim coq_goal hyp_name i
   | Logic.ALemmaAdd full_name -> execute_alemma_add coq_goal full_name
-  | Logic.ALink ((src, src_fvars), (dst, dst_fvars), itrace) -> begin
+  | Logic.ALink ((src, src_fvars), (dst, dst_fvars), subst, ctx) -> begin
       (* Check the items are valid, and swap [src] and [dst] if they point to
          the conclusion and a hypothesis respectively. *)
       match (src.kind, dst.kind) with
       | Concl, Hyp _ ->
-          execute_alink coq_goal (dst, dst_fvars) (src, src_fvars) itrace
+          execute_alink coq_goal (dst, dst_fvars) (src, src_fvars) subst ctx
       | Hyp _, Hyp _ | Hyp _, Concl ->
-          execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) itrace
+          execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) subst ctx
       | _ -> raise @@ UnsupportedAction (action, "Invalid items for DnD action.")
     end
   | Logic.ASimpl path -> begin

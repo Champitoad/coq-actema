@@ -10,7 +10,7 @@ type hyperlink = Path.t list * Path.t list [@@deriving show]
 type linkaction =
   | Nothing
   | Both of linkaction * linkaction
-  | Subform of FVarId.t list * FVarId.t list * Unif.subst
+  | Subform of FVarId.t list * FVarId.t list * Unif.subst * Context.t
     (*| Instantiate of Term.t * Path.t
       | Rewrite of Term.t * Term.t * Path.t list
       | Fold of Name.t * Path.t list
@@ -158,7 +158,7 @@ module Pred = struct
 
       (* Check there is a solution. *)
       match subst with
-      | Some subst -> [ Subform (src_fvars, dst_fvars, subst) ]
+      | Some subst -> [ Subform (src_fvars, dst_fvars, subst, context) ]
       | None -> []
     with InvalidSubtermPath _ | Invalid_argument _ ->
       (* We got an exception : most likely [traverse_rec] raised an exception because a path was invalid. *)

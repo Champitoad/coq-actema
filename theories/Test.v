@@ -5,13 +5,16 @@ Require Import ssreflect.
 Context (A B  C D E F G : Prop).
 Context (P Q : nat -> Prop) (R S : nat -> nat -> Prop) (t : nat).
 
-Lemma test (H0 : A) (H : A -> B) : B.
-actema_force.
-
 Lemma ex_elim :
   (exists x, P x) -> (forall y, P y -> C) -> C.
 Proof.
   intros H H0.
+  forward H H0 h1
+  (cons 1 nil)
+  (cons 1 (cons 0 nil))
+  (cons false (cons true (cons true nil)))
+  (cons (Some (mDYN _ (fun x:nat => x))) nil).
+
   actema_force.
 
 

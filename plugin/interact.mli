@@ -47,7 +47,7 @@ type itrace = choice list * FVarId.t list * FVarId.t list [@@deriving show]
     [dlink (src, src_fvars) (dst, dst_fvars) subst pregoal] works on a link between paths
     [src] and [dst] with free variables along each path [src_fvars] and [dst_fvars].
     The substitution [subst] unifies the subterms pointed at by [src] and [dst],
-    and has domain equal to [src_fvars @ dst_fvars].
+    and has domain equal to [src_fvars @ dst_fvars]. 
     Both paths [src] and [dst] are assumed to point to items in [pregoal]. *)
 val dlink :
      Path.t * FVarId.t list
