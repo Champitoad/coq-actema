@@ -246,7 +246,12 @@ let execute_alemma_add coq_goal lemma_name =
 (** [ALink] actions. *)
 (*********************************************************************************)
 
-(** Abstract an itrace, i.e. replace any FVars by BVars in the instantiation witnesses. *)
+(** Abstract an itrace i.e. change all the instantiation witnesses from : 
+    - having FVars 
+    to : 
+    - having BVars 
+    - binding these BVars by Lambdas 
+*)
 let abstract_itrace itrace context : Interact.choice list =
   let open Lang in
   let open Interact in
