@@ -8,7 +8,9 @@ type side = Left | Right [@@deriving show]
 
 let opp_side = function Left -> Right | Right -> Left
 
-type choice = Side of side | Binder of side * Term.t option [@@deriving show]
+type choice = Side of side | RBinder of side | FBinder of side * Term.t option
+[@@deriving show]
+
 type itrace = choice list * FVarId.t list * FVarId.t list [@@deriving show]
 
 (* For a backwards interaction, the first formula is the hypothesis,
@@ -41,12 +43,6 @@ type state =
     choices : choice list
   }
 
-(** [is_bound fvar subst] checks whether [fvar] is bound (to something other than [FVar fvar]) 
-    in [subst]. *)
-let is_bound fvar subst =
-  let expr = Term.mkFVar fvar in
-  Unif.apply subst expr != expr
-
 (* Step into the left formula. *)
 let left_step state ?(invert = false) ?(binder = None) t1 sub1 =
   match (binder : Context.entry option) with
@@ -55,13 +51,19 @@ let left_step state ?(invert = false) ?(binder = None) t1 sub1 =
   | Some { binder; type_ } ->
       let fvar = List.hd state.fvars_1 in
       let context = Context.add fvar binder type_ state.context in
-      let witness =
-        if is_bound fvar state.subst
-        then Some (Unif.apply state.subst @@ Term.mkFVar fvar)
-        else None
+      (* Depending on whether [fvar] is rigid, flex or bound in [subst],
+         the choice contains different information. *)
+      let choice =
+        if Unif.is_rigid state.subst fvar
+        then RBinder Left
+        else if Unif.is_bound state.subst fvar
+        then FBinder (Left, Some (Unif.apply state.subst @@ Term.mkFVar fvar))
+        else if Unif.is_flex state.subst fvar
+        then FBinder (Left, None)
+        else failwith "Interact.left_step : invalid FVar"
       in
       ( { state with
-          choices = Binder (Left, witness) :: state.choices
+          choices = choice :: state.choices
         ; context
         ; t1 = Term.instantiate fvar t1
         ; sub1
@@ -76,13 +78,19 @@ let right_step state ?(invert = false) ?(binder = None) t2 sub2 =
   | Some { binder; type_ } ->
       let fvar = List.hd state.fvars_2 in
       let context = Context.add fvar binder type_ state.context in
-      let witness =
-        if is_bound fvar state.subst
-        then Some (Unif.apply state.subst @@ Term.mkFVar fvar)
-        else None
+      (* Depending on whether [fvar] is rigid, flex or bound in [subst],
+         the choice contains different information. *)
+      let choice =
+        if Unif.is_rigid state.subst fvar
+        then RBinder Right
+        else if Unif.is_bound state.subst fvar
+        then FBinder (Right, Some (Unif.apply state.subst @@ Term.mkFVar fvar))
+        else if Unif.is_flex state.subst fvar
+        then FBinder (Right, None)
+        else failwith "Interact.right_step : invalid FVar"
       in
       ( { state with
-          choices = Binder (Right, witness) :: state.choices
+          choices = choice :: state.choices
         ; context
         ; t2 = Term.instantiate fvar t2
         ; sub2
@@ -95,7 +103,7 @@ let right_step state ?(invert = false) ?(binder = None) t2 sub2 =
     has all its free variables in scope (which means we are allowed to instantiate
     the corresponding quantifier). *)
 let instantiable state fvar : bool =
-  if is_bound fvar state.subst
+  if Unif.is_bound state.subst fvar
   then
     let witness = Unif.apply state.subst @@ Term.mkFVar fvar in
     List.for_all (fun v -> Context.mem v state.context)
@@ -119,12 +127,12 @@ let head_not_bound state side =
   match side with
   | Left -> begin
       match state.fvars_1 with
-      | fvar :: _ when not @@ is_bound fvar state.subst -> true
+      | fvar :: _ when not @@ Unif.is_bound state.subst fvar -> true
       | _ -> false
     end
   | Right -> begin
       match state.fvars_2 with
-      | fvar :: _ when not @@ is_bound fvar state.subst -> true
+      | fvar :: _ when not @@ Unif.is_bound state.subst fvar -> true
       | _ -> false
     end
 
@@ -293,8 +301,9 @@ let dump_last_choice state : unit =
   let pp_side = function Left -> "[left]" | Right -> "[right]" in
   match choice with
   | Side side -> Log.printf ">>> side %s" (pp_side side)
-  | Binder (side, None) -> Log.printf ">>> binder %s" (pp_side side)
-  | Binder (side, Some witness) ->
+  | RBinder side | FBinder (side, None) ->
+      Log.printf ">>> binder %s" (pp_side side)
+  | FBinder (side, Some witness) ->
       Log.printf ">>> binder %s instantiate [%s]" (pp_side side)
         (Notation.term_to_string state.env ~ctx:state.context
         @@ Unif.apply state.subst witness)
@@ -333,7 +342,8 @@ let swap_sides state : state =
       List.map
         (function
           | Side side -> Side (opp_side side)
-          | Binder (side, witness) -> Binder (opp_side side, witness))
+          | RBinder side -> RBinder (opp_side side)
+          | FBinder (side, witness) -> FBinder (opp_side side, witness))
         state.choices
   ; env = state.env
   ; context = state.context

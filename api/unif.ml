@@ -27,6 +27,24 @@ type subst =
   }
 [@@deriving show]
 
+let is_rigid subst fvar =
+  match FVarId.Map.find_opt fvar subst.map with
+  | Some SRigid -> true
+  | _ -> false
+
+let is_bound subst fvar =
+  match FVarId.Map.find_opt fvar subst.map with
+  | Some (SBound _) -> true
+  | _ -> false
+
+let is_flex subst fvar =
+  match FVarId.Map.find_opt fvar subst.map with
+  | Some SFlex -> true
+  | _ -> false
+
+let get_bound fvar subst : Term.t =
+  match FVarId.Map.find fvar subst.map with SBound t -> t | _ -> assert false
+
 (** The [repeat] flag controls what we do when we substitute a bound variable. *)
 let rec apply_rec ~repeat subst (term : Term.t) : Term.t =
   match term with
@@ -66,14 +84,6 @@ let close subst : subst =
   in
   { map }
 
-let is_bound fvar subst : bool =
-  match FVarId.Map.find_opt fvar subst.map with
-  | Some (SBound _) -> true
-  | _ -> false
-
-let get_bound fvar subst : Term.t =
-  match FVarId.Map.find fvar subst.map with SBound t -> t | _ -> assert false
-
 (** [unify_cond env context subst fvar term] checks whether we are allowed to instantiate 
     the variable [fvar] with [term]. This does *not* however unify the types of [fvar] and [term]. *)
 let unify_cond env context subst fvar term : bool =
@@ -98,9 +108,9 @@ let rec unify_rec env context subst ((t1, t2) : Term.t * Term.t) : subst Seq.t =
   | Cst c1, Cst c2 when Name.equal c1 c2 -> return subst
   (*************************************************************************)
   (* Expand a variable that is in the substitution. *)
-  | FVar v, t when is_bound v subst ->
+  | FVar v, t when is_bound subst v ->
       unify_rec env context subst (get_bound v subst, t)
-  | t, FVar v when is_bound v subst ->
+  | t, FVar v when is_bound subst v ->
       unify_rec env context subst (get_bound v subst, t)
   (*************************************************************************)
   (* Extend the substitution. *)

@@ -23,13 +23,14 @@ let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
 let compile_sides coq_goal choices : EConstr.t =
   let open Interact in
   choices
-  |> List.map (function Side side -> side | Binder (side, _) -> side)
+  |> List.map (function Side side | RBinder side | FBinder (side, _) -> side)
   |> List.map (function Left -> false | Right -> true)
   |> Trm.Datatypes.boollist (Goal.env coq_goal)
 
 (** Turn a list of [Interact.choice] into a Coq term of type [list option DYN] 
     that can be fed to tactics. *)
 let compile_instantiations coq_goal choices : EConstr.t =
+  Log.printf "Choices :\n%s" (List.to_string Interact.show_choice choices);
   let open Interact in
   let env = Goal.env coq_goal in
   let sigma = Goal.sigma coq_goal in
@@ -47,8 +48,9 @@ let compile_instantiations coq_goal choices : EConstr.t =
     let ty = Retyping.get_type_of env sigma econstr in
     EConstr.mkApp (mdyn, [| ty; econstr |])
   in
+  (* We are only interested in the choices for instantiable binders. *)
   choices
-  |> List.filter_map (function Side _ -> None | Binder (_, inst) -> Some inst)
+  |> List.filter_map (function FBinder (_, inst) -> Some inst | _ -> None)
   |> Trm.Datatypes.of_list (Goal.env coq_goal) opt_dyn
        (Trm.Datatypes.of_option env dyn
           (mkDyn <<< Import.term coq_goal symbol_table))
@@ -273,21 +275,25 @@ let abstract_itrace itrace context : Interact.choice list =
     | Side side :: choices, fvars1, fvars2 ->
         Side side :: loop passed1 passed2 (choices, fvars1, fvars2)
     (* Traverse a binder without instantiating. *)
-    | Binder (Left, None) :: choices, v1 :: fvars1, fvars2 ->
-        Binder (Left, None)
+    | RBinder Left :: choices, v1 :: fvars1, fvars2 ->
+        RBinder Left :: loop (v1 :: passed1) passed2 (choices, fvars1, fvars2)
+    | FBinder (Left, None) :: choices, v1 :: fvars1, fvars2 ->
+        FBinder (Left, None)
         :: loop (v1 :: passed1) passed2 (choices, fvars1, fvars2)
-    | Binder (Right, None) :: choices, fvars1, v2 :: fvars2 ->
-        Binder (Right, None)
+    | RBinder Right :: choices, fvars1, v2 :: fvars2 ->
+        RBinder Right :: loop passed1 (v2 :: passed2) (choices, fvars1, fvars2)
+    | FBinder (Right, None) :: choices, fvars1, v2 :: fvars2 ->
+        FBinder (Right, None)
         :: loop passed1 (v2 :: passed2) (choices, fvars1, fvars2)
     (* Traverse a binder with instantiating. *)
-    | Binder (Left, Some witness) :: choices, v1 :: fvars1, fvars2 ->
+    | FBinder (Left, Some witness) :: choices, v1 :: fvars1, fvars2 ->
         (* Don't add [v1] to [passed1] : [v1] is instantiated,
            and thus is not usable by subsequent witnesses. *)
-        Binder (Left, Some (close_witness passed1 passed2 witness))
+        FBinder (Left, Some (close_witness passed1 passed2 witness))
         :: loop passed1 passed2 (choices, fvars1, fvars2)
-    | Binder (Right, Some witness) :: choices, fvars1, v2 :: fvars2 ->
+    | FBinder (Right, Some witness) :: choices, fvars1, v2 :: fvars2 ->
         (* Don't add [v2] to [passed2]. *)
-        Binder (Right, Some (close_witness passed1 passed2 witness))
+        FBinder (Right, Some (close_witness passed1 passed2 witness))
         :: loop passed1 passed2 (choices, fvars1, fvars2)
     | _ -> []
   in
@@ -302,6 +308,7 @@ let execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) subst context :
   let choices = abstract_itrace itrace context in
   (* Translate the choices to Coq. *)
   let coq_sides = compile_sides coq_goal choices in
+  Log.printf "Substitution:\n%s\n" (Unif.show_subst subst);
   let coq_instantiations = compile_instantiations coq_goal choices in
   Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
   Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)

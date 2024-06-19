@@ -12,6 +12,17 @@ open Lang
     (which may themselves contain free variables). *)
 type subst [@@deriving show]
 
+(** [is_rigid subst fvar] checks whether [fvar] is rigid in [subst], 
+    i.e. it can't be bound to anything. *)
+val is_rigid : subst -> FVarId.t -> bool
+
+(** [is_bound subst fvar] checks whether [fvar] is bound to a term in [subst]. *)
+val is_bound : subst -> FVarId.t -> bool
+
+(** [is_flex subst fvar] checks whether [fvar] is flex in [subst],
+    i.e. it is not bound to any term but it is not rigid. *)
+val is_flex : subst -> FVarId.t -> bool
+
 (** [apply subst term] substitutes every free variable of [term] that is bound by [subst]. *)
 val apply : subst -> Term.t -> Term.t
 

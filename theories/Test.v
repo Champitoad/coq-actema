@@ -9,6 +9,7 @@ Lemma ex_elim :
   (exists x, P x) -> (forall y, P y -> C) -> C.
 Proof.
   intros H H0.
+  actema_force.
   forward H H0 h1
   (cons 1 nil)
   (cons 1 (cons 0 nil))
