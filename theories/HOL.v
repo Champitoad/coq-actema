@@ -4401,11 +4401,17 @@ Ltac forward_o ts' h1' h2' h3 hp1 hp2 t i :=
   let st := match type of h3 with
             | trl3 _ ?oh => oh
             end in
-  rewrite  /f3 /o3_norm /trl3  /coerce /xor /tr3  /check_curry  /check_list
-           /eq_list /list_rec /eq_rect_r /eq_rect /eq_sym /seq.cat /check_nat
-           /eq_nat /eqnqtdec  /app_curry /nat_rec /nat_rect /eq_rect_r /eq_rect
-           /eq_ind_r /eq_ind  /eq_sym /list_rect /eq_rect_r /eq_rect /eq_sym /ppconcat
-           /ts  /wsort /sl in h3;
+  rewrite  /f3 /o3_norm /trl3  /coerce /xor /tr3  /check_curry
+           /check_list
+           /eq_list /list_rec /eq_rect_r /eq_rec_r /eq_rect /eq_sym
+           /seq.cat
+           /check_nat
+           /eq_nat /eqnqtdec  /app_curry /nat_rec /nat_rect
+           /eq_rect_r /eq_rect /eq_rec_r
+           /eq_ind_r /eq_ind  /eq_sym /list_rect
+           /eq_rect_r /eq_rect /eq_sym /ppconcat
+           /ts  /wsort /sl
+     /eq_rec_r /eq_sym /eq_rec /eq_rect in h3;
     let np := type of h3 in
     let nnp := orename st np in
     try change nnp in h3;
