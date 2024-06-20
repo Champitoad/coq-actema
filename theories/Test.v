@@ -2,22 +2,26 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 
-Context (A B  C D E F G : Prop).
-Context (P Q : nat -> Prop) (R S : nat -> nat -> Prop) (t : nat).
+Context (P Q : nat -> Prop) (R  : nat -> nat -> Prop) (t : nat).
+Lemma toto : (forall a, R a (S a)) -> exists x y, R x (S y).
+intro h.
 
-Lemma ex_elim :
-  (exists x, P x) -> (forall y, P y -> C) -> C.
+actema_force.
+
+Lemma exfa_faex (R : nat -> nat -> Prop) :
+(exists x, forall y, R x y) -> (forall a, exists b, R b a).
 Proof.
-  intros H H0.
-  actema_force.
-  forward H H0 h1
-  (cons 1 nil)
-  (cons 1 (cons 0 nil))
-  (cons false (cons true (cons true nil)))
-  (cons (Some (mDYN _ (fun x:nat => x))) nil).
+intro h.
+back 
+ h
+( 1 :: 1 :: nil)%list
+ (1 :: 1 :: nil)%list
+ (true :: false :: true :: false :: nil)%list
+ (Some (mDYN (nat -> nat -> nat) (fun x a : nat => x))
+ :: Some (mDYN (nat -> nat -> nat -> nat) (fun x a b : nat => b)) :: nil)%list
+.
 
-  actema_force.
-
+actema_force. 
 
 Lemma test (a : forall y : nat, forall z : nat, A /\ y = z) : forall x : nat, (A /\ B) \/ (A /\ x = 0 + x ).
 actema_force.
