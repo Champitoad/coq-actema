@@ -257,7 +257,7 @@ let abstract_itrace itrace context : Interact.choice list =
   let open Interact in
   (* Compute the de Bruijn index associated to the free variable [fvar].
      The lists [passed1] and [passed2] contain the free variables
-     that are bound on each side so far, the most recently bound variable *last*. *)
+     that are bound on each side so far, the most recently bound variable *first*. *)
   let fvar_index passed1 passed2 fvar : int =
     (* The variables are bound in the order fun x0 x1 x2 ... y0 y1 y2 ... => body,
        where passed1 = [x0; x1 ...] and passed2 = [y0; y1 ...].
@@ -288,17 +288,17 @@ let abstract_itrace itrace context : Interact.choice list =
     (* Traverse a binder with instantiating. *)
     | Binder (Left, SBound witness) :: choices, v1 :: fvars1, fvars2 ->
         Binder (Left, SBound (close_witness passed1 passed2 witness))
-        :: loop (passed1 @ [ v1 ]) passed2 (choices, fvars1, fvars2)
+        :: loop (v1 :: passed1) passed2 (choices, fvars1, fvars2)
     | Binder (Right, SBound witness) :: choices, fvars1, v2 :: fvars2 ->
         Binder (Right, SBound (close_witness passed1 passed2 witness))
-        :: loop passed1 (passed2 @ [ v2 ]) (choices, fvars1, fvars2)
+        :: loop passed1 (v2 :: passed2) (choices, fvars1, fvars2)
     (* Traverse a binder without instantiating. *)
     | Binder (Left, sitem) :: choices, v1 :: fvars1, fvars2 ->
         Binder (Left, sitem)
-        :: loop (passed1 @ [ v1 ]) passed2 (choices, fvars1, fvars2)
+        :: loop (v1 :: passed1) passed2 (choices, fvars1, fvars2)
     | Binder (Right, sitem) :: choices, fvars1, v2 :: fvars2 ->
         Binder (Right, sitem)
-        :: loop passed1 (passed2 @ [ v2 ]) (choices, fvars1, fvars2)
+        :: loop passed1 (v2 :: passed2) (choices, fvars1, fvars2)
     | _ -> []
   in
   loop [] [] itrace

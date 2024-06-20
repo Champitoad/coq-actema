@@ -71,19 +71,6 @@ type linkaction =
   | Fold of hyperlink * Name.t * Path.t list
   | Unfold of hyperlink * Name.t * Path.t list*)
 
-(*type linkaction =
-    (* [DnD (xs, ys, subst, ctx, type)] represents subformula linking, including deep rewrites.
-       - [xs] contains the identifers of the bound variables on the left path.
-
-       - [ys] is analogous to [xs] but for the right path.
-       - [ctx] is a context with domain [xs @ ys].
-
-       For instance a link [forall x, exists y, {x + y} <link> {2 + 3}] yields :
-         Subform ([fvar_x, fvar_y], [], [fvar_x := 2; fvar_y := 3], ctx)
-    *)
-    | DnD of FVarId.t list * FVarId.t list * Unif.subst * Context.t * dnd_type
-  [@@deriving show]*)
-
 (** Lift a link into a hyperlink. *)
 val hyperlink_of_link : link -> hyperlink
 
