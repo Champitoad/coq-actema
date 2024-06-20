@@ -149,18 +149,17 @@ let match_selection proof lemma env selection sel_subterm : lemma_match list =
   List.filter_map
     begin
       fun (sub, pred) ->
+        let open Utils.Monad.Option in
         let hlpred = eval_hlpred_type pred in
-        if not @@ List.is_empty
-           @@ hlpred proof ([ subpath lemma_path sub ], [ selection ])
-        then
-          Some
-            { lemma
-            ; size = term_size lemma.l_form
-            ; sub
-            ; subterm_size = term_size @@ subterm_raw lemma.l_form sub
-            ; pred
-            }
-        else None
+        let+ _linkaction =
+          hlpred proof ([ subpath lemma_path sub ], [ selection ])
+        in
+        { lemma
+        ; size = term_size lemma.l_form
+        ; sub
+        ; subterm_size = term_size @@ subterm_raw lemma.l_form sub
+        ; pred
+        }
     end
     subs
 

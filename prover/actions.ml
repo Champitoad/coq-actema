@@ -136,30 +136,19 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
          (List.to_string (List.to_string Path.to_string) hyperlink_sources)
          (List.to_string (List.to_string Path.to_string) hyperlink_dests);*)
 
-  (* The hyperlink predicate we use for DnD actions. *)
-  (*let hlpred_only_sel (pred : Pred.hlpred) : Pred.hlpred =
-     fun proof link -> if link = (src_sel, dst_sel) then pred proof link else []
-    in*)
-  let hlpred =
-    Pred.add
-      [ Pred.wf_subform
-      ; Pred.deep_rewrite
-        (*; Pred.if_empty Pred.deep_rewrite (Pred.rewrite |> hlpred_only_sel)
-          ; Pred.fold |> hlpred_only_sel
-          ; Pred.instantiate*)
-      ]
-  in
-
-  (* Evaluate the hyperlink predicate on every hyperlink. *)
+  (* Check every hyperlink. *)
   let open Utils.Monad.List in
   let* hyper_src = hyperlink_sources in
   let* hyper_dst = hyperlink_dests in
-  let linkactions =
-    hlpred proof (hyper_src, hyper_dst) |> List.filter_map Link.remove_nothing
+  let linkaction =
+    (* We are interested in deep rewrites and subformula interactions. *)
+    Pred.(wf_subform <|> deep_rewrite) proof (hyper_src, hyper_dst)
   in
-  match linkactions with
-  | [] -> []
-  | [ Subform (src_fvars, dst_fvars, subst, ctx) ] ->
+  match linkaction with
+  | None -> []
+  | Some (Subform unif_data)
+  | Some (RewriteL unif_data)
+  | Some (RewriteR unif_data) ->
       let* src = hyper_src in
       let* dst = hyper_dst in
       return
@@ -168,9 +157,14 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
         ; highlights = hyper_src @ hyper_dst
         ; kind = DnD (src, Some dst)
         ; goal_id = goal.g_id
-        ; action = ALink ((src, src_fvars), (dst, dst_fvars), subst, ctx)
+        ; action =
+            ALink
+              ( (src, unif_data.fvars_1)
+              , (dst, unif_data.fvars_2)
+              , unif_data.subst
+              , unif_data.context )
         }
-  | _ -> failwith "Prover.actions.dnd_actions : unsupported dnd action(s)."
+(*| _ -> failwith "Prover.actions.dnd_actions : unsupported dnd action(s)."*)
 
 (********************************************************************************)
 (** Contextual actions. *)

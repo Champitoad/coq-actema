@@ -45,7 +45,6 @@ let lex_compare comp (xs : 'a list) (ys : 'a list) : int =
 
 module Int = BatInt
 module String = BatString
-module Option = BatOption
 module Seq = BatSeq
 module Map = BatMap
 module Set = BatSet
@@ -56,8 +55,14 @@ module Enum = BatEnum
 module IntSet = Set.Make (Int)
 module IntMap = Map.Make (Int)
 
-(** More functions on lists. *)
+(** More functions on options. *)
+module Option = struct
+  include BatOption
 
+  let to_list = function None -> [] | Some x -> [ x ]
+end
+
+(** More functions on lists. *)
 module List = struct
   include BatList
 
@@ -91,7 +96,6 @@ module List = struct
 end
 
 (** Names : wrappers around strings. *)
-
 module Name : sig
   (** A name is essentially a wrapper around a string, but provides more efficient comparison functions 
     by hashing the string. Names are used pervasively in Actema so we provide an efficient and

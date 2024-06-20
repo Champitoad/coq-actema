@@ -2,6 +2,9 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 
+Lemma not_not (A : Prop) : A -> ~ ~ A.
+actema_force.
+
 Context (P Q : nat -> Prop) (R  : nat -> nat -> Prop) (t : nat).
 Lemma toto : (forall a, R a (S a)) -> exists x y, R x (S y).
 intro h.
@@ -14,7 +17,7 @@ Proof.
 intro h.
 back 
  h
-( 1 :: 1 :: nil)%list
+ (1 :: 1 :: nil)%list
  (1 :: 1 :: nil)%list
  (true :: false :: true :: false :: nil)%list
  (Some (mDYN (nat -> nat -> nat) (fun x a : nat => x))

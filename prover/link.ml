@@ -7,29 +7,21 @@ open ProverLogic
 type link = Path.t * Path.t [@@deriving show]
 type hyperlink = Path.t list * Path.t list [@@deriving show]
 
+type unif_data =
+  { context : Context.t
+  ; subst : Unif.subst
+  ; fvars_1 : FVarId.t list
+  ; fvars_2 : FVarId.t list
+  }
+[@@deriving show]
+
 type linkaction =
-  | Nothing
-  | Both of linkaction * linkaction
-  | Subform of FVarId.t list * FVarId.t list * Unif.subst * Context.t
-    (*| Instantiate of Term.t * Path.t
-      | Rewrite of Term.t * Term.t * Path.t list
-      | Fold of Name.t * Path.t list
-      | Unfold of Name.t * Path.t list*)
+  | Subform of unif_data
+  | RewriteL of unif_data
+  | RewriteR of unif_data
 [@@deriving show]
 
 let hyperlink_of_link : link -> hyperlink = fun (src, dst) -> ([ src ], [ dst ])
-
-let rec remove_nothing action =
-  match action with
-  | Nothing -> None
-  | Both (left, right) -> begin
-      match (remove_nothing left, remove_nothing right) with
-      | None, None -> None
-      | Some left, None -> Some left
-      | None, Some right -> Some right
-      | Some left, Some right -> Some (Both (left, right))
-    end
-  | _ -> Some action
 
 (** [traverse_rec env context  rigid_fvars fvars pol term sub] traverses [term] along the path [sub], 
     recording in [rigid_fvars] which variables are rigid, and returning the list of free variables 
@@ -93,42 +85,42 @@ let consecutive_pairs (xs : 'a list) : ('a * 'a) list =
 (* Link predicates. *)
 
 module Pred = struct
-  type lpred = Proof.t -> link -> linkaction list
-  type hlpred = Proof.t -> hyperlink -> linkaction list
+  (* Instantiate the monad. *)
+  include Utils.Monad.MakePlus (struct
+    type 'a t = Proof.t -> hyperlink -> 'a option
 
-  let lift : lpred -> hlpred =
-   fun pred proof -> function
-    | [ src ], [ dst ] -> pred proof (src, dst)
-    | _ -> []
+    let return x _ _ = Some x
 
-  (** [mult2 pred1 pred2] sort-circuits : if [pred1] return an empty list, 
-      [pred2] is not evaluated. *)
-  let mult2 pred1 pred2 : hlpred =
-   fun proof link ->
-    let open Utils.Monad.List in
-    let* act1 = pred1 proof link in
-    let* act2 = pred2 proof link in
-    return @@ Both (act1, act2)
+    let bind x f proof hyperlink =
+      let open Utils.Monad.Option in
+      let* x' = x proof hyperlink in
+      f x' proof hyperlink
 
-  (** [mult preds] evaluates the predicates in [preds] from left to right, 
-      and stops as soon as one predicate returns an empty list. *)
-  let mult preds : hlpred =
-    match preds with
-    | [] -> fun proof link -> []
-    | p0 :: preds -> List.fold_left mult2 p0 preds
+    let mzero _ _ = None
 
-  let add : hlpred list -> hlpred =
-   fun ps pr lnk -> List.map (fun p -> p pr lnk) ps |> List.concat
+    let mplus x y proof hyperlink =
+      let open Utils.Monad.Option in
+      x proof hyperlink <|> y proof hyperlink
+  end)
 
-  let if_empty : hlpred -> hlpred -> hlpred =
-   fun p1 p2 pr lnk ->
-    let actions = p1 pr lnk in
-    if not (List.is_empty actions) then actions else p2 pr lnk
+  (** Simply read the proof. Always succeeds. *)
+  let ask_proof : Proof.t t = fun proof _ -> Some proof
 
-  let unifiable : lpred =
-   fun proof (src, dst) ->
+  (** Simply read the hyperlink. Always succeeds. *)
+  let ask_hyperlink : hyperlink t = fun proof hyperlink -> Some hyperlink
+
+  let fail = mzero
+
+  (** Check if the hyperlink is of the form [([src], [dst])] and return [(src, dst)]. *)
+  let ask_link : link t =
+    let* hyperlink = ask_hyperlink in
+    match hyperlink with [ src ], [ dst ] -> return (src, dst) | _ -> fail
+
+  let unifiable : unif_data t =
+    let* proof = ask_proof in
+    let* src, dst = ask_link in
     try
-      (* Now the actual unification. *)
+      (* The actual unification. *)
       let goal, src_item, _, _ = PathUtils.destr src proof in
       let _, dst_item, _, _ = PathUtils.destr dst proof in
       let env = goal.g_pregoal.g_env in
@@ -158,24 +150,27 @@ module Pred = struct
 
       (* Check there is a solution. *)
       match subst with
-      | Some subst -> [ Subform (src_fvars, dst_fvars, subst, context) ]
-      | None -> []
+      | Some subst ->
+          return { context; subst; fvars_1 = src_fvars; fvars_2 = dst_fvars }
+      | None -> fail
     with InvalidSubtermPath _ | Invalid_argument _ ->
       (* We got an exception : most likely [traverse_rec] raised an exception because a path was invalid. *)
-      []
+      fail
 
-  let opposite_pol_formulas : lpred =
-   fun proof (src, dst) ->
+  let opposite_pol_formulas : unit t =
+    let* proof = ask_proof in
+    let* src, dst = ask_link in
     try
       let src_pol = Polarity.of_ipath proof src in
       let dst_pol = Polarity.of_ipath proof dst in
       match (src_pol, dst_pol) with
-      | Neg, Pos | Pos, Neg | Sup, _ | _, Sup -> [ Nothing ]
-      | _ -> []
-    with Invalid_argument _ | InvalidSubtermPath _ -> []
+      | Neg, Pos | Pos, Neg | Sup, _ | _, Sup -> return ()
+      | _ -> fail
+    with Invalid_argument _ | InvalidSubtermPath _ -> fail
 
-  let neg_eq_operand : lpred =
-   fun proof (src, dst) ->
+  let neg_eq_operand : [ `Left | `Right ] t =
+    let* proof = ask_proof in
+    let* src, dst = ask_link in
     let check (path : Path.t) : bool =
       try
         let eq_sub = List.remove_at (List.length path.sub - 1) path.sub in
@@ -193,10 +188,15 @@ module Pred = struct
         | _ -> false
       with Invalid_argument _ | InvalidSubtermPath _ -> false
     in
-    if check src || check dst then [ Nothing ] else []
+    if check src
+    then return `Left
+    else if check dst
+    then return `Right
+    else fail
 
-  let intuitionistic : lpred =
-   fun proof (src, dst) ->
+  let intuitionistic : unit t =
+    let* proof = ask_proof in
+    let* src, dst = ask_link in
     let neg_count (path : Path.t) : int =
       let goal, item, _, _ = PathUtils.destr path proof in
       let negs =
@@ -213,18 +213,25 @@ module Pred = struct
     try
       match (neg_count src, neg_count dst) with
       | m, n when (m > 0 && n > 0) || (m = 0 && n <= 1) || (m <= 1 && n = 0) ->
-          [ Nothing ]
-      | _ -> []
-    with InvalidSubtermPath _ | Invalid_argument _ -> []
+          return ()
+      | _ -> fail
+    with InvalidSubtermPath _ | Invalid_argument _ -> fail
 
-  let wf_subform : hlpred =
-    mult [ lift opposite_pol_formulas; lift intuitionistic; lift unifiable ]
+  let wf_subform : linkaction t =
+    let* () = opposite_pol_formulas in
+    let* () = intuitionistic in
+    let* unif = unifiable in
+    return @@ Subform unif
 
   (* A deep rewrite link is not required to be intuitionistic. *)
-  let deep_rewrite : hlpred = mult [ lift neg_eq_operand; lift unifiable ]
+  let deep_rewrite : linkaction t =
+    let* side = neg_eq_operand in
+    let* unif = unifiable in
+    match side with
+    | `Left -> return @@ RewriteL unif
+    | `Right -> return @@ RewriteR unif
 
-  let instantiate : hlpred =
-   fun proof (src, dst) -> failwith "instantiate: todo"
+  let instantiate proof (src, dst) = failwith "instantiate: todo"
   (*let is_free_expr (t : term) (sub : int list) : bool =
       let lenv, subt =
         List.fold_left
@@ -284,7 +291,7 @@ module Pred = struct
         end
       | _ -> []*)
 
-  let rewrite : hlpred = fun proof lnk -> failwith "rewrite: todo"
+  let rewrite proof link = failwith "rewrite: todo"
   (*let rewrite_data (p : IPath.t) =
       if p.ctxt.kind = `Hyp
       then
@@ -312,7 +319,7 @@ module Pred = struct
       (* Empty link end *)
     with Failure _ -> []*)
 
-  let fold : hlpred = fun proof lnk -> failwith "fold: todo"
+  let fold proof link = failwith "fold: todo"
   (*let fold_data (p : IPath.t) =
       let _, it, _ = IPath.destr proof p in
       match (it, p.ctxt.kind, p.sub) with
