@@ -667,10 +667,10 @@ Fixpoint b3 (rw:bool)(l:trace) (b:bool)(ist:inst)(nh:ct)(hyp : cx nh)(hi : pp nh
          | (impl ngg h B), ng', gi' =>
              (impl3 (f3 rw l b ist nh hyp hi ng' h gi')
                     (B gi'))
-         | cNot ng1 h, ng2, gi1 =>
-             not3
+         | cNot ng1 hg, _, gi1 =>
+              not3
                (f3 rw l b ist nh hyp hi
-                   ng2 h gi1)
+                   ng1 hg gi1) 
          | (impr ng'  B g), ng'', gi' =>
              (impr3 (B gi')
                   (b3 rw l b ist nh hyp hi ng' g gi'))
@@ -720,7 +720,8 @@ Fixpoint b3 (rw:bool)(l:trace) (b:bool)(ist:inst)(nh:ct)(hyp : cx nh)(hi : pp nh
                      
       | cBot _, _, _ => bot3  
       | Hole _ _, _, _ => bot3
-      | _, _, _ => bot3 
+      | equality _ _ _ _, _, _ => bot3
+      | property _ _ _ _, _, _ => bot3
   end  
   | false =>
       match hyp, nh, hi with
@@ -929,7 +930,7 @@ with f3 (rw:bool)(l:trace)(b:bool)(ist: inst)(n1:ct)(h1 : cx n1)(i1 : pp n1)
                  (B i2)
        | cNot n2' h2', n2, i2  =>
            not3
-             (b3 rw l b ist n1 h1 i1 n2' h2'
+             (b3 rw l b ist n1 h1 i1 _ h2'
                  i2)
       | impr n2' B h2', n2, i2  =>
           impr3  (B i2)
@@ -2944,6 +2945,12 @@ Ltac reify_rec ts' l n env t :=
                           ltac:(let r := wrap env z b in exact r)) in
       let ra := reify_rec ts l' n  env a in
       constr:(impl _ n ra rb)  *)
+  | (cons 1 ?l', not ?a) =>
+          let ra := reify_rec ts l' n  env a in
+          constr:(cNot _ n ra)
+  | (cons 1 ?l', ?a -> False) =>
+          let ra := reify_rec ts l' n  env a in
+          constr:(cNot _ n ra)
   | (cons 1 ?l',  ?a -> ?b) =>
       let ra := constr:(fun (z: ppp ts n) =>
                       ltac:(let r := wrap env z a in exact r)) in
@@ -2969,9 +2976,6 @@ Ltac reify_rec ts' l n env t :=
                       ltac:(let r := wrap env z b in exact r)) in
           let ra := reify_rec ts l' n  env a in
           constr:(orl _ n ra rb) 
-  | (cons 1 ?l', not ?a) =>
-          let ra := reify_rec ts l' n  env a in
-          constr:(cNot _ n ra)
   | (cons 0 ?l', ?a -> ?b) =>
         match type of a with
         | Prop => 
@@ -3280,7 +3284,15 @@ Ltac reify_rec_at ts' l n env t :=
   | (nil, _) =>
           constr:(Hole ts n (fun (z: ppp ts n) =>
                             ltac:(let r0 := wrap env z t in exact r0)))
-  | (cons 1 ?l', ?a -> ?b) => 
+   | (cons 1 ?l',  ~ ?a) =>
+           let ra := reify_rec_at ts l' n  env a in
+          constr:(cNot _ n ra)
+  | (cons 1 ?l', ?a -> False) =>
+           let ra := reify_rec_at ts l' n  env a in
+          constr:(cNot _ n ra)
+
+
+ | (cons 1 ?l', ?a -> ?b) => 
       let ra := constr:(fun (z: ppp ts n) =>
                           ltac:(let r := wrap env z a in exact r))
       in
@@ -3327,10 +3339,6 @@ Ltac reify_rec_at ts' l n env t :=
                       ltac:(let r := wrap env z b in exact r)) in
           let ra := reify_rec_at l' n  env a in
           constr:(orl _ n ra rb)  
-
-  | (cons 1 ?l',  ~ ?a) =>
-           let ra := reify_rec_at ts l' n  env a in
-          constr:(cNot _ n ra)
 
   | (cons 1 ?l', forall x: (wsort _ ?s), @?body' x) =>
           let y := fresh "y" in
@@ -3895,17 +3903,15 @@ Ltac back_o ts'  h0 hp gp t i :=
   let o := type of h in
   match o with
   | coerce _ (@nil nat) ?hc _ => 
-      match goal with
-      | |- coerce _ (@nil nat) ?g _ =>
-            let i' := dress ts i in
-            apply (b3_corr ts true t false i'
-                           (@nil nat) tt (@nil nat) tt hc);
-        [idtac|assumption];
-        (apply trex_norm_apply;
-            [simpl; try done; auto|
-              rewrite ?/ts /b3 /o3_norm /coerce ; 
-                                  try exact tt]
-        ) end end;
+      let i' := dress ts i in
+      apply (b3_corr ts false t false i'
+                     (@nil nat) tt (@nil nat) tt hc);
+      [idtac|assumption];
+      (apply trex_norm_apply;
+       [simpl; try done; auto|
+         rewrite ?/ts /b3 /o3_norm /coerce ; 
+         try exact tt]
+        )  end;
          let sq :=
            match goal with
            | |- trl3 _ ?o => o
