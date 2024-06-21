@@ -2935,7 +2935,7 @@ Ltac reify_rec ts' l n env t :=
   let y := fresh "y" in
   let z := fresh "z" in
   let ts := eval compute in ts' in
-  let c := eval hnf in (pair l t) in
+  let c :=  constr:(pair l t) in
   lazymatch c with
   | (nil, _)  => constr:(Hole ts n (fun (z: ppp ts n) =>
                                ltac:(let r := wrap env z t in exact r)))
@@ -2948,9 +2948,9 @@ Ltac reify_rec ts' l n env t :=
   | (cons 1 ?l', not ?a) =>
           let ra := reify_rec ts l' n  env a in
           constr:(cNot _ n ra)
-  | (cons 1 ?l', ?a -> False) =>
+(*  | (cons 1 ?l', ?a -> False) =>
           let ra := reify_rec ts l' n  env a in
-          constr:(cNot _ n ra)
+          constr:(cNot _ n ra) *)
   | (cons 1 ?l',  ?a -> ?b) =>
       let ra := constr:(fun (z: ppp ts n) =>
                       ltac:(let r := wrap env z a in exact r)) in
@@ -3021,6 +3021,14 @@ Ltac reify_rec ts' l n env t :=
   | _ => constr:(Hole ts n (fun (z: ppp ts n) =>
                                ltac:(let r := wrap env z t in exact r)))
   end.
+
+
+Ltac reify_goal ts l :=
+ lazymatch goal with
+ | |- ?g =>
+     let r := reify_rec ts l  (@nil nat)  (@nil DYN)  g in
+     change (coerce ts (@nil nat) r tt)
+ end.
 
 Definition t := forall z x, x = 2 /\ z = true.
 Print ls.
@@ -3277,7 +3285,7 @@ Ltac rmkSign l' c' t' :=
 Ltac reify_rec_at ts' l n env t := 
   let z := fresh "z" in
   let ts := eval cbn in ts' in
-  let c := eval hnf in (@pair _  _ l t) in
+  let c :=  (pair  l t) in
   lazymatch c with
   | (nil, True) => constr:(cTop ts n)
   | (nil, False) => constr:(cBot ts n)
@@ -3377,13 +3385,6 @@ Ltac reify_rec_at ts' l n env t :=
      
   end.
 
-Ltac reify_goal ts l :=
- lazymatch goal with
- | |- ?g =>
-     let g' := eval hnf in g in
-     let r := reify_rec ts l  (@nil nat)  (@nil DYN)  g' in
-     change (coerce ts (@nil nat) r tt)
- end.
 
 Ltac reify_goal_at ts l :=
  lazymatch goal with
