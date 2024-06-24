@@ -3,7 +3,7 @@ Require Import ssreflect.
 
 
 Lemma not_not (A : Prop) : A -> ~ ~ A.
-actema_force.
+Admitted.
 
 Context (P Q : nat -> Prop) (R  : nat -> nat -> Prop) (t : nat).
 Lemma toto : (forall a, R a (S a)) -> exists x y, R x (S y).

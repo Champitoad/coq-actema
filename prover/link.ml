@@ -7,20 +7,6 @@ open ProverLogic
 type link = Path.t * Path.t [@@deriving show]
 type hyperlink = Path.t list * Path.t list [@@deriving show]
 
-type unif_data =
-  { context : Context.t
-  ; subst : Unif.subst
-  ; fvars_1 : FVarId.t list
-  ; fvars_2 : FVarId.t list
-  }
-[@@deriving show]
-
-type linkaction =
-  | Subform of unif_data
-  | RewriteL of unif_data
-  | RewriteR of unif_data
-[@@deriving show]
-
 let hyperlink_of_link : link -> hyperlink = fun (src, dst) -> ([ src ], [ dst ])
 
 (** [traverse_rec env context  rigid_fvars fvars pol term sub] traverses [term] along the path [sub], 
@@ -217,19 +203,21 @@ module Pred = struct
       | _ -> fail
     with InvalidSubtermPath _ | Invalid_argument _ -> fail
 
-  let wf_subform : linkaction t =
+  let wf_subform : Logic.action t =
+    let* src, dst = ask_link in
     let* () = opposite_pol_formulas in
     let* () = intuitionistic in
     let* unif = unifiable in
-    return @@ Subform unif
+    return @@ ADnD (src, dst, unif, Subform)
 
   (* A deep rewrite link is not required to be intuitionistic. *)
-  let deep_rewrite : linkaction t =
+  let deep_rewrite : Logic.action t =
+    let* src, dst = ask_link in
     let* side = neg_eq_operand in
     let* unif = unifiable in
     match side with
-    | `Left -> return @@ RewriteL unif
-    | `Right -> return @@ RewriteR unif
+    | `Left -> return @@ ADnD (src, dst, unif, RewriteL)
+    | `Right -> return @@ ADnD (src, dst, unif, RewriteR)
 
   let instantiate proof (src, dst) = failwith "instantiate: todo"
   (*let is_free_expr (t : term) (sub : int list) : bool =

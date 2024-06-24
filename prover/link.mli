@@ -26,7 +26,6 @@
        is non-confluent (see the paper for more details). *)
 
 open Api
-open Lang
 open Logic
 open ProverLogic
 
@@ -37,39 +36,6 @@ type link = Path.t * Path.t [@@deriving show]
 (** A hyperlink relaxes the constraint that there is only one source and one destination.
     You are NOT supposed to link two subterms of a same item. *)
 type hyperlink = Path.t list * Path.t list [@@deriving show]
-
-(** After having unified the two sides of a link, we gathered some data that 
-    we want to keep around. *)
-type unif_data =
-  { (* The context with domain [fvars_1 @ fvars_2]. *)
-    context : Context.t
-  ; (* A closed and acyclic substitution with domain [fvars_1 @ fvars_2],
-       which unifies the left and right subterm of the link. *)
-    subst : Unif.subst
-  ; (* The free variables (FVars) bound in the left-hand-side term.
-       The variables are ordered from the root to the pointed subterm. *)
-    fvars_1 : FVarId.t list
-  ; (* The free variables (FVars) bound in the right-hand-side term.
-       The variables are ordered from the root to the pointed subterm. *)
-    fvars_2 : FVarId.t list
-  }
-[@@deriving show]
-
-(** An action to perform after linking has been checked. *)
-type linkaction =
-  | (* Subformula interaction. *)
-    Subform of unif_data
-  | (* Deep rewrite where the equality is on the left side. *)
-    RewriteL of unif_data
-  | (* Deep rewrite where the equality is on the right side. *)
-    RewriteR of unif_data
-[@@deriving show]
-
-(*| Instantiate of hyperlink * Term.t * Path.t
-  | Rewrite of hyperlink * Term.t * Term.t * Path.t list
-      (** Rewrite expression [e1] into [e2] at several paths. *)
-  | Fold of hyperlink * Name.t * Path.t list
-  | Unfold of hyperlink * Name.t * Path.t list*)
 
 (** Lift a link into a hyperlink. *)
 val hyperlink_of_link : link -> hyperlink
@@ -95,7 +61,7 @@ module Pred : sig
       (still in the first-order skeleton).
       
       If this check succeeds returns the unification data (including the substitution). *)
-  val unifiable : unif_data t
+  val unifiable : Logic.unif_data t
 
   (** [opposite_pol_formulas] checks that the hyperlink is of the form [([src], [dst])]
       where [src] and [dst] lead to formulas of opposite polarities. *)
@@ -109,14 +75,14 @@ module Pred : sig
 
   (** [wf_subform] checks that the hyperlink is of the form [([src], [dst])]
       where [src] and [dst] lead to unifiable subformulas of opposite polarities, 
-      and returns a [Subform] linkaction. *)
-  val wf_subform : linkaction t
+      and returns a [ADnD] action. *)
+  val wf_subform : Logic.action t
 
   (** [deep_rewrite] checks that the hyperlink is of the form [([src], [dst])]
       where [src] and [dst] lead to unifiable expressions, and additionally that either [src] 
       or [dst] leads to the left or right side of an equality that has a negative polarity.
-      If it succeeds it returns a [RewriteL] or [RewriteL] linkaction. *)
-  val deep_rewrite : linkaction t
+      If it succeeds it returns a [ADnD]. *)
+  val deep_rewrite : Logic.action t
 
   (** [intuitionistic] checks that the hyperlink is of the form [([src], [dst])]
       where [(src, dst)] form an intuitionistic link. *)

@@ -3214,7 +3214,11 @@ Ltac mkSign p t := mkSignR (@nil TDYN) p (fun XX : (forall TT:Type, TT) => t).
 Ltac reify_rec_at ts' l n env t := 
   let z := fresh "z" in
   let ts := eval cbn in ts' in
+<<<<<<< HEAD
   let c :=  constr:(pair  l t) in
+=======
+  let c :=  constr:(pair l t) in
+>>>>>>> f18a3723d119e1e7cad348dba5354e5b84021a23
   lazymatch c with
   | (nil, True) => constr:(cTop ts n)
   | (nil, False) => constr:(cBot ts n)

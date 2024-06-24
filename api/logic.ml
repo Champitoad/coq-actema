@@ -317,12 +317,15 @@ end
 (***************************************************************************************)
 (** Actions *)
 
-type side = Left | Right [@@deriving show]
+type dnd_kind = Subform | RewriteL | RewriteR [@@deriving show]
 
-let opp_side = function Left -> Right | Right -> Left
-
-type choice = Side of side | Binder of side * Term.t option [@@deriving show]
-type itrace = choice list * FVarId.t list * FVarId.t list [@@deriving show]
+type unif_data =
+  { context : Context.t
+  ; subst : Unif.subst
+  ; fvars_1 : FVarId.t list
+  ; fvars_2 : FVarId.t list
+  }
+[@@deriving show]
 
 type action =
   | AId
@@ -338,11 +341,7 @@ type action =
   | AIndIntro of int
   | AGeneralize of Name.t
   | ALemmaAdd of Name.t
-  | ALink of
-      (Path.t * FVarId.t list)
-      * (Path.t * FVarId.t list)
-      * Unif.subst
-      * Context.t
+  | ADnD of Path.t * Path.t * unif_data * dnd_kind
 [@@deriving show]
 
 type aident = string * hyp list * Term.t [@@deriving show]

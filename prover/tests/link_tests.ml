@@ -319,7 +319,7 @@ let rec subterm (t : Term.t) sub vars =
            (Term.show t)
            (List.to_string string_of_int sub)
 
-let check_unif (action : Link.unif_data option) (t1, sub1) (t2, sub2) =
+let check_unif (action : Logic.unif_data option) (t1, sub1) (t2, sub2) =
   check_action action @@ function
   | Some unif ->
       Term.alpha_equiv

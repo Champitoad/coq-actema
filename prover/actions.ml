@@ -140,31 +140,22 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
   let open Utils.Monad.List in
   let* hyper_src = hyperlink_sources in
   let* hyper_dst = hyperlink_dests in
-  let linkaction =
+  let action =
     (* We are interested in deep rewrites and subformula interactions. *)
     Pred.(wf_subform <|> deep_rewrite) proof (hyper_src, hyper_dst)
   in
-  match linkaction with
+  match action with
   | None -> []
-  | Some (Subform unif_data)
-  | Some (RewriteL unif_data)
-  | Some (RewriteR unif_data) ->
-      let* src = hyper_src in
-      let* dst = hyper_dst in
+  | Some (ADnD (src, dst, unif_data, kind) as action) ->
       return
         { description = "Hyperlink"
         ; icon = None
         ; highlights = hyper_src @ hyper_dst
         ; kind = DnD (src, Some dst)
         ; goal_id = goal.g_id
-        ; action =
-            ALink
-              ( (src, unif_data.fvars_1)
-              , (dst, unif_data.fvars_2)
-              , unif_data.subst
-              , unif_data.context )
+        ; action
         }
-(*| _ -> failwith "Prover.actions.dnd_actions : unsupported dnd action(s)."*)
+  | _ -> failwith "Prover.Actions.dnd_actions : unexpected action."
 
 (********************************************************************************)
 (** Contextual actions. *)
