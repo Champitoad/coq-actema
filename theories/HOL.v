@@ -3285,7 +3285,7 @@ Ltac rmkSign l' c' t' :=
 Ltac reify_rec_at ts' l n env t := 
   let z := fresh "z" in
   let ts := eval cbn in ts' in
-  let c :=  (pair  l t) in
+  let c :=  constr:(pair l t) in
   lazymatch c with
   | (nil, True) => constr:(cTop ts n)
   | (nil, False) => constr:(cBot ts n)
