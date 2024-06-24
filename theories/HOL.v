@@ -2428,24 +2428,15 @@ end.
 
 
 Ltac find_pat t p :=
-   match p with
-  | nil => t
-  | cons ?n ?p' =>
-      let l := list_args t in
-      let t' := extract ltac:(tnth l (S n)) in
-      let x' := find_pat t' p' in
-     x'
-end.
-
-Ltac buil_imp l :=
-  match l with
-    (cons ?a (cons ?b _)) =>
-      let a' := extract a in
-      let b' := extract b in
-      constr:(a' -> b')
-  end.
-
-Definition imp_fun A B := A -> B.
+  let c :=  constr:(pair p t) in
+   lazymatch c with
+   | (nil, _) => t
+   | ((cons 1 ?p'), (?f ?a)) => 
+       let r := find_pat a p'
+       in r
+   | ((cons 0 ?p'), (?f ?a)) =>
+       find_pat f p'
+    end.
 
 
 (* Simplify the subterm at [path] in the term [t], and return the updated term. 
@@ -2621,16 +2612,17 @@ Definition test := (cons  (tDYN nat)
 tst constr:(test) Prop in exact r)).
  
 
-Ltac preify_rec ts p l n env t :=
+Ltac preify_rec ts l n env t :=
   let y := fresh "y" in
   let z := fresh "z" in
-lazymatch constr:(l) with
-  | nil =>
-      let t' := find_pat t p in 
+  let c := constr:(pair l t) in
+lazymatch c with
+  | (nil, _) => (* TODO correct : should only happen for (eq Prop..) *)
+      let t' := find_pat t l in 
       let T :=  type of t' in
       let s := tst ts T in
       let x := fresh "zz" in
-      let Q := vabst x T t p in 
+      let Q := vabst x T t l in 
       let Q' :=
         constr:(fun y : T =>
                 fun z : ppp ts (cons s n) =>
@@ -2649,37 +2641,32 @@ lazymatch constr:(l) with
                            ltac:(let r :=
                                   wrap env z t' in exact r)) in 
      constr:(property ts n s Q'' obj)    
-  | cons true ?l' =>
-      lazymatch t with
-      | ?a -> ?b =>
+  | (cons 1 ?l',  ?a -> ?b)  =>
+      let ra := constr:(fun (z: ppp ts n) =>
+                          ltac:(let r := wrap env z a
+                                in exact r)) in
+      let rb := preify_rec ts l' n  env b in
+      constr:(impr _ n ra rb)
+    |  (cons 1 ?l', ?a /\ ?b) => 
+         let ra := constr:(fun (z: ppp ts n) =>
+                             ltac:(let r := wrap env z a
+                                   in exact r)) in
+         let rb := preify_rec ts l' n  env b in
+         constr:(andr _ n ra rb) 
+    |  (cons 1 ?l', ?a \/ ?b) => 
           let ra := constr:(fun (z: ppp ts n) =>
                               ltac:(let r := wrap env z a
                                     in exact r)) in
-          let rb := preify_rec ts p l' n  env b in
-          constr:(impr _ n ra rb)
-    | ?a /\ ?b => 
-          let ra := constr:(fun (z: ppp ts n) =>
-                              ltac:(let r := wrap env z a
-                                    in exact r)) in
-          let rb := preify_rec ts p l' n  env b in
-          constr:(andr _ n ra rb) 
-    | ?a \/ ?b => 
-          let ra := constr:(fun (z: ppp ts n) =>
-                              ltac:(let r := wrap env z a
-                                    in exact r)) in
-          let rb := preify_rec ts p l' n  env b in
+          let rb := preify_rec ts l' n  env b in
           constr:(orr _ n ra rb) 
-       end
-  | cons false ?l' =>
-      lazymatch t with
-      | ?a -> ?b =>
+  |  (cons 0 (cons 1 ?l'), ?a -> ?b) =>
           match type of a with
           | Prop =>
                let rb :=
             constr:(fun (z: ppp ts n) =>
                       ltac:(let r := wrap env z b
                             in exact r)) in
-              let ra := preify_rec ts p l' n  env a in
+              let ra := preify_rec ts l' n  env a in
               constr:(impl _ n ra rb)
           | _ => 
               let y := fresh "y" in
@@ -2688,7 +2675,7 @@ lazymatch constr:(l) with
                 constr:(fun y: a =>
                       ltac:(
                               let s := ltac:(tst ts a) in
-                              let r := preify_rec ts p l'
+                              let r := preify_rec ts l'
                                              (cons s n)
                                              (cons (mDYN a y) env)
                                              b in
@@ -2700,15 +2687,15 @@ lazymatch constr:(l) with
                                            r) 
           end
           end
-      | not ?a =>
-          let ra := preify_rec ts p l' n  env a in
+  |  (cons 1 ?l', not ?a) =>
+          let ra := preify_rec ts l' n  env a in
           constr:(cNot _ n ra)
-      | forall x: ?T, @?body' x =>
+  |  (cons 1 ?l', forall x: ?T, @?body' x) =>
           let s := tst ts T in
           let y := fresh "y" in
           lazymatch constr:(fun y: T => ltac:(
            let body := beta1 body' y in
-           let r := preify_rec ts p l'
+           let r := preify_rec ts l'
                                (cons s n)
                                (cons (mDYN T y) env)
                                body in
@@ -2716,12 +2703,13 @@ lazymatch constr:(l) with
      with
      | (fun _: _ => ?r) => constr:(fa ts n s (fun x:nat=>x) r) 
      end 
-       | exists x: ?T, @?body' x =>
-          let s := tst ts T in
-          let y := fresh "y" in
-          lazymatch constr:(fun y: T => ltac:(
-           let body := beta1 body' y in
-           let r := preify_rec ts p l'
+  |  (cons 1 ?l', exists x: ?T, @?body' x) =>
+       let s := tst ts T in
+       let y := fresh "y" in
+       lazymatch constr:(fun y: T =>
+                           ltac:(
+                               let body := beta1 body' y in
+                               let r := preify_rec ts l'
                                (cons s n)
                                (cons (mDYN T y) env)
                                body in
@@ -2729,53 +2717,85 @@ lazymatch constr:(l) with
      with
      | (fun _: _ => ?r) => constr:(ex ts n s (fun x:nat=>x) r) 
      end 
-      | ?a /\ ?b => 
-          let rb := constr:(fun (z: ppp ts n) =>
-                              ltac:(let r := wrap env z b
-                                    in exact r)) in
-          let ra := preify_rec ts p l' n  env a in
-          constr:(andl _ n ra rb) 
-      | ?a \/ ?b => 
-          let rb := constr:(fun (z: ppp ts n) =>
-                              ltac:(let r := wrap env z b
-                                    in exact r)) in
-          let ra := preify_rec ts p l' n  env a in
-          constr:(orl _ n ra rb) 
+  |  (cons 0 (cons 1 ?l'), ?a /\ ?b) => 
+       let rb := constr:(fun (z: ppp ts n) =>
+                           ltac:(let r := wrap env z b
+                                 in exact r)) in
+       let ra := preify_rec ts l' n  env a in
+       constr:(andl _ n ra rb) 
+  | (cons 0 (cons 1 ?l'), ?a \/ ?b) => 
+       let rb := constr:(fun (z: ppp ts n) =>
+                           ltac:(let r := wrap env z b
+                                 in exact r)) in
+       let ra := preify_rec ts l' n  env a in
+       constr:(orl _ n ra rb) 
      
-        | _ => constr:(Hole ts n (fun (z: ppp ts n) =>
-                                    ltac:(let r := wrap env z t
-                                          in exact r)))
-     
-      end
+    | (_,_) =>
+      let t' := find_pat t l in 
+      let T :=  type of t' in
+      let s := tst ts T in
+      let x := fresh "zz" in
+      let Q := vabst x T t l in 
+      let Q' :=
+        constr:(fun y : T =>
+                fun z : ppp ts (cons s n) =>
+                  ltac:(
+                          let b := beta1 Q y in
+                          let r :=
+                            wrap
+                              (cons (mDYN T y) env)
+                              z b
+                          in exact r)) in
+      let Q'' := match Q' with
+                 | (fun _ : _ => ?r) => r
+                 end
+      in
+      let obj := constr:(fun z : ppp ts n =>
+                           ltac:(let r :=
+                                  wrap env z t' in exact r)) in 
+     constr:(property ts n s Q'' obj)    
 end.
 
-Ltac reify_prop ts p l :=
+Check ltac:(let r :=
+              preify_rec (cons (tDYN nat) nil)
+(cons 0 (cons 1 nil))
+                         (@nil nat)(@nil DYN)
+                         ( 3 = 2)
+                         in exact r).
+
+Check ltac:(let r :=
+              preify_rec (cons (tDYN nat) nil)
+(cons 1 (cons 0 (cons 1 nil)))
+                         (@nil nat)(@nil DYN)
+                         (True ->  3 = 2)
+                         in exact r).
+
+
+Ltac reify_prop ts l :=
   match goal with
   | |- ?g =>
-      let gs := preify_rec ts p l (@nil nat)(@nil DYN) g in
+      let gs := preify_rec ts l (@nil nat)(@nil DYN) g in
       change (coerce ts (@nil nat) gs tt)
   end.
 
-Ltac reify_prop_hyp ts h h' p l :=
-  let gs := preify_rec ts p l
+
+Ltac reify_prop_hyp ts h h' l :=
+  let gs := preify_rec ts l
                        (@nil nat)(@nil DYN)
                        ltac:(type of h) in
   have h' : (coerce ts (@nil nat) gs tt) by assumption.
 
+(*
 Parameter f : nat -> nat -> nat -> nat.
 Parameter R : nat -> nat -> Prop.
-(* Check ltac:( let r := 
-preify_rec test
-                         (cons 0 (cons 1 (cons 2 nil)))(@nil bool)
+ Check ltac:( let r := 
+preify_rec (cons (tDYN nat) nil)
+                         (cons 0 (cons 1 (cons 0 (cons 1 nil))))
                          (@nil nat)(@nil DYN)
-                          ( (f 0 (f 5 6 7) 2)= 99)
- in exact r).
+                          ( (f 0 (f 5 6 7) 2)= 98)
+ in let r' := eval hnf in r in exact r').
 Set Printing All.
 Check 4=4.
-
-   
-Goal ( 4 = 3) -> True.
-  move => a.
 
   Check ltac:(let gs := preify_rec test (cons 0 nil) (@nil bool)  (@nil nat)(@nil DYN) ltac:(type of a) in exact gs).
 Abort.
@@ -2794,10 +2814,9 @@ Ltac reify_eq_rec ts' l n env t :=
   let y := fresh "y" in
   let z := fresh "z" in
   let ts := eval cbn in ts' in
-  lazymatch constr:(l) with
-  | nil =>
-      match t with
-      | ?t1 = ?t2 =>
+  let c := constr:(pair l t) in
+  lazymatch c with
+  | (nil, ?t1 = ?t2) =>
           let T := type of t1 in
           let s := tst ts T in
           let r1 := constr:(fun (z: ppp ts n) =>
@@ -2807,34 +2826,29 @@ Ltac reify_eq_rec ts' l n env t :=
                               ltac:(let r := wrap env z t2
                                     in exact r)) in
           constr:(equality ts n s r1 r2)
-      end
-  | cons true ?l' =>
-      lazymatch t with
-      | ?a -> ?b => 
+  | (cons 1 ?l', ?a -> ?b) => 
           let ra := constr:(fun (z: ppp ts n) =>
                               ltac:(let r := wrap env z a
                                     in exact r)) in
           let rb := reify_eq_rec ts l' n  env b in
-          constr:(impr _ n ra rb) 
-    | ?a /\ ?b => 
+          constr:(impr _ n ra rb)
+ | (cons 1 ?l', ?a /\ ?b) => 
           let ra := constr:(fun (z: ppp ts n) =>
                               ltac:(let r := wrap env z a
                                     in exact r)) in
           let rb := reify_eq_rec ts l' n  env b in
           constr:(andr _ n ra rb) 
-    | ?a \/ ?b => 
+ | (cons 1, ?l', ?a \/ ?b) => 
           let ra := constr:(fun (z: ppp ts n) =>
                               ltac:(let r := wrap env z a
                                     in exact r)) in
           let rb := reify_eq_rec ts l' n  env b in
           constr:(orr _ n ra rb) 
-       end
-  | cons false ?l' =>
-      lazymatch t with
-      | not ?a =>
+      
+ | (cons 1 ?l', not ?a)  =>
           let ra := reify_eq_rec ts l' n  env a in
           constr:(cNot _ n ra)
-       | forall x: (wsort _ ?s), @?body' x =>
+ | (cons 1 ?l', forall x: (wsort _ ?s), @?body' x) =>
           let y := fresh "y" in
           lazymatch constr:(fun y: (wsort ts s) => ltac:(
            let body := beta1 body' y in
@@ -2847,7 +2861,7 @@ Ltac reify_eq_rec ts' l n env t :=
      | (fun _: (wsort ts s) => ?r) =>
          constr:(fa ts n s (fun x:nat=>x) r) 
      end
-      | ?a -> ?b =>
+  | (cons 0 ?l', ?a -> ?b) =>
           match type of a with
           | Prop =>       let rb :=
               constr:(fun (z: ppp ts n) =>
@@ -2871,13 +2885,13 @@ Ltac reify_eq_rec ts' l n env t :=
                         constr:(fa ts n s (fun y => y) r) 
      end
 end
-      | ?a -> ?b =>
-            let rb :=
-              constr:(fun (z: ppp ts n) =>
-                        ltac:(let r := wrap env z b in exact r)) in
-            let ra := reify_eq_rec ts l' n  env a in
-            constr:(impl _ n ra rb)
-      | forall x: ?T, @?body' x =>
+  | (cons 0 ?l', ?a -> ?b) =>
+      let rb :=
+        constr:(fun (z: ppp ts n) =>
+                  ltac:(let r := wrap env z b in exact r)) in
+      let ra := reify_eq_rec ts l' n  env a in
+      constr:(impl _ n ra rb)
+  | (cons 1 ?l', forall x: ?T, @?body' x) =>
           let y := fresh "y" in
           lazymatch constr:(fun y: T => ltac:(
            let body := beta1 body' y in
@@ -2888,7 +2902,7 @@ end
      with
      | (fun _: T => ?r) => constr:(fa ts n ltac:(let s := tst ts T in exact s) (fun x:nat=>x) r) 
      end
-      | exists x: ?T, @?body' x =>
+  | (cons 1 ?l',  exists x: ?T, @?body' x) =>
      let y := fresh "y" in
      lazymatch constr:(fun y: T => ltac:(
           let body := beta1 body' y in
@@ -2901,21 +2915,19 @@ end
      | (fun _: T => ?r) => constr:(ex ts n
                                       ltac:(let s := tst ts T in exact s) (fun x:nat=>x) r)
      end   
-      | ?a /\ ?b => 
+   | (cons 1 ?l', ?a /\ ?b) => 
           let rb := constr:(fun (z: ppp ts n) =>
                       ltac:(let r := wrap env z b in exact r)) in
           let ra := reify_eq_rec ts l' n  env a in
           constr:(andl _ n ra rb) 
-      | ?a \/ ?b => 
+   | (cons 1 ?l', ?a \/ ?b) => 
           let rb := constr:(fun (z: ppp ts n) =>
                       ltac:(let r := wrap env z b in exact r)) in
           let ra := reify_eq_rec ts l' n  env a in
           constr:(orl _ n ra rb) 
      
-        | _ => constr:(Hole ts n (fun (z: ppp ts n) =>
+   | _ => constr:(Hole ts n (fun (z: ppp ts n) =>
                                ltac:(let r := wrap env z t in exact r)))
-     
-end
   end.
 
 Ltac reify_eq ts l :=
@@ -2924,7 +2936,7 @@ Ltac reify_eq ts l :=
       let gs := reify_eq_rec ts l (@nil nat)(@nil DYN) g in
       change (coerce ts (@nil nat) gs tt)
   end.
-
+         
 Ltac reify_eq_hyp ts h h' l :=
   let g := type of h in
   let gs := reify_eq_rec ts l (@nil nat)(@nil DYN) g in
@@ -3030,17 +3042,6 @@ Ltac reify_goal ts l :=
      change (coerce ts (@nil nat) r tt)
  end.
 
-Definition t := forall z x, x = 2 /\ z = true.
-Print ls.
-Definition cct :=
-  ltac:(let r :=
-          reify_rec test
-                    (cons false (cons false (cons false nil))) (@nil nat)
-                    (@nil DYN)
-                    (forall z x, x = 2 /\ z = true)  in exact r).
-
-Print cct.
-
 
 Ltac find_comp l1o l2o :=
   let l1 := eval hnf in l1o in
@@ -3137,12 +3138,7 @@ Ltac fetch_def T' l' :=
   end.
 
 Print test.
-
-Check ltac:(let r := fetch_def Prop constr:(test)
-            in exact r).
-(* TODO : blinder pour éviter les confusions forall implication *)
- *)
-
+*)
 
 Ltac aDYN T l :=
   let d := constr:(tDYN T) in
@@ -3154,9 +3150,6 @@ Ltac aDYN T l :=
       let r := aDYN T l' in
       constr:(cons d' r)
   end.
-
-
-
 
 Ltac tp l t := match t with
                | fun XX : ?U =>  forall x : ?T, ?b =>
@@ -3172,7 +3165,9 @@ Ltac mkSignR l p t :=
   let c := eval hnf in (p, t) in
     match c with
     | (nil, fun XX : ?U => (@eq ?T _ _)) => aDYN T l
-    | (nil, _) => constr:(l)
+    | (nil, fun XX : ?U => ?u) =>
+        let T := type of u in
+        aDYN T l
     | (cons 1 ?p, fun XX : ?U =>  forall x : ?T, ?b) =>
           let r := aDYN T l in
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => (subst! (XX T) for x in b)) in 
@@ -3196,10 +3191,16 @@ Ltac mkSignR l p t :=
     |  (cons 0 ?p, fun XX : ?U =>  ?a -> ?b) =>
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => a) in 
           mkSignR l p  nt
+    |  (cons 0 ?p, fun XX : ?U =>  (?a  ?b)) =>
+          let nt :=  constr:(fun XX : (forall TT:Type , TT) => a) in 
+          mkSignR l p  nt
     |  (cons 1 ?p, fun XX : ?U =>  ?a -> ?b) =>
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => b) in 
           mkSignR l p  nt
-      |  (cons 1 ?p, fun XX : ?U => ~ ?a) =>
+    |  (cons 1 ?p, fun XX : ?U =>  (?a ?b)) =>
+          let nt :=  constr:(fun XX : (forall TT:Type , TT) => b) in 
+          mkSignR l p  nt
+    |  (cons 1 ?p, fun XX : ?U => ~ ?a) =>
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => a) in 
           mkSignR l p  nt
   end.
@@ -3207,78 +3208,6 @@ Ltac mkSignR l p t :=
 
 Ltac mkSign p t := mkSignR (@nil TDYN) p (fun XX : (forall TT:Type, TT) => t).
 
-Check ltac:(let r := mkSign (cons 1 (cons 1 nil)) ( forall x, x=3/\true=false) in exact r).
-
-
-(*
-
-Ltac rmkSign l' c' t' :=
-  let l := eval hnf in l' in
-  let c := eval hnf in c' in
-    let t := eval hnf in t' in 
-  match c with
-  | impl _ _ ?c' _ =>
-      match t with
-      |_ -> ?u =>
-         rmkSign l c' u
-      end
-  | orl _ _ ?c' _ =>
-      match t with
-      |_ \/ ?u =>
-         rmkSign l c' u
-      end
-  | andl _ _ ?c' _ =>
-      match t with
-      |_ /\ ?u =>
-         rmkSign l c' u
-      end
-  | impr _ _ _ ?c' =>
-      match t with
-      |?u -> _ =>
-         rmkSign l c' u
-      end
-  | orr _ _ _ ?c' =>
-      match t with
-      |?u \/ _ =>
-         rmkSign l c' u
-      end
-  | andr _ _ _ ?c' =>
-      match t with
-      |?u /\ _ =>
-         rmkSign l c' u
-      end
-  | cNot _ _ ?c' =>
-      match t with
-      | ~ ?u =>
-          rmkSign l c' u
-      end
-  | fa _ _ _ _ ?b =>
-      match t with
-      | forall x : ?T, ?body =>
-          let l' := aDYN T constr:(l) in
-          let d := fetch_def T l' in
-          rmkSign l' b (subst! d for x in body)
-      end
-  | ex _ _ _ _ ?b =>
-      match t with
-      | exists x : ?T, ?body =>
-          let l' := aDYN T constr:(l) in
-          let d := fetch_def T l' in
-           rmkSign l' b (subst! d for x in body)
-      end
-  | property _ _ _ _ ?t =>
-      let T := type of t in
-      aDYN T constr:(l)
-  | equality _ _ _ ?t1 _ =>
-      let T1 := type of t1 in
-      let PT1 := eval hnf in T1 in
-        match PT1 with
-        | prod ?T _ => aDYN T constr:(l)
-        end
-  | _ => l
-  end.
-
-*)
 
 (* same but detecting True and False *)
 
@@ -3590,39 +3519,6 @@ Ltac myhnf t :=
     end
   | _ => t
   end.
-
-(*
-                constr:(orr3 h r)
-    | orl3  ?u ?h =>
-        let r := myhnf u in
-        constr:(orl3 r h)
-    | andr3 ?h ?u =>
-        let r := myhnf u in
-        constr:(andr3 h r)
-    | andl3 ?u ?h =>
-        let r := myhnf u in
-        constr:(andl3 r h)
-    | impr3 ?h ?u =>
-        let r := myhnf u in
-        constr:(impr3 h r)
-    | impl3 ?u ?h =>
-        let r := myhnf u in
-        constr:(impl3 r h)
-    | fa3 ?s ?f =>
-        constr:(fa3 s (fun x =>
-                 ltac:(let body := beta1 f x in
-                       let r := myhnf body in
-                       exact r)))
-    | ex3 ?s ?f =>
-        constr:(ex3 s (fun x =>
-                 ltac:(let body := beta1 f x in
-                       let r := myhnf body in
-                       exact r)))
-    | not3 ?u =>
-        let r := myhnf u in
-       constr:(not3 r)
-    | ?X => X
-    end. *)
 
 Ltac myhnf_goal :=
   rewrite /o3_norm;
@@ -4062,13 +3958,13 @@ Print titi. *)
  t : list bool = trace (with the last bool for choice l <-> r)
  i : instantiation *)
 
-Ltac rew_dnd_o ts' h hp gp gp' t i :=
+Ltac rew_dnd_o ts' h hp gp t i :=
   let tsc := eval compute in ts' in
   let ts := fresh "ts" in
   pose ts := tsc; 
   let fl := get_last t in
   let t' := snitch_last t in
-  reify_prop ts gp gp'; 
+  reify_prop ts gp; 
   let h' := fresh "h" in
   reify_eq_hyp ts h h' hp;
   let ec :=
@@ -4079,17 +3975,10 @@ Ltac rew_dnd_o ts' h hp gp gp' t i :=
     match goal with
     | |- coerce _ _ ?g _  => g
     end in
-    let ni := eval compute in
-               (bc3 ts 0 0 false t i
-                                nil
-                                false nil ec nil gc) in
-             match ni with
-             | (?l, ?ah, ?ag) =>
-                  let l' := eval compute in (List.rev l) in
-                  let i' := dress ts l' ah ag in
+ let i' := dress ts i in
   apply (b3_corr ts fl t' false i'  (@nil nat) tt (@nil nat) tt
                  ec gc)
-        end;
+        ;
   [idtac| assumption];
   (apply trex_norm_apply ; [split; try reflexivity|idtac]);
   (try clear h');
@@ -4137,17 +4026,9 @@ Ltac rew_dnd_rev_o ts' h hp hp' gp t i :=
     match goal with
     | |- coerce _ _ ?g _  => g
     end in 
-    let ni := eval compute in
-               (bc3 ts 0 0 false t i
-                                nil
-                                false nil ec nil gc) in
-      match ni with
-      | (?l, ?ah, ?ag) =>
-          let l' := eval compute in (List.rev l) in
-            let i' := dress ts l' ah ag in
+    let i' := dress ts i in
     apply (b3_corr ts fl t' false i' (@nil nat) tt (@nil nat) tt
-                   ec gc)
-    end;
+                   ec gc);
   [idtac| assumption];
   (apply trex_norm_apply ; [split; try reflexivity|idtac]);
   try clear h';
@@ -4170,27 +4051,24 @@ Ltac rew_dnd_rev_o ts' h hp hp' gp t i :=
   rewrite  /wsort /sl; try clear ts.
 
 
-Ltac rew_dnd_rev  h hp hp' gp t i :=
+Ltac rew_dnd_rev  h hp gp t i :=
   let ht := type of h in
-  let ts1 := mkSign hp' ht in 
+  let ts1 := mkSign hp ht in 
   match goal with
   | |- ?gt =>
       let ts := mkSignR ts1 gp  (fun XX : (forall TT:Type, TT) => gt) in
-      rew_dnd_rev_o ts h hp hp' gp t i
+      rew_dnd_rev_o ts h hp gp t i
   end.
 
-Ltac rew_dnd  h hp gp gp' t i :=
+Ltac rew_dnd  h hp gp t i :=
   let th := type of h in
   let ts1 := mkSign hp th in 
   match goal with
   | |- ?gt =>
-      let ts := mkSignR ts1 gp'  (fun XX : (forall TT:Type, TT) => gt) in
+      let ts := mkSignR ts1 gp  (fun XX : (forall TT:Type, TT) => gt) in
       idtac "c2";
-      rew_dnd_o ts h hp gp gp' t i
+      rew_dnd_o ts h hp gp t i
   end.
-
-
-
 
 (*
 
@@ -4274,7 +4152,7 @@ Ltac lpl l :=
   | _ => idtac
   end.
 
-Ltac rew_dnd_hyp_o ts' fl  h1 h2 h3 hp1 hp2 hp2' t i :=
+Ltac rew_dnd_hyp_o ts' fl  h1 h2 h3 hp1 hp2 t i :=
 (*  lpl t; *)
   let flt := get_last t in
   let t' := snitch_last t in
@@ -4287,7 +4165,7 @@ Ltac rew_dnd_hyp_o ts' fl  h1 h2 h3 hp1 hp2 hp2' t i :=
   let h5 := fresh "h5" in
   pose ts:= tsc;
   reify_eq_hyp ts h1 h1' hp1;
-  reify_prop_hyp ts h2 h2' hp2' hp2;
+  reify_prop_hyp ts h2 h2' hp2;
   let hc1 :=
     match type of h1' with
     | coerce _ (@nil nat) ?hc1 _ => hc1
@@ -4299,19 +4177,11 @@ Ltac rew_dnd_hyp_o ts' fl  h1 h2 h3 hp1 hp2 hp2' t i :=
     end in
   clear h1' h2';
   let nfl := eval hnf in (negb fl) in  (* maybe do a switch_inst *)
-  let ni := eval compute in
-               (fc3 ts 0 0 false t i
-                                nil
-                                false nil hc1 nil hc2) in
-             match ni with
-             | (?l, ?ah, ?ag) =>
-                  let l' := eval compute in (List.rev l) in
-                  let i' := dress ts l' ah ag in
+    let i' := dress ts i in
       move:
         (f3_corr ts flt t' nfl
                        i' (@nil nat) hc2 tt
-                       (@nil nat) hc1 tt h2 h1) => h4
-             end;
+                       (@nil nat) hc1 tt h2 h1) => h4 ;
   let oh4 :=
     match type of h4 with
     | (trl3 _ ?oh) => oh
@@ -4339,12 +4209,12 @@ try discriminate.
 
 
 
-Ltac rew_dnd_hyp fl  h1 h2 h3 hp1 hp2 hp2' t i :=
+Ltac rew_dnd_hyp fl  h1 h2 h3 hp1 hp2 t i :=
   let ht1 := type of h1 in
   let ht2 := type of h2 in
   let ts1 := mkSign hp1 ht1 in
   let ts := mkSignR ts1 hp2  (fun XX : (forall TT:Type, TT) => ht2) in
-      rew_dnd_hyp_o ts fl  h1 h2 h3 hp1 hp2 hp2' t i.
+      rew_dnd_hyp_o ts fl  h1 h2 h3 hp1 hp2 t i.
 (*
   let th1 := type of h1 in
   let th2 := type of h2 in 
@@ -4663,52 +4533,6 @@ Lemma sf3_corr :
 Qed.
  *)
  *)
-  
-Ltac myinduction_r  p t :=
-  match p with
-  | nil =>   t
-  | cons ?n ?p' =>
-      match t with
-      | ?a -> ?b =>
-          let c := constr:(imp_fun a b) in
-          let c' := myinduction_r p c in
-          c'
-      |  forall x: ?T, @?body' x => 
-             let y := fresh "y" in
-             lazymatch
-               constr:(fun y : T =>
-                      ltac:(
-                              let body := beta1 body' y in
-                              let r := myinduction_r p' body in exact r))
-        with                    
-        | (fun _ : _ => ?r2) => r2
-             end
-      |  exists x: ?T, @?body' x => 
-             let y := fresh "y" in
-             lazymatch
-               constr:(fun y : T =>
-                      ltac:(
-                              let body := beta1 body' y in
-                              let r := myinduction_r p' body in exact r))
-        with                    
-        | (fun _ : _ => ?r2) => r2
-             end
-      | fun x : ?T => @?body' x => 
-             let y := fresh "y" in
-             lazymatch
-               constr:(fun y : T =>
-                      ltac:(
-                              let body := beta1 body' y in
-                              let r := myinduction_r p' body in exact r))
-        with                    
-        | (fun _ : _ => ?r2) => r2
-             end
-      | (?f0 _) =>
-          let l := list_args t in
-          let u := myinduction_r p' ltac:(extract ltac:(tnth l (S n))) in
-          u
-      end
-  end.
 
 
 Ltac definduction :=
@@ -4739,24 +4563,6 @@ Ltac cdr l :=
   | cons 0 ?l' => l'
   end.
 
-Ltac myinduction p :=
-  match goal with
-  | |- ?g =>
-      let g' := myinduction_r p g in
-      induction g'
-  | _ => pinduction p
-  | _ => pinduction ltac:(cdr p)
-  end;
-  simplify_goal;
-try discriminate.
-
-Ltac myinduction_hyp h p :=
-  let g := type of h in
-  let g' := myinduction_r p g in
-  induction g';
-  simplify_goal;
-  try discriminate.
-
 Ltac defcase :=
    match goal with
    | |- forall x : _, _ =>
@@ -4778,42 +4584,6 @@ Ltac mydestruct e t:=
   generalize (refl_equal t);
   destruct t at -1;
   intro e.
-
-Ltac mycase p :=
-  match goal with
-  | |- ?g =>
-      let g' := myinduction_r p g in
-      let e := fresh "e" in
-      mydestruct e g'
-  | _ => pcase p
-  | _ => pcase ltac:(cdr p)
-  end;
-  simplify_goal;
-try discriminate.
-
-
-Ltac mycase_hyp h p :=
-  let e := fresh "e" in
-  let g := type of h in
-  let g' := myinduction_r p g in
-  mydestruct e g';
-  simplify_goal;
-  try discriminate.
-
-
-Ltac myinduction_nosimpl p :=
-  match goal with
-  | |- ?g =>
-      let g' := myinduction_r p g in
-      induction g'
-  | _ => pinduction p
-  | _ => pinduction ltac:(cdr p)
-  end.
-
-Ltac myinduction_hyp_nosimpl h p :=
-  let g := type of h in
-  let g' := myinduction_r p g in
-  induction g'.
 
 
 (*
