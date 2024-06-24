@@ -12,6 +12,7 @@ module FVarId : sig
 
   module Set : Set.S with type elt = t
   module Map : Map.S with type key = t
+  module Hashtbl : Hashtbl.S with type key = t
 
   (** This exposes the implementation of free variables, and is only available in this file
       (you can check it is not exposed in lang.mli). 
@@ -31,6 +32,13 @@ end = struct
 
   module Set = IntSet
   module Map = IntMap
+
+  module Hashtbl = Hashtbl.Make (struct
+    type t = int
+
+    let hash = Hashtbl.hash
+    let equal = Int.equal
+  end)
 
   let unsafe_from_int fvar = fvar
   let unsafe_to_int fvar = fvar
