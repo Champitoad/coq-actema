@@ -303,16 +303,26 @@ let abstract_itrace itrace context : Interact.choice list =
   in
   loop [] [] itrace
 
-let execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) subst context :
+(** Precondition : [src] and [dst] respectively point to either :
+    - two hypotheses.
+    - a hypothesis and the conclusion.
+
+    In particular we forbid the case where they point to : 
+    - the conclusion and a hypothesis. *)
+let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
     unit tactic =
   let pregoal = Export.goal coq_goal in
   (* Perform deep interaction. *)
-  let itrace = Interact.dlink (src, src_fvars) (dst, dst_fvars) subst pregoal in
+  let itrace =
+    Interact.dlink (src, unif_data.fvars_1) (dst, unif_data.fvars_2)
+      unif_data.subst pregoal
+  in
   (* Abstract the instantiations. *)
-  let choices = abstract_itrace itrace context in
+  let choices = abstract_itrace itrace unif_data.context in
   (* Translate the choices to Coq. *)
   let coq_sides = compile_sides coq_goal choices in
-  Log.printf "Substitution:\n%s\n" (Unif.show_subst subst);
+  Log.printf "Substitution:\n%s\n" (Unif.show_subst unif_data.subst);
+  (* Translate the instantiations to Coq. *)
   let coq_instantiations = compile_instantiations coq_goal choices in
   Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
   Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
@@ -321,8 +331,8 @@ let execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) subst context :
     (compile_path coq_goal dst);
   Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;
   (* TODO : rewrites. *)
-  match (src.kind, dst.kind) with
-  | Hyp hyp, Concl ->
+  match (dnd_kind, src.kind, dst.kind) with
+  | Logic.Subform, Hyp hyp, Concl ->
       let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
       calltac (tactic_kname "back")
         [ hyp
@@ -331,7 +341,7 @@ let execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) subst context :
         ; coq_sides
         ; coq_instantiations
         ]
-  | Hyp hyp1, Hyp hyp2 ->
+  | Subform, Hyp hyp1, Hyp hyp2 ->
       let hyp1 = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp1 in
       let hyp2 = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp2 in
       let hyp3 = EConstr.mkVar @@ Goal.fresh_name ~basename:"H" coq_goal () in
@@ -347,7 +357,7 @@ let execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) subst context :
   | _ ->
       raise
       @@ UnsupportedAction
-           ( ALink ((src, src_fvars), (dst, dst_fvars), subst, context)
+           ( ADnD (src, dst, unif_data, dnd_kind)
            , "Invalid items for DnD action." )
 
 (*********************************************************************************)
@@ -399,16 +409,29 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.AIntro side -> execute_aintro coq_goal side
   | Logic.AElim (hyp_name, i) -> execute_aelim coq_goal hyp_name i
   | Logic.ALemmaAdd full_name -> execute_alemma_add coq_goal full_name
-  | Logic.ALink ((src, src_fvars), (dst, dst_fvars), subst, ctx) -> begin
-      (* Check the items are valid, and swap [src] and [dst] if they point to
-         the conclusion and a hypothesis respectively. *)
-      match (src.kind, dst.kind) with
-      | Concl, Hyp _ ->
-          execute_alink coq_goal (dst, dst_fvars) (src, src_fvars) subst ctx
-      | Hyp _, Hyp _ | Hyp _, Concl ->
-          execute_alink coq_goal (src, src_fvars) (dst, dst_fvars) subst ctx
-      | _ -> raise @@ UnsupportedAction (action, "Invalid items for DnD action.")
-    end
+  | Logic.ADnD (src, dst, unif_data, dnd_kind) ->
+      (* Helper function to swap the two sides of the link in a [dnd_kind]. *)
+      let reverse_dnd = function
+        | Logic.Subform -> Logic.Subform
+        | RewriteL -> RewriteR
+        | RewriteR -> RewriteL
+      in
+      (* Helper function to swap the two sides of the link in a [unif_data]. *)
+      let reverse_unif (unif : Logic.unif_data) =
+        { unif_data with fvars_1 = unif.fvars_2; fvars_2 = unif.fvars_1 }
+      in
+      begin
+        (* Check the items are valid, and swap [src] and [dst] if they point to
+           the conclusion and a hypothesis respectively. *)
+        match (src.kind, dst.kind) with
+        | Concl, Hyp _ ->
+            execute_adnd coq_goal dst src (reverse_unif unif_data)
+              (reverse_dnd dnd_kind)
+        | Hyp _, Hyp _ | Hyp _, Concl ->
+            execute_adnd coq_goal src dst unif_data dnd_kind
+        | _ ->
+            raise @@ UnsupportedAction (action, "Invalid items for DnD action.")
+      end
   | Logic.ASimpl path -> begin
       match path.kind with
       | Hyp name ->

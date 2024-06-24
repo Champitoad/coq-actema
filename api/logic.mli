@@ -187,13 +187,47 @@ module Path : sig
       - [p1.sub] is a prefix of [p2.sub]. *)
   val is_prefix : t -> t -> bool
 
-  (** Set the [sub] parts of a path to the empty list. *)
+  (** Set the [sub] part of a path to the empty list. *)
   val erase_sub : t -> t
 end
 
 (***************************************************************************************)
 (** Actions *)
 
+(** A drag and drop kind. *)
+type dnd_kind =
+  | (* Subformula linking : both sides of the link are
+       formulas in the first order skeleton. *)
+    Subform
+  | (* Deep rewrite : the *left* side of the link is an equality. *)
+    RewriteL
+  | (* Deep rewrite : the *right* side of the link is an equality. *)
+    RewriteR
+[@@deriving show]
+
+(** After having unified the two sides of a link (in the prover), we gathered some data that 
+    we want to keep around and send to the plugin. *)
+type unif_data =
+  { (* The context with domain [fvars_1 @ fvars_2]. *)
+    context : Context.t
+  ; (* A closed and acyclic substitution with domain [fvars_1 @ fvars_2],
+       which unifies the left and right subterm of the link. *)
+    subst : Unif.subst
+  ; (* The free variables (FVars) bound in the left-hand-side term.
+       The variables are ordered from the root to the pointed subterm. *)
+    fvars_1 : FVarId.t list
+  ; (* The free variables (FVars) bound in the right-hand-side term.
+       The variables are ordered from the root to the pointed subterm. *)
+    fvars_2 : FVarId.t list
+  }
+[@@deriving show]
+
+(** Actions are an intermediate step between user actions (in the frontend) 
+    and actual Coq tactics (in the plugin). The frontend listens for user input, 
+    the prover translates these inputs into [action]s and sends them by HTTP to 
+    the plugin, which then modifies the Coq proof state (using Ocaml or Ltac tactics) 
+    for each action. 
+*)
 type action =
   (* The empty action which does nothing *)
   | AId
@@ -245,17 +279,20 @@ type action =
   (* Add a lemma to the proof context (i.e. as a hypothesis).
      The [name] contains the full name of the lemma, slightly encoded. *)
   | ALemmaAdd of Name.t
-  (* A link (DnD) action. The paths are the two sides of the link. *)
-  | ALink of
-      (Path.t * FVarId.t list)
-      * (Path.t * FVarId.t list)
-      * Unif.subst
-      * Context.t
+  (* A drag and drop action. The paths are the two sides of the link. *)
+  | ADnD of Path.t * Path.t * unif_data * dnd_kind
 (*| ADef of (Name.t * Term.t * Term.t) (* Introduction of a local definition *)
-  | ARed of Path.t (* Unfold contextual action *)
-  | ACut of Term.t (* Click on +hyp button *)
-  | AInstantiate of (Term.t * Path.t)
-    (* DnD action for instantiating a quantifier *)*)
+    | ARed of Path.t (* Unfold contextual action *)
+    | ACut of Term.t (* Click on +hyp button *)
+    | AInstantiate of (Term.t * Path.t)
+      (* DnD action for instantiating a quantifier *)
+  ******************************************************
+      (*| Instantiate of hyperlink * Term.t * Path.t
+    | Rewrite of hyperlink * Term.t * Term.t * Path.t list
+        (** Rewrite expression [e1] into [e2] at several paths. *)
+    | Fold of hyperlink * Name.t * Path.t list
+    | Unfold of hyperlink * Name.t * Path.t list*)
+*)
 [@@deriving show]
 
 (* An action identifier is a pair of an arbitrary string identifier and an abstract goal. *)
