@@ -3214,11 +3214,7 @@ Ltac mkSign p t := mkSignR (@nil TDYN) p (fun XX : (forall TT:Type, TT) => t).
 Ltac reify_rec_at ts' l n env t := 
   let z := fresh "z" in
   let ts := eval cbn in ts' in
-<<<<<<< HEAD
-  let c :=  constr:(pair  l t) in
-=======
   let c :=  constr:(pair l t) in
->>>>>>> f18a3723d119e1e7cad348dba5354e5b84021a23
   lazymatch c with
   | (nil, True) => constr:(cTop ts n)
   | (nil, False) => constr:(cBot ts n)
@@ -4537,52 +4533,6 @@ Lemma sf3_corr :
 Qed.
  *)
  *)
-  
-Ltac myinduction_r  p t :=
-  match p with
-  | nil =>   t
-  | cons ?n ?p' =>
-      match t with
-      | ?a -> ?b =>
-          let c := constr:(imp_fun a b) in
-          let c' := myinduction_r p c in
-          c'
-      |  forall x: ?T, @?body' x => 
-             let y := fresh "y" in
-             lazymatch
-               constr:(fun y : T =>
-                      ltac:(
-                              let body := beta1 body' y in
-                              let r := myinduction_r p' body in exact r))
-        with                    
-        | (fun _ : _ => ?r2) => r2
-             end
-      |  exists x: ?T, @?body' x => 
-             let y := fresh "y" in
-             lazymatch
-               constr:(fun y : T =>
-                      ltac:(
-                              let body := beta1 body' y in
-                              let r := myinduction_r p' body in exact r))
-        with                    
-        | (fun _ : _ => ?r2) => r2
-             end
-      | fun x : ?T => @?body' x => 
-             let y := fresh "y" in
-             lazymatch
-               constr:(fun y : T =>
-                      ltac:(
-                              let body := beta1 body' y in
-                              let r := myinduction_r p' body in exact r))
-        with                    
-        | (fun _ : _ => ?r2) => r2
-             end
-      | (?f0 _) =>
-          let l := list_args t in
-          let u := myinduction_r p' ltac:(extract ltac:(tnth l (S n))) in
-          u
-      end
-  end.
 
 
 Ltac definduction :=
@@ -4613,24 +4563,6 @@ Ltac cdr l :=
   | cons 0 ?l' => l'
   end.
 
-Ltac myinduction p :=
-  match goal with
-  | |- ?g =>
-      let g' := myinduction_r p g in
-      induction g'
-  | _ => pinduction p
-  | _ => pinduction ltac:(cdr p)
-  end;
-  simplify_goal;
-try discriminate.
-
-Ltac myinduction_hyp h p :=
-  let g := type of h in
-  let g' := myinduction_r p g in
-  induction g';
-  simplify_goal;
-  try discriminate.
-
 Ltac defcase :=
    match goal with
    | |- forall x : _, _ =>
@@ -4652,42 +4584,6 @@ Ltac mydestruct e t:=
   generalize (refl_equal t);
   destruct t at -1;
   intro e.
-
-Ltac mycase p :=
-  match goal with
-  | |- ?g =>
-      let g' := myinduction_r p g in
-      let e := fresh "e" in
-      mydestruct e g'
-  | _ => pcase p
-  | _ => pcase ltac:(cdr p)
-  end;
-  simplify_goal;
-try discriminate.
-
-
-Ltac mycase_hyp h p :=
-  let e := fresh "e" in
-  let g := type of h in
-  let g' := myinduction_r p g in
-  mydestruct e g';
-  simplify_goal;
-  try discriminate.
-
-
-Ltac myinduction_nosimpl p :=
-  match goal with
-  | |- ?g =>
-      let g' := myinduction_r p g in
-      induction g'
-  | _ => pinduction p
-  | _ => pinduction ltac:(cdr p)
-  end.
-
-Ltac myinduction_hyp_nosimpl h p :=
-  let g := type of h in
-  let g' := myinduction_r p g in
-  induction g'.
 
 
 (*
