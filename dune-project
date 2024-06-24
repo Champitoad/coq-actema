@@ -54,6 +54,4 @@
   (alcotest-js
    (>= 1.7.0))
   (qcheck-alcotest
-   (>= 0.21.3))
-  (unionFind
-   (= 20220122))))
+   (>= 0.21.3))))
