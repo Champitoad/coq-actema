@@ -1,19 +1,17 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
-
-
-
 Parameter f g : nat -> nat.
 Lemma bug1 (x y : nat)(e : (g y) = x) :
    g (f x) = x.
-(* ici on ne peut pas réécrire la 1e occurence de x avec e, alors que la tactique suivante marche : *)
+actema_force.
+   (* ici on ne peut pas réécrire la 1e occurence de x avec e, alors que la tactique suivante marche : *)
    rew_dnd e
     (@nil nat)
     (cons 0 (cons 1 (cons 1 (cons 1 nil))))
     (cons true nil)
     (@nil (option DYN)).
-    
+
 Lemma exfa_faex (R : nat -> nat -> Prop) :
 (exists x, forall y, R x y) -> (forall a, exists b, R b a).
 Proof.

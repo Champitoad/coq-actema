@@ -30,7 +30,6 @@ let compile_sides coq_goal choices : EConstr.t =
 (** Turn a list of [Interact.choice] into a Coq term of type [list option DYN] 
     that can be fed to tactics. *)
 let compile_instantiations coq_goal choices : EConstr.t =
-  Log.printf "Choices :\n%s" (List.to_string Interact.show_choice choices);
   let open Interact in
   let env = Goal.env coq_goal in
   let sigma = Goal.sigma coq_goal in
@@ -243,7 +242,7 @@ let execute_alemma_add coq_goal lemma_name =
   Tactics.pose_proof hyp_name hyp_form
 
 (*********************************************************************************)
-(** [ALink] actions. *)
+(** [ADnD] actions. *)
 (*********************************************************************************)
 
 (** Abstract an itrace i.e. change all the instantiation witnesses from : 
@@ -303,6 +302,11 @@ let abstract_itrace itrace context : Interact.choice list =
   in
   loop [] [] itrace
 
+(* Helper function to remove the last index in a path. *)
+let remove_last (path : Logic.Path.t) : Logic.Path.t =
+  let sub = List.remove_at (List.length path.sub - 1) path.sub in
+  { path with sub }
+
 (** Precondition : [src] and [dst] respectively point to either :
     - two hypotheses.
     - a hypothesis and the conclusion.
@@ -324,14 +328,9 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
   Log.printf "Substitution:\n%s\n" (Unif.show_subst unif_data.subst);
   (* Translate the instantiations to Coq. *)
   let coq_instantiations = compile_instantiations coq_goal choices in
-  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
-  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
-    (compile_path coq_goal src);
-  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
-    (compile_path coq_goal dst);
-  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;
-  (* TODO : rewrites. *)
+  (* Call the appropriate tactic. *)
   match (dnd_kind, src.kind, dst.kind) with
+  (* Subformula, hypothesis and conclusion. *)
   | Logic.Subform, Hyp hyp, Concl ->
       let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
       calltac (tactic_kname "back")
@@ -341,6 +340,7 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
         ; coq_sides
         ; coq_instantiations
         ]
+  (* Subformula, two hypotheses. *)
   | Subform, Hyp hyp1, Hyp hyp2 ->
       let hyp1 = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp1 in
       let hyp2 = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp2 in
@@ -350,6 +350,26 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
         ; hyp2
         ; hyp3
         ; compile_path coq_goal src
+        ; compile_path coq_goal dst
+        ; coq_sides
+        ; coq_instantiations
+        ]
+  (* Rewrite with a hypothesis in the goal. *)
+  | RewriteL, Hyp hyp, Concl ->
+      Log.printf "Sides : ";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
+      Log.printf "Source path : ";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
+        (compile_path coq_goal @@ remove_last src);
+      Log.printf "Dest path : ";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
+        (compile_path coq_goal dst);
+      Log.printf "Instantiations : ";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;
+      let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
+      calltac (tactic_kname "rew_dnd")
+        [ hyp
+        ; compile_path coq_goal (remove_last src)
         ; compile_path coq_goal dst
         ; coq_sides
         ; coq_instantiations

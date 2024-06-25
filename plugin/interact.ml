@@ -297,22 +297,36 @@ let rec interact (state : state) mode : choice list =
   (* Print some debug info. *)
   dump_state state mode;
 
-  if state.sub1 = [] && state.sub2 = []
-  then (* We finished the interaction. *)
-    List.rev state.choices
-  else
-    (* Perform one interaction step. *)
-    let state, invert =
-      match mode with
-      | Forward -> forward_step state
-      | Backward -> backward_step state
-    in
-    (* Print some debug info. *)
-    dump_last_choice state;
-    (* Decide on the next interaction mode. *)
-    let mode = if invert then invert_mode mode else mode in
-    (* Continue. *)
-    interact state mode
+  (* For the L= rules, we put the rewrite direction
+     (Left for left-to-right, Right for right-to-left) at the end
+     of the choice list. *)
+  match ((state.t1, state.sub1), (state.t2, state.sub2)) with
+  (* Rule id *)
+  | (_, []), (_, []) -> List.rev state.choices
+  (* Rule L=₁ *)
+  | (App (_, Cst eq, _), [ 2 ]), _ when Name.equal eq Constants.eq ->
+      List.rev (Side Left :: state.choices)
+  | (App (_, Cst eq, _), [ 3 ]), _ when Name.equal eq Constants.eq ->
+      List.rev (Side Right :: state.choices)
+  (* Rule L=₂ *)
+  | _, (App (_, Cst eq, _), [ 2 ]) when Name.equal eq Constants.eq ->
+      List.rev (Side Left :: state.choices)
+  | _, (App (_, Cst eq, _), [ 3 ]) when Name.equal eq Constants.eq ->
+      List.rev (Side Right :: state.choices)
+  (* All other rules. *)
+  | _ ->
+      (* Perform one interaction step. *)
+      let state, invert =
+        match mode with
+        | Forward -> forward_step state
+        | Backward -> backward_step state
+      in
+      (* Print some debug info. *)
+      dump_last_choice state;
+      (* Decide on the next interaction mode. *)
+      let mode = if invert then invert_mode mode else mode in
+      (* Continue. *)
+      interact state mode
 
 (** Swap the roles of [t1] and [t2] in the state. *)
 let swap_sides state : state =
