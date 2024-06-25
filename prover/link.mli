@@ -56,19 +56,20 @@ module Pred : sig
   val fail : 'a t
 
   (** [unifiable] checks that the hyperlink is of the form [([src], [dst])] 
-      where [src] and [dst] lead to unifiable formulas of their respective items. 
+      where [src] and [dst] lead to unifiable subterms of their respective items. 
       
-      If this check succeeds returns the unification data (including the substitution). *)
+      If this check succeeds we return the unification data (which includes the substitution). *)
   val unifiable : Logic.unif_data t
 
   (** [opposite_pol_formulas] checks that the hyperlink is of the form [([src], [dst])]
-      where [src] and [dst] lead to formulas of opposite polarities. *)
+      where [src] and [dst] lead to formulas of opposite polarities *in the first order skeleton*. *)
   val opposite_pol_formulas : unit t
 
   (** [neg_eq_operand] checks that the hyperlink is of the form [([src], [dst])]
       where either [src] or [dst] leads to the left or right argument of an equality, 
-      and that this equality has a negative polarity. If this succeeds it returns the side which
-      contains the equality : [`Left] for [src] and [`Right] for [dst]. *)
+      and that this equality has a negative polarity and is in the first order skeleton. 
+      If this succeeds we return the side which contains the equality : 
+      [`Left] for [src] and [`Right] for [dst]. *)
   val neg_eq_operand : [ `Left | `Right ] t
 
   (** [wf_subform] checks that the hyperlink is of the form [([src], [dst])]
@@ -77,8 +78,9 @@ module Pred : sig
   val wf_subform : Logic.action t
 
   (** [deep_rewrite] checks that the hyperlink is of the form [([src], [dst])]
-      where [src] and [dst] lead to unifiable expressions, and additionally that either [src] 
-      or [dst] leads to the left or right side of an equality that has a negative polarity.
+      where [src] and [dst] lead to unifiable subterms, and additionally that either [src] 
+      or [dst] leads to the left or right side of an equality that has a negative polarity
+      and is in the first order skeleton.
       If it succeeds it returns a [ADnD]. *)
   val deep_rewrite : Logic.action t
 
