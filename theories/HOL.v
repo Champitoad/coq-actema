@@ -3165,12 +3165,18 @@ Ltac mkSignR l p t :=
   let c := eval hnf in (p, t) in
     match c with
     | (nil, fun XX : ?U => (@eq ?T _ _)) => aDYN T l
-    | (nil, fun XX : ?U => ?u) =>
-        let T := type of u in
-        aDYN T l
+    | (nil, fun XX : ?U => ?u) => l
+    |  (cons 1 ?p, fun XX : ?U =>  ?a -> ?b) =>
+         let nt :=  constr:(fun XX : (forall TT:Type , TT) => b) in
+         mkSignR l p  nt
+   |  (cons 0 ?p, fun XX : ?U =>  ?a -> ?b) =>
+          let nt :=  constr:(fun XX : (forall TT:Type , TT) => a) in 
+          mkSignR l p  nt
     | (cons 1 ?p, fun XX : ?U =>  forall x : ?T, ?b) =>
           let r := aDYN T l in
-          let nt :=  constr:(fun XX : (forall TT:Type , TT) => (subst! (XX T) for x in b)) in 
+          let nt :=  constr:(fun XXX : (forall TT:Type , TT) =>
+                               (subst! (XXX T) for x in
+                                 (subst! XXX for XX in b))) in 
           mkSignR r p  nt
     |  (cons 1 ?p, fun XX : ?U =>  exists x : ?T, ?b) =>
           let r := aDYN T l in
@@ -3188,14 +3194,8 @@ Ltac mkSignR l p t :=
     |  (cons 0 (cons 1 ?p), fun XX : ?U =>  ?a \/ ?b) =>
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => a) in 
           mkSignR l p  nt
-    |  (cons 0 ?p, fun XX : ?U =>  ?a -> ?b) =>
+     |  (cons 0 ?p, fun XX : ?U =>  (?a  ?b)) =>
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => a) in 
-          mkSignR l p  nt
-    |  (cons 0 ?p, fun XX : ?U =>  (?a  ?b)) =>
-          let nt :=  constr:(fun XX : (forall TT:Type , TT) => a) in 
-          mkSignR l p  nt
-    |  (cons 1 ?p, fun XX : ?U =>  ?a -> ?b) =>
-          let nt :=  constr:(fun XX : (forall TT:Type , TT) => b) in 
           mkSignR l p  nt
     |  (cons 1 ?p, fun XX : ?U =>  (?a ?b)) =>
           let nt :=  constr:(fun XX : (forall TT:Type , TT) => b) in 
@@ -3207,7 +3207,6 @@ Ltac mkSignR l p t :=
 
 
 Ltac mkSign p t := mkSignR (@nil TDYN) p (fun XX : (forall TT:Type, TT) => t).
-
 
 (* same but detecting True and False *)
 
@@ -4736,3 +4735,5 @@ Ltac rew_all_right h :=
   | ?a = ?b => rewrite <- h in *
   | _ => idtac
   end.
+
+  
