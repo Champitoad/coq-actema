@@ -5,10 +5,11 @@ module type S = sig
   val create : unit -> t
   val add : t -> elt -> unit
   val of_list : elt list -> t
+  val domain : t -> elt list
   val find : t -> elt -> elt
   val union : t -> elt -> elt -> unit
   val equiv : t -> elt -> elt -> bool
-  val domain : t -> elt list
+  val is_representative : t -> elt -> bool
 end
 
 module Make (Elt : Hashtbl.HashedType) : S with type elt = Elt.t = struct
@@ -37,6 +38,8 @@ module Make (Elt : Hashtbl.HashedType) : S with type elt = Elt.t = struct
     List.iter (add uf) elts;
     uf
 
+  let domain uf = uf.parent |> HT.to_seq_keys |> List.of_seq
+
   let rec find uf elt =
     let parent = HT.find uf.parent elt in
     if Elt.equal parent elt
@@ -51,7 +54,6 @@ module Make (Elt : Hashtbl.HashedType) : S with type elt = Elt.t = struct
     end
 
   let equiv uf x y = Elt.equal (find uf x) (find uf y)
-  let domain uf = uf.parent |> HT.to_seq_keys |> List.of_seq
 
   let union uf x y =
     (* Replace elements by roots. *)
@@ -75,4 +77,8 @@ module Make (Elt : Hashtbl.HashedType) : S with type elt = Elt.t = struct
       else (* y becomes the parent of x. *)
         HT.replace uf.parent x y
     end
+
+  let is_representative uf elt =
+    let root = find uf elt in
+    Elt.equal elt root
 end

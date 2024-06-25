@@ -9,7 +9,8 @@
     
     All operations (except [add] and related operations) assume that the elements 
     have been previously added to the domain of the partition, and raise 
-    an unspecified exception otherwise. *)
+    an unspecified exception otherwise. 
+*)
 module type S = sig
   type elt
 
@@ -28,6 +29,9 @@ module type S = sig
       elements [elts], where each element is in its own class. *)
   val of_list : elt list -> t
 
+  (** [domain p] returns the list of elements in the domain of the partition [p]. *)
+  val domain : t -> elt list
+
   (** [find p elt] returns the representative of the class of [elt] in the partition [p]. 
       This may update the partition in place. *)
   val find : t -> elt -> elt
@@ -40,8 +44,9 @@ module type S = sig
       class in the partition [p]. This may update the partition in place. *)
   val equiv : t -> elt -> elt -> bool
 
-  (** [domain p] returns the list of elements in the domain of the partition [p]. *)
-  val domain : t -> elt list
+  (** [is_representative p elt] returns [true] if and only if [elt] is the representative
+      of its class in the partition [p]. *)
+  val is_representative : t -> elt -> bool
 end
 
 (** A union-find datastructure which uses hashtables internally. 
