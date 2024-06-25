@@ -9,12 +9,11 @@ type hyperlink = Path.t list * Path.t list [@@deriving show]
 
 let hyperlink_of_link : link -> hyperlink = fun (src, dst) -> ([ src ], [ dst ])
 
-(** [traverse_rec env context  rigid_fvars fvars pol term sub] traverses [term] along the path [sub], 
+(** [traverse_rec env context rigid_fvars fvars pol term sub] traverses [term] along the path [sub], 
     recording in [rigid_fvars] which variables are rigid, and returning the list of free variables 
     and the list of rigid variables (topmost first).
     
-    This assumes the path [sub] points to a sub-formula in the first-order skeleton + equality,
-    and raises an exception if it doesn't. *)
+    @raise InvalidSubtermPath if the path is invalid. *)
 let rec traverse_rec env context rigid_fvars fvars pol term sub :
     FVarId.t list * FVarId.t list * Context.t * Term.t =
   let ret t = (List.rev rigid_fvars, List.rev fvars, context, t) in
@@ -49,14 +48,20 @@ let rec traverse_rec env context rigid_fvars fvars pol term sub :
         | _ -> rigid_fvars
       in
       traverse_rec env context rigid_fvars (fvar :: fvars) pol body sub
-  (* Equality. *)
-  | [ 2 ], FAtom (App (_, Cst eq, [ _; t1; t2 ]))
-    when Name.equal eq Constants.eq ->
-      ret t1
-  | [ 3 ], FAtom (App (_, Cst eq, [ _; t1; t2 ]))
-    when Name.equal eq Constants.eq ->
-      ret t2
-  (* The path is either invalid or escapes the first-order skeleton. *)
+  (* Atoms : from this point on we mark all traversed variables as rigid
+     and don't change the polarity. *)
+  | i :: sub, FAtom (App (_, f, args)) when i < List.length (f :: args) ->
+      traverse_rec env context rigid_fvars fvars pol (List.at (f :: args) i) sub
+  | 0 :: sub, FAtom (Lambda (_, x, ty, body))
+  | 0 :: sub, FAtom (Prod (_, x, ty, body)) ->
+      traverse_rec env context rigid_fvars fvars pol ty sub
+  | 1 :: sub, FAtom (Lambda (_, x, ty, body))
+  | 1 :: sub, FAtom (Prod (_, x, ty, body)) ->
+      let fvar, context = Context.add_fresh x ty context in
+      let body = Term.instantiate fvar body in
+      traverse_rec env context (fvar :: rigid_fvars) (fvar :: fvars) pol body
+        sub
+  (* The path is invalid. *)
   | _ -> raise @@ InvalidSubtermPath (term, sub)
 
 (** [consecutive_pairs [x0; x1; x2; ... ]] returns the list [(x0, x1); (x1; x2); (x2, x3); ...]. *)

@@ -2,9 +2,11 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 
 Parameter f g : nat -> nat.
-Lemma bug1 (x y : nat)(e : (g y) = x) :
-   g (f x) = x.
+Lemma bug1 (e : (f 0) = 0) :
+   f (g 0) = 0.
 actema_force.
+
+
    (* ici on ne peut pas réécrire la 1e occurence de x avec e, alors que la tactique suivante marche : *)
    rew_dnd e
     (@nil nat)

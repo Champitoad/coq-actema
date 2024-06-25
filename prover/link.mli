@@ -56,9 +56,7 @@ module Pred : sig
   val fail : 'a t
 
   (** [unifiable] checks that the hyperlink is of the form [([src], [dst])] 
-      where [src] and [dst] lead to unifiable formulas in the first-order skeleton 
-      of their respective items. They can also lead to an argument of an equality 
-      (still in the first-order skeleton).
+      where [src] and [dst] lead to unifiable formulas of their respective items. 
       
       If this check succeeds returns the unification data (including the substitution). *)
   val unifiable : Logic.unif_data t
