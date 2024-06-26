@@ -1,9 +1,12 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
+
+(* In tactic rew_dnd_rev : call to rew_dnd_rev_o is missing an argument. *)
+
 Parameter f g : nat -> nat.
-Lemma bug1 (e : (f 0) = 0) :
-   f (g 0) = 0.
+Lemma bug1 :
+   ~f (g 0) = 0 -> ~ (f 0) = 0.
 actema_force.
 
 

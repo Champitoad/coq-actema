@@ -356,19 +356,45 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
         ]
   (* Rewrite with a hypothesis in the goal. *)
   | RewriteL, Hyp hyp, Concl ->
-      Log.printf "Sides : ";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
-      Log.printf "Source path : ";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
-        (compile_path coq_goal @@ remove_last src);
-      Log.printf "Dest path : ";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
-        (compile_path coq_goal dst);
-      Log.printf "Instantiations : ";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;
+      (*Log.printf "Sides : ";
+        Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
+        Log.printf "Source path : ";
+        Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
+          (compile_path coq_goal @@ remove_last src);
+        Log.printf "Dest path : ";
+        Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
+          (compile_path coq_goal dst);
+        Log.printf "Instantiations : ";
+        Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;*)
       let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
       calltac (tactic_kname "rew_dnd")
         [ hyp
+        ; compile_path coq_goal (remove_last src)
+        ; compile_path coq_goal dst
+        ; coq_sides
+        ; coq_instantiations
+        ]
+  (* Rewrite with the goal in a hypothesis. *)
+  | RewriteR, Hyp hyp, Concl ->
+      let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
+      calltac
+        (tactic_kname "rew_dnd_rev")
+        [ hyp
+        ; compile_path coq_goal src
+        ; compile_path coq_goal (remove_last dst)
+        ; coq_sides
+        ; coq_instantiations
+        ]
+  (* Rewrite with a hypothesis in another hypothesis. *)
+  | RewriteL, Hyp hyp1, Hyp hyp2 ->
+      let hyp1 = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp1 in
+      let hyp2 = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp2 in
+      let hyp3 = EConstr.mkVar @@ Goal.fresh_name ~basename:"H" coq_goal () in
+      calltac
+        (tactic_kname "rew_dnd_hyp")
+        [ hyp1
+        ; hyp2
+        ; hyp3
         ; compile_path coq_goal (remove_last src)
         ; compile_path coq_goal dst
         ; coq_sides
@@ -441,13 +467,13 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
         { unif_data with fvars_1 = unif.fvars_2; fvars_2 = unif.fvars_1 }
       in
       begin
-        (* Check the items are valid, and swap [src] and [dst] if they point to
-           the conclusion and a hypothesis respectively. *)
-        match (src.kind, dst.kind) with
-        | Concl, Hyp _ ->
+        (* Check the items are valid, and swap [src] and [dst] if needed
+           to avoid redundant cases in [execute_adnd]. *)
+        match (src.kind, dst.kind, dnd_kind) with
+        | Concl, Hyp _, _ | Hyp _, Hyp _, RewriteR ->
             execute_adnd coq_goal dst src (reverse_unif unif_data)
               (reverse_dnd dnd_kind)
-        | Hyp _, Hyp _ | Hyp _, Concl ->
+        | Hyp _, Hyp _, _ | Hyp _, Concl, _ ->
             execute_adnd coq_goal src dst unif_data dnd_kind
         | _ ->
             raise @@ UnsupportedAction (action, "Invalid items for DnD action.")
