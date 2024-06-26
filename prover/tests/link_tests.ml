@@ -54,7 +54,7 @@ let mk_test_proof (hyps : Term.t list) (concl : Term.t) : Proof.t =
   try Proof.init [ { g_id = 0; g_pregoal = pregoal } ]
   with TermUtils.TypingError err ->
     failwith
-    @@ Format.sprintf "Typing Error Haha !!\n%s\n"
+    @@ Format.sprintf "Typing Error when constructing dummy proof :\n%s\n"
          (TermUtils.show_typeError err)
 
 (**********************************************************************************************)
@@ -65,16 +65,7 @@ let check_action (action : 'a option) (pred : 'a option -> bool) : unit =
   then ()
   else Alcotest.failf "Failed to find an action matching the given predicate"
 
-(*let check_none (linkactions : Link.linkaction list) : unit =
-  if linkactions = []
-  then ()
-  else
-    let linkactions_str =
-      List.to_string ~sep:"\n\n" ~left:"" ~right:"" Link.show_linkaction
-        linkactions
-    in
-    Alcotest.failf "There were %d unwanted linkactions generated :\n%s\n"
-      (List.length linkactions) linkactions_str*)
+let check_none action = check_action action Option.is_none
 
 let link_forward hyp1 sub1 hyp2 sub2 (hlpred : 'a Link.Pred.t) : 'a option =
   (* Make a test proof. *)
@@ -150,9 +141,8 @@ let test_pol_2 () =
          ; exist "l" list_nat @@ mkCst Constants.true_
          ]
   in
-  let action = link_backward hyp [ 0 ] concl [ 1; 2; 2; 1 ] hlpred in
   (* Both formulas have positive polarity. *)
-  check_action action Option.is_none
+  check_none @@ link_backward hyp [ 0 ] concl [ 1; 2; 2; 1 ] hlpred
 
 let test_pol_3 () =
   let open Term in
@@ -169,9 +159,8 @@ let test_pol_3 () =
          ; exist "l" list_nat @@ mkCst Constants.true_
          ]
   in
-  let action = link_backward hyp [ 0; 1 ] concl [ 1; 1; 2 ] hlpred in
   (* The second path points to an expression (not a formula). *)
-  check_action action Option.is_none
+  check_none @@ link_backward hyp [ 0; 1 ] concl [ 1; 1; 2 ] hlpred
 
 (**********************************************************************************************)
 (** Testing [Pred.neg_eq_operand]. *)
@@ -242,9 +231,8 @@ let test_eq_2 () =
          ; exist "l" list_nat @@ mkCst Constants.true_
          ]
   in
-  let action = link_backward hyp [ 1 ] concl [ 1; 1; 0; 3; 1 ] hlpred in
   (* The second path points too far under an equality. *)
-  check_action action Option.is_none
+  check_none @@ link_backward hyp [ 1 ] concl [ 1; 1; 0; 3; 1 ] hlpred
 
 let test_eq_3 () =
   let open Term in
@@ -266,9 +254,8 @@ let test_eq_3 () =
          ; exist "l" list_nat @@ mkCst Constants.true_
          ]
   in
-  let action = link_backward hyp [ 1 ] concl [ 1; 1; 0 ] hlpred in
   (* The second path points to an equality instead of an equality argument. *)
-  check_action action Option.is_none
+  check_none @@ link_backward hyp [ 1 ] concl [ 1; 1; 0 ] hlpred
 
 let test_eq_4 () =
   let open Term in
@@ -290,9 +277,8 @@ let test_eq_4 () =
          ; exist "l" list_nat @@ mkCst Constants.true_
          ]
   in
-  let action = link_forward hyp1 [ 1 ] hyp2 [ 1; 1; 0; 2 ] hlpred in
   (* The second path points to an equality argument with positive polarity. *)
-  check_action action Option.is_none
+  check_none @@ link_forward hyp1 [ 1 ] hyp2 [ 1; 1; 0; 2 ] hlpred
 
 (**********************************************************************************************)
 (** Testing [Pred.unifiable]. *)
@@ -437,9 +423,8 @@ let test_unif_6 () =
   let concl =
     forall "x" list_nat @@ mkApps eq_list_nat [ mkBVar 0; mkBVar 0 ]
   in
-  let action = link_backward hyp [ 1; 2 ] concl [ 1; 2 ] hlpred in
   (* The two linked variables are of different types. *)
-  check_action action Option.is_none
+  check_none @@ link_backward hyp [ 1; 2 ] concl [ 1; 2 ] hlpred
 
 let test_unif_7 () =
   let open Term in
@@ -460,105 +445,35 @@ let test_unif_7 () =
   check_unif action (hyp, hyp_sub) (concl, concl_sub)
 
 (**********************************************************************************************)
-(** Testing [Pred.wf_subform]. *)
+(** Testing [Pred.instantiable]. *)
 
-(*let test_sfl_0 () =
-    let hlpred = Link.Pred.wf_subform in
-    let hyp1 = FConn (`Imp, [ FTrue; FFalse ]) in
-    let hyp2 = FTrue in
-    let actions = link_forward hyp1 [ 0 ] hyp2 [] hlpred in
-    check_linkactions actions @@ function `Subform _ -> true | _ -> false
+let check_inst action =
+  check_action action @@ function Some (AInstantiate _) -> true | _ -> false
 
-  let test_sfl_1 () =
-    let hlpred = Link.Pred.lift Link.Pred.unifiable in
+(*let test_inst_0 () =
+    let open Term in
+    let hlpred = Link.Pred.instantiate in
     let hyp =
-      forall "l" tlist @@ FPred ("perm", [ EVar ("l", 0); EVar ("l", 0) ])
+      forall "x" nat @@ forall "l1" list_nat @@ exist "l2" list_nat
+      @@ mkApps perm_nat
+           [ mkApps cons_nat [ mkBVar 2; mkBVar 1 ]
+           ; mkApps cons_nat [ mkCst Constants.zero; nil_nat ]
+           ]
     in
+    let hyp_sub = [ 1; 1; 2; 1; 3 ] in
     let concl =
-      forall "x" tnat @@ forall "l" tlist
-      @@ FPred
-           ( "perm"
-           , [ EFun ("cons", [ var "x"; var "l" ])
-             ; EFun ("cons", [ var "x"; var "l" ])
-             ] )
+      exist "l1" list_nat @@ forall "x" nat @@ exist "y" nat
+      @@ mkApp (mkCst Constants.not)
+      @@ forall "l2" list_nat @@ exist "l0" list_nat @@ forall "z" nat
+      @@ mkApps perm_nat [mkApps cons_nat [x]]
     in
-    let actions = link_backward hyp [ 0 ] concl [ 0; 0 ] hlpred in
-    check_linkactions actions @@ function `Subform _ -> true | _ -> false
-
-  let test_sfl_2 () =
-    let hlpred = Link.Pred.wf_subform in
-    let hyp =
-      forall "l1" tlist @@ forall "l2" tlist @@ forall "l3" tlist
-      @@ FConn
-           ( `Imp
-           , [ FPred ("perm", [ var "l1"; var "l2" ])
-             ; FConn
-                 ( `Imp
-                 , [ FPred ("perm", [ var "l2"; var "l3" ])
-                   ; FPred ("perm", [ var "l1"; var "l3" ])
-                   ] )
-             ] )
-    in
-    let concl =
-      forall "x" tnat @@ forall "l1" tlist @@ forall "l2" tlist
-      @@ FPred
-           ( "perm"
-           , [ EFun ("cons", [ var "x"; var "l1" ])
-             ; EFun ("cons", [ var "x"; var "l2" ])
-             ] )
-    in
-    let actions = link_backward hyp [ 0; 0; 0; 1; 1 ] concl [ 0; 0; 0 ] hlpred in
-    check_linkactions actions @@ function `Subform _ -> true | _ -> false
-
-  let test_sfl_3 () =
-    let hlpred = Link.Pred.wf_subform in
-    let hyp =
-      forall "x" tnat @@ forall "l1" tlist @@ forall "l2" tlist
-      @@ FPred
-           ( "perm"
-           , [ EFun ("cons", [ var "x"; var "l1" ])
-             ; EFun ("cons", [ var "x"; var "l2" ])
-             ] )
-    in
-    let concl =
-      forall "x" tnat @@ forall "l1" tlist @@ forall "l2" tlist
-      @@ exist "l0" tlist
-      @@ FConn
-           ( `And
-           , [ FPred ("perm", [ EFun ("cons", [ var "x"; var "l1" ]); var "l0" ])
-             ; FPred ("perm", [ var "l0"; EFun ("cons", [ var "x"; var "l2" ]) ])
-             ] )
-    in
-    let actions = link_backward hyp [ 0; 0; 0 ] concl [ 0; 0; 0; 0; 0 ] hlpred in
-    check_linkactions actions @@ function `Subform _ -> true | _ -> false
-
-  let test_sfl_4 () =
-    let hlpred = Link.Pred.wf_subform in
-    let hyp1 = FConn (`Equiv, [ FTrue; FFalse ]) in
-    let hyp2 = FTrue in
-    let actions = link_forward hyp1 [ 0 ] hyp2 [] hlpred in
-    check_linkactions actions @@ function `Subform _ -> true | _ -> false
-
-  (**********************************************************************************************)
-  (** Testing [Pred.deep_rewrite]. *)
-
-  let test_drw_0 () =
-    let hlpred =
-      let open Link.Pred in
-      deep_rewrite
-    in
-    let zero = EFun ("Z", []) in
-    let hyp = forall "x" tnat @@ eq (EFun ("add", [ var "x"; zero ])) (var "x") in
-    let concl =
-      forall "n" tnat @@ exist "l" tlist
-      @@ FPred
-           ( "perm"
-           , [ EFun ("cons", [ var "n"; var "l" ])
-             ; EFun ("cons", [ EFun ("add", [ var "n"; zero ]); var "l" ])
-             ] )
-    in
-    let actions = link_backward hyp [ 0; 0 ] concl [ 0; 0; 1; 0 ] hlpred in
-    check_linkactions actions @@ function `Subform _ -> true | _ -> false*)
+    (*check_inst (link_backward hyp hyp_sub concl [] hlpred);
+      check_none (link_backward hyp hyp_sub concl [ 2; 1 ] hlpred);
+      check_none (link_backward hyp hyp_sub concl [ 2; 1; 1 ] hlpred);*)
+    check_inst (link_backward hyp hyp_sub concl [ 1 ] hlpred)
+  (*check_none (link_backward hyp hyp_sub concl [ 2; 1; 1; 2; 1; 1; 1 ] hlpred);
+    check_none
+      (link_backward hyp hyp_sub concl [ 2; 1; 1; 2; 1; 1; 1; 2; 1 ] hlpred)*)*)
 
 (**********************************************************************************************)
 (** Running the tests. *)
@@ -588,7 +503,4 @@ let () =
         ; test_unif_6
         ; test_unif_7
         ]
-      (*; test_group "subformula-linking"
-            [ test_sfl_0; test_sfl_1; test_sfl_2; test_sfl_3; test_sfl_4 ]
-        ; test_group "deep-rewrite" [ test_drw_0 ]*)
     ]

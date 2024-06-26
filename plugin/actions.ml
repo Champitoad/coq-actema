@@ -510,6 +510,8 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
       (* Induction on the last variable. *)
       >> Tactics.intro_then @@ fun name ->
          induction_helper coq_goal (EConstr.mkVar name)
+  | Logic.AInstantiate (witness, quants) ->
+      raise @@ UnsupportedAction (action, "AInstantiate: todo")
 
 let execute ((idx, a) : int * Logic.action) : unit tactic =
   tclFOCUS (idx + 1) (idx + 1) @@ Goal.enter @@ execute_helper a

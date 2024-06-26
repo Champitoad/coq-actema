@@ -102,6 +102,9 @@ module Pred = struct
 
   let fail = mzero
 
+  let swap (pred : 'a t) : 'a t =
+   fun proof (srcs, dsts) -> pred proof (dsts, srcs)
+
   (** Check if the hyperlink is of the form [([src], [dst])] and return [(src, dst)]. *)
   let ask_link : link t =
     let* hyperlink = ask_hyperlink in
@@ -224,66 +227,67 @@ module Pred = struct
     | `Left -> return @@ ADnD (src, dst, unif, RewriteL)
     | `Right -> return @@ ADnD (src, dst, unif, RewriteR)
 
-  let instantiate proof (src, dst) = failwith "instantiate: todo"
-  (*let is_free_expr (t : term) (sub : int list) : bool =
-      let lenv, subt =
-        List.fold_left
-          (fun (lenv, t) i ->
-            let lenv =
-              match t with
-              | `F (FBind (_, x, ty, _)) -> LEnv.enter lenv x ty
-              | _ -> lenv
-            in
-            let t = direct_subterm t i in
-            (lenv, t))
-          (LEnv.empty, t) sub
-      in
-      match subt with
-      | `F _ -> false
-      | `E e -> List.for_all (not <<| LEnv.exists lenv) (e_vars e)
-    in
-
-    fun proof (srcs, dsts) ->
-      (* Link to quantified subformula *)
-      let to_form p_wit p_form =
-        let Proof.{ g_pregoal = goal; _ }, item_wit, (sub_wit, wit) =
-          IPath.destr proof p_wit
-        in
-
-        let where = match p_wit.ctxt.kind with `Var w -> w | _ -> `Body in
-        let ctxt_wit = term_of_item ~where item_wit in
-
-        (* Check that the witness contains only free variables *)
-        if is_free_expr ctxt_wit sub_wit
+  let rec instantiable_aux witness_ty env context pol term sub : bool =
+    match (sub, FirstOrder.view env context term) with
+    (* Base case : check we are at an instantiable quantifier
+       in which the binder appears in the body. *)
+    | [], FBind (bkind, Named _, ty, body) when Term.contains_loose_bvars body
+      ->
+        (* Check the quantifier is instantiable. *)
+        if (bkind = Forall && pol = Polarity.Neg)
+           || (bkind = Exist && pol = Polarity.Pos)
         then
-          let pol = Polarity.of_ipath proof p_form in
-          let f = IPath.term proof p_form in
+          (* Check the binder type is the same as the witness' type. *)
+          Term.alpha_equiv ty witness_ty
+        else false
+    (* Invert the polarity. *)
+    | 1 :: sub, FConn (Not, [ t1 ]) ->
+        instantiable_aux witness_ty env context (Polarity.opp pol) t1 sub
+    | 0 :: sub, FImpl (t1, t2) ->
+        instantiable_aux witness_ty env context (Polarity.opp pol) t1 sub
+    (* Recurse in the formula. *)
+    | 1 :: sub, FImpl (t1, t2) ->
+        instantiable_aux witness_ty env context pol t2 sub
+    | i :: sub, FConn (conn, ts) when 1 <= i && i <= List.length ts ->
+        instantiable_aux witness_ty env context pol (List.at ts (i - 1)) sub
+    (* Binders. *)
+    | 1 :: sub, FBind (Forall, x, ty, body) ->
+        let fvar, context = Context.add_fresh x ty context in
+        let body = Term.instantiate fvar body in
+        instantiable_aux witness_ty env context pol body sub
+    | 2 :: 1 :: sub, FBind (Exist, x, ty, body) ->
+        let fvar, context = Context.add_fresh x ty context in
+        let body = Term.instantiate fvar body in
+        instantiable_aux witness_ty env context pol body sub
+    | _ -> false
 
-          let wit = expr_of_term wit in
-          let ty_wit = Form.einfer goal.g_env wit in
+  (** This is [instantiate] but we assume the witness is on the left side of the hyperlink
+      and the quantifiers are on the right side. *)
+  let instantiate_half : Logic.action t =
+    let* proof = ask_proof in
+    let* srcs, dsts = ask_hyperlink in
+    match (srcs, dsts) with
+    | [ witness_path ], quants ->
+        let goal, _, _, witness = PathUtils.destr witness_path proof in
+        (* Check the witness is a closed term. *)
+        let* _ = guard @@ not @@ Term.contains_fvars witness in
+        (* Check the other paths point to instantiable quantifiers. *)
+        let env = goal.g_pregoal.g_env in
+        let witness_ty = TermUtils.typeof env Context.empty witness in
+        let* _ =
+          guard
+          @@ List.for_all
+               (fun path ->
+                 instantiable_aux witness_ty env Context.empty
+                   (Polarity.of_item @@ PathUtils.item path proof)
+                   (PathUtils.term path proof)
+                   path.sub)
+               quants
+        in
+        return @@ AInstantiate (witness, quants)
+    | _ -> fail
 
-          (* Check that the quantifier is instantiable, meaning it has
-             the right polarity as well as the same type as the witness *)
-          match (pol, f) with
-          | Neg, `F (FBind (`Forall, _, ty, _))
-          | Pos, `F (FBind (`Exist, _, ty, _))
-            when Form.t_equal goal.g_env ty ty_wit ->
-              [ `Instantiate (wit, p_form) ]
-          | _ -> []
-        else []
-      in
-
-      (* Link to quantified occurrences *)
-      match (srcs, dsts) with
-      | [ src ], [ dst ] -> begin
-          match pair_map (IPath.term proof) (src, dst) with
-          | `E _, `F _ -> to_form src dst
-          | `F _, `E _ -> to_form dst src
-          | `E _, `E _ -> [] (* TODO *)
-          | _ -> []
-        end
-      | _ -> []*)
-
+  let instantiate : Logic.action t = instantiate_half <|> swap instantiate_half
   let rewrite proof link = failwith "rewrite: todo"
   (*let rewrite_data (p : IPath.t) =
       if p.ctxt.kind = `Hyp

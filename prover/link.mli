@@ -55,6 +55,9 @@ module Pred : sig
   (** The hyperlink which always fails. This is a synonym of [mzero]. *)
   val fail : 'a t
 
+  (** [swap pred] swaps the sides of the hyperlink and then runs [pred]. *)
+  val swap : 'a t -> 'a t
+
   (** [unifiable] checks that the hyperlink is of the form [([src], [dst])] 
       where [src] and [dst] lead to unifiable subterms of their respective items. 
       
@@ -74,45 +77,44 @@ module Pred : sig
 
   (** [wf_subform] checks that the hyperlink is of the form [([src], [dst])]
       where [src] and [dst] lead to unifiable subformulas of opposite polarities, 
-      and returns a [ADnD] action. *)
+      and returns an [ADnD] action. *)
   val wf_subform : Logic.action t
 
   (** [deep_rewrite] checks that the hyperlink is of the form [([src], [dst])]
       where [src] and [dst] lead to unifiable subterms, and additionally that either [src] 
       or [dst] leads to the left or right side of an equality that has a negative polarity
       and is in the first order skeleton.
-      If it succeeds it returns a [ADnD]. *)
+      If it succeeds it returns an [ADnD] action. *)
   val deep_rewrite : Logic.action t
 
   (** [intuitionistic] checks that the hyperlink is of the form [([src], [dst])]
       where [(src, dst)] form an intuitionistic link. *)
   val intuitionistic : unit t
 
-  (*(** [Pred.instantiate proof (srcs, dsts)] checks if [srcs] (resp.
-        [dsts]) leads to an expression, and [dsts] (resp. [srcs]) leads either to
-        an instantiable quantified subformula, or the set of occurrences of an
-        instantiable quantified variable. It it succeeds, it returns the
-        corresponding [`Instantiate] link action. *)
-    val instantiate : linkaction t
+  (** [instantiate] checks if the link is of the form [([src], dsts)]
+      where [src] leads to a subterm without free variables, and [dsts] leads 
+      to a set of instantiable quantifiers in the first-order skeleton (or the other way around). 
+      If it succeeds it returns an [AInstantiate] action. *)
+  val instantiate : Logic.action t
 
-    (** [Pred.rewrite lnk] checks if [lnk] is a rewrite hyperlink. That is, one
-        end of the link is the left or right-hand side expression [e] of an
-        equality hypothesis, and the other end a non-empty set of arbitrary
-        subterms where all occurrences of [e] are to be rewritten.
+  (* (** [Pred.rewrite lnk] checks if [lnk] is a rewrite hyperlink. That is, one
+         end of the link is the left or right-hand side expression [e] of an
+         equality hypothesis, and the other end a non-empty set of arbitrary
+         subterms where all occurrences of [e] are to be rewritten.
 
-        If the check succeeds, it returns a [`Rewrite (red, res, tgts)] link
-        action, where [red] and [res] are respectively the reduced ([e]) and
-        residual expressions, and [tgts] are the targeted subterms.
+         If the check succeeds, it returns a [`Rewrite (red, res, tgts)] link
+         action, where [red] and [res] are respectively the reduced ([e]) and
+         residual expressions, and [tgts] are the targeted subterms.
 
-        This does NOT allow deep rewriting (i.e. the equality must be at the root of a hypothesis). *)
-    val rewrite : linkaction t
+         This does NOT allow deep rewriting (i.e. the equality must be at the root of a hypothesis). *)
+     val rewrite : linkaction t
 
-    (** [Pred.fold lnk] checks if [lnk] is a fold hyperlink. That is, one
-        end of the link is the head [x] (resp. body [e]) of a local variable
-        definition, and the other end a non-empty set of arbitrary subterms where
-        all occurrences of [x] (resp. [e]) are to be rewritten into [e] (resp.
-        [x]).
+     (** [Pred.fold lnk] checks if [lnk] is a fold hyperlink. That is, one
+         end of the link is the head [x] (resp. body [e]) of a local variable
+         definition, and the other end a non-empty set of arbitrary subterms where
+         all occurrences of [x] (resp. [e]) are to be rewritten into [e] (resp.
+         [x]).
 
-        If the check succeeds, it returns either a [`Fold] or [`Unfold] link action. *)
-    val fold : linkaction t*)
+         If the check succeeds, it returns either a [`Fold] or [`Unfold] link action. *)
+     val fold : linkaction t*)
 end

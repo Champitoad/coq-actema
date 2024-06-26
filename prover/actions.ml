@@ -63,24 +63,33 @@ let rec displayed_subs_rec env (term : Term.t) sub acc : int list list =
     or paths to implicit arguments in applications. *)
 let displayed_subs env t = displayed_subs_rec env t [] [] |> List.map List.rev
 
-(* TODO : check this works when [path] points to a variable. *)
 let all_subpaths proof path : Path.t list =
-  let goal, _, _, term = PathUtils.destr path proof in
-  let subs = displayed_subs goal.g_pregoal.g_env term in
+  let goal, _, _, subterm = PathUtils.destr path proof in
+  let subs = displayed_subs goal.g_pregoal.g_env subterm in
   List.map
     (fun sub ->
       Path.{ goal = path.goal; kind = path.kind; sub = path.sub @ sub })
     subs
 
-(* TODO : handle variables. *)
 let all_goal_subpaths proof goal : Path.t list =
-  let roots =
-    Path.make ~kind:Concl goal.g_id
-    :: List.map
-         (fun name -> Path.make ~kind:(Hyp name) goal.g_id)
-         (Hyps.names goal.g_pregoal.g_hyps)
+  let concl_roots = [ Path.make ~kind:Concl goal.g_id ] in
+  let hyp_roots =
+    List.map
+      (fun name -> Path.make ~kind:(Hyp name) goal.g_id)
+      (Hyps.names goal.g_pregoal.g_hyps)
   in
-  List.concat_map (all_subpaths proof) roots
+  let var_roots =
+    List.concat_map
+      (fun var ->
+        Path.make ~kind:(VarHead var.v_name) goal.g_id
+        :: Path.make ~kind:(VarType var.v_name) goal.g_id
+        ::
+        (if var.v_body != None
+         then [ Path.make ~kind:(VarBody var.v_name) goal.g_id ]
+         else []))
+      (Vars.to_list goal.g_pregoal.g_vars)
+  in
+  List.concat_map (all_subpaths proof) (concl_roots @ hyp_roots @ var_roots)
 
 (** [dnd_actions src dst selection proof] computes all possible link action actions
     associated with the DnD action [DnD (src, dst)].
@@ -130,19 +139,19 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
         [ dst_sel ]
   in
 
-  (*Js_log.log "**********************************************************";
-    Js_log.log
-    @@ Format.sprintf "Sources : \n%s\nDests : \n%s\n"
-         (List.to_string (List.to_string Path.to_string) hyperlink_sources)
-         (List.to_string (List.to_string Path.to_string) hyperlink_dests);*)
+  Js_log.log "**********************************************************";
+  Js_log.log
+  @@ Format.sprintf "Sources : \n%s\nDests : \n%s\n"
+       (List.to_string (List.to_string Path.to_string) hyperlink_sources)
+       (List.to_string (List.to_string Path.to_string) hyperlink_dests);
 
   (* Check every hyperlink. *)
   let open Utils.Monad.List in
   let* hyper_src = hyperlink_sources in
   let* hyper_dst = hyperlink_dests in
   let action =
-    (* We are interested in deep rewrites and subformula interactions. *)
-    Pred.(wf_subform <|> deep_rewrite) proof (hyper_src, hyper_dst)
+    Pred.(wf_subform <|> deep_rewrite <|> instantiate)
+      proof (hyper_src, hyper_dst)
   in
   match action with
   | None -> []
@@ -152,6 +161,15 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
         ; icon = None
         ; highlights = hyper_src @ hyper_dst
         ; kind = DnD (src, Some dst)
+        ; goal_id = goal.g_id
+        ; action
+        }
+  | Some (AInstantiate (witness, paths) as action) ->
+      return
+        { description = "Instantiate"
+        ; icon = None
+        ; highlights = hyper_src @ hyper_dst
+        ; kind = DnD (List.hd hyper_src, Some (List.hd hyper_dst))
         ; goal_id = goal.g_id
         ; action
         }

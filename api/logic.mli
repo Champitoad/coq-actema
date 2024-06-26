@@ -181,10 +181,14 @@ module Path : sig
       A variable's head, type and body are considered in the same item. *)
   val same_item : t -> t -> bool
 
-  (** [is_prefix p1 p2] checks whether [p1] is a prefix of [p2]. This means that :
+  (** [is_prefix p1 p2] checks whether [p1] is a prefix of [p2].
+      This means that :
       - [p1.goal] and [p2.goal] are equal.
-      - [p1.kind] and [p2.kind] are equal.
-      - [p1.sub] is a prefix of [p2.sub]. *)
+      And one of the following is true :
+      - [p1.kind] and [p2.kind] are equal and [p1.sub] is a prefix of [p2.sub].
+      - [p1.kind = VarHead v] and [p2.kind = VarType v].
+      - [p1.kind = VarHead v] and [p2.kind = VarBody v].
+  *)
   val is_prefix : t -> t -> bool
 
   (** Set the [sub] part of a path to the empty list. *)
@@ -281,18 +285,17 @@ type action =
   | ALemmaAdd of Name.t
   (* A drag and drop action. The paths are the two sides of the link. *)
   | ADnD of Path.t * Path.t * unif_data * dnd_kind
-(*| ADef of (Name.t * Term.t * Term.t) (* Introduction of a local definition *)
-    | ARed of Path.t (* Unfold contextual action *)
-    | ACut of Term.t (* Click on +hyp button *)
-    | AInstantiate of (Term.t * Path.t)
-      (* DnD action for instantiating a quantifier *)
-  ******************************************************
-      (*| Instantiate of hyperlink * Term.t * Path.t
-    | Rewrite of hyperlink * Term.t * Term.t * Path.t list
-        (** Rewrite expression [e1] into [e2] at several paths. *)
-    | Fold of hyperlink * Name.t * Path.t list
-    | Unfold of hyperlink * Name.t * Path.t list*)
-*)
+  (* [Instantiate (witness, quants)] instantiates the quantifiers [quants]
+     using the closed term [witness].
+     The paths [quants] point to quantifiers (i.e. lambdas or dependent products)
+     in the first-order skeleton which bind a variable which is instantiable
+     and of the same type as [witness].
+
+     For instance in
+        P : nat -> Prop, h : exists a, P a |- forall x, exists y, P x /\ forall z, P z
+     one could instantiate any of a, x, z by e.g. [42 + 5].
+     However y is not instantiable because of polarity issues. *)
+  | AInstantiate of Term.t * Path.t list
 [@@deriving show]
 
 (* An action identifier is a pair of an arbitrary string identifier and an abstract goal. *)

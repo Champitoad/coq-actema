@@ -309,7 +309,25 @@ module Path = struct
     | _ -> false
 
   let is_prefix p1 p2 =
-    p1.goal = p2.goal && p1.kind = p2.kind && List.is_prefix p1.sub p2.sub
+    if p1.goal != p2.goal
+    then false
+    else
+      match (p1.kind, p2.kind) with
+      | Concl, Concl when List.is_prefix p1.sub p2.sub -> true
+      | Hyp h1, Hyp h2 when Name.equal h1 h2 && List.is_prefix p1.sub p2.sub ->
+          true
+      | VarHead v1, VarHead v2 when Name.equal v1 v2 ->
+          (* In this case both subs should be empty. *)
+          true
+      | VarType v1, VarType v2
+        when Name.equal v1 v2 && List.is_prefix p1.sub p2.sub ->
+          true
+      | VarBody v1, VarBody v2
+        when Name.equal v1 v2 && List.is_prefix p1.sub p2.sub ->
+          true
+      | VarHead v1, VarType v2 when Name.equal v1 v2 -> true
+      | VarHead v1, VarBody v2 when Name.equal v1 v2 -> true
+      | _ -> false
 
   let erase_sub path = { path with sub = [] }
 end
@@ -342,6 +360,7 @@ type action =
   | AGeneralize of Name.t
   | ALemmaAdd of Name.t
   | ADnD of Path.t * Path.t * unif_data * dnd_kind
+  | AInstantiate of Term.t * Path.t list
 [@@deriving show]
 
 type aident = string * hyp list * Term.t [@@deriving show]

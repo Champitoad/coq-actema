@@ -127,7 +127,7 @@ module PathUtils = struct
     try { g_id = path.goal; g_pregoal = Proof.byid proof path.goal }
     with InvalidGoalId _ -> raise @@ Path.InvalidPath (Path.to_string path)
 
-  (** This is fast. *)
+  (** This should be reasonably fast. *)
   let destr_aux (path : Path.t) proof : goal * item * Term.t =
     let goal = goal path proof in
     let pregoal = goal.g_pregoal in
