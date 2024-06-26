@@ -3356,8 +3356,6 @@ Ltac inst_hyp ts l h h' s o :=
    end;
    try discriminate.
 
-
-
 Ltac dyn_inst_hyp l h h' o :=
   let ht := type of h in
   let ts := mkSign l ht in
@@ -4008,7 +4006,7 @@ Ltac rew_dnd_o ts' h hp gp t i :=
  i : instantiation *)
 
 
-Ltac rew_dnd_rev_o ts' h hp hp' gp t i :=
+Ltac rew_dnd_rev_o ts' h hp gp t i :=
   let fl := get_last t in
   let t' := snitch_last t in
   let tsc := eval compute in ts' in
@@ -4016,7 +4014,7 @@ Ltac rew_dnd_rev_o ts' h hp hp' gp t i :=
   pose ts := tsc;
   reify_eq ts gp;
   let h' := fresh "h" in 
-  reify_prop_hyp ts h h' hp hp';
+  reify_prop_hyp ts h h' hp;
   let ec :=
     match type of h' with
     | coerce _ _ ?e _ => e
@@ -4068,6 +4066,8 @@ Ltac rew_dnd  h hp gp t i :=
       idtac "c2";
       rew_dnd_o ts h hp gp t i
   end.
+
+
 
 (*
 
@@ -4213,7 +4213,24 @@ Ltac rew_dnd_hyp fl  h1 h2 h3 hp1 hp2 t i :=
   let ht2 := type of h2 in
   let ts1 := mkSign hp1 ht1 in
   let ts := mkSignR ts1 hp2  (fun XX : (forall TT:Type, TT) => ht2) in
-      rew_dnd_hyp_o ts fl  h1 h2 h3 hp1 hp2 t i.
+  rew_dnd_hyp_o ts fl  h1 h2 h3 hp1 hp2 t i.
+
+ (*
+Parameter P : nat -> Prop.
+Goal (forall x , (forall y, P y) -> x=3 -> P 4).
+  intros x h.
+(* intro e.
+  rew_dnd_hyp false e h hh (@nil nat)
+              (cons 1 (cons 1 nil))
+              (cons true (cons true nil))
+                            (cons (Some (mDYN _ (3))) nil).
+*)
+  
+  rew_dnd_rev h (cons 1 (cons 1 nil)) (cons 0 nil)
+              (cons false (cons true (cons true nil)))
+              (cons (Some (mDYN _ ( 3))) nil).
+*)
+  
 (*
   let th1 := type of h1 in
   let th2 := type of h2 in 
