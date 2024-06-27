@@ -356,9 +356,6 @@ end
 module Constants = struct
   open Name
 
-  (** We use a special symbol [!] to ensure this is distinct from any Coq identifiers. *)
-  let dummy = make "!dummy"
-
   let eq = make "Coq.Init.Logic.eq"
   let nat = make "Coq.Init.Datatypes.nat"
   let list = make "Coq.Init.Datatypes.list"
