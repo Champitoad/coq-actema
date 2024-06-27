@@ -4595,11 +4595,32 @@ Ltac pcase p :=
   | cons _ ?p' => intro; pcase p'
   end.
 
+(* Destruct the closed term [t]. *)
+Ltac mydestruct t := 
+  destruct t ; try discriminate.
 
-Ltac mydestruct e t:=
-  generalize (refl_equal t);
-  destruct t at -1;
-  intro e.
+(* Induction on the closed term [t]. *)
+Ltac myinduction t := 
+  induction t ; try discriminate.
+
+(* [mydestruct_eq t] destructs the closed term [t] and introduces
+   an equality named to remember the link between the old and new value of [t]. *)
+Ltac mydestruct_eq t :=
+  let e := fresh "E" in
+  generalize (refl_equal t) ;
+  destruct t at -1 ;
+  intro e ; 
+  try discriminate.
+
+(* [myinduction_eq t] performs induction on the closed term [t] and introduces
+   an equality named to remember the link between the old and new value of [t]. *)
+Ltac myinduction_eq t :=
+  let e := fresh "E" in
+  generalize (refl_equal t) ;
+  induction t at -1 ;
+  intro e ; 
+  try discriminate.
+
 
 
 (*

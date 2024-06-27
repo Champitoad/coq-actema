@@ -9,6 +9,14 @@ exception UnsupportedAction of Logic.action * string
 (** Return the kernel name of a tactic defined in [Actema.HOL]. *)
 let tactic_kname = kername [ "Actema"; "HOL" ]
 
+(** Simplify the conclusion and hypotheses in the current Coq goal *)
+let simplify_goal coq_goal : unit tactic =
+  let open PVMonad in
+  let hyp_names = Goal.hyps_names coq_goal |> Names.Id.Set.to_list in
+  let* () = calltac (tactic_kname "simplify_goal") [] in
+  forM_ hyp_names @@ fun hyp ->
+  calltac (tactic_kname "simplify_hyp") [ EConstr.mkVar hyp ]
+
 (** Make an introduction pattern to introduce named variables.
     If any of the given names is already bound, this will create a fresh name instead. *)
 let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
@@ -425,12 +433,7 @@ let execute_ainstantiate coq_goal witness (path : Logic.Path.t) : unit tactic =
   | Hyp name ->
       let id = EConstr.mkVar @@ Names.Id.of_string @@ Name.show name in
       calltac (tactic_kname "dyn_inst_hyp_nd") [ coq_path; id; coq_witness ]
-  | Concl ->
-      Log.printf "Coq path :";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_path;
-      Log.printf "Coq witness :";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_witness;
-      calltac (tactic_kname "dyn_inst_goal") [ coq_path; coq_witness ]
+  | Concl -> calltac (tactic_kname "dyn_inst_goal") [ coq_path; coq_witness ]
   | VarHead _ | VarBody _ | VarType _ ->
       raise
       @@ UnsupportedAction
@@ -440,28 +443,17 @@ let execute_ainstantiate coq_goal witness (path : Logic.Path.t) : unit tactic =
 (** Putting it all together. *)
 (*********************************************************************************)
 
-(** [clear_if_var coq_goal econstr] checks if [econstr] is a local variable, 
-    and if so clears it from the goal. *)
-let clear_if_var coq_goal econstr : unit tactic =
-  if EConstr.isVar (Goal.sigma coq_goal) econstr
-  then
-    let vname = EConstr.destVar (Goal.sigma coq_goal) econstr in
-    Tactics.clear [ vname ]
-  else Tacticals.tclIDTAC
-
-(** [case_helper coq_goal econstr] performs case analysis on [econstr]. *)
 let case_helper coq_goal econstr : unit tactic =
-  let open PVMonad in
-  Induction.destruct false (Some true) econstr None None
-  (* For some reason [Induction.destruct] does not clear [econstr]. *)
-  >> clear_if_var coq_goal econstr
+  (* If [econstr] is not a simple variable, we add an equation to remember its old value. *)
+  if EConstr.isVar (Goal.sigma coq_goal) econstr
+  then calltac (tactic_kname "mydestruct") [ econstr ]
+  else calltac (tactic_kname "mydestruct_eq") [ econstr ]
 
-(** [induction_helper coq_goal econstr] performs induction on [econstr]. *)
 let induction_helper coq_goal econstr : unit tactic =
-  let open PVMonad in
-  Induction.induction false (Some true) econstr None None
-  (* For some reason [Induction.induction] does not clear [econstr]. *)
-  >> clear_if_var coq_goal econstr
+  (* If [econstr] is not a simple variable, we add an equation to remember its old value. *)
+  if EConstr.isVar (Goal.sigma coq_goal) econstr
+  then calltac (tactic_kname "myinduction") [ econstr ]
+  else calltac (tactic_kname "myinduction_eq") [ econstr ]
 
 let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   let open PVMonad in
@@ -496,6 +488,7 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
       let reverse_unif (unif : Logic.unif_data) =
         { unif_data with fvars_1 = unif.fvars_2; fvars_2 = unif.fvars_1 }
       in
+      (* Execute the dnd action. *)
       begin
         (* Check the items are valid, and swap [src] and [dst] if needed
            to avoid redundant cases in [execute_adnd]. *)
