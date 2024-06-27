@@ -11,13 +11,16 @@ Fixpoint eqb n m :=
 (* Here we can't instantiate [x]. *)
 Parameter (P : nat -> Prop).
 Lemma test a (b := a + a) : ~ forall x, exists y, P x /\ P y.
-actema_force.
 Admitted.
 
-(* Here we can't rewrite the first 0 into f0 with <-[f 0 = 0]. *)
-Parameter (f : nat -> nat).
 Parameter (Q : nat -> Prop).
-Lemma bug2 (h : Q 0) : ~ (1 = 0).
-actema_force.
+Lemma bug2 (h : Q 0) : ~ (0 = 1).
+rew_dnd_rev 
+  h 
+  (cons 1 nil) 
+  (cons 1 nil) 
+  (cons true (cons false nil)) 
+  (@nil (option DYN)).
 
-(* Double click on hypothesis : try discriminate. *)
+
+(* Searching lemmas twice in a row : "failed to apply new proof state". *)
