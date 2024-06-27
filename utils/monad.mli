@@ -60,6 +60,12 @@ module type S = sig
   (** Same as [mapM], but discards the result. *)
   val mapM_ : ('a -> 'b t) -> 'a list -> unit t
 
+  (** Same as [mapM] but with arguments flipped. *)
+  val forM : 'a list -> ('a -> 'b t) -> 'b list t
+
+  (** Same as [mapM_] but with arguments flipped. *)
+  val forM_ : 'a list -> ('a -> 'b t) -> unit t
+
   (** Fold a monadic action over a list. *)
   val foldM : ('acc -> 'a -> 'acc t) -> 'acc -> 'a list -> 'acc t
 end

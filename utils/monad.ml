@@ -19,6 +19,8 @@ module type S = sig
   val repeatM : int -> 'a t -> 'a list t
   val mapM : ('a -> 'b t) -> 'a list -> 'b list t
   val mapM_ : ('a -> 'b t) -> 'a list -> unit t
+  val forM : 'a list -> ('a -> 'b t) -> 'b list t
+  val forM_ : 'a list -> ('a -> 'b t) -> unit t
   val foldM : ('acc -> 'a -> 'acc t) -> 'acc -> 'a list -> 'acc t
 end
 
@@ -76,6 +78,9 @@ struct
   let mapM_ f xs =
     let+ _ = mapM f xs in
     ()
+
+  let forM xs f = mapM f xs
+  let forM_ xs f = mapM_ f xs
 
   let foldM f acc xs =
     List.fold_left
