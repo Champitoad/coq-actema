@@ -4289,7 +4289,7 @@ Ltac forward_o ts' h1' h2' h3 hp1 hp2 t i :=
   apply trex_norm_fapply in h3;
   rewrite /coerce  /= in h1;
   rewrite /coerce /= in h2;
-  [ | simpl; try done; auto];
+  [ | rewrite /= /eq_rect_r /eq_rect /eq_sym; try done; auto];
   try clear h1; try clear h2;
   let st := match type of h3 with
             | trl3 _ ?oh => oh
@@ -4300,11 +4300,11 @@ Ltac forward_o ts' h1' h2' h3 hp1 hp2 t i :=
            /seq.cat
            /check_nat
            /eq_nat /eqnqtdec  /app_curry /nat_rec /nat_rect
-           /eq_rect_r /eq_rect /eq_rec_r
+           /eq_rect_r /eq_rect /eq_rect_r
            /eq_ind_r /eq_ind  /eq_sym /list_rect
            /eq_rect_r /eq_rect /eq_sym /ppconcat
            /ts  /wsort /sl
-     /eq_rec_r /eq_sym /eq_rec /eq_rect in h3;
+     /eq_rect_r /eq_sym /eq_rec /eq_rect in h3;
     let np := type of h3 in
     let nnp := orename st np in
     try change nnp in h3;
