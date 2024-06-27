@@ -96,8 +96,9 @@ let rec convert_sub (term : Lang.Term.t) (sub : int list) : int list =
   (* This should not happen. *)
   | _ -> failwith "Actions.convert_sub : invalid path"
 
-(** Turn an actema path into a Coq term of type [list nat] that can be fed to tactics. *)
-let compile_path coq_goal (path : Logic.Path.t) : EConstr.t =
+(** Turn an actema path into a Coq term of type [list nat] that can be fed to tactics.
+    Takes as an optional argument a suffix to add to the path after it has been translated. *)
+let compile_path ?(suffix = []) coq_goal (path : Logic.Path.t) : EConstr.t =
   let open Logic in
   let api_goal = Export.goal coq_goal in
   let term =
@@ -108,7 +109,8 @@ let compile_path coq_goal (path : Logic.Path.t) : EConstr.t =
         failwith
           "Actions.compile_path : can't handle paths that point to a variable."
   in
-  path.sub |> convert_sub term |> Trm.Datatypes.natlist (Goal.env coq_goal)
+  let sub = convert_sub term path.sub in
+  Trm.Datatypes.natlist (Goal.env coq_goal) (sub @ suffix)
 
 (*********************************************************************************)
 (** [AIntro] actions. *)
@@ -356,16 +358,6 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
         ]
   (* Rewrite with a hypothesis in the goal. *)
   | RewriteL, Hyp hyp, Concl ->
-      (*Log.printf "Sides : ";
-        Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
-        Log.printf "Source path : ";
-        Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
-          (compile_path coq_goal @@ remove_last src);
-        Log.printf "Dest path : ";
-        Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
-          (compile_path coq_goal dst);
-        Log.printf "Instantiations : ";
-        Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;*)
       let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
       calltac (tactic_kname "rew_dnd")
         [ hyp
@@ -377,6 +369,16 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
   (* Rewrite with the goal in a hypothesis. *)
   | RewriteR, Hyp hyp, Concl ->
       let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
+      Log.printf "Sides : ";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
+      Log.printf "Source path : ";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
+        (compile_path coq_goal src);
+      Log.printf "Dest path : ";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
+        (compile_path coq_goal @@ remove_last dst);
+      Log.printf "Instantiations : ";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;
       calltac
         (tactic_kname "rew_dnd_rev")
         [ hyp
@@ -392,7 +394,8 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
       let hyp3 = EConstr.mkVar @@ Goal.fresh_name ~basename:"H" coq_goal () in
       calltac
         (tactic_kname "rew_dnd_hyp")
-        [ hyp1
+        [ Trm.Datatypes.of_bool (Goal.env coq_goal) false
+        ; hyp1
         ; hyp2
         ; hyp3
         ; compile_path coq_goal (remove_last src)
@@ -405,6 +408,33 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
       @@ UnsupportedAction
            ( ADnD (src, dst, unif_data, dnd_kind)
            , "Invalid items for DnD action." )
+
+(*********************************************************************************)
+(** [AInstantiate] actions. *)
+(*********************************************************************************)
+
+let execute_ainstantiate coq_goal witness (path : Logic.Path.t) : unit tactic =
+  (* Compile the witness. *)
+  let table = Symbols.all coq_goal in
+  let coq_witness = Import.term coq_goal table witness in
+  (* Compile the path. *)
+  (* The tactics expect the path to end with a [1], i.e. to point to the body
+     of the quantifier that is instantiated. *)
+  let coq_path = compile_path ~suffix:[ 1 ] coq_goal path in
+  match path.kind with
+  | Hyp name ->
+      let id = EConstr.mkVar @@ Names.Id.of_string @@ Name.show name in
+      calltac (tactic_kname "dyn_inst_hyp_nd") [ coq_path; id; coq_witness ]
+  | Concl ->
+      Log.printf "Coq path :";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_path;
+      Log.printf "Coq witness :";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_witness;
+      calltac (tactic_kname "dyn_inst_goal") [ coq_path; coq_witness ]
+  | VarHead _ | VarBody _ | VarType _ ->
+      raise
+      @@ UnsupportedAction
+           (AInstantiate (witness, [ path ]), "Can't instantiate in variable")
 
 (*********************************************************************************)
 (** Putting it all together. *)
@@ -511,7 +541,11 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
       >> Tactics.intro_then @@ fun name ->
          induction_helper coq_goal (EConstr.mkVar name)
   | Logic.AInstantiate (witness, quants) ->
-      raise @@ UnsupportedAction (action, "AInstantiate: todo")
+      (* Instantiate the quantifiers one by one.
+         TODO : this might break if instantiating a quantifier changes the paths to other
+         instantiated quantifiers.
+         Maybe instantiating the deepest quantifiers first fixes this ? *)
+      mapM_ (execute_ainstantiate coq_goal witness) quants
 
 let execute ((idx, a) : int * Logic.action) : unit tactic =
   tclFOCUS (idx + 1) (idx + 1) @@ Goal.enter @@ execute_helper a
