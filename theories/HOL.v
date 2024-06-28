@@ -669,7 +669,7 @@ Fixpoint b3 (rw:bool)(l:trace) (b:bool)(ist:inst)(nh:ct)(hyp : cx nh)(hi : pp nh
                     (B gi'))
          | cNot ng1 hg, _, gi1 =>
               not3
-               (f3 rw l b ist nh hyp hi
+               (f3 rw l false ist nh hyp hi
                    ng1 hg gi1) 
          | (impr ng'  B g), ng'', gi' =>
              (impr3 (B gi')
@@ -737,6 +737,7 @@ Fixpoint b3 (rw:bool)(l:trace) (b:bool)(ist:inst)(nh:ct)(hyp : cx nh)(hi : pp nh
                ((B hi1)->
                 (coerce ng goal gi))
       | orr _ B h, nh1, hi1 =>
+
           andr3 ((B hi1)->
                 (coerce ng goal gi))
                (b3 rw l b ist nh1 h hi1
@@ -930,7 +931,7 @@ with f3 (rw:bool)(l:trace)(b:bool)(ist: inst)(n1:ct)(h1 : cx n1)(i1 : pp n1)
                  (B i2)
        | cNot n2' h2', n2, i2  =>
            not3
-             (b3 rw l b ist n1 h1 i1 _ h2'
+             (b3 rw l true ist n1 h1 i1 _ h2'
                  i2)
       | impr n2' B h2', n2, i2  =>
           impr3  (B i2)
@@ -3819,10 +3820,15 @@ Ltac back_o ts'  h0 hp gp t i :=
            | |- ?xx => xx
            end
          in clear h;
-     rewrite   /b3 /o3_norm /trl3  /coerce /xor 
-                   /tr3  /check_curry  /check_list /eq_list /list_rec /eq_rect_r /eq_rect /eq_sym /seq.cat /check_nat /eq_nat /eqnqtdec  /app_curry /nat_rec /nat_rect /eq_rect_r /eq_rect
-                   /eq_ind_r /eq_ind  /eq_sym /list_rect /eq_rect_r /eq_rect /eq_sym /ppconcat
-                   /ts  /wsort /sl;
+          do 3 (
+               rewrite   /b3 /o3_norm /trl3  /coerce /xor 
+                         /tr3  /check_curry  /check_list /eq_list /list_rec  /eq_rec_r
+                         /eq_rect_r /eq_rect /eq_sym /seq.cat /check_nat /eq_nat 
+                         /eqnqtdec  /app_curry /nat_rec /nat_rect /eq_rect_r /eq_rect
+                         /eq_ind_r /eq_ind  /eq_sym /list_rect  /eq_rec_r
+                         /eq_rect_r /eq_rect /eq_sym
+                         /ppconcat  /eq_rec_r /eq_rec /eq_rect /eq_sym
+                   /ts  /wsort /sl);
                 simplify_goal;
          let tg :=
            match goal with
@@ -3991,13 +3997,14 @@ Ltac rew_dnd_o ts' h hp gp t i :=
     | |- trl3 _ ?o => o
     end
   in
-  rewrite   /b3 /app_curry /trl3 /o3_norm /coerce /check_curry /check_list 
+  do 3 (rewrite
+    /b3 /app_curry /trl3 /o3_norm /coerce /check_curry /check_list 
     /ppconcat
     /xor /tr3  /eqnqtdec /check_nat 
     /list_rect  /eq_rect_r /eq_rect /eq_sym /nat_rec 
     /nat_rect /f_equal /eq_list /eq_nat /eq_rec_r /eq_rec /eq_rect
     /list_rec  /list_rect /seq.cat /nat_rec 
-    /nat_rect /eq_ind_r /eq_ind  /eq_sym  /app_curry ;
+    /nat_rect /eq_ind_r /eq_ind  /eq_sym  /app_curry /ts) ;
   match goal with
   | |- ?tt =>
       let nt := orename os tt in
@@ -4045,10 +4052,10 @@ Ltac rew_dnd_rev_o ts' h hp gp t i :=
     | |- trl3 _ ?o => o
     end
   in
-  rewrite   /b3 /trl3 /ts /o3_norm /coerce  /xor /tr3  /eq_nat /check_nat /eqnqtdec
+  do 3 (rewrite   /b3 /trl3 /ts /o3_norm /coerce  /xor /tr3  /eq_nat /check_nat /eqnqtdec
             /nat_rec /nat_rect  /list_rect /eq_rect_r /eq_rect /eq_sym /f_equal
             /eq_ind_r /eq_ind  /eq_sym /ts  /eq_nat
-            /nat_rec /nat_rect;
+            /nat_rec /nat_rect);
   match goal with
   | |- ?tt =>
       let nt := orename os tt in
@@ -4203,15 +4210,12 @@ Ltac rew_dnd_hyp_o ts' fl  h1 h2 h3 hp1 hp2 t i :=
     match type of h3 with
     | trl3 _ ?oh => oh
     end in
-  rewrite   /f3 /trl3 /o3_norm /coerce  /xor /tr3  /eq_nat /check_nat /eqnqtdec
+  do 3 (rewrite   /f3 /trl3 /o3_norm /coerce  /xor /tr3  /eq_nat /check_nat /eqnqtdec
             /nat_rec /nat_rect  /list_rect /eq_rect_r /eq_rect /eq_sym /f_equal
-            /eq_ind_r /eq_ind /eq_nat /eq_sym /ts in h3;
+            /eq_ind_r /eq_ind /eq_nat /eq_sym /ts in h3);
   let np := type of h3 in
   let nnp := orename st np in
   try (change nnp in h3);
- (*    rewrite ?/ts /coerce /wsort /trl3 /tr3 /f3 /o3_norm /cT /cB in h3;
-   rewrite /convert /trs ?eqnqtdec_refl /eq_rect_r /eq_rect /Logic.eq_sym in h3;
-   rewrite /appist /trs /eqnqtdec /eq_rect_r /eq_rect /nat_rec /nat_rect /protect_term  /eq_ind_r /eq_ind /eq_sym /f_equal /wsort /sl in h3; *)
   clear ts;
   simplify_hyp h3;
 try discriminate.
@@ -4304,7 +4308,7 @@ Ltac forward_o ts' h1' h2' h3 hp1 hp2 t i :=
   let st := match type of h3 with
             | trl3 _ ?oh => oh
             end in
-  rewrite  /f3 /o3_norm /trl3  /coerce /xor /tr3  /check_curry
+  do 3 (rewrite  /f3 /o3_norm /trl3  /coerce /xor /tr3  /check_curry
            /check_list
            /eq_list /list_rec /eq_rect_r /eq_rec_r /eq_rect /eq_sym
            /seq.cat
@@ -4314,7 +4318,7 @@ Ltac forward_o ts' h1' h2' h3 hp1 hp2 t i :=
            /eq_ind_r /eq_ind  /eq_sym /list_rect
            /eq_rect_r /eq_rect /eq_sym /ppconcat
            /ts  /wsort /sl
-     /eq_rect_r /eq_sym /eq_rec /eq_rect in h3;
+     /eq_rect_r /eq_sym /eq_rec /eq_rect in h3);
     let np := type of h3 in
     let nnp := orename st np in
     try change nnp in h3;
@@ -4607,11 +4611,11 @@ Ltac pcase p :=
 
 (* Destruct the closed term [t]. *)
 Ltac mydestruct t := 
-  destruct t ; try discriminate.
+  destruct t ; simplify_goal.
 
 (* Induction on the closed term [t]. *)
 Ltac myinduction t := 
-  induction t ; try discriminate.
+  induction t ; simplify_goal.
 
 (* [mydestruct_eq t] destructs the closed term [t] and introduces
    an equality named to remember the link between the old and new value of [t]. *)
@@ -4620,7 +4624,7 @@ Ltac mydestruct_eq t :=
   generalize (refl_equal t) ;
   destruct t at -1 ;
   intro e ; 
-  try discriminate.
+  simplify_goal.
 
 (* [myinduction_eq t] performs induction on the closed term [t] and introduces
    an equality named to remember the link between the old and new value of [t]. *)
@@ -4629,8 +4633,7 @@ Ltac myinduction_eq t :=
   generalize (refl_equal t) ;
   induction t at -1 ;
   intro e ; 
-  try discriminate.
-
+  simplify_goal.
 
 
 (*
