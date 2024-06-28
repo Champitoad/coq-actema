@@ -4004,7 +4004,6 @@ Ltac rew_dnd_o ts' h hp gp t i :=
 
 (* rewrite in hypothesis h using an equality in the goal 
  hp : list bool = path to the atomic prop in the hyp
- hp' : list bool = path to the term
  gp : list nat = path to the equality
  t : list bool = trace (with the last bool for choice l <-> r)
  i : instantiation *)
@@ -4039,9 +4038,10 @@ Ltac rew_dnd_rev_o ts' h hp gp t i :=
     | |- trl3 _ ?o => o
     end
   in
-  rewrite   /b3 /trl3 /o3_norm /coerce  /xor /tr3  /eq_nat /check_nat /eqnqtdec
+  rewrite   /b3 /trl3 /ts /o3_norm /coerce  /xor /tr3  /eq_nat /check_nat /eqnqtdec
             /nat_rec /nat_rect  /list_rect /eq_rect_r /eq_rect /eq_sym /f_equal
-            /eq_ind_r /eq_ind  /eq_sym /ts;
+            /eq_ind_r /eq_ind  /eq_sym /ts  /eq_nat
+            /nat_rec /nat_rect;
   match goal with
   | |- ?tt =>
       let nt := orename os tt in
@@ -4052,8 +4052,8 @@ Ltac rew_dnd_rev_o ts' h hp gp t i :=
   rewrite  /wsort /sl; try clear ts.
 
 
-Ltac rew_dnd_rev  h hp gp t i :=
-  let ht := type of h in
+Ltac rew_dnd_rev  h hp gp t i := 
+let ht := type of h in
   let ts1 := mkSign hp ht in 
   match goal with
   | |- ?gt =>
@@ -4121,9 +4121,8 @@ Abort.
 
 
 (* rewrite with hypothesis h1 in hyp h2 to yield new hyp h3 
- hp1 : list bool = path to the equality
- hp2 : list bool = path to the atomic proposition containing the term
- hp2' : list nat = path to the term
+ hp1 : list nat = path to the equality
+ hp2 : list nat = path to the atomic proposition containing the term
  t : list bool = trace (with the last bool for choice l <-> r)
  i : instantiation *)
 
