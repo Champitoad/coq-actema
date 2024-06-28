@@ -7,6 +7,8 @@ module Bimap = Utils.Bimap
 (** Translate Coq to Actema. *)
 
 module Export = struct
+  exception CannotTranslate of EConstr.t
+
   (** The imperative state maintained by the translating algorithm. 
       We could use a state monad instead, but come on this is Ocaml not Haskell. *)
   type state =
@@ -26,8 +28,7 @@ module Export = struct
   (** We manually set pretty-printing information for specific Coq terms. *)
   let predefined =
     let open Lang in
-    [ (Constants.dummy, Env.default_pp_info "😬")
-    ; (Constants.nat, Env.default_pp_info "ℕ")
+    [ (Constants.nat, Env.default_pp_info "ℕ")
     ; ( Constants.and_
       , Env.{ symbol = "∧"; implicit_args = []; position = Infix } )
     ; (Constants.or_, Env.{ symbol = "∨"; implicit_args = []; position = Infix })
@@ -153,8 +154,8 @@ module Export = struct
       let args = List.map (translate_term state) @@ Array.to_list args in
       Term.mkApps f args
     else
-      (* We can't translate [t] : return a dummy constant. *)
-      Term.mkCst Constants.dummy
+      (* We can't translate [t] : raise an exception. *)
+      raise @@ CannotTranslate t
 
   (** Constants (i.e. Coq constants, constructors, inductives) need special care. 
       We have to check if we've already seen this constant, and if not 
@@ -250,12 +251,14 @@ module Export = struct
     Environ.fold_constants
       begin
         fun cname cbody lemmas ->
-          let l_full = cname |> Names.Constant.to_string |> Name.make in
-          let l_user = lemma_user_name l_full in
-          let l_form =
-            translate_term state @@ EConstr.of_constr cbody.const_type
-          in
-          Logic.{ l_user; l_full; l_form } :: lemmas
+          try
+            let l_full = cname |> Names.Constant.to_string |> Name.make in
+            let l_user = lemma_user_name l_full in
+            let l_form =
+              translate_term state @@ EConstr.of_constr cbody.const_type
+            in
+            Logic.{ l_user; l_full; l_form } :: lemmas
+          with CannotTranslate _ -> lemmas
       end
       state.coq_env []
 
@@ -264,13 +267,15 @@ module Export = struct
     fold_constructors
       begin
         fun ctr_name ctr_type lemmas ->
-          let l_full =
-            kname_of_constructor state.coq_env ctr_name
-            |> Names.KerName.to_string |> Name.make
-          in
-          let l_user = lemma_user_name l_full in
-          let l_form = translate_term state @@ EConstr.of_constr ctr_type in
-          Logic.{ l_user; l_full; l_form } :: lemmas
+          try
+            let l_full =
+              kname_of_constructor state.coq_env ctr_name
+              |> Names.KerName.to_string |> Name.make
+            in
+            let l_user = lemma_user_name l_full in
+            let l_form = translate_term state @@ EConstr.of_constr ctr_type in
+            Logic.{ l_user; l_full; l_form } :: lemmas
+          with CannotTranslate _ -> lemmas
       end
       state.coq_env []
 
@@ -285,12 +290,9 @@ module Export = struct
       List.filter
         begin
           fun l ->
-            let form = l.Logic.l_form in
-            (* Check we managed to translate all the lemma's subterms. *)
-            (not (List.mem Constants.dummy @@ Term.constants form))
             (* Check the lemma type-checks. This can sometimes fail because Coq
                uses beta-conversion when type-checking, but Actema does not. *)
-            && TermUtils.well_typed state.env Context.empty form
+            TermUtils.well_typed state.env Context.empty l.Logic.l_form
         end
         (l1 @ l2)
     in

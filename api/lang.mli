@@ -233,10 +233,6 @@ exception InvalidSubtermPath of Term.t * int list
 (** We define the names of a few Coq constants that are handled in a special way. *)
 
 module Constants : sig
-  (** A dummy name. This is used when translating Coq terms 
-      that cannot be represented in Actema. *)
-  val dummy : Name.t
-
   (** Coq's inductive [(=) : forall A : Type, A -> A -> Prop]. *)
   val eq : Name.t
 

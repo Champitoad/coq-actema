@@ -8,6 +8,9 @@ module Bimap = Utils.Bimap
 
 (** Translating from Coq to Actema. *)
 module Export : sig
+  (* We can't translate the following term. *)
+  exception CannotTranslate of EConstr.t
+
   (** Translate a Coq term to an Actema term. 
       Also returns the environment needed to type the term. *)
   val econstr : Goal.t -> EConstr.t -> Term.t * Env.t

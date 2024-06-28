@@ -102,15 +102,26 @@ export default {
     methods: {
         // Called when the "Search" button is clicked.
         searchLemmas: function () {
-            try {
-                // Hide the "Search" button (as visual feedback that we are doing something).
-                let button = document.getElementById("lemmas");
-                button.style.display = "none";
+            let selection = this.$parent.getActiveSelection();
 
-                window.ipcRenderer.send('request_lemmas');
-            } catch (e) {
-                this.$parent.showErrorMessage(e);
-                window.ipcRenderer.send('error', this.$parent.errorMsg);
+            // Lemma filtering (which happens when searching for lemmas) 
+            // only supports at most one selected subterm.
+            if (selection.length > 1) {
+                this.$parent.showErrorMessage(
+                    "Searching for lemmas requires at most one selected subterm (" +
+                    selection.length + " subterms are currently selected)");
+            }
+            else {
+                try {
+                    // Hide the "Search" button (as visual feedback that we are doing something).
+                    let button = document.getElementById("lemmas");
+                    button.style.display = "none";
+
+                    window.ipcRenderer.send('request_lemmas');
+                } catch (e) {
+                    this.$parent.showErrorMessage(e);
+                    window.ipcRenderer.send('error', this.$parent.errorMsg);
+                }
             }
         },
 

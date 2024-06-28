@@ -15,6 +15,10 @@ exception InvalidASource
     It is only allowed to move hypotheses. *)
 exception MoveOnlyHyps of string
 
+(** Exception raised when the user tries to search for lemmas with multiple 
+    selected subterms. The integer indicates how many subterms are currently selected. *)
+exception LemmaSearchSelCount of int
+
 (* -------------------------------------------------------------------- *)
 module Exn : sig
   val register : (exn -> string option) -> unit
@@ -58,8 +62,14 @@ let () =
         match exn with
         | MoveOnlyHyps name ->
             Some ("Reordering variables is not supported : " ^ name)
+        | LemmaSearchSelCount count ->
+            Some
+              (Format.sprintf
+                 "Searching for lemmas requires at most one selected subterm \
+                  (%d subterms are currently selected)"
+                 count)
         | TermUtils.TypingError err ->
-            Some ("Typing error\n" ^ TermUtils.show_typeError err)
+            Some ("Typing error :\n" ^ TermUtils.show_typeError err)
         | _ -> None
     end
 
@@ -277,29 +287,33 @@ let rec js_proof_engine (proof : Proof.t) =
         Both arguments are optional (in javascript-land, they can be undefined). *)
     method filterlemmas selection pattern =
       let open LemmaUtils in
-      (* Convert the pattern from JS to ocaml. *)
-      let pattern =
-        pattern |> Js.Optdef.to_option
-        |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
-        |> function
-        | Some "" -> None
-        | pattern -> pattern
+      let doit () =
+        (* Convert the pattern from JS to ocaml. *)
+        let pattern =
+          pattern |> Js.Optdef.to_option
+          |> Option.map (Js.as_string @@ Invalid_argument "Jsapi.filterlemmas")
+          |> function
+          | Some "" -> None
+          | pattern -> pattern
+        in
+        (* Convert the selection from JS to ocaml. *)
+        let selection =
+          selection |> Js.Optdef.to_option |> Option.map ipath_of_array
+          |> function
+          | None | Some [] -> None
+          | Some [ selection ] -> Some selection
+          | Some selections ->
+              raise @@ LemmaSearchSelCount (List.length selections)
+        in
+        (* Filter the lemma database. *)
+        let start = Sys.time () in
+        let proof = filter pattern selection _self##.proof in
+        let stop = Sys.time () in
+        Js_log.log
+        @@ Format.sprintf "Time to [filter-lemmas] : %.2fs" (stop -. start);
+        js_proof_engine proof
       in
-      (* Convert the selection from JS to ocaml. *)
-      let selection =
-        selection |> Js.Optdef.to_option |> Option.map ipath_of_array
-        |> function
-        | None | Some [] -> None
-        | Some [ selection ] -> Some selection
-        | _ -> failwith "Jsapi.filterlemmas: only supports a single selection."
-      in
-      (* Filter the lemma database. *)
-      let start = Sys.time () in
-      let proof = filter pattern selection _self##.proof in
-      let stop = Sys.time () in
-      Js_log.log
-      @@ Format.sprintf "Time to [filter-lemmas] : %.2fs" (stop -. start);
-      js_proof_engine proof
+      !!doit ()
   end
 
 (* -------------------------------------------------------------------- *)

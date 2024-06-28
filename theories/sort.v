@@ -191,8 +191,8 @@ Lemma sorted_insertion : forall l,
     sorted (insertion_sort l).
     induction l. simpl. trivial.
     simpl.
-  actema_force.
-  pose proof insert_sort.
+  (*actema_force.
+  pose proof insert_sort.*)
 Admitted.
 
 (* easy and not really useful *)
@@ -229,6 +229,8 @@ Qed.*)
 
 Lemma perm_nil : forall l, perm lnil l -> l = lnil.
   move: perm_length => h.
+  actema_force.
+  case 1.
 Admitted.
 
 Lemma app_cons :
