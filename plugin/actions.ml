@@ -343,6 +343,16 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
   (* Subformula, hypothesis and conclusion. *)
   | Logic.Subform, Hyp hyp, Concl ->
       let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
+      Log.printf "Source path : ";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
+        (compile_path coq_goal src);
+      Log.printf "Dest path : ";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
+        (compile_path coq_goal dst);
+      Log.printf "Sides : ";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
+      Log.printf "Instantiations : ";
+      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;
       calltac (tactic_kname "back")
         [ hyp
         ; compile_path coq_goal src
@@ -377,16 +387,6 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
   (* Rewrite with the goal in a hypothesis. *)
   | RewriteR, Hyp hyp, Concl ->
       let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
-      Log.printf "Sides : ";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
-      Log.printf "Source path : ";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
-        (compile_path coq_goal src);
-      Log.printf "Dest path : ";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
-        (compile_path coq_goal @@ remove_last dst);
-      Log.printf "Instantiations : ";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;
       calltac
         (tactic_kname "rew_dnd_rev")
         [ hyp
@@ -432,7 +432,12 @@ let execute_ainstantiate coq_goal witness (path : Logic.Path.t) : unit tactic =
   match path.kind with
   | Hyp name ->
       let id = EConstr.mkVar @@ Names.Id.of_string @@ Name.show name in
-      calltac (tactic_kname "dyn_inst_hyp_nd") [ coq_path; id; coq_witness ]
+      let new_id =
+        EConstr.mkVar @@ Goal.fresh_name ~basename:(Name.show name) coq_goal ()
+      in
+      calltac
+        (tactic_kname "dyn_inst_hyp")
+        [ coq_path; id; new_id; coq_witness ]
   | Concl -> calltac (tactic_kname "dyn_inst_goal") [ coq_path; coq_witness ]
   | VarHead _ | VarBody _ | VarType _ ->
       raise

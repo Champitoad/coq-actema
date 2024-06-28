@@ -228,10 +228,7 @@ Qed.*)
  
 
 Lemma perm_nil : forall l, perm lnil l -> l = lnil.
-  move: perm_length => h.
-  actema_force.
-  case 1.
-Admitted.
+  Admitted.
 
 Lemma app_cons :
   forall l1 n l2,
@@ -250,11 +247,19 @@ Qed.
 
 (* I leave the textual proofs in the comments *)
 
-(* This crashes the Coq tactics and I have not been able 
-   to find a smaller example that still fails. *)
-(*Lemma p_test (h : forall l1 l2, perm l1 l2 -> perm l2 l3 -> perm l1 l3) :
+Lemma p_test (h : forall l1 l2 l3, perm l1 l2 -> perm l2 l3 -> perm l1 l3) :
   forall a l1, perm l1 l1 -> perm l1 (lcons a l1).
-  actema. *)
+  (* Linking [perm l2 l3] in the hypothesis with [perm l1 l1] in the conclusion. *)
+  back 
+    h 
+    (1 :: 1 :: 1 :: 1 :: 0 :: nil)%list
+    (1 :: 1 :: 0 :: nil)%list
+    (true :: true :: true :: false :: false :: false :: false :: false :: nil)%list
+    (None
+     :: Some (mDYN (ll -> ll -> nat -> ll) (fun (_ l1 : ll) (_ : nat) => l1))
+     :: Some (mDYN (ll -> ll -> ll -> nat -> ll) (fun (_ _ l1 : ll) (_ : nat) => l1)) 
+     :: nil)%list.
+  
 
 Lemma p_cons : forall a l1 l2,
     perm l1 l2 -> perm (lcons a l1) (lcons a l2).
