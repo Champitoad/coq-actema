@@ -1443,7 +1443,9 @@ Fixpoint instp (t:nat)(s : nat)(o : wsort ts s)(n : seq nat)
       match h, c, n with
       | impl _ h' B, c, n =>
            (instn t s o _ c h')->
-              (B c)
+           (B c)
+      | cNot _ h', c, n =>
+          ~(instn t s o _ c h')
       | impr _ B h', c, n =>
           (B c) -> (instp t s o _ c h')
       | orl _ h' B, c, n =>
@@ -1488,7 +1490,9 @@ instn (t:nat)(s : nat)(o : wsort ts s)(n : seq nat)
          match h, c, n with
       | impl n' h' B, c , n =>
            (instp t s o n' c h')->
-              (B c)
+           (B c)
+      | cNot n' h', c, n =>
+          ~(instp t s o n' c h')       
       | impr n' B h', c , n =>
           (B c) -> (instn t s o n' c h')
       | orl n' h' B, c , n =>
