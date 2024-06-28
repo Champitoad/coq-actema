@@ -3391,12 +3391,15 @@ Ltac inst_hyp_nd ts l h s o :=
 
 
 Ltac dyn_inst_hyp_nd l h o :=
+  let hn := fresh "h" in
+  dyn_inst_hyp l h hn o.
+(*
     let ht := type of h in
   let ts := mkSign l ht in
   let to := type of o in
   let s := tst ts to in
   inst_hyp_nd ts l h s o.
-
+*)
 (*  
 Check ltac:(let r := tst [:: tDYN Prop] Prop in exact r).
    Goal (forall X :  Prop,  X) -> False.
@@ -3988,9 +3991,13 @@ Ltac rew_dnd_o ts' h hp gp t i :=
     | |- trl3 _ ?o => o
     end
   in
-  rewrite   /b3 /trl3 /o3_norm /coerce  /xor /tr3  /eq_nat /check_nat /eqnqtdec
-            /nat_rec /nat_rect  /list_rect /eq_rect_r /eq_rect /eq_sym /f_equal
-            /eq_ind_r /eq_ind  /eq_sym /ts;
+  rewrite   /b3 /app_curry /trl3 /o3_norm /coerce /check_curry /check_list 
+    /ppconcat
+    /xor /tr3  /eqnqtdec /check_nat 
+    /list_rect  /eq_rect_r /eq_rect /eq_sym /nat_rec 
+    /nat_rect /f_equal /eq_list /eq_nat /eq_rec_r /eq_rec /eq_rect
+    /list_rec  /list_rect /seq.cat /nat_rec 
+    /nat_rect /eq_ind_r /eq_ind  /eq_sym  /app_curry ;
   match goal with
   | |- ?tt =>
       let nt := orename os tt in
