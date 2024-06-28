@@ -188,13 +188,18 @@
                                     <div class="work-zone" droppable="true" @drop="onDropPredicate"
                                         @dragover="onDragOverPredicate" @click="deselect">
                                         <goal :subgoal="subgoal" :key="getGoalKey(i)" :selectMode="selectMode"
-                                            :displayMode="displayMode" :ref="subgoal.handle"></goal>
+                                            :displayMode="displayMode" :characterWidth="goalCharWidth()"
+                                            :ref="subgoal.handle">
+                                        </goal>
                                         <predicate v-for="(predicate, j) in getPredicatesInWorkZone(subgoal)"
                                             :predicate="predicate" :selectMode="selectMode" :displayMode="displayMode"
-                                            :key="getPredicateKey(i, j)" :ref="predicate.handle"></predicate>
+                                            :characterWidth="hypsCharWidth()" :key="getPredicateKey(i, j)"
+                                            :ref="predicate.handle">
+                                        </predicate>
                                         <expression v-for="expression in getExpressionsInWorkZone(subgoal)"
                                             :expression="expression" :selectMode="selectMode" :displayMode="displayMode"
-                                            :key="expression.handle" draggable="true" :ref="expression.handle">
+                                            :characterWidht="hypsCharWidth()" :key="expression.handle" draggable="true"
+                                            :ref="expression.handle">
                                         </expression>
                                     </div>
                                 </div>
@@ -261,7 +266,9 @@ export default {
                 size: 400, x: 0, y: 0,
                 items: []
             },
-            menuIcons: []
+            menuIcons: [],
+
+            goalWidth: 15
         };
     },
     computed: {
@@ -271,7 +278,7 @@ export default {
                 return this.hypsZoneStart_;
             },
             set: function (newStart) {
-                if (0.1 <= newStart && newStart <= this.hypsZoneEnd - 0.05) {
+                if (0.1 <= newStart && newStart <= this.hypsZoneEnd - 0.1) {
                     this.hypsZoneStart_ = newStart;
                 }
             }
@@ -282,7 +289,7 @@ export default {
                 return this.hypsZoneEnd_;
             },
             set: function (newEnd) {
-                if (this.hypsZoneStart + 0.05 <= newEnd && newEnd <= 0.95) {
+                if (this.hypsZoneStart + 0.1 <= newEnd && newEnd <= 0.9) {
                     this.hypsZoneEnd_ = newEnd;
                 }
             }
@@ -940,6 +947,21 @@ export default {
 
         actionsMenuClosed() {
             this.actionsMenu.items = [];
+        },
+
+        // The approximate width in characters of the goal zone (workzone).
+        goalCharWidth() {
+            // The percentage of the total width that the goal zone occupies.
+            let percentage = (1.0 - this.hypsZoneEnd) * 100 - 5;
+            // The multiplicative constant here is guesswork. 
+            // We could probably be more accurate by using the font size.
+            return Math.floor(1.7 * percentage);
+        },
+
+        // The approximate width in characters of the hypothesis zone.
+        hypsCharWidth() {
+            let percentage = (this.hypsZoneEnd - this.hypsZoneStart) * 100 - 5;
+            return Math.floor(1.7 * percentage);
         }
     }
 };

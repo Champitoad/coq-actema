@@ -37,7 +37,8 @@ export default {
     props: [
         "predicate",
         "selectMode",
-        "displayMode"
+        "displayMode",
+        "characterWidth"
     ],
     computed: {
         alignment() {
@@ -50,7 +51,7 @@ export default {
         },
 
         toHTML: function () {
-            let html = this.predicate.term.html();
+            let html = this.predicate.term.html(this.characterWidth);
             // We have to replace newlines in the HTML by <br> tags.
             return html.split(/\r?\n/).join("<br/>");;
         },

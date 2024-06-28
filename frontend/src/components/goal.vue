@@ -63,7 +63,7 @@ import ButtonVue from "./button.vue";
 
 export default {
     extends: ButtonVue,
-    props: ["subgoal", "selectMode", "displayMode"],
+    props: ["subgoal", "selectMode", "displayMode", "characterWidth"],
     created: function () {
         // goals are always in work zone
         this.assignMetadata({ inWorkZone: true });
@@ -79,7 +79,8 @@ export default {
         },
 
         toHTML: function () {
-            return "<span class='generalize'>⇒</span>" + this.subgoal.conclusion().html();
+            return "<span class='generalize'>⇒</span>" +
+                this.subgoal.conclusion().html(this.characterWidth);
         },
 
         toString() {

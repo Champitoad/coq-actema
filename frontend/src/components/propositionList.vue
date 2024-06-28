@@ -120,7 +120,8 @@ li .pi-expression.in-work-zone {
             <li class="list-group-item text-success" :key="'li-' + expression.handle">
                 <div class="overflow-container">
                     <expression :expression="expression" :selectMode="selectMode" :displayMode="displayMode"
-                        :key="'expression-' + expression.handle" draggable="true" :ref="expression.handle">
+                        :characterWidth="hypsCharWidth()" :key="'expression-' + expression.handle" draggable="true"
+                        :ref="expression.handle">
                     </expression>
                 </div>
                 <button class="btn btn-sm btn-secondary-outline btn-transparent btn-clear d-inline-block float-right"
@@ -135,7 +136,8 @@ li .pi-expression.in-work-zone {
             <li class="list-group-item text-primary" :key="'li-' + predicate.handle">
                 <div class="overflow-container">
                     <predicate :predicate="predicate" :selectMode="selectMode" :displayMode="displayMode"
-                        :key="'predicate-' + predicate.handle" draggable="true" :ref="predicate.handle"></predicate>
+                        :characterWidth="hypsCharWidth()" :key="'predicate-' + predicate.handle" draggable="true"
+                        :ref="predicate.handle"></predicate>
                 </div>
                 <button class="btn btn-sm btn-secondary-outline btn-transparent btn-clear d-inline-block float-right"
                     @click="onClear(predicate)" title="Clear">
@@ -191,6 +193,10 @@ export default {
                 return !isInWorkZone;
             });
             return _.sortBy(expressions, ["position"]);
+        },
+
+        hypsCharWidth() {
+            return this.$parent.hypsCharWidth();
         },
 
         addToWorkZone: function (predicate) {

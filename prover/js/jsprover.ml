@@ -530,7 +530,7 @@ and js_hyps parent (goal_id : int) (pos : int) (hyp : Logic.hyp) =
     val proof = parent##.parent
 
     (* Return the [html] of the enclosed formula *)
-    method html = _self##.term##html
+    method html width = _self##.term##html width
 
     (* Return an UTF8 string representation of the enclosed formula *)
     method tostring = _self##.term##tostring
@@ -579,7 +579,7 @@ and js_var parent (goal_id : int) (pos : int) (var : Logic.var) =
     val proof = parent##.parent
 
     (* Return the Tyxml.Xml of the variable. *)
-    method tyxml =
+    method tyxml width =
       let open Tyxml in
       (* Convenience functions. *)
       let span ?(a = []) x = Xml.node ~a "span" x in
@@ -604,19 +604,19 @@ and js_var parent (goal_id : int) (pos : int) (var : Logic.var) =
             ([ span
                  (head_xml
                  @ spaced [ span [ Xml.pcdata ":" ] ]
-                 @ [ _self##.type_##tyxml ])
+                 @ [ _self##.type_##tyxml width ])
              ]
             @
             match Js.Opt.to_option _self##.body with
             | Some js_body ->
-                spaced [ span [ Xml.pcdata ":=" ] ] @ [ js_body##tyxml ]
+                spaced [ span [ Xml.pcdata ":=" ] ] @ [ js_body##tyxml width ]
             | None -> [])
         ]
 
     (* Return the [html] of the enclosed local variable *)
-    method html =
+    method html width =
       (* Print the xml to a string. *)
-      Js.string @@ Format.asprintf "%a" (Tyxml.Xml.pp ()) _self##tyxml
+      Js.string @@ Format.asprintf "%a" (Tyxml.Xml.pp ()) (_self##tyxml width)
 
     (* Return an UTF8 string representation of the enclosed local variable *)
     method tostring =
@@ -647,22 +647,20 @@ and js_var parent (goal_id : int) (pos : int) (var : Logic.var) =
 (* JS Wrapper for terms                                              *)
 and js_term parent (goal_id : int) (kind : Path.kind) (term : Term.t) =
   object%js (_self)
-    (** Return the Tyxml.Xml of the term. *)
-    method tyxml =
-      (* Pretty-print the term to xml.
-         We choose an arbitrary width here : in the future we could
-         make it so this method takes the width as input, so that
-         the javascript code decides which width to use. *)
-      Notation.term_to_xml ~width:50
+    (** Return the Tyxml.Xml of the term. [width] is the maximum number of characters 
+        in width the term is expected to fit in. *)
+    method tyxml width =
+      (* Pretty-print the term to xml. *)
+      Notation.term_to_xml ~width
         (Logic.Path.make ~kind goal_id)
         (parent##goal).Logic.g_env term
       |> Notation.tidy_xml
 
     (** Return the html of the term (as a js string). *)
-    method html =
+    method html width =
       (* Pretty-print the xml to a string. This will then be used
          by the javascript code. *)
-      Js.string @@ Format.asprintf "%a" (Tyxml.Xml.pp ()) _self##tyxml
+      Js.string @@ Format.asprintf "%a" (Tyxml.Xml.pp ()) (_self##tyxml width)
 
     (* Return an UTF8 string representation of the term. *)
     method tostring =
