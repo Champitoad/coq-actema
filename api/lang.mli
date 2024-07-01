@@ -303,7 +303,7 @@ module Env : sig
     ; (* The indices of the implicit arguments (i.e. arguments which are not printed)
          of the constant (starting at 0).
 
-         This list is expected to be sorted in increasing order.
+         This list is expected to be sorted in increasing order and contain no duplicates.
 
          For instance the polymorphic equality [eq : forall A : Type, A -> A -> Prop]
          has an implicit argument at index [0]. *)
