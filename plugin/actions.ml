@@ -281,12 +281,20 @@ let abstract_itrace itrace context : Interact.choice list =
      The variables of [passed1] are bound *above* the variables of [passed2]. *)
   let close_witness passed1 passed2 witness =
     witness
+    (* Replace FVars by BVars. *)
     |> Term.fsubst (Term.mkBVar <<< fvar_index passed1 passed2)
+    (* Bind BVars. *)
     |> List.fold_right
          begin
            fun fvar body ->
              let entry = Option.get @@ Context.find fvar context in
-             Term.mkLambda entry.Context.binder entry.Context.type_ body
+             (* We also need to replace FVars by BVars in the type of the binder. *)
+             let ty =
+               Term.fsubst
+                 (Term.mkBVar <<< fvar_index passed1 passed2)
+                 entry.type_
+             in
+             Term.mkLambda entry.binder ty body
          end
          (passed1 @ passed2)
   in
@@ -328,31 +336,34 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
   let pregoal = Export.goal coq_goal in
   (* Perform deep interaction. *)
   let itrace =
-    Interact.dlink (src, unif_data.fvars_1) (dst, unif_data.fvars_2)
+    Interact.dlink dnd_kind (src, unif_data.fvars_1) (dst, unif_data.fvars_2)
       unif_data.subst pregoal
   in
   (* Abstract the instantiations. *)
   let choices = abstract_itrace itrace unif_data.context in
+  Log.printf "Choices : \n";
+  List.iter (Log.str <<< Interact.show_choice) choices;
   (* Translate the choices to Coq. *)
   let coq_sides = compile_sides coq_goal choices in
   Log.printf "Substitution:\n%s\n" (Unif.show_subst unif_data.subst);
   (* Translate the instantiations to Coq. *)
   let coq_instantiations = compile_instantiations coq_goal choices in
+  Log.printf "Source path : ";
+  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
+    (compile_path coq_goal src);
+  Log.printf "Dest path : ";
+  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
+    (compile_path coq_goal dst);
+  Log.printf "Sides : ";
+  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
+  Log.printf "Instantiations : ";
+  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;
+
   (* Call the appropriate tactic. *)
   match (dnd_kind, src.kind, dst.kind) with
   (* Subformula, hypothesis and conclusion. *)
   | Logic.Subform, Hyp hyp, Concl ->
       let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
-      Log.printf "Source path : ";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
-        (compile_path coq_goal src);
-      Log.printf "Dest path : ";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
-        (compile_path coq_goal dst);
-      Log.printf "Sides : ";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
-      Log.printf "Instantiations : ";
-      Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;
       calltac (tactic_kname "back")
         [ hyp
         ; compile_path coq_goal src

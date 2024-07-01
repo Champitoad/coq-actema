@@ -247,7 +247,7 @@ Qed.
 
 (* I leave the textual proofs in the comments *)
 
-(*Lemma p_test (h : forall l1 l2 l3, perm l1 l2 -> perm l2 l3 -> perm l1 l3) :
+Lemma p_test (h : forall l1 l2 l3, perm l1 l2 -> perm l2 l3 -> perm l1 l3) :
   forall a l1, perm l1 l1 -> perm l1 (lcons a l1).
   (* Linking [perm l2 l3] in the hypothesis with [perm l1 l1] in the conclusion. *)
   back 
@@ -258,9 +258,10 @@ Qed.
     (None
      :: Some (mDYN (ll -> ll -> nat -> ll) (fun (_ l1 : ll) (_ : nat) => l1))
      :: Some (mDYN (ll -> ll -> ll -> nat -> ll) (fun (_ _ l1 : ll) (_ : nat) => l1)) 
-     :: nil)%list.*)
+     :: nil)%list.
+Admitted.
 
-Lemma p_cons (h : forall a l1 l2, perm l1 l2 -> perm (lcons a l1) (lcons a l2)) : 
+Lemma p_cons (h := forall a l1 l2, perm l1 l2 -> perm (lcons a l1) (lcons a l2)) : 
   forall a l1 l2, perm l1 l2 -> perm (lcons a l1) (lcons a l2).
   actema_force.
 Qed.

@@ -21,15 +21,9 @@ end))
 let span ?(attribs = []) (x : annot Pp.doc) : annot Pp.doc =
   Pp.annotate ("span", attribs) x
 
-(** Get the formatting information for a name. *)
-let name_info env name =
-  match Name.Map.find_opt name env.Env.pp_info with
-  | Some info -> info
-  | None -> Env.default_pp_info (Name.show name)
-
 (** Pretty-print a global variable using its symbol. *)
 let pp_global env name =
-  let info = name_info env name in
+  let info = Name.Map.find name env.Env.pp_info in
   (* Take care that the symbol can use utf-8 characters. *)
   Pp.utf8string info.symbol
 
@@ -147,7 +141,7 @@ let rec pp_term ?(paren = false) env (path : Path.t) ctx (t : Term.t) :
         let elts =
           match f with
           | Cst name ->
-              let info = name_info env name in
+              let info = Name.Map.find name env.Env.pp_info in
               let args = Env.filter_args info (indices ~start:1 args) in
               begin
                 match (info.position, args) with

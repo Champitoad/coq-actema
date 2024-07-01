@@ -275,6 +275,12 @@ module Constants : sig
   (** Coq's inductive [False : Prop]. *)
   val false_ : Name.t
 
+  (** Coq's empty list [nil : forall A : Type, list A]. *)
+  val nil : Name.t
+
+  (** Coq's list constructor [cons : forall A : Type, A -> list A -> list A]. *)
+  val cons : Name.t
+
   (** [is_logical_conn name] tests whether [name] corresponds to a logical connector. *)
   val is_logical_conn : Name.t -> bool
 end
@@ -304,13 +310,14 @@ module Env : sig
   [@@deriving show]
 
   (** An environment contains all the information needed to :
-        - Type check terms.
-        - Pretty-print terms. *)
+      - Type check terms.
+      - Pretty-print terms. *)
   type t =
     { constants : Term.t Name.Map.t
           (** The type of each constant, indexed by name. *)
     ; pp_info : pp_info Name.Map.t
-          (** The information needed to pretty-print a constant, indexed by name. *)
+          (** The information needed to pretty-print each constant, indexed by name.
+              Note that this field is not optional : every constant should have a pp_info. *)
     }
 
   (** The empty environment. *)
@@ -328,9 +335,6 @@ module Env : sig
   (** [Env.add_constant name ty env] adds the constant [name] with type [ty]
         to the environment [env]. *)
   val add_constant : Name.t -> Term.t -> ?pp:pp_info -> t -> t
-
-  (** [default_pp_info symbol] prints [symbol] in prefix position with no implicit arguments. *)
-  val default_pp_info : string -> pp_info
 
   (** [filter_args pp_info args] filters out the implicit arguments in [args]. *)
   val filter_args : pp_info -> 'a list -> 'a list

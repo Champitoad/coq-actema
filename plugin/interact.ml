@@ -15,7 +15,13 @@ type itrace = choice list * FVarId.t list * FVarId.t list [@@deriving show]
    the second formula is the conclusion.
    For a forward interaction, the order doesn't matter. *)
 type state =
-  { (* The global environment we are working in. *)
+  { (* The dnd kind we are expecting. This helps resolve ambiguities such as :
+         {...} = ... |- {...} = ...
+       where {} indicate linked items. Without any extra information it is unclear
+       which equality should rewrite in the other.
+    *)
+    dnd_kind : dnd_kind
+  ; (* The global environment we are working in. *)
     env : Env.t
   ; (* The local context we are working in. *)
     context : Context.t
@@ -300,18 +306,18 @@ let rec interact (state : state) mode : choice list =
   (* For the L= rules, we put the rewrite direction
      (Left for left-to-right, Right for right-to-left) at the end
      of the choice list. *)
-  match ((state.t1, state.sub1), (state.t2, state.sub2)) with
+  match (state.dnd_kind, (state.t1, state.sub1), (state.t2, state.sub2)) with
   (* Rule id *)
-  | (_, []), (_, []) -> List.rev state.choices
+  | Subform, (_, []), (_, []) -> List.rev state.choices
   (* Rule L=₁ *)
-  | (App (_, Cst eq, _), [ 2 ]), _ when Name.equal eq Constants.eq ->
+  | RewriteL, (App (_, Cst eq, _), [ 2 ]), _ when Name.equal eq Constants.eq ->
       List.rev (Side Left :: state.choices)
-  | (App (_, Cst eq, _), [ 3 ]), _ when Name.equal eq Constants.eq ->
+  | RewriteL, (App (_, Cst eq, _), [ 3 ]), _ when Name.equal eq Constants.eq ->
       List.rev (Side Right :: state.choices)
   (* Rule L=₂ *)
-  | _, (App (_, Cst eq, _), [ 2 ]) when Name.equal eq Constants.eq ->
+  | RewriteR, _, (App (_, Cst eq, _), [ 2 ]) when Name.equal eq Constants.eq ->
       List.rev (Side Left :: state.choices)
-  | _, (App (_, Cst eq, _), [ 3 ]) when Name.equal eq Constants.eq ->
+  | RewriteR, _, (App (_, Cst eq, _), [ 3 ]) when Name.equal eq Constants.eq ->
       List.rev (Side Right :: state.choices)
   (* All other rules. *)
   | _ ->
@@ -345,6 +351,13 @@ let swap_sides state : state =
   ; env = state.env
   ; context = state.context
   ; subst = state.subst
+  ; dnd_kind =
+      begin
+        match state.dnd_kind with
+        | Subform -> Subform
+        | RewriteL -> RewriteR
+        | RewriteR -> RewriteL
+      end
   }
 
 let item_of_path (path : Path.t) (pregoal : Logic.pregoal) : Logic.item =
@@ -356,7 +369,7 @@ let item_of_path (path : Path.t) (pregoal : Logic.pregoal) : Logic.item =
   | VarHead _ | VarType _ | VarBody _ ->
       failwith "Interact.dlink : invalid link (a path points to a variable)."
 
-let dlink ((src, src_fvars) : Path.t * FVarId.t list)
+let dlink dnd_kind ((src, src_fvars) : Path.t * FVarId.t list)
     ((dst, dst_fvars) : Path.t * FVarId.t list) subst pregoal : itrace =
   (* Destruct the link. *)
   assert (src.goal = dst.goal);
@@ -366,7 +379,8 @@ let dlink ((src, src_fvars) : Path.t * FVarId.t list)
 
   (* Build the initial state. *)
   let state =
-    { env
+    { dnd_kind
+    ; env
     ; context = Context.empty
     ; t1 = src_term
     ; t2 = dst_term

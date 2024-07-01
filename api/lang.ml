@@ -371,6 +371,8 @@ module Constants = struct
   let false_ = make "Coq.Init.Logic.False"
   let add = make "Coq.Init.Nat.add"
   let mul = make "Coq.Init.Nat.mul"
+  let nil = make "Coq.Init.Datatypes.nil"
+  let cons = make "Coq.Init.Datatypes.cons"
 
   let is_logical_conn name : bool =
     List.exists (equal name) [ and_; or_; not; equiv; true_; false_ ]
@@ -401,8 +403,6 @@ module Env = struct
     match pp with
     | None -> env
     | Some pp -> { env with pp_info = Name.Map.add name pp env.pp_info }
-
-  let default_pp_info symbol = { symbol; implicit_args = []; position = Prefix }
 
   let filter_args pp_info args =
     let rec loop implicits args kept i =

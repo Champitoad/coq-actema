@@ -1,130 +1,82 @@
 From Actema Require Import Loader.
-
-
-Fixpoint eqb n m :=
-  match n, m with
-  | 0, 0 => true
-  | S n, S m => eqb n m
-  | _, _ => false
-  end.
-
-Fixpoint eqr n m :=
-  match n, m with
-  | 0, 0 => True
-  | S n, S m => eqr n m
-  | _, _ => False
-  end.
-
 Require Import ssreflect.
-        
-Lemma eqr_eq : forall n m, eqr n m -> n = m.
-  actema.
-Qed.
+Require Import List.
 
 
-Lemma eqr_eqb : forall n m, eqr n m -> eqb n m = true.
-  actema.
-Qed.
 
-Lemma eqb_eqr : forall n m, eqb n m = true -> eqr n m.
-  actema.
-Qed.
-
-Lemma eqr_refl : forall n, eqr n n.
-actema.
-Qed.
-
-Lemma eqb_eq : forall n m, eqb n m = true -> n = m.
-  actema.
-Qed.
-  
-Fixpoint leb (n:nat)(m:nat) :=
-  match n,m with
-  | 0,_ => true
-  | (S _) , 0  => false
-  | S n, S m => leb n m
-  end.
- 
-Fixpoint le (n:nat)(m:nat) :=
-  match n,m with
-  | 0,_ => True
-  | (S _) , 0  => False
-  | S n, S m => le n m
-  end.
-
-Lemma leb_le : forall n m, (leb n m = true) -> le n m.
-  actema.
-Qed.
-
-Lemma le_refl : forall n, le n n.
-  actema.
-Qed.
-
-Fixpoint gtb  (n:nat)(m:nat) :=
-  match n,m with
-  | 0,_ => false
-  | (S _) , 0  => true
-  | S n, S m => gtb n m
-  end.
-
-Lemma leb_gtb : forall n m, leb n m = negb (gtb n m).
-actema.
-Qed.
-
-Fixpoint moins n m :=
-  match m,n with
-  | 0,_ => n
-  | S m, S n => moins n m
-  | S _, 0 => 0
-  end.
-
-Lemma le_S : forall n m,
-       le n m -> le n (S m).
-actema.
-Qed.
-
-  
-Lemma leb_lt : forall n m, leb n m = false -> le m n.
-  actema.
-Qed.
-
-
-Inductive ll :=
-  lnil
-  | lcons : nat -> ll -> ll.
+(* being sorted *)
 
 Definition low n l :=
   match l with
-  | lnil => True
-  | lcons m _ => le n m
+  | nil => True
+  | m :: _ => n <= m
   end.
 
- Fixpoint sorted l :=
+Fixpoint sorted l :=
   match l with
-  | lnil => True
-  | lcons n l => (low n l) /\ (sorted l)
+  | nil => True
+  | n :: l => low n l /\ sorted l
   end.
 
-Definition ifthl (b:bool) (n1 : ll) n2 :=
+(* To allow Actema to display the code *)
+
+Definition ifthl {A} (b:bool) (n1 : list A) n2 :=
   if b then n1 else n2.
 
+
+Inductive perm {A} : list A -> list A -> Prop :=
+| perm_refl : forall l, perm l l
+| perm_app : forall a l1 l2,  perm (a :: app l1 l2) (app l1 (a :: l2))
+| perm_trans : forall l1 l2 l3, perm l1 l2 -> perm l2 l3 -> perm l1 l3.
+
+Lemma addnS : forall n m, n + S m = S (n + m).
+Admitted.
+
+Lemma addn0 : forall n, n + 0 = n.
+Admitted.
+
+(* These lemmas are somewhat interesting to prove in Actema *)
+(* We also need to import lemmas in the proof context before launching Actema *)
+(* It is worth checking how a search function would react *)
+
+Lemma perm_length : forall A (l1 : list A) (l2 : list A),
+         perm l1 l2 -> length l1 = length l2.
+Proof.
+intros A l1 l2 H. induction H.
+- reflexivity.
+- pose proof (H := app_length).
+  actema_force.
+  back 
+    H 
+    (1 :: 1 :: 1)%list
+    ()
+    
+
+  actema_force.
+Admitted.
+
+(* The insertion function *)
 Fixpoint insert n l :=
   match l with
   | lnil => lcons n lnil
   | lcons m l' =>
       ifthl (leb n m)
        (lcons n l)
-       ( lcons m (insert n l'))
+       (lcons m (insert n l'))
   end.
 
+Lemma insert_length : forall n l, length (insert n l) = S (length l).
+Admitted.
 
+(* The specification with the good invariant *)
 Lemma insert_sort : forall n l, sorted l ->
                                 sorted (insert n l) /\
                                   forall m, le m n /\ low m l -> low m (insert n l).
- generalize leb_le; intro h1.
+(* generalize leb_le; intro h1.
  generalize leb_lt; intro h2.
  actema.
-Qed.
+Qed.*)
+Admitted.
 
 Fixpoint insertion_sort l :=
   match l with
@@ -134,10 +86,185 @@ Fixpoint insertion_sort l :=
 
 Lemma sorted_insertion : forall l,
     sorted (insertion_sort l).
- pose proof insert_sort.
+    induction l. simpl. trivial.
+    simpl.
+  (*actema_force.
+  pose proof insert_sort.*)
+Admitted.
+
+(* easy and not really useful *)
+Lemma sorting_length : forall l, length l = length (insertion_sort l).
+  move: insert_length => h.
+Admitted.
+
+
+
+
+(* Not super useful, comes from BSc exercises *)
+Fixpoint member n l :=
+  match l with
+  | lnil => False
+  | lcons m l =>
+      n=m \/ member n l
+  end.
+
+(*Lemma member1 : forall n l1 l2, member n l1 -> member n (concat l1 l2).
   actema.
 Qed.
 
+Lemma member2 : forall n l1 l2, member n l2 -> member n (concat l1 l2).
+  actema.
+Qed.
+
+Lemma member3 : forall n l1 l2, member n (concat l1 l2) ->  member n l1 \/ member n l2.
+actema.
+Qed.*)
+
+(* One possble way to sow the result of sorting has the same content as the input *)
+(* Counting the elements as done later is easier *)
+ 
+
+Lemma perm_nil : forall l, perm lnil l -> l = lnil.
+  Admitted.
+
+Lemma app_cons :
+  forall l1 n l2,
+    concat l1 (lcons n l2) = concat (concat l1 (lcons n lnil)) l2.
+Proof.
+Admitted.
+
+(* These lemmas are for putting the propositions in a form which allows the DnDs *)
+Lemma reww : forall a l1 l2, (lcons a (concat l1 l2)) = concat (lcons a l1) l2.
+  done.
+Qed.
+
+Lemma reww1 : forall a l, lcons a l = concat (lcons a lnil) l.
+  done.
+Qed.
+
+(* I leave the textual proofs in the comments *)
+
+Lemma p_test (h : forall l1 l2 l3, perm l1 l2 -> perm l2 l3 -> perm l1 l3) :
+  forall a l1, perm l1 l1 -> perm l1 (lcons a l1).
+  (* Linking [perm l2 l3] in the hypothesis with [perm l1 l1] in the conclusion. *)
+  back 
+    h 
+    (1 :: 1 :: 1 :: 1 :: 0 :: nil)%list
+    (1 :: 1 :: 0 :: nil)%list
+    (true :: true :: true :: false :: false :: false :: false :: false :: nil)%list
+    (None
+     :: Some (mDYN (ll -> ll -> nat -> ll) (fun (_ l1 : ll) (_ : nat) => l1))
+     :: Some (mDYN (ll -> ll -> ll -> nat -> ll) (fun (_ _ l1 : ll) (_ : nat) => l1)) 
+     :: nil)%list.
+Admitted.
+
+Lemma p_cons (h := forall a l1 l2, perm l1 l2 -> perm (lcons a l1) (lcons a l2)) : 
+  forall a l1 l2, perm l1 l2 -> perm (lcons a l1) (lcons a l2).
+  actema_force.
+Qed.
+
+  
+(*  
+induction 1.
+- constructor.
+- apply perm_trans with (lcons a0 (lcons a (concat l1 l2))).
+    apply (perm_app a (lcons a0 lnil) (concat l1 l2)).
+  apply (perm_app a0 (lcons a l1) l2).
+- by apply perm_trans with (lcons a l2).
+Qed.
+*)
+
+Lemma perm_comapp : forall l1 l2, perm (concat l1 l2)(concat l2 l1).
+  move:  p_cons => h.
+  move: perm_trans => h1.
+  move: cat_nil => h2.
+  move: perm_app => h3.
+  move: perm_refl => h0.
+  actema.
+Qed.
+
+(*  
+induction l1.
+move => l2.
+simpl; rewrite cat_nil; constructor.
+simpl.
+move => l2; apply perm_trans with (lcons n (concat l2 l1)).
+ by apply h.
+constructor.
+Qed.
+ *)
+
+Lemma perm_sym : forall l1 l2, perm l1 l2 -> perm l2 l1.
+  move: perm_refl => h0.
+  move: perm_trans => h1.
+  move: perm_comapp => h2.
+    move: perm_app => h3.
+    move:  p_cons => h.
+actema.
+Qed.
+
+(*
+  constructor.
+apply perm_trans with  (concat (lcons a l2) l1).
+  apply perm_comapp.
+   apply p_cons.
+   apply perm_comapp.  
+by apply perm_trans with l2.
+*)
+
+Lemma perm_cons_iter : forall l1 l2 l3,
+    perm l2 l3 -> perm (concat l1 l2)(concat l1 l3).
+Proof.
+  move: perm_refl => h0.
+  move: p_cons => h.
+actema.
+Qed.
+
+(*
+  induction l1; first done.
+move => l2 l3 p23; apply p_cons.
+  by apply IHl1.
+ *)
+
+Lemma insert_perm : forall n l, perm (lcons n l)(insert n l).
+move: perm_refl => h0.
+move: perm_trans => h1.
+move: p_cons => h3.
+move: perm_app => h2.
+move: reww => h4.
+move: reww1 => h5.
+actema.
+Qed.
+
+Lemma sort_perm : forall l, perm l (insertion_sort l).
+  move: p_cons => h.
+  move: perm_refl => h0.
+move: perm_trans => h1.
+move:  insert_perm => h2.
+  actema.
+Qed.
+  
+(*
+induction l.
+ constructor.
+simpl.
+apply perm_trans with (lcons n (insertion_sort l)).
+  by apply p_cons.
+apply insert_perm.
+Qed.
+*)
+
+(*
+induction l.
+ constructor.
+simpl.
+case: leb; simpl.
+  constructor.
+apply perm_trans with (lcons n0 (lcons n l)).
+apply (perm_app n (lcons n0 lnil) l).
+apply p_cons.
+done.
+*)
 
 Definition ifthn (b:bool) (n1:nat) n2 :=
   if b then n1 else n2.
@@ -183,6 +310,7 @@ Lemma insertion_sort_count : forall a l, count a l = count a (insertion_sort l).
   actema.
 Qed.
 
+(* The heap stuff does not worl well because of the merge function 
 
 Inductive Tree :=
   Leaf
@@ -385,3 +513,5 @@ by rewrite e3 in e4.
   actema.
 
   actema.
+
+*)

@@ -203,9 +203,11 @@ type dnd_kind =
   | (* Subformula linking : both sides of the link are
        formulas in the first order skeleton. *)
     Subform
-  | (* Deep rewrite : the *left* side of the link is an equality. *)
+  | (* Deep rewrite : the *left* side of the link is an equality
+       which rewrites in the right side. *)
     RewriteL
-  | (* Deep rewrite : the *right* side of the link is an equality. *)
+  | (* Deep rewrite : the *right* side of the link is an equality
+       which rewrites in the left side. *)
     RewriteR
 [@@deriving show]
 

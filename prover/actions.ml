@@ -44,11 +44,7 @@ let rec displayed_subs_rec env (term : Term.t) sub acc : int list list =
       let elts =
         match f with
         | Cst name ->
-            let info =
-              match Name.Map.find_opt name env.Env.pp_info with
-              | Some info -> info
-              | None -> Env.default_pp_info (Name.show name)
-            in
+            let info = Name.Map.find name env.Env.pp_info in
             (0, f) :: Env.filter_args info (indices ~start:1 args)
         | _ -> indices (f :: args)
       in

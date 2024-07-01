@@ -28,34 +28,43 @@ module Export = struct
   (** We manually set pretty-printing information for specific Coq terms. *)
   let predefined =
     let open Lang in
-    [ (Constants.nat, Env.default_pp_info "ℕ")
+    [ ( Constants.nat
+      , Env.{ symbol = "ℕ"; implicit_args = []; position = Prefix } )
     ; ( Constants.and_
       , Env.{ symbol = "∧"; implicit_args = []; position = Infix } )
     ; (Constants.or_, Env.{ symbol = "∨"; implicit_args = []; position = Infix })
-    ; (Constants.not, Env.default_pp_info "¬")
-    ; (Constants.true_, Env.default_pp_info "⊤")
-    ; (Constants.false_, Env.default_pp_info "⊥")
+    ; (Constants.not, Env.{ symbol = "¬"; implicit_args = []; position = Infix })
+    ; ( Constants.true_
+      , Env.{ symbol = "⊤"; implicit_args = []; position = Infix } )
+    ; ( Constants.false_
+      , Env.{ symbol = "⊥"; implicit_args = []; position = Infix } )
     ; (Constants.add, Env.{ symbol = "+"; implicit_args = []; position = Infix })
     ; (Constants.mul, Env.{ symbol = "⋅"; implicit_args = []; position = Infix })
     ; ( Constants.eq
       , Env.{ symbol = "="; implicit_args = [ 0 ]; position = Infix } )
     ; ( Constants.equiv
       , Env.{ symbol = "↔"; implicit_args = []; position = Infix } )
+    ; ( Constants.nil
+      , Env.{ symbol = "[]"; implicit_args = [ 0 ]; position = Prefix } )
+    ; ( Constants.cons
+      , Env.{ symbol = "::"; implicit_args = [ 0 ]; position = Infix } )
     ]
+    |> List.to_seq |> Hashtbl.of_seq
 
-  (** [get_pp_info name] returns the pretty-printing information for [name]. *)
-  let get_pp_info =
+  (** [make_pp_info name] creates the pretty-printing information for [name]. *)
+  let make_pp_info name =
     let open Lang in
-    let predefined = Hashtbl.of_seq @@ List.to_seq predefined in
-    fun name ->
-      match Hashtbl.find_opt predefined name with
-      | Some pp -> pp
-      | None ->
-          (* For an ordinary constant, we simply remove the module path.
-             For instance [Coq.Init.Datatypes.nat] is pretty-printed as [nat]. *)
-          let parts = String.split_on_char '.' (Name.show name) in
-          let symbol = List.nth parts (List.length parts - 1) in
-          Env.default_pp_info symbol
+    match Hashtbl.find_opt predefined name with
+    (* We handle this constant in a special way. *)
+    | Some pp -> pp
+    (* Just an ordinary constant. *)
+    | None ->
+        (* For an ordinary constant, we simply remove the module path.
+           For instance [Coq.Init.Datatypes.nat] is pretty-printed as [nat]. *)
+        let parts = String.split_on_char '.' (Name.show name) in
+        let symbol = List.nth parts (List.length parts - 1) in
+        (* By default a constant has no implicit args and is printed in prefix position. *)
+        Env.{ symbol; implicit_args = []; position = Prefix }
 
   (***********************************************************************************)
   (** Translate terms. *)
@@ -168,7 +177,7 @@ module Export = struct
         (* This is the first time we see this constant : we have to translate its type
            and add the constant to the actema environment and symbol table. *)
         let ty = translate_term state ty in
-        let pp = get_pp_info name in
+        let pp = make_pp_info name in
         state.env <- Env.add_constant name ty ~pp state.env;
         Term.mkCst name
 
@@ -204,7 +213,7 @@ module Export = struct
             in
             let act_ty = translate_term state coq_ty in
             (* Don't forget to add the constant to the actema environment. *)
-            let pp = Lang.Env.default_pp_info (Name.show name) in
+            let pp = make_pp_info name in
             state.env <- Lang.Env.add_constant name act_ty ~pp state.env;
             (* Add it to the list of hypotheses or variables. *)
             if EConstr.ESorts.is_prop state.sigma coq_sort
