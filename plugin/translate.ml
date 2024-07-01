@@ -51,20 +51,45 @@ module Export = struct
     ]
     |> List.to_seq |> Hashtbl.of_seq
 
-  (** [make_pp_info name] creates the pretty-printing information for [name]. *)
-  let make_pp_info name =
+  (** Translate implicit arguments from Coq format to Actema format.
+      We are a bit more strict than Coq as to which arguments are considered implicit. *)
+  let compute_implicits implicits : int list =
+    let open Impargs in
+    let for_one info : int option =
+      match info.impl_expl with
+      | DepRigid _ | Manual ->
+          let _, i, _ = info.Impargs.impl_pos in
+          (* Coq indexes arguments starting at 1 but Actema starts at 0. *)
+          Some (i - 1)
+      | _ -> None
+    in
+    implicits
+    |> List.filter_map (function Some info -> for_one info | None -> None)
+    |> List.sort Int.compare
+
+  (** [make_pp_info name ref] creates the pretty-printing information for [name]. *)
+  let make_pp_info name ref =
     let open Lang in
     match Hashtbl.find_opt predefined name with
     (* We handle this constant in a special way. *)
     | Some pp -> pp
     (* Just an ordinary constant. *)
     | None ->
-        (* For an ordinary constant, we simply remove the module path.
+        (* We don't print the module path.
            For instance [Coq.Init.Datatypes.nat] is pretty-printed as [nat]. *)
         let parts = String.split_on_char '.' (Name.show name) in
         let symbol = List.nth parts (List.length parts - 1) in
-        (* By default a constant has no implicit args and is printed in prefix position. *)
-        Env.{ symbol; implicit_args = []; position = Prefix }
+        (* Compute implicit arguments. *)
+        let implicit_args =
+          match Impargs.implicits_of_global ref with
+          | [ (_, implicits) ] -> compute_implicits implicits
+          (* Some constants have more than one list of implicit arguments.
+             I have no idea what this corresponds to : in this case we mark all arguments
+             as explicit. *)
+          | _ -> []
+        in
+        (* By default a constant is printed in prefix position. *)
+        Env.{ symbol; implicit_args; position = Prefix }
 
   (***********************************************************************************)
   (** Translate terms. *)
@@ -123,14 +148,16 @@ module Export = struct
       let cname, _ = EConstr.destConst state.sigma t in
       let name = Name.make @@ Names.Constant.to_string cname in
       let cdecl = Environ.lookup_constant cname state.coq_env in
-      handle_cst state name @@ EConstr.of_constr cdecl.const_type
+      handle_cst state name
+        (EConstr.of_constr cdecl.const_type)
+        (Names.GlobRef.ConstRef cname)
     else if EConstr.isVar state.sigma t
     then
       (* Local context variable. *)
       let vname = EConstr.destVar state.sigma t in
       let name = vname |> Names.Id.to_string |> Name.make in
       let ty = type_of_variable state.coq_env vname in
-      handle_cst state name ty
+      handle_cst state name ty (Names.GlobRef.VarRef vname)
     else if EConstr.isConstruct state.sigma t
     then
       (* Constructor. *)
@@ -140,7 +167,7 @@ module Export = struct
         |> Names.KerName.to_string |> Name.make
       in
       let ty = type_of_constructor state.coq_env cname in
-      handle_cst state name ty
+      handle_cst state name ty (Names.GlobRef.ConstructRef cname)
     else if EConstr.isInd state.sigma t
     then
       (* Inductive. *)
@@ -154,7 +181,7 @@ module Export = struct
           ^ Names.Id.to_string body.mind_typename)
       in
       let ty = Retyping.get_type_of state.coq_env state.sigma t in
-      handle_cst state name ty
+      handle_cst state name ty (Names.GlobRef.IndRef iname)
     else if EConstr.isApp state.sigma t
     then
       (* Application. *)
@@ -169,15 +196,15 @@ module Export = struct
   (** Constants (i.e. Coq constants, constructors, inductives) need special care. 
       We have to check if we've already seen this constant, and if not 
       we have to translate the constant's type. *)
-  and handle_cst state name (ty : EConstr.t) =
+  and handle_cst state name (ty : EConstr.t) (ref : Names.GlobRef.t) =
     let open Lang in
     match Name.Map.find_opt name state.env.constants with
     | Some _ -> Term.mkCst name
     | None ->
         (* This is the first time we see this constant : we have to translate its type
-           and add the constant to the actema environment and symbol table. *)
+           and add the constant to the actema environment. *)
         let ty = translate_term state ty in
-        let pp = make_pp_info name in
+        let pp = make_pp_info name ref in
         state.env <- Env.add_constant name ty ~pp state.env;
         Term.mkCst name
 
@@ -213,7 +240,10 @@ module Export = struct
             in
             let act_ty = translate_term state coq_ty in
             (* Don't forget to add the constant to the actema environment. *)
-            let pp = make_pp_info name in
+            let pp =
+              make_pp_info name
+              @@ Names.GlobRef.VarRef (Context.Named.Declaration.get_id decl)
+            in
             state.env <- Lang.Env.add_constant name act_ty ~pp state.env;
             (* Add it to the list of hypotheses or variables. *)
             if EConstr.ESorts.is_prop state.sigma coq_sort

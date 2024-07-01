@@ -136,4 +136,43 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
           | _ -> interactive ()
     end
 
-let test_tac () : unit tactic = Tacticals.tclIDTAC
+let print_implicits (_, implicits) =
+  List.iter
+    begin
+      function
+      | None -> Log.printf "None"
+      | Some info ->
+          let name, i, j = info.Impargs.impl_pos in
+          Log.printf "pos = (%s, %d, %d)"
+            (Pp.string_of_ppcmds @@ Names.Name.print name)
+            i
+            (Option.default 42424242 j)
+    end
+    implicits;
+  Log.printf "*****"
+
+let test_tac () : unit tactic =
+  let name =
+    Names.GlobRef.ConstRef
+      (Names.Constant.make1 @@ kername [ "Actema"; "Test" ] "target")
+  in
+  List.iter print_implicits @@ Impargs.implicits_of_global name;
+  Tacticals.tclIDTAC
+(*Goal.enter
+  begin
+    fun goal ->
+      Environ.fold_inductives
+        begin
+          fun name _ _ ->
+            let implicits =
+              Impargs.implicits_of_global @@ Names.GlobRef.IndRef (name, 0)
+            in
+            if List.length implicits > 1
+            then begin
+              Log.printf "Constant : %s" Names.Ind.(name, 0);
+              List.iter print_implicits implicits
+            end
+        end
+        (Goal.env goal) ();
+      Tacticals.tclIDTAC
+  end*)

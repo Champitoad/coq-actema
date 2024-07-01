@@ -1,6 +1,16 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
+fun A : Type => fun l : list A => _
+
+Definition target (x : nat) {A : Type} (l : list A) {y : nat} : True := I.
+
+Lemma test : True.
+  test_tac.
+
+Print mathcomp.ssreflect.eqtype.eqVneq
+About app.
+
 Fixpoint eqb n m :=
   match n, m with
   | 0, 0 => true

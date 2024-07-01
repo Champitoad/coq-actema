@@ -297,14 +297,17 @@ module Env : sig
 
   (** Some global variables require special formatting when pretty-printed. *)
   type pp_info =
-    { symbol : string
-          (** The symbol to use to print the constant. For instance we might want to
-                print [Coq.Init.Peano.plus] as [+]. *)
-    ; implicit_args : int list
-          (** The indices of the implicit arguments of the constant.
-                Implicit arguments are not printed, and are always before explicit arguments.
-                For instance the polymorphic equality [eq : forall A : Type, A -> A -> Prop]
-                has an implicit argument at index [0]. *)
+    { (* The symbol to use to print the constant. For instance we might want to
+         print [Coq.Init.Peano.plus] as [+]. *)
+      symbol : string
+    ; (* The indices of the implicit arguments (i.e. arguments which are not printed)
+         of the constant (starting at 0).
+
+         This list is expected to be sorted in increasing order.
+
+         For instance the polymorphic equality [eq : forall A : Type, A -> A -> Prop]
+         has an implicit argument at index [0]. *)
+      implicit_args : int list
     ; position : pp_pos
     }
   [@@deriving show]

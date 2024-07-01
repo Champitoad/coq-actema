@@ -416,7 +416,7 @@ module Env = struct
       | [], _ :: _ ->
           (* There are remaining implicits but no more args. *) assert false
     in
-    loop (List.sort Int.compare pp_info.implicit_args) args [] 0
+    loop pp_info.implicit_args args [] 0
 
   let test_env =
     let open Term in
