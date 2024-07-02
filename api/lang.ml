@@ -381,11 +381,31 @@ end
 (***************************************************************************************)
 (** Environments *)
 
+module Precedence = struct
+  let min_level = 0
+  let max_level = 100
+
+  type t = NeverParen | Level of int [@@deriving show]
+
+  let decrease = function NeverParen -> NeverParen | Level i -> Level (i - 1)
+
+  let compare p1 p2 =
+    match (p1, p2) with
+    | NeverParen, NeverParen -> 0
+    | NeverParen, Level _ -> -1
+    | Level _, NeverParen -> 1
+    | Level i, Level j -> Int.compare i j
+end
+
 module Env = struct
   type pp_pos = Prefix | Infix | Suffix [@@deriving show]
 
   type pp_info =
-    { symbol : string; implicit_args : int list; position : pp_pos }
+    { symbol : string
+    ; implicit_args : int list
+    ; position : pp_pos
+    ; precedence : Precedence.t
+    }
   [@@deriving show]
 
   type t = { constants : Term.t Name.Map.t; pp_info : pp_info Name.Map.t }

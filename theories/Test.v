@@ -1,7 +1,8 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
-fun A : Type => fun l : list A => _
+Parameter (f : nat -> nat).
+
 
 Definition target (x : nat) {A : Type} (l : list A) {y : nat} : True := I.
 

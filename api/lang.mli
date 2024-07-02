@@ -288,11 +288,35 @@ end
 (***************************************************************************************)
 (** Environments. *)
 
+module Precedence : sig
+  (** The minimum precedence level. *)
+  val min_level : int
+
+  (** The maximum precedence level. *)
+  val max_level : int
+
+  (* A term's precedence level (used for pretty-printing without too much parentheses). *)
+  type t =
+    | (* This term never needs parentheses. You can think of this as [Level (-inf)]. *)
+      NeverParen
+    | (* This term sometimes needs parentheses.
+         The level should be in the range [min_level..max_level] : lower levels bind tighter. *)
+      Level of int
+  [@@deriving show]
+
+  (** Decrease a precedence. For a level this simply substracts [1], 
+      and [NeverParen] is unchanged. *)
+  val decrease : t -> t
+
+  (** Compare precedences in the sense of [Stdlib.compare]. *)
+  val compare : t -> t -> int
+end
+
 module Env : sig
-  (** Where to print a constant with respect to its arguments.
-        [Infix] only makes sense for functions that have two explicit arguments.
-        [Suffix] only makes sense for functions that have one explicit argument.
-        [Prefix] is always valid, and is what is used by default. *)
+  (** Where to print a constant with respect to its explicit arguments.
+      [Infix] only makes sense for functions that have two explicit arguments.
+      [Suffix] only makes sense for functions that have one explicit argument.
+      [Prefix] is always valid, and is what is used by default. *)
   type pp_pos = Prefix | Infix | Suffix [@@deriving show]
 
   (** Some global variables require special formatting when pretty-printed. *)
@@ -308,7 +332,9 @@ module Env : sig
          For instance the polymorphic equality [eq : forall A : Type, A -> A -> Prop]
          has an implicit argument at index [0]. *)
       implicit_args : int list
-    ; position : pp_pos
+    ; (* Where do we print this constant relative to its *explicit* arguments ? *)
+      position : pp_pos
+    ; precedence : Precedence.t
     }
   [@@deriving show]
 
@@ -316,11 +342,11 @@ module Env : sig
       - Type check terms.
       - Pretty-print terms. *)
   type t =
-    { constants : Term.t Name.Map.t
-          (** The type of each constant, indexed by name. *)
-    ; pp_info : pp_info Name.Map.t
-          (** The information needed to pretty-print each constant, indexed by name.
-              Note that this field is not optional : every constant should have a pp_info. *)
+    { (* The type of each constant, indexed by name. *)
+      constants : Term.t Name.Map.t
+    ; (* The information needed to pretty-print each constant, indexed by name.
+         Note that this field is not optional : every constant should have a pp_info. *)
+      pp_info : pp_info Name.Map.t
     }
 
   (** The empty environment. *)

@@ -62,15 +62,68 @@ let is_exist = function
 let extend i (path : Path.t) : Path.t = { path with sub = i :: path.sub }
 let reverse (path : Path.t) : Path.t = { path with sub = List.rev path.sub }
 
-(** [pp_term ?paren env path t] pretty-prints the term [t]. 
-    The argument [path] keeps track of the path to the term [t], 
-    and is used to annotate the Xml divs of each subterm. 
-    The flag [paren] controls whether we should add parentheses around [t]. *)
-let rec pp_term ?(paren = false) env (path : Path.t) ctx (t : Term.t) :
-    annot Pp.doc =
+(** Get the precedence level associated to a term. *)
+let get_precedence (env : Env.t) (term : Term.t) : Precedence.t =
+  match term with
+  (* Atoms : these never need parentheses. *)
+  | Cst _ | Sort _ | FVar _ | BVar _ -> NeverParen
+  | n when is_nat_constant n -> NeverParen
+  (* Non-dependent product. *)
+  | Prod (_, _, _, body) when not @@ Term.contains_loose_bvars body -> Level 99
+  (* Dependent product. *)
+  | Prod _ -> Level 100
+  (* Existential quantifier. *)
+  | App (_, Cst ex, [ _; Lambda _ ]) when Name.equal ex Constants.ex ->
+      Level 100
+  (* Lambda abstraction. *)
+  | Lambda _ -> Level 100
+  (* For an applied constant we get the precedence in the environment. *)
+  | App (_, Cst name, args) ->
+      let info = Name.Map.find name env.pp_info in
+      info.precedence
+  (* Default application. *)
+  | App _ -> Level 0
+
+(** [arrange_app env f args] arranges the function and arguments of the 
+    application [App (_, f, args)] in the correct order, accounting for infix/suffix
+    functions. We retain for each argument its original position in the list [f :: args].
+    
+    As usual this assumes [args] is nonempty and [f] is not itself an application. *)
+let arrange_app env f args : (int * Term.t) list =
+  assert (args != []);
+  match (f : Term.t) with
+  | Cst name ->
+      let info = Name.Map.find name env.Env.pp_info in
+      let args = Env.filter_args info (indices ~start:1 args) in
+      begin
+        match (info.position, args) with
+        | Prefix, args -> (0, f) :: args
+        | Suffix, [ arg ] -> [ arg; (0, f) ]
+        | Infix, [ arg1; arg2 ] -> [ arg1; (0, f); arg2 ]
+        | Infix, [ arg ] -> [ arg; (0, f) ]
+        | _ ->
+            failwith
+              "Notation.arrange_app : unexpected position/argument combination"
+      end
+  | _ -> indices (f :: args)
+
+(** [pp_term prec env path ctx t] pretty-prints the term [t]. 
+    - [ctx] keeps track of the names of the free variables (FVars) 
+      encountered so far. 
+    - [path] keeps track of the path to the term [t], 
+      and is used to annotate the Xml divs of each subterm. 
+    - [max_prec] is the maximum allowed precedence level : 
+      if the precedence of [t] is greater than [max_prec] 
+      we surround [t] with parentheses.
+*)
+let rec pp_term max_prec env (path : Path.t) ctx (t : Term.t) : annot Pp.doc =
   let open Pp in
+  (* Compute the current precedence level. *)
+  let prec = get_precedence env t in
+  (* Pretty-print [t] without the outer-most parentheses. *)
   let content =
     match t with
+    (* Atoms. *)
     | BVar _ -> failwith "Notation.pp_term : loose bvar"
     (* We have to print natural numbers e.g. [S (S (O))] in a special way. *)
     | _ when is_nat_constant t ->
@@ -83,38 +136,39 @@ let rec pp_term ?(paren = false) env (path : Path.t) ctx (t : Term.t) :
     | Cst name -> pp_global env name
     | Sort `Prop -> string "Prop"
     | Sort `Type -> string "Type"
+    (* Lambda. *)
     | Lambda (_, x, ty, body) ->
         let fvar, new_ctx = Context.add_fresh x ty ctx in
         let pp_binder = string "λ" ^+^ pp_binder env x ^+^ string ":" in
-        let pp_ty = pp_term env (extend 0 path) ctx ty ^+^ utf8string "⇒" in
+        let pp_ty =
+          pp_term max_prec env (extend 0 path) ctx ty ^+^ utf8string "⇒"
+        in
         let pp_body =
-          pp_term env (extend 1 path) new_ctx @@ Term.instantiate fvar body
+          pp_term Precedence.(Level max_level) env (extend 1 path) new_ctx
+          @@ Term.instantiate fvar body
         in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
     (* Non-dependent product. *)
     | Prod (_, _, t1, t2) when not (Term.contains_loose_bvars t2) ->
-        (* We might or might not need to add parentheses around [t1]. *)
-        let paren_t1 =
-          match t1 with
-          | FVar _ | Cst _ | App _ | Sort _ -> false
-          | _ when is_nat_constant t1 -> false
-          | _ -> true
+        let pp_t1 =
+          pp_term Precedence.(Level max_level) env (extend 0 path) ctx t1
         in
-        let pp_t1 = pp_term ~paren:paren_t1 env (extend 0 path) ctx t1 in
-        (* We don't need parentheses around [t2]. *)
-        let pp_t2 = pp_term env (extend 1 path) ctx t2 in
+        let pp_t2 =
+          pp_term Precedence.(Level max_level) env (extend 1 path) ctx t2
+        in
         (* Combine the results. *)
         (pp_t1 ^+^ utf8string "➞") ^//^ pp_t2
     (* Dependent product. *)
     | Prod (_, x, ty, body) ->
         let fvar, new_ctx = Context.add_fresh x ty ctx in
         let pp_binder = utf8string "∀" ^+^ pp_binder env x ^+^ string ":" in
-        let paren_ty = is_dep_prod ty || is_exist ty in
         let pp_ty =
-          pp_term ~paren:paren_ty env (extend 0 path) ctx ty ^^ string ","
+          pp_term Precedence.(Level max_level) env (extend 0 path) ctx ty
+          ^^ string ","
         in
         let pp_body =
-          pp_term env (extend 1 path) new_ctx @@ Term.instantiate fvar body
+          pp_term Precedence.(Level max_level) env (extend 1 path) new_ctx
+          @@ Term.instantiate fvar body
         in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
     (* Existential quantifier. *)
@@ -122,13 +176,20 @@ let rec pp_term ?(paren = false) env (path : Path.t) ctx (t : Term.t) :
       when Name.equal ex Constants.ex ->
         let fvar, new_ctx = Context.add_fresh x ty ctx in
         let pp_binder = utf8string "∃" ^+^ pp_binder env x ^+^ string ":" in
-        let paren_ty = is_dep_prod ty || is_exist ty in
         let pp_ty =
-          pp_term ~paren:paren_ty env (extend 0 @@ extend 2 path) ctx ty
+          pp_term
+            Precedence.(Level max_level)
+            env
+            (extend 0 @@ extend 2 path)
+            ctx ty
           ^^ string ","
         in
         let pp_body =
-          pp_term env (extend 1 @@ extend 2 path) new_ctx
+          pp_term
+            Precedence.(Level max_level)
+            env
+            (extend 1 @@ extend 2 path)
+            new_ctx
           @@ Term.instantiate fvar body
         in
         (pp_binder ^//^ pp_ty) ^//^ pp_body
@@ -138,38 +199,21 @@ let rec pp_term ?(paren = false) env (path : Path.t) ctx (t : Term.t) :
 
            When tracking paths we also take care that the order in which the function
            and arguments are printed is not always the same. *)
-        let elts =
-          match f with
-          | Cst name ->
-              let info = Name.Map.find name env.Env.pp_info in
-              let args = Env.filter_args info (indices ~start:1 args) in
-              begin
-                match (info.position, args) with
-                | Prefix, args -> (0, f) :: args
-                | Infix, [ arg1; arg2 ] -> [ arg1; (0, f); arg2 ]
-                | Suffix, [ arg ] -> [ arg; (0, f) ]
-                | _ -> assert false
-              end
-          | _ -> indices (f :: args)
-        in
-        (* Pretty-print the applications one by one, adding parentheses where needed. *)
-        elts
+        arrange_app env f args
         |> List.map
              begin
                fun (i, t) ->
-                 (* Decide whether we need parentheses around [t]. *)
-                 let paren_t =
-                   match (t : Term.t) with
-                   | FVar _ | Cst _ | Sort _ -> false
-                   | _ when is_nat_constant t -> false
-                   | _ -> true
-                 in
-                 pp_term ~paren:paren_t env (extend i path) ctx t
+                 (* The arguments are printed at one level below the level of the constant.  *)
+                 pp_term (Precedence.decrease prec) env (extend i path) ctx t
              end
         |> flow (ifflat space (nest 2 hardline))
   in
-  (* Add parentheses if needed. *)
-  let content = if paren then char '(' ^^ content ^^ char ')' else content in
+  (* Add outer parentheses if needed. *)
+  let content =
+    if Precedence.compare prec max_prec > 0
+    then char '(' ^^ content ^^ char ')'
+    else content
+  in
   (* Wrap the term in a span which holds the path to the term. *)
   let path_str = Path.to_string @@ reverse path in
   span ~attribs:[ Xml.string_attrib "id" path_str ] content
@@ -184,12 +228,14 @@ let term_to_string ?(width = default_width) ?(ctx = Context.empty) env t :
   assert (0 <= width);
   (* The path doesn't matter when printing to a string. *)
   let dummy_path = Path.make 0 in
-  PpString.pp ~width (pp_term env dummy_path ctx t)
+  PpString.pp ~width (pp_term Precedence.(Level max_level) env dummy_path ctx t)
 
 let term_to_xml ?(width = default_width) ?(ctx = Context.empty) path env t :
     Xml.elt =
   assert (0 <= width);
-  let xml = PpXml.pp ~width (pp_term env path ctx t) in
+  let xml =
+    PpXml.pp ~width (pp_term Precedence.(Level max_level) env path ctx t)
+  in
   match xml with
   | [ element ] -> element
   | _ ->

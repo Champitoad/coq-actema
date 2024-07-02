@@ -28,26 +28,91 @@ module Export = struct
   (** We manually set pretty-printing information for specific Coq terms. *)
   let predefined =
     let open Lang in
+    let open Precedence in
     [ ( Constants.nat
-      , Env.{ symbol = "ℕ"; implicit_args = []; position = Prefix } )
+      , Env.
+          { symbol = "ℕ"
+          ; implicit_args = []
+          ; position = Prefix
+          ; precedence = NeverParen
+          } )
     ; ( Constants.and_
-      , Env.{ symbol = "∧"; implicit_args = []; position = Infix } )
-    ; (Constants.or_, Env.{ symbol = "∨"; implicit_args = []; position = Infix })
-    ; (Constants.not, Env.{ symbol = "¬"; implicit_args = []; position = Infix })
+      , Env.
+          { symbol = "∧"
+          ; implicit_args = []
+          ; position = Infix
+          ; precedence = Level 80
+          } )
+    ; ( Constants.or_
+      , Env.
+          { symbol = "∨"
+          ; implicit_args = []
+          ; position = Infix
+          ; precedence = Level 85
+          } )
+    ; ( Constants.not
+      , Env.
+          { symbol = "¬"
+          ; implicit_args = []
+          ; position = Infix
+          ; precedence = Level 75
+          } )
     ; ( Constants.true_
-      , Env.{ symbol = "⊤"; implicit_args = []; position = Infix } )
+      , Env.
+          { symbol = "⊤"
+          ; implicit_args = []
+          ; position = Infix
+          ; precedence = NeverParen
+          } )
     ; ( Constants.false_
-      , Env.{ symbol = "⊥"; implicit_args = []; position = Infix } )
-    ; (Constants.add, Env.{ symbol = "+"; implicit_args = []; position = Infix })
-    ; (Constants.mul, Env.{ symbol = "⋅"; implicit_args = []; position = Infix })
+      , Env.
+          { symbol = "⊥"
+          ; implicit_args = []
+          ; position = Infix
+          ; precedence = NeverParen
+          } )
+    ; ( Constants.add
+      , Env.
+          { symbol = "+"
+          ; implicit_args = []
+          ; position = Infix
+          ; precedence = Level 50
+          } )
+    ; ( Constants.mul
+      , Env.
+          { symbol = "⋅"
+          ; implicit_args = []
+          ; position = Infix
+          ; precedence = Level 40
+          } )
     ; ( Constants.eq
-      , Env.{ symbol = "="; implicit_args = [ 0 ]; position = Infix } )
+      , Env.
+          { symbol = "="
+          ; implicit_args = [ 0 ]
+          ; position = Infix
+          ; precedence = Level 70
+          } )
     ; ( Constants.equiv
-      , Env.{ symbol = "↔"; implicit_args = []; position = Infix } )
+      , Env.
+          { symbol = "↔"
+          ; implicit_args = []
+          ; position = Infix
+          ; precedence = Level 95
+          } )
     ; ( Constants.nil
-      , Env.{ symbol = "[]"; implicit_args = [ 0 ]; position = Prefix } )
+      , Env.
+          { symbol = "[]"
+          ; implicit_args = [ 0 ]
+          ; position = Prefix
+          ; precedence = NeverParen
+          } )
     ; ( Constants.cons
-      , Env.{ symbol = "::"; implicit_args = [ 0 ]; position = Infix } )
+      , Env.
+          { symbol = "::"
+          ; implicit_args = [ 0 ]
+          ; position = Infix
+          ; precedence = Level 60
+          } )
     ]
     |> List.to_seq |> Hashtbl.of_seq
 
@@ -88,8 +153,8 @@ module Export = struct
              as explicit. *)
           | _ -> []
         in
-        (* By default a constant is printed in prefix position. *)
-        Env.{ symbol; implicit_args; position = Prefix }
+        (* By default a constant is printed in prefix position and binds tightly. *)
+        Env.{ symbol; implicit_args; position = Prefix; precedence = Level 0 }
 
   (***********************************************************************************)
   (** Translate terms. *)
