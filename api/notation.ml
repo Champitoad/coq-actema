@@ -151,7 +151,7 @@ let rec pp_term max_prec env (path : Path.t) ctx (t : Term.t) : annot Pp.doc =
     (* Non-dependent product. *)
     | Prod (_, _, t1, t2) when not (Term.contains_loose_bvars t2) ->
         let pp_t1 =
-          pp_term Precedence.(Level max_level) env (extend 0 path) ctx t1
+          pp_term Precedence.(decrease prec) env (extend 0 path) ctx t1
         in
         let pp_t2 =
           pp_term Precedence.(Level max_level) env (extend 1 path) ctx t2
@@ -204,7 +204,7 @@ let rec pp_term max_prec env (path : Path.t) ctx (t : Term.t) : annot Pp.doc =
              begin
                fun (i, t) ->
                  (* The arguments are printed at one level below the level of the constant.  *)
-                 pp_term (Precedence.decrease prec) env (extend i path) ctx t
+                 pp_term Precedence.(decrease prec) env (extend i path) ctx t
              end
         |> flow (ifflat space (nest 2 hardline))
   in

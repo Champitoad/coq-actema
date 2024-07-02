@@ -3,6 +3,8 @@ Require Import ssreflect.
 
 Parameter (f : nat -> nat).
 
+Lemma test : True -> (True -> True).
+actema_force.
 
 Definition target (x : nat) {A : Type} (l : list A) {y : nat} : True := I.
 
