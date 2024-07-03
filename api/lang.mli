@@ -286,8 +286,20 @@ module Constants : sig
 end
 
 (***************************************************************************************)
-(** Environments. *)
+(** Precedences. *)
 
+(** This module implements precedence levels, which are used when pretty printing terms
+    to avoid excessive parentheses.
+    
+    For instance, the term 
+      [App (_, Constants.eq, App (_, Constants.add, App (_, Constants.mul, x, y), z), Constants.zero)]
+    would be printed without precedence levels as 
+      [((x * y) + z) = 0]
+    and with the correct precedence levels as 
+      [x * y + z = 0]
+  
+    The precedence levels for standard constants can be found in plugin/translate.ml.
+*)
 module Precedence : sig
   (** The minimum precedence level. *)
   val min_level : int
@@ -295,7 +307,7 @@ module Precedence : sig
   (** The maximum precedence level. *)
   val max_level : int
 
-  (* A term's precedence level (used for pretty-printing without too much parentheses). *)
+  (* A term's precedence level. *)
   type t =
     | (* This term never needs parentheses. You can think of this as [Level (-inf)]. *)
       NeverParen
@@ -311,6 +323,9 @@ module Precedence : sig
   (** Compare precedences in the sense of [Stdlib.compare]. *)
   val compare : t -> t -> int
 end
+
+(***************************************************************************************)
+(** Environments. *)
 
 module Env : sig
   (** Where to print a constant with respect to its explicit arguments.

@@ -379,7 +379,7 @@ module Constants = struct
 end
 
 (***************************************************************************************)
-(** Environments *)
+(** Precedences *)
 
 module Precedence = struct
   let min_level = 0
@@ -396,6 +396,9 @@ module Precedence = struct
     | Level _, NeverParen -> 1
     | Level i, Level j -> Int.compare i j
 end
+
+(***************************************************************************************)
+(** Environments *)
 
 module Env = struct
   type pp_pos = Prefix | Infix | Suffix [@@deriving show]
