@@ -19,22 +19,18 @@ let exist name ty body =
 
 let nat : Term.t = Term.mkCst Constants.nat
 let eq_nat : Term.t = Term.(mkApp (mkCst Constants.eq) nat)
-let list_nat : Term.t = Term.(mkApp (mkCst @@ Name.make "list") nat)
+let list_nat : Term.t = Term.(mkApp (mkCst Constants.list) nat)
 let eq_list_nat : Term.t = Term.(mkApp (mkCst Constants.eq) list_nat)
 let perm_nat : Term.t = Term.(mkApp (mkCst @@ Name.make "perm") nat)
-let nil_nat : Term.t = Term.(mkApp (mkCst @@ Name.make "nil") nat)
-let cons_nat : Term.t = Term.(mkApp (mkCst @@ Name.make "cons") nat)
+let nil_nat : Term.t = Term.(mkApp (mkCst Constants.nil) nat)
+let cons_nat : Term.t = Term.(mkApp (mkCst Constants.cons) nat)
 
 (** The environment we use for testing in this file.
       It includes the standard [Env.test_env], and lists + permutations. *)
 let perm_env =
   let open Term in
-  let list0 = mkApp (mkCst @@ Name.make "list") (mkBVar 0) in
+  let list0 = mkApp (mkCst Constants.list) (mkBVar 0) in
   Env.test_env
-  |> Env.add_constant (Name.make "list") (mkArrow mkType mkType)
-  |> Env.add_constant (Name.make "nil") (forall "A" mkType list0)
-  |> Env.add_constant (Name.make "cons")
-       (forall "A" mkType @@ mkArrows [ mkBVar 0; list0; list0 ])
   |> Env.add_constant (Name.make "perm")
        (forall "A" mkType @@ mkArrows [ list0; list0; mkProp ])
 

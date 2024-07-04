@@ -18,6 +18,16 @@
 - Talk about the lemma search "fast" unification.
 - Unification : describe the problem formally and the solution.
 
+# Problematic inputs for the backtracking unif algorithm : 
+
+forall ?a ?b ?x1 ... ?xn : Prop, {a /\ x1 ... xn /\ ~ b}
+=?=
+forall ?c ?y1 ... ?yn : Prop, {c /\ y1 ... yn /\ c}
+
+If we initially choose a := c, it won't work at the end because we will have a := f b which
+violates the constraint that a can't depend on b.
+We have to backtrack all the way up to the first assignment and choose c := a instead (and it still does not work, but it has to test every possibility first).
+
 # Formalizing the unification algorithm
 
 Define a judgement in the style of :

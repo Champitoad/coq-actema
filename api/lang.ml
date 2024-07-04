@@ -422,10 +422,20 @@ module Env = struct
     }
 
   let add_constant name ty ?pp env =
-    let env = { env with constants = Name.Map.add name ty env.constants } in
-    match pp with
-    | None -> env
-    | Some pp -> { env with pp_info = Name.Map.add name pp env.pp_info }
+    (* We always need a pp_info : if none is provided, make some dummy one. *)
+    let pp =
+      match pp with
+      | Some pp -> pp
+      | None ->
+          { symbol = Name.show name
+          ; implicit_args = []
+          ; position = Prefix
+          ; precedence = Level 0
+          }
+    in
+    { constants = Name.Map.add name ty env.constants
+    ; pp_info = Name.Map.add name pp env.pp_info
+    }
 
   let filter_args pp_info args =
     let rec loop implicits args kept i =
@@ -462,6 +472,17 @@ module Env = struct
       ; ( Constants.ex
         , mkProd (Named (Name.make "A")) mkType
           @@ mkArrow (mkArrow (mkBVar 0) mkProp) mkProp )
+      ; (Constants.list, mkArrow mkType mkType)
+      ; ( Constants.nil
+        , mkProd (Named (Name.make "A")) mkType
+          @@ mkApp (mkCst Constants.list) (mkBVar 0) )
+      ; ( Constants.cons
+        , mkProd (Named (Name.make "A")) mkType
+          @@ mkArrows
+               [ mkBVar 0
+               ; mkApp (mkCst Constants.list) (mkBVar 0)
+               ; mkApp (mkCst Constants.list) (mkBVar 0)
+               ] )
       ]
     in
     List.fold_left

@@ -238,7 +238,7 @@ let filter pattern_opt selection_opt proof =
           |> (* Keep only one match per lemma. *)
           nub_matches
         in
-        Js_log.log @@ Format.sprintf "%d matches" (List.length matches);
+        Js_log.printf "%d matches" (List.length matches);
         (* Get the (sorted) list of lemmas that match the selection. *)
         List.map (fun m -> m.lemma) matches
   in

@@ -136,8 +136,7 @@ let dnd_actions (input_src : Path.t) (input_dst : Path.t option)
   in
 
   (*Js_log.log "**********************************************************";
-    Js_log.log
-    @@ Format.sprintf "Sources : \n%s\nDests : \n%s\n"
+    Js_log.printf "Sources : \n%s\nDests : \n%s\n"
          (List.to_string (List.to_string Path.to_string) hyperlink_sources)
          (List.to_string (List.to_string Path.to_string) hyperlink_dests);*)
 

@@ -116,6 +116,7 @@ module Term : sig
   val mkApps : t -> t list -> t
 
   (** Smart constructor for [Term.Prod] in case the product is non-dependent.
+      The second argument is lifted by one level.
       This computes the cached data. *)
   val mkArrow : t -> t -> t
 
@@ -307,7 +308,7 @@ module Precedence : sig
   (** The maximum precedence level. *)
   val max_level : int
 
-  (* A term's precedence level. *)
+  (* A term's precedence. *)
   type t =
     | (* This term never needs parentheses. You can think of this as [Level (-inf)]. *)
       NeverParen
@@ -349,7 +350,9 @@ module Env : sig
       implicit_args : int list
     ; (* Where do we print this constant relative to its *explicit* arguments ? *)
       position : pp_pos
-    ; precedence : Precedence.t
+    ; (* This term's precedence. If you have no idea what to use here [Level 0] is
+         a good default. *)
+      precedence : Precedence.t
     }
   [@@deriving show]
 

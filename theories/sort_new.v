@@ -2,8 +2,6 @@ From Actema Require Import Loader.
 Require Import ssreflect.
 Require Import List.
 
-
-
 (* being sorted *)
 
 Definition low n l :=
@@ -22,7 +20,6 @@ Fixpoint sorted l :=
 
 Definition ifthl {A} (b:bool) (n1 : list A) n2 :=
   if b then n1 else n2.
-
 
 Inductive perm {A} : list A -> list A -> Prop :=
 | perm_refl : forall l, perm l l
@@ -43,6 +40,7 @@ Admitted.
 Lemma perm_length : forall A (l1 : list A) (l2 : list A),
          perm l1 l2 -> length l1 = length l2.
 Proof.
+actema_force.
 intros A l1 l2 H. induction H.
 - reflexivity.
 - pose proof (H := app_length).

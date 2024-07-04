@@ -101,6 +101,9 @@ let unify_cond env context subst fvar term : bool =
     starting with a substitution [subst].
     This doesn't check for cycles, but instead returns a lazy list of all unifiers. *)
 let rec unify_rec env context subst ((t1, t2) : Term.t * Term.t) : subst Seq.t =
+  (*Format.printf "********************************\n";
+    Format.printf "subst : %s\n" (show_subst subst);
+    Format.printf "unifying %s =?= %s\n" (Term.show t1) (Term.show t2);*)
   let open Utils.Monad.Seq in
   match (t1, t2) with
   (*************************************************************************)
@@ -123,6 +126,11 @@ let rec unify_rec env context subst ((t1, t2) : Term.t * Term.t) : subst Seq.t =
       let* subst =
         unify_types env context subst (Term.mkFVar v1, Term.mkFVar v2)
       in
+      let e1 = Context.find v1 context |> Option.get in
+      let e2 = Context.find v2 context |> Option.get in
+      Format.printf "choice : %s <-> %s\n"
+        (Term.show_binder e1.binder)
+        (Term.show_binder e2.binder);
       (* This is a choice point : we try both [v1 --> v2] and [v2 --> v1].
          Since we are using lazy lists this simulates backtracking. *)
       List.to_seq
@@ -206,7 +214,8 @@ let unify env context ?(rigid_fvars = []) ?(forbidden_deps = []) t1 t2 :
   in
   let subst = { map = FVarId.Map.of_list bindings } in
 
-  (* Compute all solutions - acyclic or not - *on demand* using a lazy list. *)
+  (* Compute all solutions - acyclic or not - on demand using a lazy list. *)
+  Format.printf "Context : %s\n" (Context.show context);
   let solutions = unify_rec env context subst (t1, t2) in
 
   (* Find the first acyclic solution. *)

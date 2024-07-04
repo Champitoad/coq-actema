@@ -246,11 +246,10 @@ let rec js_proof_engine (proof : Proof.t) =
             fun lemma ->
               try ignore @@ TermUtils.well_typed env Context.empty lemma.l_form
               with TermUtils.TypingError err ->
-                Js_log.log
-                @@ Format.sprintf "In lemma %s\n%s\nTyping Error\n%s\n"
-                     (Name.show lemma.l_full)
-                     (Notation.term_to_string env lemma.l_form)
-                     (TermUtils.show_typeError err)
+                Js_log.printf "In lemma %s\n%s\nTyping Error\n%s\n"
+                  (Name.show lemma.l_full)
+                  (Notation.term_to_string env lemma.l_form)
+                  (TermUtils.show_typeError err)
           end
           lemmas;
         (* Create the lemma database. *)
@@ -309,8 +308,7 @@ let rec js_proof_engine (proof : Proof.t) =
         let start = Sys.time () in
         let proof = filter pattern selection _self##.proof in
         let stop = Sys.time () in
-        Js_log.log
-        @@ Format.sprintf "Time to [filter-lemmas] : %.2fs" (stop -. start);
+        Js_log.printf "Time to [filter-lemmas] : %.2fs" (stop -. start);
         js_proof_engine proof
       in
       !!doit ()
@@ -480,9 +478,8 @@ and js_subgoal parent (handle : int) =
       let doit () =
         let from = Name.make from in
         let before = Option.map Name.make @@ Js.Opt.to_option before in
-        Js_log.log
-        @@ Format.sprintf "Moving hyp [%s] to [%s]\n" (Name.show from)
-             (Option.map_default Name.show "#None" before);
+        Js_log.printf "Moving hyp [%s] to [%s]\n" (Name.show from)
+          (Option.map_default Name.show "#None" before);
         let subgoal = Proof.byid parent##.proof _self##.handle in
         (* Check that [from] is a hypothesis. *)
         let is_hypothesis = List.mem from (Logic.Hyps.names subgoal.g_hyps) in
@@ -669,36 +666,6 @@ and js_term parent (goal_id : int) (kind : Path.kind) (term : Term.t) =
 
 (** Print a single goal in Actema format (for debug purposes). *)
 let print_goal (Logic.{ g_id; g_pregoal = goal } : Logic.goal) : unit = ()
-
-(*Js_log.log @@ Format.sprintf "%s\n"
-  @@ Notation.term_to_string goal.g_env goal.g_concl*)
-(*let xml = Notation.term_to_xml (Logic.Path.make 0) goal.g_env goal.g_concl in
-  Js_log.log @@ Format.asprintf "%a\n" (Tyxml.Xml.pp ()) xml*)
-
-(* Print the env. *)
-(*js_log "ENV\n";
-  List.iter
-    begin
-      fun (name, ty) ->
-        js_log
-        @@ Format.sprintf "%s : %s\n" (Name.show name)
-             (Notation.term_to_string goal.g_env ty)
-    end
-    (Name.Map.bindings goal.g_env.constants);
-  (* Print the hypotheses. *)
-  js_log "HYPS\n";
-  Logic.Hyps.iter
-    begin
-      fun hyp ->
-        js_log
-        @@ Format.sprintf "%s : %s\n" (Name.show hyp.h_name)
-             (Notation.term_to_string goal.g_env hyp.h_form)
-    end
-    goal.g_hyps;
-  (* Print the conclusion. *)
-  js_log
-  @@ Format.sprintf "GOAL\n%s\n"
-       (Notation.term_to_string goal.g_env goal.g_concl)*)
 
 (* -------------------------------------------------------------------- *)
 let export (name : string) : unit =

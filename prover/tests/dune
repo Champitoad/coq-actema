@@ -11,3 +11,17 @@
  (alias runtest-js)
  (action
   (run node %{dep:link_tests.bc.js})))
+
+; Playground
+
+(executable
+ (name playground)
+ (public_name -)
+ (modules playground)
+ (libraries coq-actema.prover)
+ (modes js))
+
+(rule
+ (alias playground)
+ (action
+  (run node %{dep:playground.bc.js})))
