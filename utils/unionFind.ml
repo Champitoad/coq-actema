@@ -10,6 +10,7 @@ module type S = sig
   val union : t -> elt -> elt -> unit
   val equiv : t -> elt -> elt -> bool
   val is_representative : t -> elt -> bool
+  val classes : t -> elt list list
 end
 
 module Make (Elt : Hashtbl.HashedType) : S with type elt = Elt.t = struct
@@ -81,4 +82,23 @@ module Make (Elt : Hashtbl.HashedType) : S with type elt = Elt.t = struct
   let is_representative uf elt =
     let root = find uf elt in
     Elt.equal elt root
+
+  let classes uf =
+    let elements = domain uf in
+    (* We use a map from each representative to its class. *)
+    let representatives =
+      List.filter (fun elt -> is_representative uf elt) elements
+    in
+    let map =
+      HT.of_seq @@ List.to_seq
+      @@ List.map (fun elt -> (elt, [])) representatives
+    in
+    (* Add each element to the class of its representative. *)
+    List.iter
+      (fun elt ->
+        let repr = find uf elt in
+        let current_elts = HT.find map repr in
+        HT.add map repr (elt :: current_elts))
+      elements;
+    map |> HT.to_seq_values |> List.of_seq
 end

@@ -47,6 +47,9 @@ module type S = sig
   (** [is_representative p elt] returns [true] if and only if [elt] is the representative
       of its class in the partition [p]. *)
   val is_representative : t -> elt -> bool
+
+  (** [classes p] computes the list of equivalence classes in the partition [p]. *)
+  val classes : t -> elt list list
 end
 
 (** A union-find datastructure which uses hashtables internally. 

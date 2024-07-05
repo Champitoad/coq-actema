@@ -41,6 +41,20 @@ let lex_compare comp (xs : 'a list) (ys : 'a list) : int =
   in
   loop xs ys
 
+(** [argmax f xs] returns the element of [xs] that maximizes [f], 
+    using default comparison of integers. 
+    @raise Failure if [xs] is empty. *)
+let argmax (f : 'a -> int) (xs : 'a list) : 'a =
+  let rec loop x_max f_max = function
+    | [] -> x_max
+    | x :: xs ->
+        let f_x = f x in
+        if f_x <= f_max then loop x_max f_max xs else loop x f_x xs
+  in
+  match xs with
+  | [] -> failwith "argmax: empty list"
+  | x :: xs -> loop x (f x) xs
+
 (** Shorthands for batteries modules. *)
 
 module Int = BatInt
