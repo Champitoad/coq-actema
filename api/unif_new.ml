@@ -19,13 +19,15 @@ type sitem = SRigid | SFlex | SBound of Term.t [@@deriving show]
 let print_uf fmt uf =
   let bindings =
     uf |> UF.domain
-    |> List.map (fun fvar ->
+    |> List.filter_map (fun fvar ->
            let repr = UF.find uf fvar in
            if not @@ FVarId.equal fvar repr
-           then Format.sprintf "%s -> %s" (FVarId.show fvar) (FVarId.show repr)
-           else "")
+           then
+             Some
+               (Format.sprintf "%s -> %s" (FVarId.show fvar) (FVarId.show repr))
+           else None)
   in
-  Format.fprintf fmt "[%s]" (String.concat "," bindings)
+  Format.fprintf fmt "[%s]" (String.concat ", " bindings)
 
 let print_table fmt tbl =
   let bindings =
@@ -33,7 +35,34 @@ let print_table fmt tbl =
     |> List.map (fun (fvar, item) ->
            Format.sprintf "%s := %s" (FVarId.show fvar) (show_sitem item))
   in
-  Format.fprintf fmt "[%s]" (String.concat "," bindings)
+  Format.fprintf fmt "[%s]" (String.concat ", " bindings)
+
+let show_deps forbidden_deps context deps : string =
+  let module Attribs = struct
+    include FVarGraph
+
+    let graph_attributes _ = []
+    let default_vertex_attributes _ = []
+
+    let vertex_name var =
+      match Context.find var context with
+      | None -> "###"
+      | Some entry -> begin
+          match entry.binder with
+          | Named name -> Name.show name
+          | Anonymous -> "_"
+        end
+
+    let vertex_attributes _ = []
+    let get_subgraph _ = None
+    let default_edge_attributes _ = []
+
+    let edge_attributes (edge : FVarGraph.edge) =
+      let v1, v2 = edge in
+      if List.mem (v2, v1) forbidden_deps then [ `Style `Dashed ] else []
+  end in
+  let module Dot = Graph.Graphviz.Dot (Attribs) in
+  Format.asprintf "%a" Dot.fprint_graph deps
 
 type presubst =
   { (* The underlying union-find datastructure on free variables
@@ -117,12 +146,12 @@ let rec unify_rec env context presubst ((t1, t2) : Term.t * Term.t) : unit =
       (* Unify the types of [v] and [t]. *)
       unify_types env context presubst (Term.mkFVar v, t);
       (* Extend the substitution with a mapping [v --> SBound t]. *)
-      HT.add presubst.tbl v (SBound t)
+      HT.replace presubst.tbl v (SBound t)
   | t, FVar v when unify_cond env context presubst v t ->
       (* Unify the types of [v] and [t]. *)
       unify_types env context presubst (Term.mkFVar v, t);
       (* Extend the substitution with a mapping [v --> SBound t]. *)
-      HT.add presubst.tbl v (SBound t)
+      HT.replace presubst.tbl v (SBound t)
   (*************************************************************************)
   (* Recursive cases. *)
   | App (_, f1, args1), App (_, f2, args2)
@@ -189,8 +218,27 @@ let compute_dependencies forbidden_deps presubst : FVarGraph.t =
 (** Actual substitutions. *)
 (***********************************************************************************)
 
+let print_map fmt map =
+  let bindings =
+    FVarId.Map.bindings map
+    |> List.map (fun (fvar, item) ->
+           Format.sprintf "(%s, %s)" (FVarId.show fvar) (show_sitem item))
+  in
+  Format.fprintf fmt "[%s]" (String.concat "," bindings)
+
 (** Substitutions are immutable. *)
-type subst = { map : sitem FVarId.Map.t }
+type subst = { map : sitem FVarId.Map.t [@printer print_map] } [@@deriving show]
+
+(** Temporary. *)
+let convert_sitem__ (sitem : sitem) : Unif.sitem =
+  match sitem with
+  | SFlex -> SFlex
+  | SRigid -> SRigid
+  | SBound term -> SBound term
+
+(** Temporary. *)
+let convert_subst__ (subst : subst) : Unif.subst =
+  Unif.{ map = FVarId.Map.map convert_sitem__ subst.map }
 
 (** The [repeat] flag controls what we do when we substitute a bound variable. *)
 let rec apply_rec ~repeat subst (term : Term.t) : Term.t =
@@ -301,19 +349,29 @@ let unify env context ?(rigid_fvars = []) ?(forbidden_deps = []) t1 t2 :
 
   (* Compute the solution. *)
   try
+    Format.printf "***************************************\n";
+    Format.printf "Context : \n%s\n" @@ Context.show context;
     unify_rec env context presubst (t1, t2);
+    Format.printf "***************************************\n";
+    Format.printf "After unify_rec :\n%s\n" @@ show_presubst presubst;
     (* The next steps assume [presubst] is normalized. *)
     normalize_presubst presubst;
+    Format.printf "***************************************\n";
+    Format.printf "After normalize :\n%s\n" @@ show_presubst presubst;
     (* Compute the dependency graph. *)
     let deps = compute_dependencies forbidden_deps presubst in
+    Out_channel.with_open_text
+      "/home/mathis/Documents/work/coq-actema/graph.dot"
+    @@ fun file ->
+    Out_channel.output_string file @@ show_deps forbidden_deps context deps;
     (* Check the dependency graph is acyclic. *)
     let module Dfs = Graph.Traverse.Dfs (FVarGraph) in
-    if Dfs.has_cycle deps
-    then None
-    else
-      (* Convert the presubstitution to a substitution.
-         This is where we resolve aliasing issues. *)
-      let subst = export_presubst presubst deps in
-      (* Don't forget to close the substitution. *)
-      Some (close subst)
+    if Dfs.has_cycle deps then raise UnifFail;
+    (* Convert the presubstitution to a substitution.
+       This is where we resolve aliasing issues. *)
+    let subst = export_presubst presubst deps in
+    Format.printf "***************************************\n";
+    Format.printf "After export_presubst :\n%s\n" @@ show_subst subst;
+    (* Don't forget to close the substitution. *)
+    Some (close subst)
   with UnifFail -> None

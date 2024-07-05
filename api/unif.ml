@@ -86,7 +86,7 @@ let close subst : subst =
   in
   { map }
 
-(** [unify_cond env context subst fvar term] checks whether we are allowed to instantiate 
+(** [unify_cond env  subst fvar term] checks whether we are allowed to instantiate 
     the variable [fvar] with [term]. This does *not* however unify the types of [fvar] and [term]. *)
 let unify_cond env context subst fvar term : bool =
   let free_vars = Term.free_vars term in

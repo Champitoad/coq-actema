@@ -110,7 +110,7 @@ module Pred = struct
     let* hyperlink = ask_hyperlink in
     match hyperlink with [ src ], [ dst ] -> return (src, dst) | _ -> fail
 
-  let unifiable : unif_data t =
+  let unifiable ?(new_unif = false) () : unif_data t =
     let* proof = ask_proof in
     let* src, dst = ask_link in
     try
@@ -136,10 +136,18 @@ module Pred = struct
 
       (* Unify the two subterms. *)
       let subst =
-        Unif.unify env context
-          ~forbidden_deps:
-            (consecutive_pairs src_fvars @ consecutive_pairs dst_fvars)
-          ~rigid_fvars:(src_rigid @ dst_rigid) src_subterm dst_subterm
+        if new_unif
+        then
+          Option.map Unif_new.convert_subst__
+          @@ Unif_new.unify env context
+               ~forbidden_deps:
+                 (consecutive_pairs src_fvars @ consecutive_pairs dst_fvars)
+               ~rigid_fvars:(src_rigid @ dst_rigid) src_subterm dst_subterm
+        else
+          Unif.unify env context
+            ~forbidden_deps:
+              (consecutive_pairs src_fvars @ consecutive_pairs dst_fvars)
+            ~rigid_fvars:(src_rigid @ dst_rigid) src_subterm dst_subterm
       in
 
       (* Check there is a solution. *)
@@ -215,14 +223,14 @@ module Pred = struct
     let* src, dst = ask_link in
     let* () = opposite_pol_formulas in
     let* () = intuitionistic in
-    let* unif = unifiable in
+    let* unif = unifiable () in
     return @@ ADnD (src, dst, unif, Subform)
 
   (* A deep rewrite link is not required to be intuitionistic. *)
   let deep_rewrite : Logic.action t =
     let* src, dst = ask_link in
     let* side = neg_eq_operand in
-    let* unif = unifiable in
+    let* unif = unifiable () in
     match side with
     | `Left -> return @@ ADnD (src, dst, unif, RewriteL)
     | `Right -> return @@ ADnD (src, dst, unif, RewriteR)

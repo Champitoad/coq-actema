@@ -19,8 +19,10 @@ type sitem =
     SBound of Term.t
 [@@deriving show]
 
+(*type subst [@@deriving show]*)
+
 (** A substitution is essentially a mapping from free variables to sitems. *)
-type subst [@@deriving show]
+type subst = { map : sitem FVarId.Map.t } [@@deriving show]
 
 (** [find_sitem subst fvar] returns the [sitem] associated to the free variable [fvar],
     or [None] if [fvar] is not in the domain of the substitution [subst]. *)

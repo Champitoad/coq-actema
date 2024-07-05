@@ -61,7 +61,7 @@ let test_unif n =
   let h2 = add_binders (c :: ys) @@ fold_and elems2 in
   let sub2 = List.init (n + 1) (const 1) in
 
-  Js_log.printf "TERMS%s\n=?=\n%s"
+  Js_log.printf "TERMS :\n%s\n=?=\n%s"
     (Notation.term_to_string Env.test_env h1)
     (Notation.term_to_string Env.test_env h2);
   let proof = mk_test_proof [ h1; h2 ] (Term.mkCst Constants.true_) in
@@ -69,7 +69,7 @@ let test_unif n =
   (* Compute the linkactions. *)
   let start = Sys.time () in
   let subst =
-    Link.Pred.unifiable proof
+    Link.Pred.unifiable ~new_unif:true () proof
       ( [ Path.make ~kind:(Hyp (mk_hyp_name 0)) ~sub:sub1 g_id ]
       , [ Path.make ~kind:(Hyp (mk_hyp_name 1)) ~sub:sub2 g_id ] )
   in
@@ -81,4 +81,4 @@ let test_unif n =
   | Some unif_data ->
       Js_log.printf "SUBST :\n%s" (Unif.show_subst unif_data.subst)
 
-let () = test_unif 15
+let () = test_unif 1
