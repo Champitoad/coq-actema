@@ -98,7 +98,7 @@ module Make (Elt : Hashtbl.HashedType) : S with type elt = Elt.t = struct
       (fun elt ->
         let repr = find uf elt in
         let current_elts = HT.find map repr in
-        HT.add map repr (elt :: current_elts))
+        HT.replace map repr (elt :: current_elts))
       elements;
     map |> HT.to_seq_values |> List.of_seq
 end

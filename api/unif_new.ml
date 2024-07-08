@@ -27,7 +27,10 @@ let print_uf fmt uf =
                (Format.sprintf "%s -> %s" (FVarId.show fvar) (FVarId.show repr))
            else None)
   in
-  Format.fprintf fmt "[%s]" (String.concat ", " bindings)
+  let classes = uf |> UF.classes |> List.map (List.to_string FVarId.show) in
+  Format.fprintf fmt "[%s] ### [%s]"
+    (String.concat ", " bindings)
+    (String.concat ", " classes)
 
 let print_table fmt tbl =
   let bindings =

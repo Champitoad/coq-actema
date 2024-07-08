@@ -1,15 +1,13 @@
 digraph G {
-  x0;
-  a;
-  c;
-  b;
-  y0;
+  B;
+  A;
+  y;
+  x;
   
   
-  x0 -> b [style="dashed", ];
-  a -> b;
-  c -> b;
-  b -> a [style="dashed", ];
-  y0 -> c [style="dashed", ];
+  A -> B;
+  y -> B [style="dashed", ];
+  x -> A [style="dashed", ];
+  x -> y;
   
   }
