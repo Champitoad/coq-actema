@@ -110,7 +110,7 @@ module Pred = struct
     let* hyperlink = ask_hyperlink in
     match hyperlink with [ src ], [ dst ] -> return (src, dst) | _ -> fail
 
-  let unifiable ?(new_unif = false) () : unif_data t =
+  let unifiable () : unif_data t =
     let* proof = ask_proof in
     let* src, dst = ask_link in
     try
@@ -134,27 +134,33 @@ module Pred = struct
           dst.sub
       in
 
+      (*Format.printf "------------------------\nUnifying %s\n=?=%s\n"
+          (Notation.term_to_string env ~ctx:context @@ Logic.term_of_item src_item)
+          (Notation.term_to_string env ~ctx:context @@ Logic.term_of_item dst_item);
+        Format.printf "sub1 : %s\n" @@ List.to_string string_of_int src.sub;
+        Format.printf "sub2 : %s\n" @@ List.to_string string_of_int dst.sub;*)
+
       (* Unify the two subterms. *)
-      let subst =
-        if new_unif
-        then
-          Option.map Unif_new.convert_subst__
-          @@ Unif_new.unify env context
-               ~forbidden_deps:
-                 (consecutive_pairs src_fvars @ consecutive_pairs dst_fvars)
-               ~rigid_fvars:(src_rigid @ dst_rigid) src_subterm dst_subterm
-        else
-          Unif.unify env context
-            ~forbidden_deps:
-              (consecutive_pairs src_fvars @ consecutive_pairs dst_fvars)
-            ~rigid_fvars:(src_rigid @ dst_rigid) src_subterm dst_subterm
+      let subst_old =
+        Unif.unify env context
+          ~forbidden_deps:
+            (consecutive_pairs src_fvars @ consecutive_pairs dst_fvars)
+          ~rigid_fvars:(src_rigid @ dst_rigid) src_subterm dst_subterm
+      in
+      let subst_new =
+        Option.map Unif_new.convert_subst__
+        @@ Unif_new.unify env context
+             ~forbidden_deps:
+               (consecutive_pairs src_fvars @ consecutive_pairs dst_fvars)
+             ~rigid_fvars:(src_rigid @ dst_rigid) src_subterm dst_subterm
       in
 
       (* Check there is a solution. *)
-      match subst with
-      | Some subst ->
+      match (subst_old, subst_new) with
+      | Some subst, Some _ ->
           return { context; subst; fvars_1 = src_fvars; fvars_2 = dst_fvars }
-      | None -> fail
+      | None, None -> fail
+      | _ -> failwith "Link.unifiable : unif mismatch"
     with InvalidSubtermPath _ | Invalid_argument _ ->
       (* We got an exception : most likely [traverse_rec] raised an exception because a path was invalid. *)
       fail

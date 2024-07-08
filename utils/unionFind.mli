@@ -32,6 +32,10 @@ module type S = sig
   (** [domain p] returns the list of elements in the domain of the partition [p]. *)
   val domain : t -> elt list
 
+  (** [mem p elt] checks if [elt] is in the domain of the partition [p]. 
+      This is more efficient than [List.mem elt (domain p)]. *)
+  val mem : t -> elt -> bool
+
   (** [find p elt] returns the representative of the class of [elt] in the partition [p]. 
       This may update the partition in place. *)
   val find : t -> elt -> elt

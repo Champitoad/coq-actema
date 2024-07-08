@@ -3,6 +3,8 @@ Require Import ssreflect.
 
 
 
+Lemma test : 0 = 0.
+actema_force.
 
 Parameter (f : nat -> nat).
 

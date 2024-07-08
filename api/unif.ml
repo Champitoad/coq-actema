@@ -215,7 +215,6 @@ let unify env context ?(rigid_fvars = []) ?(forbidden_deps = []) t1 t2 :
   let subst = { map = FVarId.Map.of_list bindings } in
 
   (* Compute all solutions - acyclic or not - on demand using a lazy list. *)
-  Format.printf "Context : %s\n" (Context.show context);
   let solutions = unify_rec env context subst (t1, t2) in
 
   (* Find the first acyclic solution. *)

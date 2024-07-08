@@ -62,7 +62,7 @@ module Pred : sig
       where [src] and [dst] lead to unifiable subterms of their respective items. 
       
       If this check succeeds we return the unification data (which includes the substitution). *)
-  val unifiable : ?new_unif:bool -> unit -> Logic.unif_data t
+  val unifiable : unit -> Logic.unif_data t
 
   (** [opposite_pol_formulas] checks that the hyperlink is of the form [([src], [dst])]
       where [src] and [dst] lead to formulas of opposite polarities *in the first order skeleton*. *)

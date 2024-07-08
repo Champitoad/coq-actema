@@ -67,6 +67,12 @@ let show_deps forbidden_deps context deps : string =
   let module Dot = Graph.Graphviz.Dot (Attribs) in
   Format.asprintf "%a" Dot.fprint_graph deps
 
+(** A pre-substitution keeps track of the unification state.
+    
+    Note that only top-level free variables (i.e. variables which are
+    in the context passed to [unify]) are unifiable. Other variables may appear in 
+    subterms, but they are treated as rigid variables and do not appear in the substitution.
+*)
 type presubst =
   { (* The underlying union-find datastructure on free variables
        that keeps track of which variables are aliased.
@@ -102,7 +108,7 @@ let get_bound presubst fvar : Term.t =
     Precondition : [fvar] is the representative of its union-find class. *)
 let unify_cond env context presubst fvar term : bool =
   let free_vars = Term.free_vars term in
-  (* [fvar] has to be in the domain of [subst] and be flex. *)
+  (* [fvar] has to be in the domain of [presubst] and be flex. *)
   is_flex presubst fvar
   (* All the free variables of [term] have to be in the domain of [subst]. *)
   && List.for_all (HT.mem presubst.tbl) free_vars
@@ -111,17 +117,31 @@ let unify_cond env context presubst fvar term : bool =
 
 exception UnifFail
 
-(** [unify_rec subst t1 t2] performs syntactic unification on the terms [t1] and [t2],
-    starting with a substitution [subst].
+(** [unify_rec env context presubst t1 t2] performs syntactic unification on the terms [t1] and [t2],
+    updating a pre-substitution [presubst] along the way.
     This does not check for cycles : it only performs occur-checks. 
+
+    A note on free variables :
+    - [presubst] contains only the top-level free variables, both in [presubst.tbl]
+      and [presubst.uf].
+    - [context] contains all free variables, including those that are not in scope at the top level.
     
     @raise UnifFail if [t1] and [t2] are not unifiable. *)
 let rec unify_rec env context presubst ((t1, t2) : Term.t * Term.t) : unit =
+  (*Format.printf "Unifying\n%s\n=?=\n%s\n"
+    (Notation.term_to_string env ~ctx:context t1)
+    (Notation.term_to_string env ~ctx:context t2);*)
   match (t1, t2) with
   (*************************************************************************)
   (* Trivial cases. *)
+  (* The same free variable. This works even if these are not in the domain of [presubst]. *)
   | FVar v1, FVar v2 when FVarId.equal v1 v2 -> ()
+  (* Free variables which are not in the domain of [presubst]. *)
+  | FVar v, _ when not @@ UF.mem presubst.uf v -> raise UnifFail
+  | _, FVar v when not @@ UF.mem presubst.uf v -> raise UnifFail
+  (* Same sort. *)
   | Sort s1, Sort s2 when s1 = s2 -> ()
+  (* Same constant. *)
   | Cst c1, Cst c2 when Name.equal c1 c2 -> ()
   (*************************************************************************)
   (* Deal with aliased variables. *)
@@ -201,6 +221,8 @@ let normalize_presubst presubst : unit =
 let compute_dependencies forbidden_deps presubst : FVarGraph.t =
   (* Start from the empty graph. *)
   let deps = FVarGraph.create () in
+  (* Add a vertex for each variable. *)
+  List.iter (FVarGraph.add_vertex deps) @@ UF.domain presubst.uf;
   (* Add an edge [v2 --> v1] for each forbidden dependency (v1, v2). *)
   List.iter (fun (v1, v2) -> FVarGraph.add_edge deps v2 v1) forbidden_deps;
   (* Add edges for each binding [v --> SBound term] of the substitution. *)
@@ -298,6 +320,7 @@ let export_presubst presubst deps : subst =
   let index =
     HT.of_seq @@ List.to_seq @@ List.mapi (fun i var -> (var, i)) sort
   in
+
   (* Make sure each edge in the dependency graph goes from left to right in the sort. *)
   FVarGraph.iter_edges
     (fun v1 v2 -> assert (HT.(find index v1 < find index v2)))
@@ -335,6 +358,12 @@ let export_presubst presubst deps : subst =
 
 let unify env context ?(rigid_fvars = []) ?(forbidden_deps = []) t1 t2 :
     subst option =
+  (*Format.printf "***************************************\n";
+    Format.printf "Context :\n%s\n" @@ Context.show context;
+    Format.printf "Terms :\n%s\n=?=\n%s\n"
+      (Notation.term_to_string env ~ctx:context t1)
+      (Notation.term_to_string env ~ctx:context t2);*)
+
   (* Create the initial presubstitution. *)
   let flex_fvars =
     FVarId.Set.(
@@ -352,29 +381,24 @@ let unify env context ?(rigid_fvars = []) ?(forbidden_deps = []) t1 t2 :
 
   (* Compute the solution. *)
   try
-    Format.printf "***************************************\n";
-    Format.printf "Context : \n%s\n" @@ Context.show context;
     unify_rec env context presubst (t1, t2);
-    Format.printf "***************************************\n";
-    Format.printf "After unify_rec :\n%s\n" @@ show_presubst presubst;
+    (*Format.printf "After unify_rec :\n%s\n" @@ show_presubst presubst;*)
     (* The next steps assume [presubst] is normalized. *)
     normalize_presubst presubst;
-    Format.printf "***************************************\n";
-    Format.printf "After normalize :\n%s\n" @@ show_presubst presubst;
+    (*Format.printf "After normalize :\n%s\n" @@ show_presubst presubst;*)
     (* Compute the dependency graph. *)
     let deps = compute_dependencies forbidden_deps presubst in
-    Out_channel.with_open_text
-      "/home/mathis/Documents/work/coq-actema/graph.dot"
-    @@ fun file ->
-    Out_channel.output_string file @@ show_deps forbidden_deps context deps;
+    (*Out_channel.with_open_text
+        "/home/mathis/Documents/work/coq-actema/graph.dot"
+      @@ fun file ->
+      Out_channel.output_string file @@ show_deps forbidden_deps context deps;*)
     (* Check the dependency graph is acyclic. *)
     let module Dfs = Graph.Traverse.Dfs (FVarGraph) in
     if Dfs.has_cycle deps then raise UnifFail;
     (* Convert the presubstitution to a substitution.
        This is where we resolve aliasing issues. *)
     let subst = export_presubst presubst deps in
-    Format.printf "***************************************\n";
-    Format.printf "After export_presubst :\n%s\n" @@ show_subst subst;
+    (*Format.printf "After export_presubst :\n%s\n" @@ show_subst subst;*)
     (* Don't forget to close the substitution. *)
     Some (close subst)
   with UnifFail -> None

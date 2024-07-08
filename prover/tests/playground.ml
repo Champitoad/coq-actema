@@ -69,7 +69,7 @@ let test_unif n =
   (* Compute the linkactions. *)
   let start = Sys.time () in
   let subst =
-    Link.Pred.unifiable ~new_unif:true () proof
+    Link.Pred.unifiable () proof
       ( [ Path.make ~kind:(Hyp (mk_hyp_name 0)) ~sub:sub1 g_id ]
       , [ Path.make ~kind:(Hyp (mk_hyp_name 1)) ~sub:sub2 g_id ] )
   in

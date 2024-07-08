@@ -311,7 +311,7 @@ let check_unif (action : Logic.unif_data option) (t1, sub1) (t2, sub2) =
 
 let test_unif_0 () =
   let open Term in
-  let hlpred = Link.Pred.unifiable () ~new_unif:true in
+  let hlpred = Link.Pred.unifiable () in
   let hyp1 = mkArrow (mkCst Constants.true_) (mkCst Constants.false_) in
   let sub1 = [ 0 ] in
   let hyp2 = mkCst Constants.true_ in
@@ -321,7 +321,7 @@ let test_unif_0 () =
 
 let test_unif_1 () =
   let open Term in
-  let hlpred = Link.Pred.unifiable () ~new_unif:true in
+  let hlpred = Link.Pred.unifiable () in
   let hyp = forall "l" list_nat @@ mkApps perm_nat [ mkBVar 0; mkBVar 0 ] in
   let hyp_sub = [ 1 ] in
   let concl =
@@ -337,7 +337,7 @@ let test_unif_1 () =
 
 let test_unif_2 () =
   let open Term in
-  let hlpred = Link.Pred.unifiable () ~new_unif:true in
+  let hlpred = Link.Pred.unifiable () in
   let hyp =
     forall "l1" list_nat @@ forall "l2" list_nat @@ forall "l3" list_nat
     @@ mkArrows
@@ -361,7 +361,7 @@ let test_unif_2 () =
 
 let test_unif_3 () =
   let open Term in
-  let hlpred = Link.Pred.unifiable () ~new_unif:true in
+  let hlpred = Link.Pred.unifiable () in
   let hyp =
     forall "x" nat @@ forall "l1" list_nat @@ exist "l2" list_nat
     @@ mkApps perm_nat
@@ -383,7 +383,7 @@ let test_unif_3 () =
 (* This is the same as test_unif_3, but we swapped [exist l1] to [forall l1] in the conclusion. *)
 let test_unif_4 () =
   let open Term in
-  let hlpred = Link.Pred.unifiable () ~new_unif:true in
+  let hlpred = Link.Pred.unifiable () in
   let hyp =
     forall "x" nat @@ forall "l1" list_nat @@ exist "l2" list_nat
     @@ mkApps perm_nat
@@ -404,7 +404,7 @@ let test_unif_4 () =
 
 let test_unif_5 () =
   let open Term in
-  let hlpred = Link.Pred.unifiable () ~new_unif:true in
+  let hlpred = Link.Pred.unifiable () in
   let hyp = forall "x" nat @@ mkApps eq_nat [ mkBVar 0; mkBVar 0 ] in
   let hyp_sub = [ 1; 2 ] in
   let concl = forall "x" nat @@ mkApps eq_nat [ mkBVar 0; mkBVar 0 ] in
@@ -414,7 +414,7 @@ let test_unif_5 () =
 
 let test_unif_6 () =
   let open Term in
-  let hlpred = Link.Pred.unifiable () ~new_unif:true in
+  let hlpred = Link.Pred.unifiable () in
   let hyp = forall "x" nat @@ mkApps eq_nat [ mkBVar 0; mkBVar 0 ] in
   let concl =
     forall "x" list_nat @@ mkApps eq_list_nat [ mkBVar 0; mkBVar 0 ]
@@ -424,7 +424,7 @@ let test_unif_6 () =
 
 let test_unif_7 () =
   let open Term in
-  let hlpred = Link.Pred.unifiable () ~new_unif:true in
+  let hlpred = Link.Pred.unifiable () in
   let hyp =
     forall "A" mkType
     @@ forall "x" (mkBVar 0)

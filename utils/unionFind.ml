@@ -6,6 +6,7 @@ module type S = sig
   val add : t -> elt -> unit
   val of_list : elt list -> t
   val domain : t -> elt list
+  val mem : t -> elt -> bool
   val find : t -> elt -> elt
   val union : t -> elt -> elt -> unit
   val equiv : t -> elt -> elt -> bool
@@ -40,6 +41,7 @@ module Make (Elt : Hashtbl.HashedType) : S with type elt = Elt.t = struct
     uf
 
   let domain uf = uf.parent |> HT.to_seq_keys |> List.of_seq
+  let mem uf elt = HT.mem uf.parent elt
 
   let rec find uf elt =
     let parent = HT.find uf.parent elt in
