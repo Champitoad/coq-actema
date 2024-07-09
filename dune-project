@@ -22,7 +22,7 @@
  (synopsis "Integrating the Actema GUI as a Coq tactic")
  (depends
   (coq
-   (= 8.20.0))
+   (= 8.19.1))
   (coq-mathcomp-ssreflect
    (= 2.2.0))
   (cohttp-lwt-unix
