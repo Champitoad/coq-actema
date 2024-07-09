@@ -73,15 +73,19 @@ Ltac2 rec back
   (* Print the link. *)
   printf "Backward : %t |- %t" h c;
   match choices, subh, subc with
+  (****************************************************************************)
   (* End rule : check [h] and [c] are beta equivalent. *)
+  (****************************************************************************)
   | [], [], [] => 
     if beta_equiv h c then 
       let d' := 'True in 
-      let p' := '(fun (h_ : $h) (_ : $d') => h_) in
+      let p' := '(fun (h_ : $h) (_ : $d') => (h_ : $c)) in
       (d', p')
     else 
       Control.throw InteractFailure
+  (****************************************************************************)
   (* Left non-binder rules. *)
+  (****************************************************************************)
   | Side Left :: choices, i :: subh, subc => 
     lazy_match! h with 
     (* L∧i. *)
@@ -124,7 +128,56 @@ Ltac2 rec back
       else Control.throw InteractFailure
     | _ => Control.throw InteractFailure
     end
+  (****************************************************************************)
+  (* Right non-binder rules. *)
+  (****************************************************************************)
+  | Side Right :: choices, subh, i :: subc =>
+    lazy_match! c with 
+    (* R∧i. *)
+    | ?cA /\ ?cB => 
+      (* R∧1. *)
+      if Int.equal i 1 then 
+        let (d, p) := back h subh cA subc choices in 
+        let d' := '($d /\ $cB) in
+        let p' := '(fun (h_ : $h) (d_ : $d') => conj ($p h_ (proj1 d_)) (proj2 d_)) in
+        (d', p')
+      (* R∧2. *)
+      else if Int.equal i 2 then 
+        let (d, p) := back h subh cB subc choices in 
+        let d' := '($cA /\ $d) in
+        let p' := '(fun (h_ : $h) (d_ : $d') => conj (proj1 d_) ($p h_ (proj2 d_))) in
+        (d', p')
+      else Control.throw InteractFailure
+    (* R∨i. *)
+    | ?cA \/ ?cB => 
+      (* R∨1. *)
+      if Int.equal i 1 then 
+        let (d, p) := back h subh cA subc choices in 
+        let d' := '($d \/ $cB) in
+        let p' := 
+          '(fun (h_ : $h) (d_ : $d') => 
+              match d_ with 
+              | @or_introl _ _ d_ => @or_introl $cA $cB ($p h_ d_)
+              | @or_intror _ _ b_ => @or_intror $cA $cB b_
+            end)
+        in (d', p')
+      (* R∨2. *)
+      else if Int.equal i 2 then 
+        let (d, p) := back h subh cB subc choices in 
+        let d' := '($cA \/ $d) in
+        let p' := 
+          '(fun (h_ : $h) (d_ : $d') => 
+              match d_ with 
+              | @or_introl _ _ a_ => @or_introl $cA $cB a_
+              | @or_intror _ _ d_ => @or_intror $cA $cB ($p h_ d_)
+            end)
+        in (d', p')
+      else Control.throw InteractFailure
+    | _ => Control.throw InteractFailure
+    end 
+  (****************************************************************************)
   (* Left binder, instantiated. *)
+  (****************************************************************************)
   | Binder Left (Some w) :: choices, 1 :: subh, subc => 
     lazy_match! h with 
     | forall x : ?ha, @?hb x => 
@@ -133,7 +186,9 @@ Ltac2 rec back
       (d, p')
     | _ => Control.throw InteractFailure
     end
+  (****************************************************************************)
   (* Left binder, non-instantiated. *)
+  (****************************************************************************)
   | Binder Left None :: choices, 1 :: subh, subc =>
     lazy_match! h with 
     | forall x : ?ha, @?hb x => 
@@ -153,7 +208,9 @@ Ltac2 rec back
       clear ev ; (d', p')
     | _ => Control.throw InteractFailure
     end
+  (****************************************************************************)
   (* No matching rule. *)
+  (****************************************************************************)
   | _ => Control.throw InteractFailure
   end.
 
@@ -167,9 +224,9 @@ Ltac2 back_hyp_goal (h : ident) (subh : int list) (subc : int list) (choices : c
 Parameter (A B : Prop).
 Parameter (P : nat -> Prop).
 
-Lemma test (h : B \/ A) : A.
+Lemma test (h : A) : (B \/ A) \/ B.
 Proof.
-  back_hyp_goal @h [ 2 ] [ ] [ Side Left ].
+  back_hyp_goal @h [ ] [ 1 ; 2 ] [ Side Right ; Side Right ].
 Admitted.
 
 
