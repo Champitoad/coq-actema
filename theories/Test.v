@@ -1,9 +1,9 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
+Parameter (P : nat -> Prop).
 
-
-Lemma test : 0 = 0.
+Lemma test x (h : x = 0) : P (x + 3).
 actema_force.
 
 Parameter (f : nat -> nat).
