@@ -37,14 +37,63 @@ We will also need an aliasing relation on metavariables.
 
 # Scratch
 
-forall R, exists x, R x x /\ exists y, {y = x}  
-=?= 
-exists a, {a = 3} 
+back :: hyp -> concl -> new_concl * proof
+  where proof :: hyp -> new_concl -> concl
 
--------------------------------------
+forward :: hyp1 -> hyp2 -> new_hyp * proof 
+  where proof :: hyp1 -> hyp2 -> new_hyp
 
-sigma = (x := 3, y := a)
+back A B when A = B
+  new_concl := True 
+  proof a _ := a
 
--------------------------------------
+back (B /\ C) A 
+  let D, (p :: B -> D -> A) := back B A
+  new_concl := D
+  proof (b, c) d := p b d
 
-forall R, R 3 3 /\ exists a, a = 3 ==> a = 3
+back A (B /\ C) 
+  let D, (p :: A -> D -> B) := back A B
+  new_concl := D /\ C
+  proof a (d, c) := (p a d, c)
+
+back (B \/ C) A 
+  let D, (p :: B -> D -> A) := back B A
+  new_concl := D /\ C -> A
+  proof (inl b) (d, ca) := p b d
+  proof (inr c) (d, ca) := ca c
+
+back A (B -> C)
+  let D, (p :: A -> B -> D) := forward A B
+  new_concl := D -> C
+  proof a dc := fun b => dc (p a b)
+
+back (exists x, B x) A
+  let ?x := new metavariable of the type of x.
+  let D, (p :: B ?x -> D -> A) := back (B ?x) A
+  -- ?x can appear in D and p
+
+  new_concl := forall x, D[?x:=x]
+  proof (ex x0 bx0) xd :: A := p[?x:=x0] bx0 (xd x0)
+    where bx0 :: B x0
+          xd :: forall x, D[?x:=x]
+  -- works because when applying p we instantiate ?x by x0 in both p and D
+
+back (forall x, B x) A (None :: ws)
+  let ?x := new metavariable of the type of x.
+  let D, (p :: B ?x -> D -> A) := back (B ?x) A (List.map (fun w -> w ?x) ws)
+  -- ?x can appear in D and p
+
+  new_concl := exists x, D[?x:=x] -- here we DON'T instantiate ?x, 
+                                  -- we simply replace its occurences in D by x
+  proof xb (ex x0 dx0) :: A := p[?x:=x0] (xb x0) dx0 -- here we DO instantiate ?x by x0
+    where xb :: forall x, B x
+          dx0 :: D[?x:=x0] -- here we DON'T instantiate ?x
+
+back (forall x, B x) A (Some wx :: ws) 
+  let D, (p :: B wx -> D -> A) := back (B wx) A (List.map (fun w -> w wx) ws)
+                                                -- this part depends on whether we make the witnesses 
+                                                -- in ws depend on wx or not. 
+  new_concl := D
+  proof xb d :: A := p (xb wx) d 
+    where xb :: forall x, B x
