@@ -48,6 +48,16 @@ Ltac2 beta_root (c : constr) : constr :=
   | _ => c
   end.
 
+(* [fun_to_forall f] returns a term beta-equivalent to [forall x, f x], 
+   but when [f] is a lambda abstarction we take care to keep the binder name of [f] 
+   and to beta reduce [f x]. *)
+Ltac2 fun_to_forall (f : constr) : constr := 
+  match Constr.Unsafe.kind f with 
+  | Constr.Unsafe.Lambda binder body => 
+    Constr.Unsafe.make (Constr.Unsafe.Prod binder body)
+  | _ => '(forall x, $f x)
+  end.
+
 (**********************************************************************************)
 (** Interaction. *)
 
@@ -83,7 +93,18 @@ Ltac2 Type dnd_kind :=
 
 Ltac2 Type exn ::= [ InteractFailure ].
 
-Check eq_ind.
+(* [apply_choices choices x] applies each witness in [choices] to the argument [x], 
+   and leaves sides unchanged. *)
+Ltac2 apply_choices (choices : choice list) (x : constr) : choice list :=
+  List.map 
+    (fun c => 
+      match c with 
+      | Side side => Side side  
+      | Binder side None => Binder side None 
+      | Binder side (Some witness) => Binder side (Some '($witness $x))
+      end)
+    choices.
+     
 
 Ltac2 rec back 
   (h : constr) 
@@ -182,6 +203,14 @@ Ltac2 rec back
               end)
         in (d', p')
       else Control.throw InteractFailure
+    (* L⇒2. *)
+    | ?hA -> ?hB => 
+      if Int.equal i 1 then 
+        let (d, p) := back hB subh c subc choices kind in 
+        let d' := '($hA /\ $d) in
+        let p' := '(fun (h_ : $h) (d_ : $d') => $p (h_ (proj1 d_)) (proj2 d_)) in
+        (d', p')
+      else Control.throw InteractFailure
     | _ => Control.throw InteractFailure
     end
   (****************************************************************************)
@@ -229,6 +258,22 @@ Ltac2 rec back
             end)
         in (d', p')
       else Control.throw InteractFailure
+    (* R⇒i. *)
+    | ?cA -> ?cB => 
+      (* R⇒1. *)
+      if Int.equal i 0 then 
+        let (d, p) := forward h subh cA subc choices kind in 
+        let d' := '($d -> $cB) in
+        (* p : h -> cA -> d *) 
+        let p' := '(fun (h_ : $h) (d_ : $d') (cA_ : $cA) => d_ ($p h_ cA_)) in 
+        (d', p')
+      (* R⇒2. *)
+      else if Int.equal i 1 then 
+        let (d, p) := back h subh cB subc choices kind in 
+        let d' := '($cA -> $d) in
+        let p' := '(fun (h_ : $h) (d_ : $d') (cA_ : $cA) => $p h_ (d_ cA_)) in 
+        (d', p')
+      else Control.throw InteractFailure
     | _ => Control.throw InteractFailure
     end 
   (****************************************************************************)
@@ -236,9 +281,22 @@ Ltac2 rec back
   (****************************************************************************)
   | Binder Left (Some w) :: choices, 1 :: subh, subc, _ => 
     lazy_match! h with 
+    (* L∀i. *)
     | forall x : ?ha, @?hb x => 
       let (d, p) := back '($hb $w) subh c subc choices kind in 
       let p' := '(fun (xb_ : forall x, $hb x) (d_ : $d) => $p (xb_ $w) d_) in
+      (d, p')
+    | _ => Control.throw InteractFailure
+    end
+  (****************************************************************************)
+  (* Right binder, instantiated. *)
+  (****************************************************************************)
+  | Binder Right (Some w) :: choices, subh, 1 :: subc, _ => 
+    lazy_match! c with 
+    (* R∃i. *)
+    | exists x : ?ca, @?cb x => 
+      let (d, p) := back h subh '($cb $w) subc choices kind in 
+      let p' := '(fun (h_ : $h) (d_ : $d) => @ex_intro $ca $cb $w ($p h_ d_)) in
       (d, p')
     | _ => Control.throw InteractFailure
     end
@@ -247,10 +305,11 @@ Ltac2 rec back
   (****************************************************************************)
   | Binder Left None :: choices, 1 :: subh, subc, _ =>
     lazy_match! h with 
+    (* L∀s. *)
     | forall x : ?ha, @?hb x => 
       let ev := fresh_evar @ev (Some ha) in
       let ev_constr := Constr.Unsafe.make (Constr.Unsafe.Var ev) in
-      let (d, p) := back '($hb $ev_constr) subh c subc choices kind in
+      let (d, p) := back '($hb $ev_constr) subh c subc (apply_choices choices ev_constr) kind in
       let d := abstract_ident ev d in
       let p := abstract_ident ev p in
       let d' := '(ex $d) in
@@ -262,10 +321,82 @@ Ltac2 rec back
       in
       (* Don't forget to clear the evar. *)
       clear ev ; (d', p')
+    (* L∃s. *)
+    | exists x : ?ha, @?hb x => 
+      let ev := fresh_evar @ev (Some ha) in
+      let ev_constr := Constr.Unsafe.make (Constr.Unsafe.Var ev) in
+      let (d, p) := back '($hb $ev_constr) subh c subc (apply_choices choices ev_constr) kind in
+      let d := abstract_ident ev d in
+      let p := abstract_ident ev p in
+      let d' := fun_to_forall d in
+      let p' := 
+        '(fun (xb_ : exists x, $hb x) (xd_ : $d') => 
+            match xb_ with 
+            | ex_intro _ x0 bx0 => ($p x0) bx0 (xd_ x0)
+            end) 
+      in
+      (* Don't forget to clear the evar. *)
+      clear ev ; (d', p')
+    | _ => Control.throw InteractFailure
+    end
+  (****************************************************************************)
+  (* Right binder, non-instantiated. *)
+  (****************************************************************************)
+  | Binder Right None :: choices, subh, 1 :: subc, _ =>
+    lazy_match! c with 
+    (* R∀s. *)
+    | forall x : ?ca, @?cb x => 
+      let ev := fresh_evar @ev (Some ca) in
+      let ev_constr := Constr.Unsafe.make (Constr.Unsafe.Var ev) in
+      let (d, p) := back h subh '($cb $ev_constr) subc (apply_choices choices ev_constr) kind in
+      let d := abstract_ident ev d in
+      let p := abstract_ident ev p in
+      let d' := fun_to_forall d in
+      let p' := '(fun (h_ : $h) (xd_ : $d') (x : $ca) => ($p x) h_ (xd_ x)) in
+      (* Don't forget to clear the evar. *)
+      clear ev ; (d', p')
+    (* R∃s. *)
+    | exists x : ?ca, @?cb x => 
+      let ev := fresh_evar @ev (Some ca) in
+      let ev_constr := Constr.Unsafe.make (Constr.Unsafe.Var ev) in
+      let (d, p) := back h subh '($cb $ev_constr) subc (apply_choices choices ev_constr) kind in
+      let d := abstract_ident ev d in
+      let p := abstract_ident ev p in
+      let d' := '(ex $d) in
+      (* p x : h -> d x -> cb x *)
+      let p' := 
+        '(fun (h_ : $h) (xd_ : $d') => 
+            match xd_ with 
+            | ex_intro _ x0 dx0 => ex_intro $cb x0 (($p x0) h_ dx0)
+            end)
+      in
+      (* Don't forget to clear the evar. *)
+      clear ev ; (d', p')  
     | _ => Control.throw InteractFailure
     end
   (****************************************************************************)
   (* No matching rule. *)
+  (****************************************************************************)
+  | _ => Control.throw InteractFailure
+  end
+  
+with forward 
+  (h1 : constr) 
+  (sub1 : int list) 
+  (h2 : constr) 
+  (sub2 : int list) 
+  (choices : choice list) 
+  (kind : dnd_kind)
+  : constr * constr 
+:= 
+  (* Put the two terms in head normal form. *)
+  let h1 := eval hnf in $h1 in 
+  let h2 := eval hnf in $h2 in 
+  (* Print the link. *)
+  printf "Forward : %t * %t" h1 h2;
+  match choices, sub1, sub2, kind with
+  (****************************************************************************)
+  (* No matching rule *)
   (****************************************************************************)
   | _ => Control.throw InteractFailure
   end.
@@ -274,20 +405,24 @@ Ltac2 back_hyp_goal (h : ident) (subh : int list) (subc : int list) (choices : c
   let hyp := Control.hyp h in  
   let concl := Control.goal () in 
   let (new_concl, proof) := back (Constr.type hyp) subh concl subc choices kind in
-  printf "%t" proof ; 
-  refine '($proof $hyp _).
+  printf "%t" proof ;   refine '($proof $hyp _).
 
 Parameter (A B : Prop).
 Parameter (P : nat -> Prop).
 
-Lemma test x (h : 2 = x) : P x \/ A.
-Proof.
-  back_hyp_goal @h [ ] [ 1 ] [ Side Right ; Side Right ] RewriteL.
-Admitted.
-
-
-Lemma test' (h : forall x, P x \/ P 0) : P 0.
+Lemma test' (h : P 0) : exists x : nat, P 0 /\ P x.
 Proof.  
-  back_hyp_goal @h [ 1 ; 2 ] [] [ Binder Left None ; Side Left ]. 
+  back_hyp_goal @h [] [ 1 ; 1 ] [ Binder Right None ; Side Right ] Subform. 
   
 
+
+  Lemma test (h : A) : A -> B.
+  Proof.
+    back_hyp_goal @h [ ] [ 0 ] [ Side Right ] Subform.
+  Admitted.
+  
+  
+  Lemma test x (h : 2 = x) : P x \/ A.
+  Proof.
+    back_hyp_goal @h [ ] [ 1 ] [ Side Right ; Side Right ] RewriteL.
+  Admitted.
