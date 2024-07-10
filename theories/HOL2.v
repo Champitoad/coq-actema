@@ -59,11 +59,103 @@ Ltac2 fun_to_forall (f : constr) : constr :=
   | _ => '(forall x, $f x)
   end.
 
-(* [deep_pattern pat c sub] is the same as [Std.eval_pattern [ (a, Std.AllOccurences) ] c],
-   except that we only abstract occurences of [a] which are in the subterm of [c] at path [sub]. *)
+(* Exception raised when a subpath in a term is invalid. *)
+Ltac2 Type exn ::= [ InvalidSubpath (constr, int list)].
+
+(* [map_subterm f c sub] replaces the subterm [sc] of [c] at path [sub] with [f n sc],
+   where [n] is the number of binders traversed along the path [sub]. *)
+Ltac2 map_subterm (f : int -> constr -> constr) (c : constr) (sub : int list) : constr := 
+  let rec loop n c sub :=   
+    lazy_match! c with 
+    (* Special case for exist. *)
+    | ex ?body => 
+      (* Here we reuse the same [sub] but instead go into the [body] function. *)
+      let body := loop n body sub in '(ex $body)
+    (* All other cases. *)
+    | _ => 
+      match Constr.Unsafe.kind c, sub with 
+      (* Base case. *)
+      | _, [] => f n c
+      (* Lambda abstraction. *)
+      | Constr.Unsafe.Lambda bind body, 0 :: sub => 
+        let id := Constr.Binder.name bind in 
+        let type := loop n (Constr.Binder.type bind) sub in 
+        let bind := Constr.Binder.make id type in
+        Constr.Unsafe.make (Constr.Unsafe.Lambda bind body)
+      | Constr.Unsafe.Lambda bind body, 1 :: sub => 
+        let body := loop (Int.add n 1) body sub in
+        Constr.Unsafe.make (Constr.Unsafe.Lambda bind body)
+      (* Product. *)
+      | Constr.Unsafe.Prod bind body, 0 :: sub => 
+        let id := Constr.Binder.name bind in 
+        let type := loop n (Constr.Binder.type bind) sub in 
+        let bind := Constr.Binder.make id type in
+        Constr.Unsafe.make (Constr.Unsafe.Prod bind body)
+      | Constr.Unsafe.Prod bind body, 1 :: sub => 
+        let body := loop (Int.add n 1) body sub in
+        Constr.Unsafe.make (Constr.Unsafe.Prod bind body)
+      (* Application. *)
+      | Constr.Unsafe.App func args, 0 :: sub => 
+        let func := loop n func sub in
+        Constr.Unsafe.make (Constr.Unsafe.App func args)
+      | Constr.Unsafe.App func args, i :: sub => 
+        let args := 
+          Array.mapi 
+            (fun j arg => if Int.equal (Int.sub i 1) j then loop n arg sub else arg)
+            args 
+        in
+        Constr.Unsafe.make (Constr.Unsafe.App func args)
+      (* Invalid path. *)
+      | _ => Control.throw (InvalidSubpath c sub)
+      end
+    end
+  in
+  loop 0 c sub.
+
+(* [deep_pattern pat c sub] replaces occurences of [pat] which are in the subterm of [c] 
+   at path [sub] by a local variable, and abstracts over this variable.
+   
+   For instance : 
+     deep_pattern '(x + 1) '(P (x + 1) /\ P (x + 1)) [ 2 ]
+   gives
+     '(fun a => P (x + 1) /\ P a)
+*)
 Ltac2 deep_pattern (pat : constr) (c : constr) (sub : int list) : constr :=
-  (* TODO : actually use [sub]. *)
-  Std.eval_pattern [ (pat, Std.AllOccurrences) ] c.
+  (* Replace the pattern by a [Var] in the subterm. *)
+  let on_subterm n sc :=
+    (* We want to use Std.eval_pattern, but for some reason it messes up 
+       when the terms contain loose de Bruijn indices (which is the case here). 
+       To handle this we convert loose indices to evars, call Std.eval_pattern,
+       and convert evars back to loose indices. *)
+    (* Evars for the loose indices in [sc]. *)
+    let evars := List.init n (fun i => fresh_evar @ev None) in 
+    (* Replace the loose indices by evars in [sc]. *)
+    let sc_closed := 
+      Constr.Unsafe.substnl 
+        (List.map (fun e => Constr.Unsafe.make (Constr.Unsafe.Var e)) evars) 
+        0 
+        sc 
+    in
+    (* Call the regular [pattern] tactic. *)
+    lazy_match! Std.eval_pattern [ ( pat, Std.AllOccurrences ) ] sc_closed with 
+    | ?f _ => 
+      (* Evar for the argument of [f]. *)
+      let ev_x := fresh_evar @ev None in
+      let ev_constr := Constr.Unsafe.make (Constr.Unsafe.Var ev_x) in
+      let app := beta_root '($f $ev_constr) in
+      (* Replace the evars in [app] by loose indices. *)
+      let app_closed := Constr.Unsafe.closenl (List.append evars [ ev_x ]) 1 app in
+      (* Don't forget to clear the evars. *)
+      Std.clear (ev_x :: evars) ;
+      app_closed
+    | _ => Control.throw Assertion_failure
+    end
+  in
+  (* Replace the pattern by [Var 1] in the term. *)
+  let body := map_subterm on_subterm c sub in
+  (* Add a binder. *)
+  let bind := Constr.Binder.make (Some @x) (Constr.type pat) in
+  Constr.Unsafe.make (Constr.Unsafe.Lambda bind body). 
 
 (**********************************************************************************)
 (** Interaction. *)
@@ -171,13 +263,10 @@ Ltac2 rec back
     lazy_match! h with 
     | @eq ?ty ?a ?b => 
       (* Rewrite a into b. *)
-      lazy_match! deep_pattern a c subc with
-      | ?f _ => 
-        let d' := beta_root '($f $b) in
-        let p' := '(fun (h_ : $h) (d_ : $d') => @eq_ind_r $ty $b $f d_ $a h_) in
-        (d', p')
-      | _ => Control.throw (InteractFailure "[back] L=1 rule : bad result from deep_pattern") 
-      end
+      let f := deep_pattern a c subc in
+      let d' := beta_root '($f $b) in
+      let p' := '(fun (h_ : $h) (d_ : $d') => @eq_ind_r $ty $b $f d_ $a h_) in
+      (d', p')
     | _ => Control.throw (InteractFailure "[back] L=1 rule : expected an equality")
     end
   (* L=2. *)
@@ -185,13 +274,10 @@ Ltac2 rec back
     lazy_match! h with 
     | @eq ?ty ?a ?b => 
       (* Rewrite b into a. *)
-      lazy_match! deep_pattern b c subc with
-      | ?f _ => 
-        let d' := beta_root '($f $a) in
-        let p' := '(fun (h_ : $h) (d_ : $d') => @eq_ind $ty $a $f d_ $b h_) in
-        (d', p')
-      | _ => Control.throw (InteractFailure "[back] L=2 rule : bad result from deep_pattern") 
-      end
+      let f := deep_pattern b c subc in
+      let d' := beta_root '($f $a) in
+      let p' := '(fun (h_ : $h) (d_ : $d') => @eq_ind $ty $a $f d_ $b h_) in
+      (d', p')
     | _ => Control.throw (InteractFailure "[back] L=2 rule : expected an equality")
     end
   (****************************************************************************)
@@ -438,6 +524,10 @@ with forward
   (* Put the two terms in head normal form. *)
   let h1 := eval hnf in $h1 in 
   let h2 := eval hnf in $h2 in 
+  (* Helper to retry the same interaction with the two sides swapped. *)
+  let retry_swapped () := 
+    forward h2 sub2 h1 sub1 (List.map swap_choice choices) (swap_dnd_kind kind)
+  in
   (* Print the link. *)
   printf "Forward : %t * %t" h1 h2;
   match choices, sub1, sub2, kind with
@@ -449,13 +539,10 @@ with forward
     lazy_match! h1 with 
     | @eq ?ty ?a ?b => 
       (* Rewrite a into b. *)
-      lazy_match! deep_pattern a h2 sub2 with
-      | ?f _ => 
-        let d' := beta_root '($f $b) in
-        let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind $ty $a $f h2_ $b h1_) in
-        (d', p')
-      | _ => Control.throw (InteractFailure "[forward] F=1 rule : bad result from deep_pattern") 
-      end
+      let f := deep_pattern a h2 sub2 in
+      let d' := beta_root '($f $b) in
+      let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind $ty $a $f h2_ $b h1_) in
+      (d', p')
     | _ => Control.throw (InteractFailure "[forward] F=1 rule : expected an equality")
     end
   (* F=2. *)
@@ -463,22 +550,57 @@ with forward
     lazy_match! h1 with 
     | @eq ?ty ?a ?b => 
       (* Rewrite b into a. *)
-      lazy_match! deep_pattern b h2 sub2 with
-      | ?f _ => 
-        let d' := beta_root '($f $a) in
-        let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind_r $ty $b $f h2_ $a h1_) in
-        (d', p')
-      | _ => Control.throw (InteractFailure "[forward] L=2 rule : bad result from deep_pattern") 
-      end
+      let f := deep_pattern b h2 sub2 in
+      let d' := beta_root '($f $a) in
+      let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind_r $ty $b $f h2_ $a h1_) in
+      (d', p')
     | _ => Control.throw (InteractFailure "[forward] L=2 rule : expected an equality")
     end
   (****************************************************************************)
-  (* Swap sides. *)
+  (* Non-binder rules. *)
   (****************************************************************************)
-  | Side Right :: _, _, _, _ =>
-    forward h2 sub2 h1 sub1 (List.map swap_choice choices) (swap_dnd_kind kind)
-  | (Binder Right _) :: _, _, _, _ =>
-    forward h2 sub2 h1 sub1 (List.map swap_choice choices) (swap_dnd_kind kind)
+  | Side Left :: choices, i :: sub1, sub2, _ => 
+    lazy_match! h1 with 
+    (* F∧. *)
+    | ?ha /\ ?hb =>  
+      (* F∧1. *)
+      if Int.equal i 1 then   
+        let (d, p) := forward ha sub1 h2 sub2 choices kind in
+        let p' := '(fun (h1_ : $h1) (h2_ : $h2) => $p (proj1 h1_) h2_) in
+        (d, p')
+      (* F∧2. *)
+      else if Int.equal i 2 then 
+        let (d, p) := forward hb sub1 h2 sub2 choices kind in 
+        let p' := '(fun (h1_ : $h1) (h2_ : $h2) => $p (proj2 h1_) h2_) in
+        (d, p')
+      else Control.throw (InteractFailure "[forward] F∧ rule : invalid index")
+    (* F∨. *)
+    | ?ha \/ ?hb => 
+      (* F∨1. *)
+      if Int.equal i 1 then 
+        let (d, p) := forward ha sub1 h2 sub2 choices kind in 
+        let d' := '($d \/ $hb) in 
+        let p' := 
+          '(fun (h1_ : $h1) (h2_ : $h2) => 
+              match h1_ with 
+              | @or_introl _ _ a_ => @or_introl $d $hb ($p a_ h2_)
+              | @or_intror _ _ b_ => @or_intror $d $hb b_
+              end) 
+        in (d', p')
+      (* F∨2. *)
+      else if Int.equal i 2 then 
+        let (d, p) := forward hb sub1 h2 sub2 choices kind in 
+        let d' := '($ha \/ $d) in 
+        let p' := 
+          '(fun (h1_ : $h1) (h2_ : $h2) => 
+              match h1_ with 
+              | @or_introl _ _ a_ => @or_introl $ha $d a_
+              | @or_intror _ _ b_ => @or_intror $ha $d ($p b_ h2_)
+              end) 
+        in (d', p')
+      else Control.throw (InteractFailure "[forward] F∨ rule : invalid index")
+    | _ => Control.throw (InteractFailure "[forward] unexpected head constructor")
+    end
   (****************************************************************************)
   (* No matching rule. *)
   (****************************************************************************)
@@ -496,11 +618,16 @@ Ltac2 back_hyp_goal (h : ident) (subh : int list) (subc : int list) (choices : c
 (** Debugging area. *)
 
 Parameter (A B : Prop).
-Parameter (P : nat -> Prop).
+Parameter (P : nat -> Prop) (R : nat -> nat -> Prop).
 
-Lemma test' x (h : 3 = x) : P x -> A.
+(*Lemma test x (h : x = 3) : (A /\ P x) -> B.
+Proof.
+  back_hyp_goal @h [ 2 ] [ 0 ; 2 ] [ Side Right ; Side Right ] (Rewrite Left).*)
+
+
+Lemma test' x (h : 3 = x) : R x (x + 42) -> A.
 Proof.  
-  back_hyp_goal @h [ 3 ] [ 0 ] [ Side Right ] (Rewrite Left). 
+  back_hyp_goal @h [ 3 ] [ 0 ; 2 ] [ Side Right ] (Rewrite Left). 
 Admitted. 
 
 Lemma test (h : A) : A -> B.
