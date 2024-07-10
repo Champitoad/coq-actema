@@ -2,8 +2,8 @@
  (name Actema)
  (package coq-actema)
  (plugins coq-actema.plugin)
- (modules Loader Utils HOL HOL2)
- ; We only need mathcomp.ssreflect, but for some reason 
+ (modules Loader Utils HOL HOL2 Ltac2Test)
+ ; We only need mathcomp.ssreflect and Ltac2, but for some reason 
  ; we have to explicitly list some dependencies of mathcomp.ssreflect.
  ; This is a dune issue : it does not happen when stepping through files
  ; with VScode/coqtop. 

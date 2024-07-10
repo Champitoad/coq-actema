@@ -3,6 +3,9 @@ Require Import ssreflect.
 
 Parameter (P : nat -> Prop).
 
+Lemma test : True.
+test_tac.
+
 Lemma test x (h : x = 0) : P (x + 3).
 actema_force.
 
