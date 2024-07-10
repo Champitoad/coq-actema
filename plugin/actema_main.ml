@@ -139,4 +139,6 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
 (**********************************************************************************)
 (** Debugging area. *)
 
-let test_tac () : unit tactic = Tacticals.tclIDTAC
+let test_tac () : unit tactic =
+  let tac2name n = kername [ "Actema"; "HOL2"; "Ltac2" ] n in
+  Tacticals.tclIDTAC

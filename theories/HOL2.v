@@ -407,22 +407,23 @@ Ltac2 back_hyp_goal (h : ident) (subh : int list) (subc : int list) (choices : c
   let (new_concl, proof) := back (Constr.type hyp) subh concl subc choices kind in
   printf "%t" proof ;   refine '($proof $hyp _).
 
+(******************************************************************************)
+(** Debugging area. *)
+
 Parameter (A B : Prop).
 Parameter (P : nat -> Prop).
 
 Lemma test' (h : P 0) : exists x : nat, P 0 /\ P x.
 Proof.  
-  back_hyp_goal @h [] [ 1 ; 1 ] [ Binder Right None ; Side Right ] Subform. 
-  
+  (*back_hyp_goal @h [] [ 1 ; 1 ] [ Binder Right None ; Side Right ] Subform.*) 
+Admitted. 
 
+Lemma test (h : A) : A -> B.
+Proof.
+(*  back_hyp_goal @h [ ] [ 0 ] [ Side Right ] Subform.*)
+Admitted.
 
-  Lemma test (h : A) : A -> B.
-  Proof.
-    back_hyp_goal @h [ ] [ 0 ] [ Side Right ] Subform.
-  Admitted.
-  
-  
-  Lemma test x (h : 2 = x) : P x \/ A.
-  Proof.
-    back_hyp_goal @h [ ] [ 1 ] [ Side Right ; Side Right ] RewriteL.
-  Admitted.
+Ltac2 myfunc (x : bool) (ys : int list) : unit := 
+  if x then printf "x : true"
+  else printf "x : false";
+  List.iter (printf "-> %i") ys.

@@ -25,6 +25,8 @@
    (= 8.19.1))
   (coq-mathcomp-ssreflect
    (= 2.2.0))
+  (coq-core.plugins.ltac2
+   (= 8.19.1))
   (cohttp-lwt-unix
    (>= 5.3.0))
   (lwt_ppx
