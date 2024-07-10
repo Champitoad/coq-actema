@@ -532,9 +532,9 @@ with forward
   printf "Forward : %t * %t" h1 h2;
   match choices, sub1, sub2, kind with
   (****************************************************************************)
-  (* End rules. *)
+  (* Left end rules. *)
   (****************************************************************************)
-  (* F=1. *)
+  (* L=1. *)
   | [], [ 2 ], sub2, Rewrite Left => 
     lazy_match! h1 with 
     | @eq ?ty ?a ?b => 
@@ -543,9 +543,9 @@ with forward
       let d' := beta_root '($f $b) in
       let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind $ty $a $f h2_ $b h1_) in
       (d', p')
-    | _ => Control.throw (InteractFailure "[forward] F=1 rule : expected an equality")
+    | _ => Control.throw (InteractFailure "[forward] L=1 rule : expected an equality")
     end
-  (* F=2. *)
+  (* L=2. *)
   | [], [ 3 ], sub2, Rewrite Left =>
     lazy_match! h1 with 
     | @eq ?ty ?a ?b => 
@@ -557,26 +557,51 @@ with forward
     | _ => Control.throw (InteractFailure "[forward] L=2 rule : expected an equality")
     end
   (****************************************************************************)
-  (* Non-binder rules. *)
+  (* Right end rules. *)
+  (****************************************************************************)
+  (* R=1. *)
+  | [], sub1, [ 2 ], Rewrite Right => 
+    lazy_match! h2 with 
+    | @eq ?ty ?a ?b => 
+      (* Rewrite a into b. *)
+      let f := deep_pattern a h1 sub1 in
+      let d' := beta_root '($f $b) in
+      let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind $ty $a $f h1_ $b h2_) in
+      (d', p')
+    | _ => Control.throw (InteractFailure "[forward] R=1 rule : expected an equality")
+    end
+  (* R=2. *)
+  | [], sub1, [ 3 ], Rewrite Right =>
+    lazy_match! h2 with 
+    | @eq ?ty ?a ?b => 
+      (* Rewrite b into a. *)
+      let f := deep_pattern b h1 sub1 in
+      let d' := beta_root '($f $a) in
+      let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind_r $ty $b $f h1_ $a h2_) in
+      (d', p')
+    | _ => Control.throw (InteractFailure "[forward] L=2 rule : expected an equality")
+    end
+  (****************************************************************************)
+  (* Left non-binder rules. *)
   (****************************************************************************)
   | Side Left :: choices, i :: sub1, sub2, _ => 
     lazy_match! h1 with 
-    (* F∧. *)
+    (* L∧. *)
     | ?ha /\ ?hb =>  
-      (* F∧1. *)
+      (* L∧1. *)
       if Int.equal i 1 then   
         let (d, p) := forward ha sub1 h2 sub2 choices kind in
         let p' := '(fun (h1_ : $h1) (h2_ : $h2) => $p (proj1 h1_) h2_) in
         (d, p')
-      (* F∧2. *)
+      (* L∧2. *)
       else if Int.equal i 2 then 
         let (d, p) := forward hb sub1 h2 sub2 choices kind in 
         let p' := '(fun (h1_ : $h1) (h2_ : $h2) => $p (proj2 h1_) h2_) in
         (d, p')
-      else Control.throw (InteractFailure "[forward] F∧ rule : invalid index")
-    (* F∨. *)
+      else Control.throw (InteractFailure "[forward] L∧ rule : invalid index")
+    (* L∨. *)
     | ?ha \/ ?hb => 
-      (* F∨1. *)
+      (* L∨1. *)
       if Int.equal i 1 then 
         let (d, p) := forward ha sub1 h2 sub2 choices kind in 
         let d' := '($d \/ $hb) in 
@@ -587,7 +612,7 @@ with forward
               | @or_intror _ _ b_ => @or_intror $d $hb b_
               end) 
         in (d', p')
-      (* F∨2. *)
+      (* L∨2. *)
       else if Int.equal i 2 then 
         let (d, p) := forward hb sub1 h2 sub2 choices kind in 
         let d' := '($ha \/ $d) in 
@@ -598,7 +623,52 @@ with forward
               | @or_intror _ _ b_ => @or_intror $ha $d ($p b_ h2_)
               end) 
         in (d', p')
-      else Control.throw (InteractFailure "[forward] F∨ rule : invalid index")
+      else Control.throw (InteractFailure "[forward] L∨ rule : invalid index")
+    | _ => Control.throw (InteractFailure "[forward] unexpected head constructor")
+    end
+  (****************************************************************************)
+  (* Right non-binder rules. *)
+  (****************************************************************************)
+  | Side Right :: choices, sub1, i :: sub2, _ => 
+    lazy_match! h2 with 
+    (* R∧. *)
+    | ?ha /\ ?hb =>  
+      (* R∧1. *)
+      if Int.equal i 1 then   
+        let (d, p) := forward h1 sub1 ha sub2 choices kind in
+        let p' := '(fun (h1_ : $h1) (h2_ : $h2) => $p h1_ (proj1 h2_)) in
+        (d, p')
+      (* R∧2. *)
+      else if Int.equal i 2 then 
+        let (d, p) := forward h1 sub1 hb sub2 choices kind in 
+        let p' := '(fun (h1_ : $h1) (h2_ : $h2) => $p h1_ (proj2 h2_)) in
+        (d, p')
+      else Control.throw (InteractFailure "[forward] R∧ rule : invalid index")
+    (* R∨. *)
+    | ?ha \/ ?hb => 
+      (* R∨1. *)
+      if Int.equal i 1 then 
+        let (d, p) := forward h1 sub1 ha sub2 choices kind in 
+        let d' := '($d \/ $hb) in 
+        let p' := 
+          '(fun (h1_ : $h1) (h2_ : $h2) => 
+              match h2_ with 
+              | @or_introl _ _ a_ => @or_introl $d $hb ($p h1_ a_)
+              | @or_intror _ _ b_ => @or_intror $d $hb b_
+              end) 
+        in (d', p')
+      (* R∨2. *)
+      else if Int.equal i 2 then 
+        let (d, p) := forward h1 sub1 hb sub2 choices kind in 
+        let d' := '($ha \/ $d) in 
+        let p' := 
+          '(fun (h1_ : $h1) (h2_ : $h2) => 
+              match h2_ with 
+              | @or_introl _ _ a_ => @or_introl $ha $d a_
+              | @or_intror _ _ b_ => @or_intror $ha $d ($p h1_ b_)
+              end) 
+        in (d', p')
+      else Control.throw (InteractFailure "[forward] R∨ rule : invalid index")
     | _ => Control.throw (InteractFailure "[forward] unexpected head constructor")
     end
   (****************************************************************************)
@@ -607,12 +677,19 @@ with forward
   | _ => Control.throw (InteractFailure "[forward] unexpected head constructor")
   end.
 
-Ltac2 back_hyp_goal (h : ident) (subh : int list) (subc : int list) (choices : choice list) (kind : dnd_kind) : unit := 
-  let hyp := Control.hyp h in  
+Ltac2 back_hyp_goal (hname : ident) (subh : int list) (subc : int list) (choices : choice list) (kind : dnd_kind) : unit := 
+  let h := Control.hyp hname in  
   let concl := Control.goal () in 
-  let (new_concl, proof) := back (Constr.type hyp) subh concl subc choices kind in
+  let (new_concl, proof) := back (Constr.type h) subh concl subc choices kind in
   printf "%t" proof ; 
-  refine '($proof $hyp _).
+  refine '($proof $h _).
+
+Ltac2 forward_hyp_hyp (hname1 : ident) sub1 (hname2 : ident) sub2 choices kind : unit := 
+  let h1 := Control.hyp hname1 in 
+  let h2 := Control.hyp hname2 in 
+  let (h3, proof) := forward (Constr.type h1) sub1 (Constr.type h2) sub2 choices kind in 
+  let hname3 := Fresh.in_goal hname1 in 
+  pose $h3 as $hname3.
 
 (******************************************************************************)
 (** Debugging area. *)
@@ -620,14 +697,16 @@ Ltac2 back_hyp_goal (h : ident) (subh : int list) (subc : int list) (choices : c
 Parameter (A B : Prop).
 Parameter (P : nat -> Prop) (R : nat -> nat -> Prop).
 
-(*Lemma test x (h : x = 3) : (A /\ P x) -> B.
+
+
+Lemma test x (h : x = 3) : (A \/ P x) -> B.
 Proof.
-  back_hyp_goal @h [ 2 ] [ 0 ; 2 ] [ Side Right ; Side Right ] (Rewrite Left).*)
+  back_hyp_goal @h [ 2 ] [ 0 ; 2 ] [ Side Right ; Side Right ] (Rewrite Left).
 
 
-Lemma test' x (h : 3 = x) : R x (x + 42) -> A.
+Lemma test' x (h' : R x (x + 42)) (h : 3 = x) : True.
 Proof.  
-  back_hyp_goal @h [ 3 ] [ 0 ; 2 ] [ Side Right ] (Rewrite Left). 
+  forward_hyp_hyp @h' [ 2 ] @h [ 3 ] [] (Rewrite Right). 
 Admitted. 
 
 Lemma test (h : A) : A -> B.
