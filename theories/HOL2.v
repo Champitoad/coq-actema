@@ -223,8 +223,6 @@ Ltac2 apply_choices (choices : choice list) (x : constr) : choice list :=
       end)
     choices. 
 
-Check eq_ind_r.
-
 (* [back h subh c subc choices kind] should produce a result (d, p) such that : 
    - d is the new conclusion. 
    - p is a proof of h -> d -> c. 
@@ -694,7 +692,7 @@ Ltac2 forward_hyp_hyp (hname1 : ident) sub1 (hname2 : ident) sub2 choices kind :
 (******************************************************************************)
 (** Debugging area. *)
 
-Parameter (A B : Prop).
+(*Parameter (A B : Prop).
 Parameter (P : nat -> Prop) (R : nat -> nat -> Prop).
 
 
@@ -713,3 +711,4 @@ Lemma test (h : A) : A -> B.
 Proof.
 (*  back_hyp_goal @h [ ] [ 0 ] [ Side Right ] Subform.*)
 Admitted.
+*)

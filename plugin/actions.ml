@@ -264,61 +264,33 @@ let execute_alemma_add coq_goal lemma_name =
 let abstract_itrace itrace context : Interact.choice list =
   let open Lang in
   let open Interact in
-  (* Compute the de Bruijn index associated to the free variable [fvar].
-     The lists [passed1] and [passed2] contain the free variables
-     that are bound on each side so far, the most recently bound variable *first*. *)
-  let fvar_index passed1 passed2 fvar : int =
-    (* The variables are bound in the order fun x0 x1 x2 ... y0 y1 y2 ... => body,
-       where passed1 = [x0; x1 ...] and passed2 = [y0; y1 ...].
-       Thus we have to find the index of fvar in the *reverse* of passed1 @ passed2. *)
-    match List.index_of fvar @@ List.rev (passed1 @ passed2) with
-    | Some idx -> idx
-    | None -> failwith "Actions.abstract_itrace: unbound free variable"
+  (* [close_one witness fvar] closes the witness with respect to the free variable [fvar],
+     i.e. it replaces [fvar] by [BVar 0] and binds this BVar with a lambda. *)
+  let close_one witness fvar =
+    let entry = Option.get @@ Context.find fvar context in
+    Term.mkLambda entry.binder entry.type_ (Term.abstract fvar witness)
   in
-  (* Close a witness, i.e. :
-     - replace all FVars by BVars.
-     - bind all loose BVars with Lambdas.
-     The variables of [passed1] are bound *above* the variables of [passed2]. *)
-  let close_witness passed1 passed2 witness =
-    witness
-    (* Replace FVars by BVars. *)
-    |> Term.fsubst (Term.mkBVar <<< fvar_index passed1 passed2)
-    (* Bind BVars. *)
-    |> List.fold_right
-         begin
-           fun fvar body ->
-             let entry = Option.get @@ Context.find fvar context in
-             (* We also need to replace FVars by BVars in the type of the binder. *)
-             let ty =
-               Term.fsubst
-                 (Term.mkBVar <<< fvar_index passed1 passed2)
-                 entry.type_
-             in
-             Term.mkLambda entry.binder ty body
-         end
-         (passed1 @ passed2)
-  in
-  let rec loop passed1 passed2 = function
+  (* The list [passed] contains the *uninstantiated* free variables bound above,
+     the most recently bound first. *)
+  let rec loop passed = function
     (* Simply descend on a side or another. *)
     | Side side :: choices, fvars1, fvars2 ->
-        Side side :: loop passed1 passed2 (choices, fvars1, fvars2)
+        Side side :: loop passed (choices, fvars1, fvars2)
     (* Traverse a binder with instantiating. *)
     | Binder (Left, SBound witness) :: choices, v1 :: fvars1, fvars2 ->
-        Binder (Left, SBound (close_witness passed1 passed2 witness))
-        :: loop (v1 :: passed1) passed2 (choices, fvars1, fvars2)
+        Binder (Left, SBound (List.fold_left close_one witness passed))
+        :: loop passed (choices, fvars1, fvars2)
     | Binder (Right, SBound witness) :: choices, fvars1, v2 :: fvars2 ->
-        Binder (Right, SBound (close_witness passed1 passed2 witness))
-        :: loop passed1 (v2 :: passed2) (choices, fvars1, fvars2)
+        Binder (Right, SBound (List.fold_left close_one witness passed))
+        :: loop passed (choices, fvars1, fvars2)
     (* Traverse a binder without instantiating. *)
     | Binder (Left, sitem) :: choices, v1 :: fvars1, fvars2 ->
-        Binder (Left, sitem)
-        :: loop (v1 :: passed1) passed2 (choices, fvars1, fvars2)
+        Binder (Left, sitem) :: loop (v1 :: passed) (choices, fvars1, fvars2)
     | Binder (Right, sitem) :: choices, fvars1, v2 :: fvars2 ->
-        Binder (Right, sitem)
-        :: loop passed1 (v2 :: passed2) (choices, fvars1, fvars2)
+        Binder (Right, sitem) :: loop (v2 :: passed) (choices, fvars1, fvars2)
     | _ -> []
   in
-  loop [] [] itrace
+  loop [] itrace
 
 (* Helper function to remove the last index in a path. *)
 let remove_last (path : Logic.Path.t) : Logic.Path.t =
@@ -339,11 +311,14 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
     Interact.dlink dnd_kind (src, unif_data.fvars_1) (dst, unif_data.fvars_2)
       unif_data.subst pregoal
   in
+  Log.printf "Context :\n%s" (Lang.Context.show unif_data.context);
+  Log.printf "Itrace :\n%s" (Interact.show_itrace itrace);
   (* Abstract the instantiations. *)
   let choices = abstract_itrace itrace unif_data.context in
   Log.printf "Choices : \n";
   List.iter (Log.str <<< Interact.show_choice) choices;
-  (* Translate the choices to Coq. *)
+  Tacticals.tclIDTAC
+(*(* Translate the choices to Coq. *)
   let coq_sides = compile_sides coq_goal choices in
   Log.printf "Substitution:\n%s\n" (Unif.show_subst unif_data.subst);
   (* Translate the instantiations to Coq. *)
@@ -357,76 +332,7 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
   Log.printf "Sides : ";
   Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
   Log.printf "Instantiations : ";
-  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;
-
-  (* Call the appropriate tactic. *)
-  match (dnd_kind, src.kind, dst.kind) with
-  (* Subformula, hypothesis and conclusion. *)
-  | Logic.Subform, Hyp hyp, Concl ->
-      let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
-      calltac (tactic_kname "back")
-        [ hyp
-        ; compile_path coq_goal src
-        ; compile_path coq_goal dst
-        ; coq_sides
-        ; coq_instantiations
-        ]
-  (* Subformula, two hypotheses. *)
-  | Subform, Hyp hyp1, Hyp hyp2 ->
-      let hyp1 = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp1 in
-      let hyp2 = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp2 in
-      let hyp3 = EConstr.mkVar @@ Goal.fresh_name ~basename:"H" coq_goal () in
-      calltac (tactic_kname "forward")
-        [ hyp1
-        ; hyp2
-        ; hyp3
-        ; compile_path coq_goal src
-        ; compile_path coq_goal dst
-        ; coq_sides
-        ; coq_instantiations
-        ]
-  (* Rewrite with a hypothesis in the goal. *)
-  | RewriteL, Hyp hyp, Concl ->
-      let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
-      calltac (tactic_kname "rew_dnd")
-        [ hyp
-        ; compile_path coq_goal (remove_last src)
-        ; compile_path coq_goal dst
-        ; coq_sides
-        ; coq_instantiations
-        ]
-  (* Rewrite with the goal in a hypothesis. *)
-  | RewriteR, Hyp hyp, Concl ->
-      let hyp = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp in
-      calltac
-        (tactic_kname "rew_dnd_rev")
-        [ hyp
-        ; compile_path coq_goal src
-        ; compile_path coq_goal (remove_last dst)
-        ; coq_sides
-        ; coq_instantiations
-        ]
-  (* Rewrite with a hypothesis in another hypothesis. *)
-  | RewriteL, Hyp hyp1, Hyp hyp2 ->
-      let hyp1 = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp1 in
-      let hyp2 = EConstr.mkVar @@ Names.Id.of_string @@ Name.show hyp2 in
-      let hyp3 = EConstr.mkVar @@ Goal.fresh_name ~basename:"H" coq_goal () in
-      calltac
-        (tactic_kname "rew_dnd_hyp")
-        [ Trm.Datatypes.of_bool (Goal.env coq_goal) false
-        ; hyp1
-        ; hyp2
-        ; hyp3
-        ; compile_path coq_goal (remove_last src)
-        ; compile_path coq_goal dst
-        ; coq_sides
-        ; coq_instantiations
-        ]
-  | _ ->
-      raise
-      @@ UnsupportedAction
-           ( ADnD (src, dst, unif_data, dnd_kind)
-           , "Invalid items for DnD action." )
+  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;*)
 
 (*********************************************************************************)
 (** [AInstantiate] actions. *)

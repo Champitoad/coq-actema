@@ -303,22 +303,17 @@ let rec interact (state : state) mode : choice list =
   (* Print some debug info. *)
   dump_state state mode;
 
-  (* For the L= rules, we put the rewrite direction
-     (Left for left-to-right, Right for right-to-left) at the end
-     of the choice list. *)
   match (state.dnd_kind, (state.t1, state.sub1), (state.t2, state.sub2)) with
   (* Rule id *)
   | Subform, (_, []), (_, []) -> List.rev state.choices
   (* Rule L=₁ *)
-  | RewriteL, (App (_, Cst eq, _), [ 2 ]), _ when Name.equal eq Constants.eq ->
-      List.rev (Side Left :: state.choices)
-  | RewriteL, (App (_, Cst eq, _), [ 3 ]), _ when Name.equal eq Constants.eq ->
-      List.rev (Side Right :: state.choices)
+  | RewriteL, (App (_, Cst eq, _), [ 2 ]), _
+  | RewriteL, (App (_, Cst eq, _), [ 3 ]), _
   (* Rule L=₂ *)
-  | RewriteR, _, (App (_, Cst eq, _), [ 2 ]) when Name.equal eq Constants.eq ->
-      List.rev (Side Left :: state.choices)
-  | RewriteR, _, (App (_, Cst eq, _), [ 3 ]) when Name.equal eq Constants.eq ->
-      List.rev (Side Right :: state.choices)
+  | RewriteR, _, (App (_, Cst eq, _), [ 2 ])
+  | RewriteR, _, (App (_, Cst eq, _), [ 3 ])
+    when Name.equal eq Constants.eq ->
+      List.rev state.choices
   (* All other rules. *)
   | _ ->
       (* Perform one interaction step. *)
