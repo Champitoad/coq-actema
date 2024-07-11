@@ -1,3 +1,31 @@
+(*
+
+
+(* [freh_evar basename type] creates a fresh evar with the type [type].
+   Optionally [basename] can be used to indicate a prefered name for the evar
+   (wich might be slightly modified to ensure freshness). *)
+Ltac2 fresh_evar (id_opt : ident option) (type : constr) : evar := 
+  (* Get the name. *)
+  let id := 
+    match id_opt with 
+    | Some id => Fresh.in_goal id 
+    | _ => Fresh.in_goal @x
+    end 
+  in
+  (* We have to use a trick to ensure the evar has the right name. 
+     We create an identity function with the correct type and binder name : 
+     this binder name will magically get chosen as the evar name. *)
+  let binder := Constr.Binder.make (Some id) type in
+  let body := Constr.Unsafe.make (Constr.Unsafe.Rel 1) in
+  let my_lambda := Constr.Unsafe.make (Constr.Unsafe.Lambda binder body) in
+  (* Create the evar. *)
+  let evar := beta_root '($my_lambda _ :> $type) in
+  match Constr.Unsafe.kind evar with 
+  | Constr.Unsafe.Evar evar _ => evar 
+  | _ => Control.throw Assertion_failure
+  end.
+  *)
+
 open Utils.Pervasive
 open Api
 open Proofview
