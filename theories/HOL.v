@@ -2499,7 +2499,6 @@ Ltac simpl_path_hyp hyp path :=
   let g := type of hyp in
   let g' := simpl_path_r path g in
   change g' in hyp.
-  
 
 
 Ltac beta_head t l :=

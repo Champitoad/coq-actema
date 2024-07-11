@@ -141,18 +141,15 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
 
 let test_tac () : unit tactic =
   let open Ltac2_plugin in
-  let mpath =
-    Names.(
-      MPfile (DirPath.make (List.map Id.of_string [ "Ltac2Test"; "Actema" ])))
-  in
-  let fname =
-    Names.KerName.make mpath @@ Names.Label.of_id
-    @@ Names.Id.of_string_soft "myfunc"
-  in
+  let globals = Tac2env.globals () |> Names.KNmap.bindings |> List.map fst in
+  Log.printf "count = %d" (List.length globals);
+  List.iter (Log.printf "%s" <<< Names.KerName.to_string) globals;
+  Tacticals.tclIDTAC
+(*let fname = kername [ "Actema"; "Ltac2Test" ] "myfunc" in
   try
     let f = Tac2interp.eval_global fname in
     let tac =
       Tac2ffi.apply_val f Tac2ffi.[ of_bool true; of_list of_int [ 3; 2; 1 ] ]
     in
     PVMonad.map Tac2ffi.to_unit tac
-  with Not_found -> Log.error "constant not found."
+  with Not_found -> Log.error "constant not found."*)

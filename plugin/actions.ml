@@ -1,41 +1,61 @@
-(*
-
-
-(* [freh_evar basename type] creates a fresh evar with the type [type].
-   Optionally [basename] can be used to indicate a prefered name for the evar
-   (wich might be slightly modified to ensure freshness). *)
-Ltac2 fresh_evar (id_opt : ident option) (type : constr) : evar := 
-  (* Get the name. *)
-  let id := 
-    match id_opt with 
-    | Some id => Fresh.in_goal id 
-    | _ => Fresh.in_goal @x
-    end 
-  in
-  (* We have to use a trick to ensure the evar has the right name. 
-     We create an identity function with the correct type and binder name : 
-     this binder name will magically get chosen as the evar name. *)
-  let binder := Constr.Binder.make (Some id) type in
-  let body := Constr.Unsafe.make (Constr.Unsafe.Rel 1) in
-  let my_lambda := Constr.Unsafe.make (Constr.Unsafe.Lambda binder body) in
-  (* Create the evar. *)
-  let evar := beta_root '($my_lambda _ :> $type) in
-  match Constr.Unsafe.kind evar with 
-  | Constr.Unsafe.Evar evar _ => evar 
-  | _ => Control.throw Assertion_failure
-  end.
-  *)
-
 open Utils.Pervasive
 open Api
 open Proofview
 open CoqUtils
 open Translate
+open Ltac2_plugin
 
 exception UnsupportedAction of Logic.action * string
 
 (** Return the kernel name of a tactic defined in [Actema.HOL]. *)
 let tactic_kname = kername [ "Actema"; "HOL" ]
+
+(** This module deals with calling Ltac2 functions from Ocaml.
+    
+    See https://coq.zulipchat.com/#narrow/stream/237656-Coq-devs-.26-plugin-devs/topic/Ltac2.20FFI.20.3A.20building.20types.20and.20constructors
+    for an explanation of how Ltac2 values are represented.
+*)
+module FFI = struct
+  (** [calltack name args] calls the Ltac2 tactic [name] with arguments [args], 
+      and discards the result. The tactic should be defined in file [HOL2.v]. *)
+  let calltac (name : string) (args : Tac2ffi.valexpr list) : unit PVMonad.t =
+    let open PVMonad in
+    (* Construct the kernel name of the tactic. *)
+    let kname = kername [ "Actema"; "HOL2" ] name in
+    (* Find the corresponding Ltac2 value. *)
+    let tac =
+      try Tac2interp.eval_global kname
+      with Not_found ->
+        failwith
+        @@ Format.sprintf "Actions.FFI.calltac : unknown tactic name %s"
+             (Names.KerName.to_string kname)
+    in
+    (* Call the tactic with its arguments. *)
+    Tac2ffi.to_unit <$> Tac2ffi.apply_val tac args
+
+  (** Encode an [Interact.side] to the Ltac2 type [HOL2.side]. *)
+  let of_side : Interact.side -> Tac2ffi.valexpr = function
+    | Left -> Tac2ffi.ValInt 0
+    | Right -> Tac2ffi.ValInt 1
+
+  (** [of_choice import_term choice] encodes [choice] to the Ltac2 type [HOL2.choice]. *)
+  let of_choice (import_term : Lang.Term.t -> EConstr.t) :
+      Interact.choice -> Tac2ffi.valexpr = function
+    | Side side -> Tac2ffi.ValBlk (0, [| of_side side |])
+    | Binder (side, SFlex) | Binder (side, SRigid) ->
+        let none = Tac2ffi.ValInt 0 in
+        Tac2ffi.ValBlk (1, [| of_side side; none |])
+    | Binder (side, SBound witness) ->
+        let constr = import_term witness in
+        let some_witness = Tac2ffi.ValBlk (0, [| Tac2ffi.of_constr constr |]) in
+        Tac2ffi.ValBlk (1, [| of_side side; some_witness |])
+
+  (** [of_dnd_kind kind] encodes [kind] to the Ltac2 type [HOL2.dnd_kind]. *)
+  let of_dnd_kind : Logic.dnd_kind -> Tac2ffi.valexpr = function
+    | Subform -> Tac2ffi.ValInt 0
+    | RewriteL -> Tac2ffi.ValBlk (0, [| of_side Left |])
+    | RewriteR -> Tac2ffi.ValBlk (0, [| of_side Right |])
+end
 
 (** Simplify the conclusion and hypotheses in the current Coq goal *)
 let simplify_goal coq_goal : unit tactic =
@@ -53,45 +73,6 @@ let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
     (fun name ->
       CAst.make @@ IntroNaming (Namegen.IntroFresh (Names.Id.of_string name)))
     names
-
-(** Turn a list of [Interact.choice] into a Coq term of type [list bool] 
-    that can be fed to tactics. *)
-let compile_sides coq_goal choices : EConstr.t =
-  let open Interact in
-  choices
-  |> List.map (function Side side | Binder (side, _) -> side)
-  |> List.map (function Left -> false | Right -> true)
-  |> Trm.Datatypes.boollist (Goal.env coq_goal)
-
-(** Turn a list of [Interact.choice] into a Coq term of type [list option DYN] 
-    that can be fed to tactics. *)
-let compile_instantiations coq_goal choices : EConstr.t =
-  let open Interact in
-  let env = Goal.env coq_goal in
-  let sigma = Goal.sigma coq_goal in
-  let symbol_table = Symbols.all coq_goal in
-  (* Coq's [DYN] type. *)
-  let dyn = Trm.mkInd env [ "Actema"; "HOL" ] "DYN" in
-  (* Coq's [option DYN] type. *)
-  let opt_dyn = Trm.Datatypes.option env dyn in
-  (* Coq's [mDYN] constructor. *)
-  let mdyn =
-    Trm.mkConstruct ~constructor:1 (Goal.env coq_goal) [ "Actema"; "HOL" ] "DYN"
-  in
-  (* Wrap a Coq term in a [DYN]. *)
-  let mkDyn (econstr : EConstr.t) : EConstr.t =
-    let ty = Retyping.get_type_of env sigma econstr in
-    EConstr.mkApp (mdyn, [| ty; econstr |])
-  in
-  (* We are only interested in the choices for instantiable binders. *)
-  choices
-  |> List.filter_map (function
-       | Binder (_, SFlex) -> Some None
-       | Binder (_, SBound witness) -> Some (Some witness)
-       | _ -> None)
-  |> Trm.Datatypes.of_list (Goal.env coq_goal) opt_dyn
-       (Trm.Datatypes.of_option env dyn
-          (mkDyn <<< Import.term coq_goal symbol_table))
 
 (** [convert_sub term sub] converts the path [sub] (that points inside [term])
     from the actema format to the format that the tactics expect. 
@@ -132,7 +113,7 @@ let rec convert_sub (term : Lang.Term.t) (sub : int list) : int list =
   (* This should not happen. *)
   | _ -> failwith "Actions.convert_sub : invalid path"
 
-(** Turn an actema path into a Coq term of type [list nat] that can be fed to tactics.
+(** Turn an actema path into a Coq term of type [list nat] that can be fed to the old tactics in HOL.v.
     Takes as an optional argument a suffix to add to the path after it has been translated. *)
 let compile_path ?(suffix = []) coq_goal (path : Logic.Path.t) : EConstr.t =
   let open Logic in
@@ -325,42 +306,66 @@ let remove_last (path : Logic.Path.t) : Logic.Path.t =
   let sub = List.remove_at (List.length path.sub - 1) path.sub in
   { path with sub }
 
-(** Precondition : [src] and [dst] respectively point to either :
-    - two hypotheses.
-    - a hypothesis and the conclusion.
+(** Helper function to swap the two sides of the link in a [dnd_kind]. *)
+let opp_dnd_kind : Logic.dnd_kind -> Logic.dnd_kind = function
+  | Subform -> Logic.Subform
+  | RewriteL -> RewriteR
+  | RewriteR -> RewriteL
 
-    In particular we forbid the case where they point to : 
-    - the conclusion and a hypothesis. *)
+(** Helper function to swap the two sides of the link in a [choice]. *)
+let opp_choice : Interact.choice -> Interact.choice = function
+  | Side side -> Side (Interact.opp_side side)
+  | Binder (side, witness) -> Binder (Interact.opp_side side, witness)
+
+(** Precondition : [src] and [dst] point to a hypothesis or the conclusion,
+    and can't both point to the conclusion. *)
 let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
     unit tactic =
   let pregoal = Export.goal coq_goal in
-  (* Perform deep interaction. *)
+  (* Perform deep interaction (i.e. choose an order of application of the rewrite rules). *)
   let itrace =
     Interact.dlink dnd_kind (src, unif_data.fvars_1) (dst, unif_data.fvars_2)
       unif_data.subst pregoal
   in
-  Log.printf "Context :\n%s" (Lang.Context.show unif_data.context);
-  Log.printf "Itrace :\n%s" (Interact.show_itrace itrace);
   (* Abstract the instantiations. *)
   let choices = abstract_itrace itrace unif_data.context in
-  Log.printf "Choices : \n";
-  List.iter (Log.str <<< Interact.show_choice) choices;
-  Tacticals.tclIDTAC
-(*(* Translate the choices to Coq. *)
-  let coq_sides = compile_sides coq_goal choices in
-  Log.printf "Substitution:\n%s\n" (Unif.show_subst unif_data.subst);
-  (* Translate the instantiations to Coq. *)
-  let coq_instantiations = compile_instantiations coq_goal choices in
-  Log.printf "Source path : ";
-  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
-    (compile_path coq_goal src);
-  Log.printf "Dest path : ";
-  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal)
-    (compile_path coq_goal dst);
-  Log.printf "Sides : ";
-  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_sides;
-  Log.printf "Instantiations : ";
-  Log.econstr (Goal.env coq_goal) (Goal.sigma coq_goal) coq_instantiations;*)
+  (* Export the Coq symbols to translate Actema terms to Coq terms later on. *)
+  let symbols = Symbols.all coq_goal in
+  (* Call the Ltac2 tactic to do the rest of the work. *)
+  match (src.kind, dst.kind) with
+  | Hyp h1, Hyp h2 ->
+      let h1 = Names.Id.of_string_soft @@ Name.show h1 in
+      let h2 = Names.Id.of_string_soft @@ Name.show h2 in
+      FFI.calltac "forward_wrapper"
+        [ Tac2ffi.of_ident h1
+        ; Tac2ffi.(of_list of_int) src.sub
+        ; Tac2ffi.of_ident h2
+        ; Tac2ffi.(of_list of_int) dst.sub
+        ; Tac2ffi.of_list (FFI.of_choice (Import.term coq_goal symbols)) choices
+        ; FFI.of_dnd_kind dnd_kind
+        ]
+  | Hyp h, Concl ->
+      let h = Names.Id.of_string_soft @@ Name.show h in
+      FFI.calltac "back_wrapper"
+        [ Tac2ffi.of_ident h
+        ; Tac2ffi.(of_list of_int) src.sub
+        ; Tac2ffi.(of_list of_int) dst.sub
+        ; Tac2ffi.of_list (FFI.of_choice (Import.term coq_goal symbols)) choices
+        ; FFI.of_dnd_kind dnd_kind
+        ]
+  | Concl, Hyp h ->
+      (* The tactic [back_wrapper] expects the hypothesis on the left
+         and the conclusion on the right : we have to swap the two sides of the link. *)
+      let h = Names.Id.of_string_soft @@ Name.show h in
+      FFI.calltac "back_wrapper"
+        [ Tac2ffi.of_ident h
+        ; Tac2ffi.(of_list of_int) dst.sub
+        ; Tac2ffi.(of_list of_int) src.sub
+        ; Tac2ffi.of_list (FFI.of_choice (Import.term coq_goal symbols))
+          @@ List.map opp_choice choices
+        ; FFI.of_dnd_kind @@ opp_dnd_kind dnd_kind
+        ]
+  | _ -> assert false
 
 (*********************************************************************************)
 (** [AInstantiate] actions. *)
@@ -428,29 +433,7 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.AElim (hyp_name, i) -> execute_aelim coq_goal hyp_name i
   | Logic.ALemmaAdd full_name -> execute_alemma_add coq_goal full_name
   | Logic.ADnD (src, dst, unif_data, dnd_kind) ->
-      (* Helper function to swap the two sides of the link in a [dnd_kind]. *)
-      let reverse_dnd = function
-        | Logic.Subform -> Logic.Subform
-        | RewriteL -> RewriteR
-        | RewriteR -> RewriteL
-      in
-      (* Helper function to swap the two sides of the link in a [unif_data]. *)
-      let reverse_unif (unif : Logic.unif_data) =
-        { unif_data with fvars_1 = unif.fvars_2; fvars_2 = unif.fvars_1 }
-      in
-      (* Execute the dnd action. *)
-      begin
-        (* Check the items are valid, and swap [src] and [dst] if needed
-           to avoid redundant cases in [execute_adnd]. *)
-        match (src.kind, dst.kind, dnd_kind) with
-        | Concl, Hyp _, _ | Hyp _, Hyp _, RewriteR ->
-            execute_adnd coq_goal dst src (reverse_unif unif_data)
-              (reverse_dnd dnd_kind)
-        | Hyp _, Hyp _, _ | Hyp _, Concl, _ ->
-            execute_adnd coq_goal src dst unif_data dnd_kind
-        | _ ->
-            raise @@ UnsupportedAction (action, "Invalid items for DnD action.")
-      end
+      execute_adnd coq_goal src dst unif_data dnd_kind
   | Logic.ASimpl path -> begin
       match path.kind with
       | Hyp name ->

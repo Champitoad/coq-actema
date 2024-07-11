@@ -1,6 +1,5 @@
 From Ltac2 Require Import Ltac2 Printf.
 
-
 (**********************************************************************************)
 (** Utils. *)
 
@@ -253,7 +252,7 @@ Ltac2 Type dnd_kind :=
     Rewrite (side)
   ].
 
-(* [swap_dnd_kind kind] swaps the side of [kind] is it is of the form [Rewrite side]. *)
+(* [swap_dnd_kind kind] swaps the side of [kind] if it is of the form [Rewrite side]. *)
 Ltac2 swap_dnd_kind (kind : dnd_kind) : dnd_kind :=
   match kind with 
   | Subform => Subform 
@@ -276,18 +275,6 @@ Ltac2 apply_choices (choices : choice list) (x : constr) : choice list :=
       end)
     choices. 
 
-Ltac2 print_context () : unit := 
-  printf "Context :";
-  List.iter 
-    (fun hyp => 
-      let (id, body, type) := hyp in 
-      match body with 
-      | None => printf "  %I : %t" id type
-      | Some body => printf "  %I := %t : %t" id body type
-      end) 
-    (Control.hyps ()).
-
-
 (* [back h subh c subc choices kind] should produce a result (d, p) such that : 
    - d is the new conclusion. 
    - p is a proof of h -> d -> c. 
@@ -308,9 +295,7 @@ Ltac2 rec back
   let h := eval hnf in $h in 
   let c := eval hnf in $c in 
   (* Print the link. *)
-  printf "************************************";
-  print_context ();
-  printf "Backward : %t |- %t" h c;
+  printf ">>> %t |- %t" h c;
   match choices, subh, subc, kind with
   (****************************************************************************)
   (* End rules *)
@@ -598,7 +583,7 @@ with forward
     forward h2 sub2 h1 sub1 (List.map swap_choice choices) (swap_dnd_kind kind)
   in
   (* Print the link. *)
-  printf "Forward : %t * %t" h1 h2;
+  printf ">>> %t * %t" h1 h2;
   match choices, sub1, sub2, kind with
   (****************************************************************************)
   (* Left end rules. *)
@@ -746,14 +731,15 @@ with forward
   | _ => Control.throw (InteractFailure "[forward] unexpected head constructor")
   end.
 
-Ltac2 back_hyp_goal (hname : ident) (subh : int list) (subc : int list) (choices : choice list) (kind : dnd_kind) : unit := 
+Ltac2 back_wrapper (hname : ident) (subh : int list) (subc : int list) (choices : choice list) (kind : dnd_kind) : unit := 
+  printf "Starting [back] tactic.";
   let h := Control.hyp hname in  
   let concl := Control.goal () in 
   let (new_concl, proof) := back (Constr.type h) subh concl subc choices kind in
-  printf "%t" proof ; 
   refine '($proof $h _).
 
-Ltac2 forward_hyp_hyp (hname1 : ident) sub1 (hname2 : ident) sub2 choices kind : unit := 
+Ltac2 forward_wrapper (hname1 : ident) sub1 (hname2 : ident) sub2 choices kind : unit := 
+  printf "Starting [forward] tactic.";
   let h1 := Control.hyp hname1 in 
   let h2 := Control.hyp hname2 in 
   let (h3, proof) := forward (Constr.type h1) sub1 (Constr.type h2) sub2 choices kind in 
@@ -763,7 +749,7 @@ Ltac2 forward_hyp_hyp (hname1 : ident) sub1 (hname2 : ident) sub2 choices kind :
 (******************************************************************************)
 (** Debugging area. *)
 
-Parameter (P : forall A, list A -> Prop).
+(*Parameter (P : forall A, list A -> Prop).
 
 Lemma list_test (h : forall A (l : list A), P A l) :
   forall B (l : list B), P B l.
