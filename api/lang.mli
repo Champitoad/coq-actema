@@ -282,8 +282,17 @@ module Constants : sig
   (** Coq's list constructor [cons : forall A : Type, A -> list A -> list A]. *)
   val cons : Name.t
 
-  (** [is_logical_conn name] tests whether [name] corresponds to a logical connector. *)
-  val is_logical_conn : Name.t -> bool
+  (** Coq's inductive proposition [le : nat -> nat -> Prop]. *)
+  val le : Name.t
+
+  (** Coq's inductive proposition [lt : nat -> nat -> Prop]. *)
+  val lt : Name.t
+
+  (** Coq's inductive proposition [ge : nat -> nat -> Prop]. *)
+  val ge : Name.t
+
+  (** Coq's inductive proposition [gt : nat -> nat -> Prop]. *)
+  val gt : Name.t
 end
 
 (***************************************************************************************)

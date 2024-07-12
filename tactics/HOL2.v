@@ -89,7 +89,7 @@ Ltac2 rec back
   let h := eval hnf in $h in 
   let c := eval hnf in $c in 
   (* Print the link. *)
-  printf ">>> %t |- %t" h c;
+  printf "[back] %t |- %t" h c;
   match choices, subh, subc, kind with
   (****************************************************************************)
   (* End rules *)
@@ -386,7 +386,7 @@ with forward
     (d, '($swap $p))
   in
   (* Print the link. *)
-  printf ">>> %t * %t" h1 h2;
+  printf "[forward] %t * %t" h1 h2;
   match choices, sub1, sub2, kind with
   (****************************************************************************)
   (* End rules. *)
@@ -550,21 +550,20 @@ Ltac2 back_wrapper (hname : ident) subh subc choices kind : unit :=
   (* The type of the new goal comes from [proof] : we prefer to use [new_concl]. *)
   change $new_concl.
 
-(* A thin wrapper around [forward] that takes care of updating the proof state. *)
-Ltac2 forward_wrapper (hname1 : ident) sub1 (hname2 : ident) sub2 choices kind : unit := 
+(* A thin wrapper around [forward] that takes care of updating the proof state.
+   It takes as input the name of the new hypothesis to create. *)
+Ltac2 forward_wrapper (hname1 : ident) sub1 (hname2 : ident) sub2 (hnew : ident) choices kind : unit := 
   (* Fetch the hypotheses. *)
   let h1 := Control.hyp hname1 in 
   let h2 := Control.hyp hname2 in 
   (* Perform the deep interaction. *)
   let (h3, proof) := forward (Constr.type h1) sub1 (Constr.type h2) sub2 choices kind in 
-  (* Choose a fresh name for the new hypothesis. *)
-  let hname3 := Fresh.in_goal hname1 in 
   (* Create the new hypothesis. *)
-  pose ($proof $h1 $h2) as $hname3 ; 
+  pose ($proof $h1 $h2) as $hnew ; 
   (* We are only interested in the type of the new hypothesis. *)
-  Std.clearbody [ hname3 ] ; 
+  Std.clearbody [ hnew ] ; 
   (* The type of the new hypothesis comes from [proof] : we prefer to use [h3],
      which the same modulo conversion but may be better formatted (e.g. it might 
      have better variable names). *)
-  change $h3 in $hname3.
+  change $h3 in $hnew.
 

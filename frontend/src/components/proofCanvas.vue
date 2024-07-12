@@ -955,13 +955,13 @@ export default {
             let percentage = (1.0 - this.hypsZoneEnd) * 100 - 5;
             // The multiplicative constant here is guesswork. 
             // We could probably be more accurate by using the font size.
-            return Math.floor(1.7 * percentage);
+            return Math.floor(1.6 * percentage);
         },
 
         // The approximate width in characters of the hypothesis zone.
         hypsCharWidth() {
             let percentage = (this.hypsZoneEnd - this.hypsZoneStart) * 100 - 5;
-            return Math.floor(1.7 * percentage);
+            return Math.floor(1.6 * percentage);
         }
     }
 };

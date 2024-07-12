@@ -57,12 +57,14 @@ module FFI = struct
     | RewriteR -> Tac2ffi.ValBlk (0, [| of_side Right |])
 end
 
-(** Simplify the conclusion and hypotheses in the current Coq goal *)
-let simplify_goal coq_goal : unit tactic =
-  let open PVMonad in
-  let hyp_names = Goal.hyps_names coq_goal |> Names.Id.Set.to_list in
-  let* () = calltac (tactic_kname "simplify_goal") [] in
-  forM_ hyp_names @@ fun hyp ->
+(** Simplify the conclusion in the current Coq goal. *)
+let simplify_goal () : unit tactic =
+  (* We call Benjamin's tactic in HOL.v. *)
+  calltac (tactic_kname "simplify_goal") []
+
+(** Simplify the given hypothesis in the current Coq goal. *)
+let simplify_hyp (hyp : Names.Id.t) : unit tactic =
+  (* We call Benjamin's tactic in HOL.v. *)
   calltac (tactic_kname "simplify_hyp") [ EConstr.mkVar hyp ]
 
 (** Make an introduction pattern to introduce named variables.
@@ -321,6 +323,7 @@ let opp_choice : Interact.choice -> Interact.choice = function
     and can't both point to the conclusion. *)
 let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
     unit tactic =
+  let open PVMonad in
   let pregoal = Export.goal coq_goal in
   (* Perform deep interaction (i.e. choose an order of application of the rewrite rules). *)
   let itrace =
@@ -334,6 +337,7 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
   (* Call the Ltac2 tactic to do the rest of the work. *)
   match (src.kind, dst.kind) with
   | Hyp h1, Hyp h2 ->
+      let hnew = Goal.fresh_name ~basename:(Name.show h2) coq_goal () in
       let h1 = Names.Id.of_string_soft @@ Name.show h1 in
       let h2 = Names.Id.of_string_soft @@ Name.show h2 in
       FFI.calltac "forward_wrapper"
@@ -341,9 +345,11 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
         ; Tac2ffi.(of_list of_int) src.sub
         ; Tac2ffi.of_ident h2
         ; Tac2ffi.(of_list of_int) dst.sub
+        ; Tac2ffi.of_ident hnew
         ; Tac2ffi.of_list (FFI.of_choice (Import.term coq_goal symbols)) choices
         ; FFI.of_dnd_kind dnd_kind
         ]
+      >> simplify_hyp hnew
   | Hyp h, Concl ->
       let h = Names.Id.of_string_soft @@ Name.show h in
       FFI.calltac "back_wrapper"
@@ -353,6 +359,7 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
         ; Tac2ffi.of_list (FFI.of_choice (Import.term coq_goal symbols)) choices
         ; FFI.of_dnd_kind dnd_kind
         ]
+      >> simplify_goal ()
   | Concl, Hyp h ->
       (* The tactic [back_wrapper] expects the hypothesis on the left
          and the conclusion on the right : we have to swap the two sides of the link. *)
@@ -365,6 +372,7 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
           @@ List.map opp_choice choices
         ; FFI.of_dnd_kind @@ opp_dnd_kind dnd_kind
         ]
+      >> simplify_goal ()
   | _ -> assert false
 
 (*********************************************************************************)

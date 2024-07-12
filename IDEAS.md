@@ -97,8 +97,3 @@ back (forall x, B x) A (Some wx :: ws)
   new_concl := D
   proof xb d :: A := p (xb wx) d 
     where xb :: forall x, B x
-
-# TODO : 
-
-- notation for le
-- reduce the term witdth in actema

@@ -373,9 +373,10 @@ module Constants = struct
   let mul = make "Coq.Init.Nat.mul"
   let nil = make "Coq.Init.Datatypes.nil"
   let cons = make "Coq.Init.Datatypes.cons"
-
-  let is_logical_conn name : bool =
-    List.exists (equal name) [ and_; or_; not; equiv; true_; false_ ]
+  let le = make "Coq.Init.Peano.le"
+  let lt = make "Coq.Init.Peano.lt"
+  let ge = make "Coq.Init.Peano.ge"
+  let gt = make "Coq.Init.Peano.gt"
 end
 
 (***************************************************************************************)

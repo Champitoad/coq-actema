@@ -32,11 +32,10 @@ Admitted.
 Lemma addn0 : forall n, n + 0 = n.
 Admitted.
 
-(* These lemmas are somewhat interesting to prove in Actema *)
-(* We also need to import lemmas in the proof context before launching Actema *)
-(* It is worth checking how a search function would react *)
+(*Lemma test (h : forall A (l1 : list A) (l2 : list A), l1 = l2) : forall B (l : list B), length l = 0.
+actema_force.*)
 
-Lemma test (h : forall A (l1 : list A) (l2 : list A), l1 = l2) : forall B (l : list B), length l = 0.
+Lemma test x : (x <= 42 /\ x > 3 /\ x >= 3 /\ x < 42).
 actema_force.
 
 Lemma perm_length : forall A (l1 : list A) (l2 : list A),

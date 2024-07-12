@@ -113,6 +113,34 @@ module Export = struct
           ; position = Infix
           ; precedence = Level 60
           } )
+    ; ( Constants.le
+      , Env.
+          { symbol = "≤"
+          ; implicit_args = []
+          ; position = Infix
+          ; precedence = Level 70
+          } )
+    ; ( Constants.lt
+      , Env.
+          { symbol = "<"
+          ; implicit_args = []
+          ; position = Infix
+          ; precedence = Level 70
+          } )
+    ; ( Constants.ge
+      , Env.
+          { symbol = "≥"
+          ; implicit_args = []
+          ; position = Infix
+          ; precedence = Level 70
+          } )
+    ; ( Constants.gt
+      , Env.
+          { symbol = ">"
+          ; implicit_args = []
+          ; position = Infix
+          ; precedence = Level 70
+          } )
     ]
     |> List.to_seq |> Hashtbl.of_seq
 
