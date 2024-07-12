@@ -323,7 +323,7 @@ Ltac2 rec back
       let (d, p) := back h subh '($cb $ev_constr) subc (apply_choices choices ev_constr) kind in
       let d := abstract_ident ev d in
       let p := abstract_ident ev p in
-      let d' := fun_to_forall None d in
+      let d' := fun_to_forall (Some x) d in
       let p' := '(fun (h_ : $h) (xd_ : $d') (x : $ca) => ($p x) h_ (xd_ x)) in
       (* Don't forget to clear the evar. *)
       Std.clear [ ev ] ; (d', p')
@@ -378,38 +378,20 @@ with forward
   (* Put the two terms in head normal form. *)
   let h1 := eval hnf in $h1 in 
   let h2 := eval hnf in $h2 in 
+  (* Helper function to perform the same interaction with the two sides swapped. *)
+  let retry_swapped () := 
+    (* We have to adapt the proof : proving h1 -> h2 -> d is not the same as h2 -> h1 -> d. *)
+    let (d, p) := forward h2 sub2 h1 sub1 (List.map swap_choice choices) (swap_dnd_kind kind) in 
+    let swap := '(fun (p : $h2 -> $h1 -> $d) h1 h2 => p h2 h1) in
+    (d, '($swap $p))
+  in
   (* Print the link. *)
   printf ">>> %t * %t" h1 h2;
   match choices, sub1, sub2, kind with
   (****************************************************************************)
-  (* Left end rules. *)
+  (* End rules. *)
   (****************************************************************************)
-  (* L=1. *)
-  | [], [ 2 ], sub2, Rewrite Left => 
-    lazy_match! h1 with 
-    | @eq ?ty ?a ?b => 
-      (* Rewrite a into b. *)
-      let f := deep_pattern a h2 sub2 in
-      let d' := beta_root '($f $b) in
-      let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind $ty $a $f h2_ $b h1_) in
-      (d', p')
-    | _ => Control.throw (InteractFailure "[forward] L=1 rule : expected an equality")
-    end
-  (* L=2. *)
-  | [], [ 3 ], sub2, Rewrite Left =>
-    lazy_match! h1 with 
-    | @eq ?ty ?a ?b => 
-      (* Rewrite b into a. *)
-      let f := deep_pattern b h2 sub2 in
-      let d' := beta_root '($f $a) in
-      let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind_r $ty $b $f h2_ $a h1_) in
-      (d', p')
-    | _ => Control.throw (InteractFailure "[forward] L=2 rule : expected an equality")
-    end
-  (****************************************************************************)
-  (* Right end rules. *)
-  (****************************************************************************)
-  (* R=1. *)
+  (* F=1. *)
   | [], sub1, [ 2 ], Rewrite Right => 
     lazy_match! h2 with 
     | @eq ?ty ?a ?b => 
@@ -418,9 +400,9 @@ with forward
       let d' := beta_root '($f $b) in
       let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind $ty $a $f h1_ $b h2_) in
       (d', p')
-    | _ => Control.throw (InteractFailure "[forward] R=1 rule : expected an equality")
+    | _ => Control.throw (InteractFailure "[forward] F=1 rule : expected an equality")
     end
-  (* R=2. *)
+  (* F=2. *)
   | [], sub1, [ 3 ], Rewrite Right =>
     lazy_match! h2 with 
     | @eq ?ty ?a ?b => 
@@ -429,87 +411,29 @@ with forward
       let d' := beta_root '($f $a) in
       let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind_r $ty $b $f h1_ $a h2_) in
       (d', p')
-    | _ => Control.throw (InteractFailure "[forward] L=2 rule : expected an equality")
+    | _ => Control.throw (InteractFailure "[forward] F=2 rule : expected an equality")
     end
   (****************************************************************************)
-  (* Left non-binder rules. *)
-  (****************************************************************************)
-  | Side Left :: choices, i :: sub1, sub2, _ => 
-    lazy_match! h1 with 
-    (* L∧. *)
-    | ?ha /\ ?hb =>  
-      (* L∧1. *)
-      if Int.equal i 1 then   
-        let (d, p) := forward ha sub1 h2 sub2 choices kind in
-        let p' := '(fun (h1_ : $h1) (h2_ : $h2) => $p (proj1 h1_) h2_) in
-        (d, p')
-      (* L∧2. *)
-      else if Int.equal i 2 then 
-        let (d, p) := forward hb sub1 h2 sub2 choices kind in 
-        let p' := '(fun (h1_ : $h1) (h2_ : $h2) => $p (proj2 h1_) h2_) in
-        (d, p')
-      else Control.throw (InteractFailure "[forward] L∧ rule : invalid index")
-    (* L∨. *)
-    | ?ha \/ ?hb => 
-      (* L∨1. *)
-      if Int.equal i 1 then 
-        let (d, p) := forward ha sub1 h2 sub2 choices kind in 
-        let d' := '($d \/ $hb) in 
-        let p' := 
-          '(fun (h1_ : $h1) (h2_ : $h2) => 
-              match h1_ with 
-              | @or_introl _ _ a_ => @or_introl $d $hb ($p a_ h2_)
-              | @or_intror _ _ b_ => @or_intror $d $hb b_
-              end) 
-        in (d', p')
-      (* L∨2. *)
-      else if Int.equal i 2 then 
-        let (d, p) := forward hb sub1 h2 sub2 choices kind in 
-        let d' := '($ha \/ $d) in 
-        let p' := 
-          '(fun (h1_ : $h1) (h2_ : $h2) => 
-              match h1_ with 
-              | @or_introl _ _ a_ => @or_introl $ha $d a_
-              | @or_intror _ _ b_ => @or_intror $ha $d ($p b_ h2_)
-              end) 
-        in (d', p')
-      else Control.throw (InteractFailure "[forward] L∨ rule : invalid index")
-    (* L⇒. *)
-    | ?ha -> ?hb => 
-      (* L⇒1. *)
-      if Int.equal i 0 then 
-        (* Here we invert the role of h1 and h2. *)
-        let (d, p) := back h2 sub2 ha sub1 (List.map swap_choice choices) (swap_dnd_kind kind) in
-        let d' := '($d -> $hb) in 
-        let p' := '(fun '(h1_ : $h1) (h2_ : $h2) => )
-      (* L⇒2. *)
-      else if Int.equal i 1 then 
-
-      else Control.throw (InteractFailure "[forward] L⇒ rule : invalid index")
-    | _ => Control.throw (InteractFailure 
-      "[forward] unexpected head constructor for [Side Left]")
-    end
-  (****************************************************************************)
-  (* Right non-binder rules. *)
+  (* Non-binder rules. *)
   (****************************************************************************)
   | Side Right :: choices, sub1, i :: sub2, _ => 
     lazy_match! h2 with 
-    (* R∧. *)
+    (* F∧. *)
     | ?ha /\ ?hb =>  
-      (* R∧1. *)
+      (* F∧1. *)
       if Int.equal i 1 then   
         let (d, p) := forward h1 sub1 ha sub2 choices kind in
         let p' := '(fun (h1_ : $h1) (h2_ : $h2) => $p h1_ (proj1 h2_)) in
         (d, p')
-      (* R∧2. *)
+      (* F∧2. *)
       else if Int.equal i 2 then 
         let (d, p) := forward h1 sub1 hb sub2 choices kind in 
         let p' := '(fun (h1_ : $h1) (h2_ : $h2) => $p h1_ (proj2 h2_)) in
         (d, p')
-      else Control.throw (InteractFailure "[forward] R∧ rule : invalid index")
-    (* R∨. *)
+      else Control.throw (InteractFailure "[forward] F∧ rule : invalid index")
+    (* F∨. *)
     | ?ha \/ ?hb => 
-      (* R∨1. *)
+      (* F∨1. *)
       if Int.equal i 1 then 
         let (d, p) := forward h1 sub1 ha sub2 choices kind in 
         let d' := '($d \/ $hb) in 
@@ -520,7 +444,7 @@ with forward
               | @or_intror _ _ b_ => @or_intror $d $hb b_
               end) 
         in (d', p')
-      (* R∨2. *)
+      (* F∨2. *)
       else if Int.equal i 2 then 
         let (d, p) := forward h1 sub1 hb sub2 choices kind in 
         let d' := '($ha \/ $d) in 
@@ -531,25 +455,83 @@ with forward
               | @or_intror _ _ b_ => @or_intror $ha $d ($p h1_ b_)
               end) 
         in (d', p')
-      else Control.throw (InteractFailure "[forward] R∨ rule : invalid index")
-    (* R⇒. *)
+      else Control.throw (InteractFailure "[forward] F∨ rule : invalid index")
+    (* F⇒. *)
     | ?ha -> ?hb => 
-      (* R⇒1. *)
+      (* F⇒1. *)
       if Int.equal i 0 then 
         let (d, p) := back h1 sub1 ha sub2 choices kind in 
         let d' := '($d -> $hb) in 
         let p' := '(fun (h1_ : $h1) (h2_ : $h2) (d_ : $d) => h2_ ($p h1_ d_)) in
         (d', p')
-      (* R⇒2. *)
+      (* F⇒2. *)
       else if Int.equal i 1 then 
         let (d, p) := forward h1 sub1 hb sub2 choices kind in 
         let d' := '($ha -> $d) in
         let p' := '(fun (h1_ : $h1) (h2_ : $h2) (a_ : $ha) => $p h1_ (h2_ a_)) in
         (d', p')
-      else Control.throw (InteractFailure "[forward] R⇒ rule : invalid index")
+      else Control.throw (InteractFailure "[forward] F⇒ rule : invalid index")
     | _ => Control.throw (InteractFailure 
       "[forward] unexpected head constructor for [Side Right]")
     end
+  (****************************************************************************)
+  (* Binder, instantiated. *)
+  (****************************************************************************)
+  | Binder Right (Some w) :: choices, sub1, 1 :: sub2, _ => 
+    lazy_match! h2 with 
+    (* F∀i. *)
+    | forall x : ?ha, @?hb x => 
+      let (d, p) := forward h1 sub1 '($hb $w) sub2 choices kind in 
+      let p' := '(fun (h1_ : $h1) (xb_ : forall x, $hb x) => $p h1_ (xb_ $w)) in
+      (d, p')
+    | _ => Control.throw (InteractFailure 
+      "[back] unexpected head constructor for [Binder Left (Some _)]")
+    end
+  (****************************************************************************)
+  (* Binder, non-instantiated. *)
+  (****************************************************************************)
+  | Binder Right None :: choices, sub1, 1 :: sub2, _ =>
+    lazy_match! h2 with 
+    (* F∀s. *)
+    | forall x : ?ha, @?hb x => 
+      let x := Option.default @x (binder_name hb) in 
+      let ev := fresh_evar (Some x) (Some ha) in
+      let ev_constr := mk_var ev in
+      let (d, p) := forward h1 sub1 '($hb $ev_constr) sub2 (apply_choices choices ev_constr) kind in
+      let d := abstract_ident ev d in
+      let p := abstract_ident ev p in
+      let d' := fun_to_forall (Some x) d in
+      let p' := '(fun (h1_ : $h1) (xb_ : $h2) (x : $ha) => ($p x) h1_ (xb_ x)) in
+      (* Don't forget to clear the evar. *)
+      Std.clear [ ev ] ; (d', p')
+    (* F∃s. *)
+    | exists x : ?ha, @?hb x => 
+      let x := Option.default @x (binder_name hb) in 
+      let ev := fresh_evar (Some x) (Some ha) in
+      let ev_constr := mk_var ev in
+      let (d, p) := forward h1 sub1 '($hb $ev_constr) sub2 (apply_choices choices ev_constr) kind in
+      let d := abstract_ident ev d in
+      let p := abstract_ident ev p in
+      let d' := '(ex $d) in
+      (* p x : h1 -> hb x -> d x *)
+      let p' := 
+        '(fun (h1_ : $h1) (xb_ : $h2) => 
+            match xb_ with 
+            | ex_intro _ x0 bx0 => ex_intro $d x0 (($p x0) h1_ bx0)
+            end)
+      in
+      (* Don't forget to clear the evar. *)
+      Std.clear [ ev ] ; (d', p')  
+    | _ => Control.throw (InteractFailure 
+      "[forward] unexpected head constructor for [Binder Right None]")
+    end
+  (****************************************************************************)
+  (* Swap sides. *)
+  (****************************************************************************)
+  | Side Left :: _, _, _, _ => retry_swapped ()
+  | Binder Left _ :: _, _, _, _ => retry_swapped ()
+  | [], [ 2 ], _, Rewrite Left => retry_swapped ()
+  | [], [ 3 ], _, Rewrite Left => retry_swapped ()
   (****************************************************************************)
   (* No matching rule. *)
   (****************************************************************************)

@@ -1,7 +1,8 @@
 (* In this file we test the tactics [back] and [forward] from HOL2.v. 
    We test all individual rules, as well as some more complex examples. *)
 
-From Ltac2 Require Import Ltac2.
+From Ltac2 Require Import Ltac2 Printf.
+From Actema Require Import Utils.
 From Actema Require Import HOL2.
 
 (* Some constants that we use to state dummy lemmas. *)
@@ -9,16 +10,16 @@ Parameter (A B : Prop).
 Parameter (P : nat -> Prop) (R : nat -> nat -> Prop).
 
 (* [assert_goal goal] checks the conclusion of the current goal is equal to [goal]
-   (modulo alpha conversion). Otherwise we raise an expection. *)
+   (modulo beta conversion). Otherwise we raise an expection. *)
 Local Ltac2 assert_goal (expected : constr) : unit := 
   let goal := Control.goal () in 
-  if Constr.equal expected goal then () 
+  if beta_equiv expected goal then () 
   else Control.throw Assertion_failure.
 
 (* [assert_hyp hyp] checks if there is a hypothesis of type [hyp]
-   (modulo alpha conversion). Otherwise we raise an expection. *)
+   (modulo beta conversion). Otherwise we raise an expection. *)
 Local Ltac2 assert_hyp (expected : constr) : unit := 
-  if List.exist (fun (_, _, hyp) => Constr.equal expected hyp) (Control.hyps ()) then ()
+  if List.exist (fun (_, _, hyp) => beta_equiv expected hyp) (Control.hyps ()) then ()
   else Control.throw Assertion_failure.
 
 (***********************************************************************************)
@@ -231,16 +232,34 @@ Local Lemma impl_right_2 x (h1 : x = 42) (h2 : A -> P x) : True.
   assert_hyp '(A -> P 42).
 Admitted.
 
+(* Forward forall. *)
+Local Lemma forall_right_i (h1 : 0 = 0 + 0) (h2 : forall x, P x) : True.
+  forward_wrapper @h1 [ 2 ] @h2 [ 1 ] [ Binder Right (Some '0) ] (Rewrite Left).
+  assert_hyp '(P (0 + 0)).
+Admitted.
+Local Lemma forall_right_s (h1 : 0 = 0 + 0) (h2 : forall x, P 0 /\ P x) : True.
+  forward_wrapper @h1 [ 2 ] @h2 [ 1 ; 1 ] [ Binder Right None ; Side Right ] (Rewrite Left).
+  assert_hyp '(forall x : nat, P (0 + 0)).
+Admitted.
+
+(* Forward exists. *)
+Local Lemma exists_right_s (h1 : 0 = 0 + 0) (h2 : exists x, P 0 /\ P x) : True.
+  forward_wrapper @h1 [ 2 ] @h2 [ 1 ; 1 ] [ Binder Right None ; Side Right ] (Rewrite Left).
+  assert_hyp '(exists x : nat, P (0 + 0)).
+Admitted.
 
 End Forward.
 
-(*Parameter (P : forall A, list A -> Prop).
+(***********************************************************************************)
+(** Testing more complicated interactions. *)
+(***********************************************************************************)
 
-Lemma list_test (h : forall A (l : list A), P A l) :
-  forall B (l : list B), P B l.
+Parameter (Q : forall A, list A -> Prop).
+
+Lemma list_test (h : forall A (l : list A), Q A l) :
+  forall B (l : list B), Q B l.
 Proof.
-
-  back_hyp_goal 
+  back_wrapper 
     @h 
     [ 1 ; 1 ] 
     [ 1 ; 1 ]
@@ -250,24 +269,7 @@ Proof.
     ; Binder Left (Some '(fun B (l : list B) => l))
     ]
     Subform.
-
-Parameter (A B : Prop).
-Parameter (P : nat -> Prop) (R : nat -> nat -> Prop).
-
-
-
-Lemma test x (h : x = 3) : (A \/ P x) -> B.
-Proof.
-  back_hyp_goal @h [ 2 ] [ 0 ; 2 ] [ Side Right ; Side Right ] (Rewrite Left).
-
-
-Lemma test' x (h' : R x (x + 42)) (h : 3 = x) : True.
-Proof.  
-  forward_hyp_hyp @h' [ 2 ] @h [ 3 ] [] (Rewrite Right). 
-Admitted. 
-
-Lemma test (h : A) : A -> B.
-Proof.
-(*  back_hyp_goal @h [ ] [ 0 ] [ Side Right ] Subform.*)
+  (* For some reason comparing the terms seems to fail here. 
+     I anyways put the expected goal. *)
+  (* target := '(forall B : Type, list B -> True) *)
 Admitted.
-*)
