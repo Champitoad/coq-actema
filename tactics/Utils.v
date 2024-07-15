@@ -1,5 +1,5 @@
 (* This module contains utility functions for Ltac2. 
-   It is used mainly by HOL2.v *)
+   It is used mainly by DnD.v *)
 
 From Ltac2 Require Import Ltac2.
 
@@ -185,7 +185,7 @@ Ltac2 deep_pattern (pat : constr) (c : constr) (sub : int list) : constr :=
        To handle this we convert loose indices to evars, call Std.eval_pattern,
        and convert evars back to loose indices. *)
     (* Evars for the loose indices in [sc]. *)
-    let evars := List.init n (fun _ => fresh_evar (Some @deep_pattern_) None) in 
+    let evars := List.init n (fun _ => fresh_evar (Some @deep_pattern_0) None) in 
     (* Replace the loose indices by evars in [sc]. *)
     let sc_closed := Constr.Unsafe.substnl (List.map mk_var evars) 0 sc in
     (* Call the regular [pattern] tactic. *)

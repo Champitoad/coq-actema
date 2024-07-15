@@ -1,9 +1,9 @@
-(* In this file we test the tactics [back] and [forward] from HOL2.v. 
+(* In this file we test the tactics [back] and [forward] from DnD.v. 
    We test all individual rules, as well as some more complex examples. *)
 
 From Ltac2 Require Import Ltac2 Printf.
 From Actema Require Import Utils.
-From Actema Require Import HOL2.
+From Actema Require Import DnD.
 
 (* Some constants that we use to state dummy lemmas. *)
 Parameter (A B : Prop).

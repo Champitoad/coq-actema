@@ -16,12 +16,14 @@ let tactic_kname = kername [ "Actema"; "HOL" ]
     for an explanation of how Ltac2 values are represented.
 *)
 module FFI = struct
-  (** [calltack name args] calls the Ltac2 tactic [name] with arguments [args], 
-      and discards the result. The tactic should be defined in file [HOL2.v]. *)
-  let calltac (name : string) (args : Tac2ffi.valexpr list) : unit PVMonad.t =
+  (** [calltac ~file name args] calls the Ltac2 tactic [name] with arguments [args], 
+      and discards the result. 
+      [file] is the name of the file (without the .v extension) the tactic is defined in. *)
+  let calltac ~(file : string) (name : string) (args : Tac2ffi.valexpr list) :
+      unit PVMonad.t =
     let open PVMonad in
     (* Construct the kernel name of the tactic. *)
-    let kname = kername [ "Actema"; "HOL2" ] name in
+    let kname = kername [ "Actema"; file ] name in
     (* Find the corresponding Ltac2 value. *)
     let tac =
       try Tac2interp.eval_global kname
@@ -33,12 +35,12 @@ module FFI = struct
     (* Call the tactic with its arguments. *)
     Tac2ffi.to_unit <$> Tac2ffi.apply_val tac args
 
-  (** Encode an [Interact.side] to the Ltac2 type [HOL2.side]. *)
+  (** Encode an [Interact.side] to the Ltac2 type [DnD.side]. *)
   let of_side : Interact.side -> Tac2ffi.valexpr = function
     | Left -> Tac2ffi.ValInt 0
     | Right -> Tac2ffi.ValInt 1
 
-  (** [of_choice import_term choice] encodes [choice] to the Ltac2 type [HOL2.choice]. *)
+  (** [of_choice import_term choice] encodes [choice] to the Ltac2 type [DnD.choice]. *)
   let of_choice (import_term : Lang.Term.t -> EConstr.t) :
       Interact.choice -> Tac2ffi.valexpr = function
     | Side side -> Tac2ffi.ValBlk (0, [| of_side side |])
@@ -50,7 +52,7 @@ module FFI = struct
         let some_witness = Tac2ffi.ValBlk (0, [| Tac2ffi.of_constr constr |]) in
         Tac2ffi.ValBlk (1, [| of_side side; some_witness |])
 
-  (** [of_dnd_kind kind] encodes [kind] to the Ltac2 type [HOL2.dnd_kind]. *)
+  (** [of_dnd_kind kind] encodes [kind] to the Ltac2 type [DnD.dnd_kind]. *)
   let of_dnd_kind : Logic.dnd_kind -> Tac2ffi.valexpr = function
     | Subform -> Tac2ffi.ValInt 0
     | RewriteL -> Tac2ffi.ValBlk (0, [| of_side Left |])
@@ -76,48 +78,52 @@ let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
       CAst.make @@ IntroNaming (Namegen.IntroFresh (Names.Id.of_string name)))
     names
 
-(** [convert_sub term sub] converts the path [sub] (that points inside [term])
-    from the actema format to the format that the tactics expect. 
+(** [convert_path coq_goal path] converts the path [path] from 
+    the actema format to the format that the tactics expect. 
     
     The differences between these two formats are : 
-    - In Actema applications are n-ary, whereas the tactics expect applications to
-      be binary. For instance when pointing to [x] in [f x y z], in Actema
-      we use [[1]] but the tactics expect [[0; 0; 1]]. 
     - In Actema existential quantification [exists x : ty, body] is represented 
       as [App (Cst ex, [ty; Lambda (x, ty, body)])], but the tactics work with first-class 
       existentials. For instance when pointing to [ty] or [body] in [exists x : ty, body],
       in Actema we use [[2; 0]] or [[2; 1]], but the tactics expect [[0]] or [[1]]. *)
-let rec convert_sub (term : Lang.Term.t) (sub : int list) : int list =
-  match (sub, term) with
-  | [], _ -> []
-  (* Lambdas and products don't change. *)
-  | 0 :: sub, Lambda (_, x, ty, body) | 0 :: sub, Prod (_, x, ty, body) ->
-      0 :: convert_sub ty sub
-  | 1 :: sub, Lambda (_, x, ty, body) | 1 :: sub, Prod (_, x, ty, body) ->
-      1 :: convert_sub body sub
-  (* Handle existential quantification. *)
-  | 2 :: 0 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
-    when Name.equal ex Lang.Constants.ex ->
-      0 :: convert_sub body sub
-  | 2 :: 1 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
-    when Name.equal ex Lang.Constants.ex ->
-      1 :: convert_sub body sub
-  (* Turn n-ary applications to binary applications. *)
-  (* One argument. *)
-  | 0 :: sub, App (_, f, [ arg ]) -> 0 :: convert_sub f sub
-  | 1 :: sub, App (_, f, [ arg ]) -> 1 :: convert_sub arg sub
-  (* At least two arguments. *)
-  | n :: sub, App (_, f, args) when n = List.length args ->
-      1 :: convert_sub (List.last args) sub
-  | n :: sub, App (_, f, args) when 0 <= n && n < List.length args ->
-      let args = List.remove_at (List.length args - 1) args in
-      0 :: convert_sub (Lang.Term.mkApps f args) (n :: sub)
-  (* This should not happen. *)
-  | _ -> failwith "Actions.convert_sub : invalid path"
+let convert_path (coq_goal : Goal.t) (path : Logic.Path.t) : int list =
+  let rec loop (term : Lang.Term.t) sub =
+    match (sub, term) with
+    | [], _ -> []
+    (* Handle existential quantification. *)
+    | 2 :: 0 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
+      when Name.equal ex Lang.Constants.ex ->
+        0 :: loop body sub
+    | 2 :: 1 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
+      when Name.equal ex Lang.Constants.ex ->
+        1 :: loop body sub
+    (* Lambdas and products. *)
+    | 0 :: sub, Lambda (_, x, ty, body) | 0 :: sub, Prod (_, x, ty, body) ->
+        0 :: loop ty sub
+    | 1 :: sub, Lambda (_, x, ty, body) | 1 :: sub, Prod (_, x, ty, body) ->
+        1 :: loop body sub
+    (* Applications *)
+    | i :: sub, App (_, f, args) when 0 <= i && i <= List.length args ->
+        i :: loop (List.at (f :: args) i) sub
+    (* This should not happen. *)
+    | _ -> failwith "Actions.convert_sub : invalid path"
+  in
+  (* Get the actema term the path points to. *)
+  let api_goal = Export.goal coq_goal in
+  let term =
+    match path.kind with
+    | Concl -> api_goal.g_concl
+    | Hyp name -> (Logic.Hyps.by_name api_goal.g_hyps name).h_form
+    | _ ->
+        failwith
+          "Actions.convert_path : can't handle paths that point to a variable."
+  in
+  (* Convert the path. *)
+  loop term path.sub
 
 (** Turn an actema path into a Coq term of type [list nat] that can be fed to the old tactics in HOL.v.
     Takes as an optional argument a suffix to add to the path after it has been translated. *)
-let compile_path ?(suffix = []) coq_goal (path : Logic.Path.t) : EConstr.t =
+(*let compile_path ?(suffix = []) coq_goal (path : Logic.Path.t) : EConstr.t =
   let open Logic in
   let api_goal = Export.goal coq_goal in
   let term =
@@ -129,7 +135,7 @@ let compile_path ?(suffix = []) coq_goal (path : Logic.Path.t) : EConstr.t =
           "Actions.compile_path : can't handle paths that point to a variable."
   in
   let sub = convert_sub term path.sub in
-  Trm.Datatypes.natlist (Goal.env coq_goal) (sub @ suffix)
+  Trm.Datatypes.natlist (Goal.env coq_goal) (sub @ suffix)*)
 
 (*********************************************************************************)
 (** [AIntro] actions. *)
@@ -232,9 +238,9 @@ let execute_aelim (coq_goal : Goal.t) hyp_name i : unit tactic =
           @@ mk_intro_patterns [ var_name; Name.show hyp_name ]
         ]
   | App (_, Cst eq, [ _; _; _ ]) when Name.equal eq Constants.eq && i = 0 ->
-      calltac (tactic_kname "rew_all_left") [ EConstr.mkVar hyp_id ]
+      FFI.calltac ~file:"Misc" "rew_all_left" [ Tac2ffi.of_ident hyp_id ]
   | App (_, Cst eq, [ _; _; _ ]) when Name.equal eq Constants.eq && i = 1 ->
-      calltac (tactic_kname "rew_all_right") [ EConstr.mkVar hyp_id ]
+      FFI.calltac ~file:"Misc" "rew_all_right" [ Tac2ffi.of_ident hyp_id ]
   | _ ->
       let msg = "Could not apply elimination action." in
       raise @@ UnsupportedAction (Logic.AElim (hyp_name, i), msg)
@@ -340,11 +346,11 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
       let hnew = Goal.fresh_name ~basename:(Name.show h2) coq_goal () in
       let h1 = Names.Id.of_string_soft @@ Name.show h1 in
       let h2 = Names.Id.of_string_soft @@ Name.show h2 in
-      FFI.calltac "forward_wrapper"
+      FFI.calltac ~file:"DnD" "forward_wrapper"
         [ Tac2ffi.of_ident h1
-        ; Tac2ffi.(of_list of_int) src.sub
+        ; Tac2ffi.(of_list of_int) @@ convert_path coq_goal src
         ; Tac2ffi.of_ident h2
-        ; Tac2ffi.(of_list of_int) dst.sub
+        ; Tac2ffi.(of_list of_int) @@ convert_path coq_goal dst
         ; Tac2ffi.of_ident hnew
         ; Tac2ffi.of_list (FFI.of_choice (Import.term coq_goal symbols)) choices
         ; FFI.of_dnd_kind dnd_kind
@@ -352,10 +358,10 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
       >> simplify_hyp hnew
   | Hyp h, Concl ->
       let h = Names.Id.of_string_soft @@ Name.show h in
-      FFI.calltac "back_wrapper"
+      FFI.calltac ~file:"DnD" "back_wrapper"
         [ Tac2ffi.of_ident h
-        ; Tac2ffi.(of_list of_int) src.sub
-        ; Tac2ffi.(of_list of_int) dst.sub
+        ; Tac2ffi.(of_list of_int) @@ convert_path coq_goal src
+        ; Tac2ffi.(of_list of_int) @@ convert_path coq_goal dst
         ; Tac2ffi.of_list (FFI.of_choice (Import.term coq_goal symbols)) choices
         ; FFI.of_dnd_kind dnd_kind
         ]
@@ -364,10 +370,10 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
       (* The tactic [back_wrapper] expects the hypothesis on the left
          and the conclusion on the right : we have to swap the two sides of the link. *)
       let h = Names.Id.of_string_soft @@ Name.show h in
-      FFI.calltac "back_wrapper"
+      FFI.calltac ~file:"DnD" "back_wrapper"
         [ Tac2ffi.of_ident h
-        ; Tac2ffi.(of_list of_int) dst.sub
-        ; Tac2ffi.(of_list of_int) src.sub
+        ; Tac2ffi.(of_list of_int) @@ convert_path coq_goal dst
+        ; Tac2ffi.(of_list of_int) @@ convert_path coq_goal src
         ; Tac2ffi.of_list (FFI.of_choice (Import.term coq_goal symbols))
           @@ List.map opp_choice choices
         ; FFI.of_dnd_kind @@ opp_dnd_kind dnd_kind
@@ -380,8 +386,10 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
 (*********************************************************************************)
 
 let execute_ainstantiate coq_goal witness (path : Logic.Path.t) : unit tactic =
-  (* Compile the witness. *)
-  let table = Symbols.all coq_goal in
+  failwith "ainstantiate: TODO"
+
+(* Compile the witness. *)
+(*let table = Symbols.all coq_goal in
   let coq_witness = Import.term coq_goal table witness in
   (* Compile the path. *)
   (* The tactics expect the path to end with a [1], i.e. to point to the body
@@ -400,23 +408,11 @@ let execute_ainstantiate coq_goal witness (path : Logic.Path.t) : unit tactic =
   | VarHead _ | VarBody _ | VarType _ ->
       raise
       @@ UnsupportedAction
-           (AInstantiate (witness, [ path ]), "Can't instantiate in variable")
+           (AInstantiate (witness, [ path ]), "Can't instantiate in variable")*)
 
 (*********************************************************************************)
 (** Putting it all together. *)
 (*********************************************************************************)
-
-let case_helper coq_goal econstr : unit tactic =
-  (* If [econstr] is not a simple variable, we add an equation to remember its old value. *)
-  if EConstr.isVar (Goal.sigma coq_goal) econstr
-  then calltac (tactic_kname "mydestruct") [ econstr ]
-  else calltac (tactic_kname "mydestruct_eq") [ econstr ]
-
-let induction_helper coq_goal econstr : unit tactic =
-  (* If [econstr] is not a simple variable, we add an equation to remember its old value. *)
-  if EConstr.isVar (Goal.sigma coq_goal) econstr
-  then calltac (tactic_kname "myinduction") [ econstr ]
-  else calltac (tactic_kname "myinduction_eq") [ econstr ]
 
 let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   let open PVMonad in
@@ -445,35 +441,39 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
   | Logic.ASimpl path -> begin
       match path.kind with
       | Hyp name ->
-          let id = EConstr.mkVar @@ Names.Id.of_string @@ Name.show name in
-          let path = compile_path coq_goal path in
-          calltac (tactic_kname "simpl_path_hyp") [ id; path ]
+          let id = Names.Id.of_string @@ Name.show name in
+          let sub = convert_path coq_goal path in
+          FFI.calltac ~file:"Misc" "deep_simpl_hyp"
+            [ Tac2ffi.of_ident id; Tac2ffi.(of_list of_int) sub ]
       | Concl ->
-          let path = compile_path coq_goal path in
-          calltac (tactic_kname "simpl_path") [ path ]
+          let sub = convert_path coq_goal path in
+          FFI.calltac ~file:"Misc" "deep_simpl_concl"
+            [ Tac2ffi.(of_list of_int) sub ]
       | VarHead _ | VarBody _ | VarType _ ->
           raise @@ UnsupportedAction (action, "Can't simplify in variable")
     end
   | Logic.ACase term ->
       let symbol_table = Symbols.all coq_goal in
       let coq_term = Import.term coq_goal symbol_table term in
-      case_helper coq_goal coq_term
+      FFI.calltac ~file:"Misc" "mydestruct" [ Tac2ffi.of_constr coq_term ]
   | Logic.AInd term ->
       let symbol_table = Symbols.all coq_goal in
       let coq_term = Import.term coq_goal symbol_table term in
-      induction_helper coq_goal coq_term
+      FFI.calltac ~file:"Misc" "myinduction" [ Tac2ffi.of_constr coq_term ]
   | Logic.ACaseIntro n ->
       (* Introduce (n-1) variables/hypotheses. *)
       repeatM (n - 1) Tactics.intro
       (* Destruct the last variable. *)
       >> Tactics.intro_then @@ fun name ->
-         case_helper coq_goal (EConstr.mkVar name)
+         FFI.calltac ~file:"Misc" "mydestruct"
+           [ Tac2ffi.of_constr @@ EConstr.mkVar name ]
   | Logic.AIndIntro n ->
       (* Introduce (n-1) variables/hypotheses. *)
       repeatM (n - 1) Tactics.intro
       (* Induction on the last variable. *)
       >> Tactics.intro_then @@ fun name ->
-         induction_helper coq_goal (EConstr.mkVar name)
+         FFI.calltac ~file:"Misc" "myinduction"
+           [ Tac2ffi.of_constr @@ EConstr.mkVar name ]
   | Logic.AInstantiate (witness, quants) ->
       (* Instantiate the quantifiers one by one.
          TODO : this might break if instantiating a quantifier changes the paths to other

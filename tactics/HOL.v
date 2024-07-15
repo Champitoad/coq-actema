@@ -4608,33 +4608,6 @@ Ltac pcase p :=
   | cons _ ?p' => intro; pcase p'
   end.
 
-(* Destruct the closed term [t]. *)
-Ltac mydestruct t := 
-  destruct t ; simplify_goal.
-
-(* Induction on the closed term [t]. *)
-Ltac myinduction t := 
-  induction t ; simplify_goal.
-
-(* [mydestruct_eq t] destructs the closed term [t] and introduces
-   an equality named to remember the link between the old and new value of [t]. *)
-Ltac mydestruct_eq t :=
-  let e := fresh "E" in
-  generalize (refl_equal t) ;
-  destruct t at -1 ;
-  intro e ; 
-  simplify_goal.
-
-(* [myinduction_eq t] performs induction on the closed term [t] and introduces
-   an equality named to remember the link between the old and new value of [t]. *)
-Ltac myinduction_eq t :=
-  let e := fresh "E" in
-  generalize (refl_equal t) ;
-  induction t at -1 ;
-  intro e ; 
-  simplify_goal.
-
-
 (*
       let g' := myinduction_r p g in
       match g' with
@@ -4767,23 +4740,5 @@ Ltac shoot := trivial.
 Ltac pbp p := point_goal shoot p.
 
 Ltac pbp_hyp h p := point_hyp h shoot p.
-
-Ltac rew_all_left h :=
-  match type of h with
-  | ?a = ?b =>
-      is_var a;
-      rewrite -> h in *; clear h
-  | ?a = ?b => rewrite -> h in *
-  | _ => idtac
-  end.
-
-Ltac rew_all_right h :=
-    match type of h with
-  | ?a = ?b =>
-      is_var a;
-      rewrite -> h in *; clear h
-  | ?a = ?b => rewrite <- h in *
-  | _ => idtac
-  end.
 
   
