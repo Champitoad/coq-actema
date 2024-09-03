@@ -1,6 +1,12 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
+
+Lemma test : True.
+  epose (fun x : nat => ?[ev] : Prop) as h.
+  Eval compute in h.
+  Eval compute in h 42.
+
 Lemma add_comm :
   forall n m, n + m = m + n.
 Proof.

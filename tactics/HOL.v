@@ -2444,61 +2444,6 @@ Ltac find_pat t p :=
     end.
 
 
-(* Simplify the subterm at [path] in the term [t], and return the updated term. 
-   [path] is a list of natural numbers. *)
-Ltac simpl_path_r p t :=
-  match constr:(pair p t) with
-  (* Base case. *)
-  | (nil, _) => eval simpl in t
-  (* Lambda. *)
-  | (cons 0 ?p', fun x : ?T => ?body) => 
-      let new_T := simpl_path_r p' T in 
-      constr:(fun x : new_T => body)
-  | (cons 1 ?p', fun x : ?T => @?body' x) => 
-      constr:(fun x : T =>
-                 ltac:(let body := beta1 body' x in
-                       let r := simpl_path_r p' body in
-                       exact r))
-  (* Dependent product. *)
-  | (cons 0 ?p', forall x : ?T, ?body) => 
-      let new_T := simpl_path_r p' T in 
-      constr:(forall x : new_T, body)
-  | (cons 1 ?p', forall x: ?T, @?body' x) => 
-      constr:(forall x : T,
-                 ltac:(let body := beta1 body' x in
-                       let new_body := simpl_path_r p' body in
-                       exact new_body))
-  (* Exists. *)
-  | (cons 0 ?p', exists x : ?T, ?body) => 
-      let new_T := simpl_path_r p' T in 
-      constr:(exists x : new_T, body)
-  | (cons 1 ?p', exists x: ?T, @?body' x) => 
-      constr:(exists x : T,
-                 ltac:(let body := beta1 body' x in
-                       let new_body := simpl_path_r p' body in
-                       exact new_body))
-  (* Application. *)
-  | (cons 0 ?p', ?f ?x) =>
-      let new_f := simpl_path_r p' f in constr:(new_f x)
-  | (cons 1 ?p', ?f ?x) =>
-      let new_x := simpl_path_r p' x in constr:(f new_x)
-  end.
-   
-(* Simplify the subterm at [path] in the goal. 
-   [path] is a list of natural numbers. *)
-Ltac simpl_path path :=
-  match goal with
-  | |- ?g =>
-      let g' := simpl_path_r path g in
-      change g'
-  end.
-
-(* Simplify the subterm at [path] in hypothesis [hyp].
-   [path] is a list of natural numbers. *)
-Ltac simpl_path_hyp hyp path :=
-  let g := type of hyp in
-  let g' := simpl_path_r path g in
-  change g' in hyp.
 
 
 Ltac beta_head t l :=

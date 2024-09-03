@@ -1,49 +1,53 @@
 ## Project structure 
 
 - frontend/
-  Contains the GUI, written in Vue and packaged as a desktop application with Electron. 
-  It communicates to the plugin via http, by implementing directly an http server with Node.js.
-
+  Contains the GUI, written in Vue (javascript framework) and packaged as a desktop application with Electron. It communicates to the plugin via http, by implementing directly an http server with Node.js. 
 - prover/
-  Contains the logic for the GUI, written in Ocaml.
-  It is transpiled to JavaScript with js_of_ocaml, so that it can be run in the browser engine of Electron.
+  Contains the logic for the GUI, written in Ocaml. It is transpiled to JavaScript with js_of_ocaml, so that it can be run in the browser engine of Electron.
 
 - prover/js/
   Thin wrapper around the prover to ease transpilation to JavaScript.
 
 - plugin/ 
-  Contains a Coq plugin, written in Ocaml. 
-  It exposes new tactics actema and actema_force that send Coq goals to the frontend (via http), and compile the actions performed by the user in the frontend back to Coq tactics.
+  Contains the Coq plugin, written in Ocaml. It exposes new tactics actema and actema_force that send Coq goals to the frontend (via http), and compile the actions performed by the user in the frontend back to Coq tactics. Data sent to the prover is serealized and deserealized using the Ocaml Marshal library.
+  The plugin also handles translating between the Actema language (defined in api/) and the Coq language.
 
 - api/
-  Contains the data format used to communicate between the prover and the plugin. The data is (de)serialized using Marshal.
+  Defines the core language used internally in Actema, as well as functions to manipulate terms and perform unification. 
 
-- theories/
-  Coq tactics that are invoked from the plugin.
+- tactics/
+  Coq tactics that are invoked from the plugin. Most of it is written in Ltac2 : the exception is HOL.v which contains the old tactics written by Benjamin (written in Ltac1). Eventually we should get rid of HOL.v : the biggest thing left is to port the simplification tactics to Ltac2.
+
+- examples/
+  Several Coq proofs using the actema tactic. This is more of a playground / debugging area at the moment.
 
 ## Development workflow
 
 - Build the ocaml code. From the root :
-  $ make
+  ``` 
+  make
+  ```
 
-- Launch the frontend. From frontend/, and in another terminal :
-  $ npm run electron:serve
+- Launch the frontend. From frontend/ and in another terminal :
+  ```
+  npm run electron:serve
+  ```
 
 - Step through a coq file until you reach an actema tactic.
 
-There is no need to re-launch the frontend every time ! 
-The frontend will automatically reload (hot-reload) when changing files in frontend/src
-or when running make.
+There is no need to re-launch the frontend every time. The frontend will automatically reload (hot-reload) when changing files in frontend/src or when running make.
 
 ## Setting up a development environment
 
 - Install opam (e.g. on ubuntu : $ sudo apt install opam).
-  Check it is correctly installed by running : $ opam --version
+  Check it is correctly installed by running `opam --version`
 
-- Update opam : $ opam update
+- Update opam : `opam update`
 
 - Create a local opam switch. In the root of the project :
-  $ opam switch create . 5.1.1 --repos default,coq-released=https://coq.inria.fr/opam/released
+  ```
+  opam switch create . 5.1.1 --repos default,coq-released=https://coq.inria.fr/opam/released
+  ```
 
   This will create a switch with ocaml (version 5.1.1) and add a remote repository (needed to fetch mathcomp),
   and install all opam dependencies (but not development-only dependencies such as ocaml-lsp-server).
@@ -57,12 +61,16 @@ or when running make.
 
 - Optionally, install development packages into the switch. 
   On VScode : 
-  $ opam install ocamlformat ocaml-lsp-server user-setup
-  $ opam user-setup install
+  ```
+  opam install ocamlformat ocaml-lsp-server user-setup
+  opam user-setup install
+  ```
 
   On emacs :
-  $ opam install ocamlformat merlin tuareg ocp-indent user-setup 
-  $ opam user-setup install
+  ```
+  opam install ocamlformat merlin tuareg ocp-indent user-setup 
+  opam user-setup install
+  ```
 
 - You'll probably also want to enable formatting on save (formatting uses ocamlformat).
   For VScode : 
@@ -71,29 +79,29 @@ or when running make.
 - Follow the instructions in frontend/README.md to setup the javascript stuff.
 
 - When changing the dependencies (in dune-project), commit the changes (git commit) and then run :
-  $ opam install . --deps-only
-
+  ```
+  opam install . --deps-only
+  ```
 
 # Troubleshooting 
 
 - If you get an opam error when creating the switch, don't cleanup the switch and try the following :
   Commit (git commit) your changes, then run :
-  $ opam clean
-  $ opam install .
+  ```
+  opam clean
+  opam install .
+  ```
 
 - If you get an error when running make/dune build :
-    Dynlink error: execution of module initializers in the shared library failed: ...
+  ```
+  Dynlink error: execution of module initializers in the shared library failed: ...
+  ```
 
-  Where ... is the name of an ocaml exception (for instance "Not_found"),
-  look in file plugin/actema_main.ml, and check that there are no top-level definitions that 
-  might be raising errors. 
+  Where ... is the name of an ocaml exception (for instance "Not_found"), look in file plugin/actema_main.ml and check that there are no top-level definitions that might be raising errors. 
 
-  The explanation is that when loading the plugin from theories/ with dune, the top-level definitions in 
-  the plugin seem to be executed (or at least the definitions in plugin/actema_main.ml). 
-  I think this is similar to what would happen in an executable, not in a library. Not sure it is intended or not.
+  The explanation is that when loading the plugin from theories/ with dune, the top-level definitions in the plugin seem to be executed (or at least the definitions in plugin/actema_main.ml). I think this is similar to what would happen in an executable, not in a library. Not sure it is intended or not.
 
-- If you can run "make" without any errors but can't step through Coq files, 
-  you might need to set the coqtop path in your editor. 
+- If you can run `make` without any errors but can't step through Coq files, you might need to set the coqtop path in your editor. 
 
   If using the VScode extension VSCoq Legacy :
   Go to File > Preferences > Settings, type "coqtop" and set the coqtop bin path to _opam/bin

@@ -37,12 +37,13 @@ Ltac2 swap_choice (c : choice) : choice :=
   | Binder s witness => Binder (swap_side s) witness
   end.
 
-(* A drag and drop kind. *)
+(* A drag and drop kind. This is used to know which end rule to apply :
+   without this information there could be ambiguities. *)
 Ltac2 Type dnd_kind :=
   [ (* Subformula linking : both sides of the link are
        formulas in the first order skeleton. *)
     Subform
-  | (* Deep rewrite where the equality is on the given side. *)
+  | (* Deep rewrite where the equality is in the formula on the given side. *)
     Rewrite (side)
   ].
 

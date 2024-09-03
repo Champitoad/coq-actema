@@ -47,11 +47,3 @@ Proof.
   actema_force.
 Abort.
 
-Lemma add_comm :
-  forall n m, n + m = m + n.
-Proof.
-  (* pose proof PeanoNat.Nat.add_0_r.
-  pose proof PeanoNat.Nat.add_succ_r. *)
-  actema_force. Undo.
-  actema_force.
-Qed.

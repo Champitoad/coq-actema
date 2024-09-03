@@ -126,11 +126,6 @@ let rec unify_rec env context subst ((t1, t2) : Term.t * Term.t) : subst Seq.t =
       let* subst =
         unify_types env context subst (Term.mkFVar v1, Term.mkFVar v2)
       in
-      let e1 = Context.find v1 context |> Option.get in
-      let e2 = Context.find v2 context |> Option.get in
-      Format.printf "choice : %s <-> %s\n"
-        (Term.show_binder e1.binder)
-        (Term.show_binder e2.binder);
       (* This is a choice point : we try both [v1 --> v2] and [v2 --> v1].
          Since we are using lazy lists this simulates backtracking. *)
       List.to_seq

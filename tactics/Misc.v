@@ -75,8 +75,5 @@ Ltac2 deep_simpl_concl (sub : int list) : unit :=
 Ltac2 deep_simpl_hyp (hname : ident) (sub : int list) : unit := 
   let new_hyp := deep_simpl (Constr.type (Control.hyp hname)) sub in
   change $new_hyp in $hname.
-
-Lemma test (hhh : forall x, exists y, forall z, x + y = 0 + z) : True.
-Proof. deep_simpl_hyp @hhh [1 ; 1 ; 1 ].
   
   

@@ -7,5 +7,9 @@ Declare ML Module "coq-actema.plugin".
    We do however need to Require it in order to call Ltac2 tactics from Ocaml. *)
 From Ltac2 Require Ltac2.
 
+(* Export some modules so that we can call the Ltac2 functions they define
+   from Ocaml tactics. *)
 From Actema Require Export HOL.
 From Actema Require Export DnD.
+From Actema Require Export Misc.
+From Actema Require Export Utils.

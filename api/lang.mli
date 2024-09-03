@@ -424,33 +424,3 @@ module TermUtils : sig
         Raises [InvalidSubtermPath] if [sub] is not a valid path in [t]. *)
   val subterm : ?context:Context.t -> Term.t -> int list -> Context.t * Term.t
 end
-
-(** This module defines functions for generating arbitrary terms.
-      These are used mainly for testing.
-
-      The algorithm to generate typed terms is inspired by :
-        Testing an Optimising Compiler by Generating Random Lambda Terms
-        https://www.cse.chalmers.se/~russo/publications_files/AST2011.pdf *)
-(*module TermGen : sig
-    open QCheck2
-
-    (** [simple ~closed env] generates arbitrary terms, not necessarily well-typed.
-        The terms use only the constants defined in [env].
-        The flag [closed] controls whether we allow terms with free variables or not. *)
-    val simple : closed:bool -> Env.t -> Term.t Gen.t
-
-    (** [typed ?context ?ty env] generates pairs [(term, ty)] where [term] has type
-        [ty] in environment [env].
-        The terms use only the constants defined in [env].
-        The argument [ty] is used to fix the type of the generated terms (by default it is
-        chosen at random).
-        The argument [context] defines which free variables we can use (by default [context]
-        is empty i.e. we generate closed terms). *)
-    val typed :
-      ?context:Context.t -> ?ty:Term.t -> Env.t -> (Term.t * Term.t) Gen.t
-
-    (** [context env] generates a typing context in [env].
-        This can be fed to [typed] to generate open terms. *)
-    val context : Env.t -> Context.t Gen.t
-  end
-*)
