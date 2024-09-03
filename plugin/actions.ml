@@ -23,10 +23,9 @@ module FFI = struct
       unit PVMonad.t =
     let open PVMonad in
     (* Debug *)
-    let globals = Tac2env.globals () |> Names.KNmap.bindings in
-    Log.printf "AAA count = %d" (List.length globals);
-    List.iter (Log.printf "  %s" <<< Names.KerName.to_string <<< fst) globals;
-
+    (*let globals = Tac2env.globals () |> Names.KNmap.bindings in
+      Log.printf "AAA count = %d" (List.length globals);
+      List.iter (Log.printf "  %s" <<< Names.KerName.to_string <<< fst) globals;*)
     (* Construct the kernel name of the tactic. *)
     let kname = kername [ "Actema"; file ] name in
     (* Find the corresponding Ltac2 value. *)
