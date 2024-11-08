@@ -54,7 +54,7 @@ module Export = struct
       , Env.
           { symbol = "¬"
           ; implicit_args = []
-          ; position = Infix
+          ; position = Prefix
           ; precedence = Level 75
           } )
     ; ( Constants.true_
