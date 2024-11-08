@@ -3,7 +3,7 @@ Require Import ssreflect.
 
 Parameter (Even : nat -> Prop).
 
-Lemma example a (h1 : Even a) (h2 : forall n, Even n -> ~ Even (n + 2)) : 
+Lemma example a (h1 : Even a) (h2 : forall n, Even n -> Even (n + 2)) : 
   Even (a + 2).
 Proof. 
   actema_force.
