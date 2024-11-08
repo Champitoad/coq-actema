@@ -108,7 +108,7 @@ let rec js_proof_engine (proof : Proof.t) =
 
     (** Return the given action as a binary, base64-encoded string. *)
     method encodeaction (goal_id, action) =
-      (*Js_log.log @@ Api.Logic.show_action action;*)
+      Js_log.log @@ Api.Logic.show_action action;
       action
       |> Fun.flip Marshal.to_string []
       |> Base64.encode_string |> Js.string
@@ -344,12 +344,12 @@ and js_subgoal parent (handle : int) =
       js_term _self _self##.handle Path.Concl goal.g_concl
 
     (** [this#ivariants] Return the available introduction rules that can
-                be applied to the conclusion of [this] as a string array. The strings
-                are only for documentation purposes - only their position in the
-                returned array is meaningful and can be used as argument to [#intro]
-                to select the desired introduction rule. *)
+        be applied to the conclusion of [this] as a string array. The strings
+        are only for documentation purposes - only their position in the
+        returned array is meaningful and can be used as argument to [#intro]
+        to select the desired introduction rule. *)
     method ivariants =
-      (*let aout = !!Proof.Tactics.ivariants parent##.proof ~goal_id:handle in
+      (*let aout = !!PActions.intro_variants parent##.proof ~goal_id:handle in
         let aout = Array.of_list (List.map Js.string aout) in
         Js.array aout*)
       Js.array [||]

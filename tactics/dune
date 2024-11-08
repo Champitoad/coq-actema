@@ -7,4 +7,4 @@
  ; we have to explicitly list some dependencies of mathcomp.ssreflect.
  ; This is a dune issue : it does not happen when stepping through files
  ; with VScode/coqtop. 
- (theories mathcomp.ssreflect elpi HB Ltac2))
+ (theories mathcomp.ssreflect elpi elpi_elpi HB Ltac2))
