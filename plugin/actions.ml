@@ -90,28 +90,30 @@ let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
       as [App (Cst ex, [ty; Lambda (x, ty, body)])], but the tactics work with first-class 
       existentials. For instance when pointing to [ty] or [body] in [exists x : ty, body],
       in Actema we use [[2; 0]] or [[2; 1]], but the tactics expect [[0]] or [[1]]. *)
-let convert_path (coq_goal : Goal.t) (path : Logic.Path.t) : int list =
-  let rec loop (term : Lang.Term.t) sub =
+
+let rec convert_sub (term : Lang.Term.t) sub =
     match (sub, term) with
     | [], _ -> []
     (* Handle existential quantification. *)
     | 2 :: 0 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
       when Name.equal ex Lang.Constants.ex ->
-        0 :: loop body sub
+        0 :: convert_sub body sub
     | 2 :: 1 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
       when Name.equal ex Lang.Constants.ex ->
-        1 :: loop body sub
+        1 :: convert_sub body sub
     (* Lambdas and products. *)
     | 0 :: sub, Lambda (_, x, ty, body) | 0 :: sub, Prod (_, x, ty, body) ->
-        0 :: loop ty sub
+        0 :: convert_sub ty sub
     | 1 :: sub, Lambda (_, x, ty, body) | 1 :: sub, Prod (_, x, ty, body) ->
-        1 :: loop body sub
+        1 :: convert_sub body sub
     (* Applications *)
     | i :: sub, App (_, f, args) when 0 <= i && i <= List.length args ->
-        i :: loop (List.at (f :: args) i) sub
+        i :: convert_sub (List.at (f :: args) i) sub
     (* This should not happen. *)
     | _ -> failwith "Actions.convert_sub : invalid path"
-  in
+
+
+  let convert_path (coq_goal : Goal.t) (path : Logic.Path.t) : int list =
   (* Get the actema term the path points to. *)
   let api_goal = Export.goal coq_goal in
   let term =
@@ -123,11 +125,11 @@ let convert_path (coq_goal : Goal.t) (path : Logic.Path.t) : int list =
           "Actions.convert_path : can't handle paths that point to a variable."
   in
   (* Convert the path. *)
-  loop term path.sub
+  convert_sub term path.sub
 
 (** Turn an actema path into a Coq term of type [list nat] that can be fed to the old tactics in HOL.v.
     Takes as an optional argument a suffix to add to the path after it has been translated. *)
-(*let compile_path ?(suffix = []) coq_goal (path : Logic.Path.t) : EConstr.t =
+ let compile_path ?(suffix = []) coq_goal (path : Logic.Path.t) : EConstr.t =
   let open Logic in
   let api_goal = Export.goal coq_goal in
   let term =
@@ -139,7 +141,7 @@ let convert_path (coq_goal : Goal.t) (path : Logic.Path.t) : int list =
           "Actions.compile_path : can't handle paths that point to a variable."
   in
   let sub = convert_sub term path.sub in
-  Trm.Datatypes.natlist (Goal.env coq_goal) (sub @ suffix)*)
+  Trm.Datatypes.natlist (Goal.env coq_goal) (sub @ suffix)
 
 (*********************************************************************************)
 (** [AIntro] actions. *)
@@ -390,16 +392,16 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
 (*********************************************************************************)
 
 let execute_ainstantiate coq_goal witness (path : Logic.Path.t) : unit tactic =
-  failwith "ainstantiate: TODO"
+  (* failwith "ainstantiate: TODO" *)
 
 (* Compile the witness. *)
-(*let table = Symbols.all coq_goal in
-  let coq_witness = Import.term coq_goal table witness in
+  let table = Symbols.all coq_goal in 
+  let coq_witness = Import.term coq_goal table witness in 
   (* Compile the path. *)
   (* The tactics expect the path to end with a [1], i.e. to point to the body
      of the quantifier that is instantiated. *)
   let coq_path = compile_path ~suffix:[ 1 ] coq_goal path in
-  match path.kind with
+ ( match path.kind with
   | Hyp name ->
       let id = EConstr.mkVar @@ Names.Id.of_string @@ Name.show name in
       let new_id =
@@ -412,7 +414,8 @@ let execute_ainstantiate coq_goal witness (path : Logic.Path.t) : unit tactic =
   | VarHead _ | VarBody _ | VarType _ ->
       raise
       @@ UnsupportedAction
-           (AInstantiate (witness, [ path ]), "Can't instantiate in variable")*)
+           (AInstantiate (witness, [ path ]), "Can't instantiate in variable")
+)
 
 (*********************************************************************************)
 (** Putting it all together. *)
