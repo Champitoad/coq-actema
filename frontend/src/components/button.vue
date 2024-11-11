@@ -356,7 +356,8 @@ export default {
         // action scouting
         this.dndActions = {};
 
-        // caching prover responses. this.dndCache[src][dst] give the prover response. Use "null" if src/dst is unkown
+        // caching prover responses. this.dndCache[src][dst] give the prover response. 
+        // Use "null" if src/dst is unkown.
         this.clickCache = null;
         this.dndCache = {};
         this.dndScoutState = "not started";
@@ -841,8 +842,6 @@ export default {
             if (!this.isInWorkZone()) {
                 throw new Error("Element is not in work zone");
             } else {
-                console.log("Element is in work zone !");
-
                 if (this.subgoal) {
                     this.originalPosition = this.getSavedPosition();
                 }
@@ -1753,10 +1752,7 @@ export default {
         },
 
         async getDecoratedHTML() {
-            //var timeouttest = await this.sleep(5);
-            if (!this.clickCache) {
-                this.clickCache = await this.getActions("click");
-            }
+            this.clickCache = await this.getActions("click");
             var actions = this.clickCache;
             var html = this.toHTML();
             var parsed = jQuery.parseHTML(html);
