@@ -93,28 +93,28 @@ let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
     - In Actema negation is represented as [App (Cst not, x)] and in Coq it is represented 
       as [Prod (_, x, False)].  *)
 let rec convert_sub (term : Lang.Term.t) sub =
-    match (sub, term) with
-    | [], _ -> []
-    (* Handle existential quantification. *)
-    | 2 :: 0 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
-      when Name.equal ex Lang.Constants.ex ->
-        0 :: convert_sub body sub
-    | 2 :: 1 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
-      when Name.equal ex Lang.Constants.ex ->
-        1 :: convert_sub body sub
-    (* Handle negation. *)
-    | 1 :: sub, App (_, Cst not, [x]) when Name.equal not Lang.Constants.not ->
-        0 :: convert_sub x sub
-    (* Lambdas and products. *)
-    | 0 :: sub, Lambda (_, x, ty, body) | 0 :: sub, Prod (_, x, ty, body) ->
-        0 :: convert_sub ty sub
-    | 1 :: sub, Lambda (_, x, ty, body) | 1 :: sub, Prod (_, x, ty, body) ->
-        1 :: convert_sub body sub
-    (* Applications *)
-    | i :: sub, App (_, f, args) when 0 <= i && i <= List.length args ->
-        i :: convert_sub (List.at (f :: args) i) sub
-    (* This should not happen. *)
-    | _ -> failwith "Actions.convert_sub : invalid path"
+  match (sub, term) with
+  | [], _ -> []
+  (* Handle existential quantification. *)
+  | 2 :: 0 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
+    when Name.equal ex Lang.Constants.ex ->
+      0 :: convert_sub body sub
+  | 2 :: 1 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
+    when Name.equal ex Lang.Constants.ex ->
+      1 :: convert_sub body sub
+  (* Handle negation. *)
+  | 1 :: sub, App (_, Cst not, [ x ]) when Name.equal not Lang.Constants.not ->
+      0 :: convert_sub x sub
+  (* Lambdas and products. *)
+  | 0 :: sub, Lambda (_, x, ty, body) | 0 :: sub, Prod (_, x, ty, body) ->
+      0 :: convert_sub ty sub
+  | 1 :: sub, Lambda (_, x, ty, body) | 1 :: sub, Prod (_, x, ty, body) ->
+      1 :: convert_sub body sub
+  (* Applications *)
+  | i :: sub, App (_, f, args) when 0 <= i && i <= List.length args ->
+      i :: convert_sub (List.at (f :: args) i) sub
+  (* This should not happen. *)
+  | _ -> failwith "Actions.convert_sub : invalid path"
 
 let convert_path (coq_goal : Goal.t) (path : Logic.Path.t) : int list =
   (* Get the actema term the path points to. *)
@@ -132,7 +132,7 @@ let convert_path (coq_goal : Goal.t) (path : Logic.Path.t) : int list =
 
 (** Turn an actema path into a Coq term of type [list nat] that can be fed to the old tactics in HOL.v.
     Takes as an optional argument a suffix to add to the path after it has been translated. *)
- let compile_path ?(suffix = []) coq_goal (path : Logic.Path.t) : EConstr.t =
+let compile_path ?(suffix = []) coq_goal (path : Logic.Path.t) : EConstr.t =
   let open Logic in
   let api_goal = Export.goal coq_goal in
   let term =
@@ -314,7 +314,10 @@ let abstract_itrace itrace context : Interact.choice list =
         Binder (Left, sitem) :: loop (v1 :: passed) (choices, fvars1, fvars2)
     | Binder (Right, sitem) :: choices, fvars1, v2 :: fvars2 ->
         Binder (Right, sitem) :: loop (v2 :: passed) (choices, fvars1, fvars2)
-    | _ -> []
+    (* Finished. *)
+    | [], [], [] -> []
+    (* Errors. *)
+    | _ -> Log.error "Actions.abstract_itrace : unexpected case"
   in
   loop [] itrace
 
@@ -397,14 +400,14 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
 let execute_ainstantiate coq_goal witness (path : Logic.Path.t) : unit tactic =
   (* failwith "ainstantiate: TODO" *)
 
-(* Compile the witness. *)
-  let table = Symbols.all coq_goal in 
-  let coq_witness = Import.term coq_goal table witness in 
+  (* Compile the witness. *)
+  let table = Symbols.all coq_goal in
+  let coq_witness = Import.term coq_goal table witness in
   (* Compile the path. *)
   (* The tactics expect the path to end with a [1], i.e. to point to the body
      of the quantifier that is instantiated. *)
   let coq_path = compile_path ~suffix:[ 1 ] coq_goal path in
- ( match path.kind with
+  match path.kind with
   | Hyp name ->
       let id = EConstr.mkVar @@ Names.Id.of_string @@ Name.show name in
       let new_id =
@@ -418,7 +421,6 @@ let execute_ainstantiate coq_goal witness (path : Logic.Path.t) : unit tactic =
       raise
       @@ UnsupportedAction
            (AInstantiate (witness, [ path ]), "Can't instantiate in variable")
-)
 
 (*********************************************************************************)
 (** Putting it all together. *)

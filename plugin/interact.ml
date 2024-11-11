@@ -329,6 +329,12 @@ let rec interact (state : state) mode : choice list =
       (* Continue. *)
       interact state mode
 
+(** Swap the side in a choice. *)
+let swap_choice c : choice =
+  match c with
+  | Side side -> Side (opp_side side)
+  | Binder (side, sitem) -> Binder (opp_side side, sitem)
+
 (** Swap the roles of [t1] and [t2] in the state. *)
 let swap_sides state : state =
   { t1 = state.t2
@@ -337,12 +343,7 @@ let swap_sides state : state =
   ; t2 = state.t1
   ; sub2 = state.sub1
   ; fvars_2 = state.fvars_1
-  ; choices =
-      List.map
-        (function
-          | Side side -> Side (opp_side side)
-          | Binder (side, sitem) -> Binder (opp_side side, sitem))
-        state.choices
+  ; choices = List.map swap_choice state.choices
   ; env = state.env
   ; context = state.context
   ; subst = state.subst
@@ -392,7 +393,9 @@ let dlink dnd_kind ((src, src_fvars) : Path.t * FVarId.t list)
   let choices =
     match (src.kind, dst.kind) with
     | Hyp _, Concl -> interact state Backward
-    | Concl, Hyp _ -> interact (swap_sides state) Backward
+    | Concl, Hyp _ ->
+        (* Swap the sides _before_ and _after_ the interaction. *)
+        List.map swap_choice (interact (swap_sides state) Backward)
     | Hyp _, Hyp _ -> interact state Forward
     | _ -> failwith "Interact.dlink : invalid link."
   in

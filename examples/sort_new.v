@@ -35,13 +35,12 @@ Admitted.
 (*Lemma test (h : forall A (l1 : list A) (l2 : list A), l1 = l2) : forall B (l : list B), length l = 0.
 actema_force.*)
 
-
 Lemma perm_length : forall A (l1 : list A) (l2 : list A),
          perm l1 l2 -> length l1 = length l2.
 Proof.
 intros A l1 l2 H. induction H.
 - reflexivity.
-- pose proof (H := app_length).
+- (*pose proof (H := app_length).*)
   actema_force.
     
 
