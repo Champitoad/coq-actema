@@ -1,7 +1,8 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
-Lemma test (A B : Prop) (h : A -> B) : A -> B.
+Lemma test (A : Prop) (h1 : A) (h2 : A -> B) (h3 : A) : True \/ False.
+actema_force.
 Admitted.
 
 Lemma test2 (A : Prop) (h : A) (h' : not A) : False.

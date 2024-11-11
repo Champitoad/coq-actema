@@ -1753,10 +1753,7 @@ export default {
         },
 
         async getDecoratedHTML() {
-            //var timeouttest = await this.sleep(5);
-            if (!this.clickCache) {
-                this.clickCache = await this.getActions("click");
-            }
+            this.clickCache = await this.getActions("click");
             var actions = this.clickCache;
             var html = this.toHTML();
             var parsed = jQuery.parseHTML(html);

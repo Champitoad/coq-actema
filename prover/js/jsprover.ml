@@ -179,6 +179,13 @@ let rec js_proof_engine (proof : Proof.t) =
         List.flatten (List.map !!(Actions.actions _self##.proof) asource)
       in
 
+      (*let click_actions =
+          List.filter
+            (fun a -> match a.kind with Click _ -> true | _ -> false)
+            actions
+        in
+        Js_log.printf "CLICK ACTIONS : %s"
+          (List.to_string Actions.show_aoutput click_actions);*)
       Js.array
         (Array.of_list
            (List.map
@@ -350,8 +357,8 @@ and js_subgoal parent (handle : int) =
         to select the desired introduction rule. *)
     method ivariants =
       (*let aout = !!Actions.intro_variants parent##.proof in
-      let aout = Array.of_list (List.map (fun (s, _) -> Js.string s) aout) in
-      Js.array aout*)
+        let aout = Array.of_list (List.map (fun (s, _) -> Js.string s) aout) in
+        Js.array aout*)
       Js.array [||]
 
     (** [this#encodeduplicate (hyp_name : string)] gets the hypothesis in the current goal,
@@ -665,7 +672,9 @@ and js_term parent (goal_id : int) (kind : Path.kind) (term : Term.t) =
   end
 
 (** Print a single goal in Actema format (for debug purposes). *)
-let print_goal (Logic.{ g_id; g_pregoal = goal } : Logic.goal) : unit = ()
+let print_goal (Logic.{ g_id; g_pregoal = goal } : Logic.goal) : unit =
+  Js_log.printf "INTRO VARIANTS : %s"
+    (List.to_string (fun (s, sub) -> s) (Actions.intro_variants goal))
 
 (* -------------------------------------------------------------------- *)
 let export (name : string) : unit =
@@ -677,7 +686,6 @@ let export (name : string) : unit =
            goalsb |> Js.to_string |> Base64.decode_exn
            |> Fun.flip Marshal.from_string 0
          in
-         (*let hm = List.fold_left Hidmap.union Hidmap.empty hms in*)
          (* Log the goals. *)
          List.iter print_goal goals;
          (* Create a new proof engine. *)

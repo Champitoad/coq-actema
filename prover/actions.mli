@@ -43,3 +43,5 @@ type aoutput =
 (** [actions proof source] gets the list of all valid actions on [proof] with 
     source [source]. *)
 val actions : Proof.t -> asource -> aoutput list
+
+val intro_variants : pregoal -> (string * int list) list
