@@ -20,7 +20,9 @@ Ltac2 swap_side (s : side) : side :=
 
 (* A choice of rule to apply. *)
 Ltac2 Type choice := 
-  [ (* Apply the next non-binder rule on the given side. *)
+  [ (* Swap the sides of the link. *)
+    Swap
+  | (* Apply the next non-binder rule on the given side. *)
     Side (side) 
   | (* Apply the next binder rule on the given side. 
        The option contains an instantiation witness :
@@ -33,6 +35,7 @@ Ltac2 Type choice :=
 (* [swap_choice c] swaps the side of [c]. *)
 Ltac2 swap_choice (c : choice) : choice := 
   match c with 
+  | Swap => Swap
   | Side s => Side (swap_side s)
   | Binder s witness => Binder (swap_side s) witness
   end.
@@ -64,6 +67,7 @@ Ltac2 apply_choices (choices : choice list) (x : constr) : choice list :=
   List.map 
     (fun c => 
       match c with 
+      | Swap => Swap
       | Side side => Side side  
       | Binder side None => Binder side None 
       | Binder side (Some witness) => Binder side (Some '($witness $x))
@@ -379,13 +383,6 @@ with forward
   (* Put the two terms in head normal form. *)
   let h1 := eval hnf in $h1 in 
   let h2 := eval hnf in $h2 in 
-  (* Helper function to perform the same interaction with the two sides swapped. *)
-  let retry_swapped () := 
-    (* We have to adapt the proof : proving h1 -> h2 -> d is not the same as h2 -> h1 -> d. *)
-    let (d, p) := forward h2 sub2 h1 sub1 (List.map swap_choice choices) (swap_dnd_kind kind) in 
-    let swap := '(fun (p : $h2 -> $h1 -> $d) h1 h2 => p h2 h1) in
-    (d, '($swap $p))
-  in
   (* Print the link. *)
   printf "[forward] %t * %t" h1 h2;
   match choices, sub1, sub2, kind with
@@ -529,10 +526,16 @@ with forward
   (****************************************************************************)
   (* Swap sides. *)
   (****************************************************************************)
-  | Side Left :: _, _, _, _ => retry_swapped ()
-  | Binder Left _ :: _, _, _, _ => retry_swapped ()
-  | [], [ 2 ], _, Rewrite Left => retry_swapped ()
-  | [], [ 3 ], _, Rewrite Left => retry_swapped ()
+  | Swap :: choices, _, _ , _ =>
+    (* We have to adapt the proof : proving h1 -> h2 -> d is not the same as h2 -> h1 -> d. *)
+    let (d, p) := forward h2 sub2 h1 sub1 choices (swap_dnd_kind kind) in 
+    let swap := '(fun (p : $h2 -> $h1 -> $d) h1 h2 => p h2 h1) in
+    (d, '($swap $p))
+  (* Eventually these rules should be removed. *)
+  | (Side Left :: _, _, _, _)
+  | (Binder Left _ :: _, _, _, _) 
+  | ([], [ 2 ], _, Rewrite Left)
+  | ([], [ 3 ], _, Rewrite Left) => Control.throw (InteractFailure "[forward]: TODO swap")
   (****************************************************************************)
   (* No matching rule. *)
   (****************************************************************************)

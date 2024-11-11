@@ -24,7 +24,9 @@ val opp_side : side -> side
     and if yes with what witness (which depends on the variables bound in each linked formula).
     The witness contains BVars from the left *and* right sides. *)
 type choice =
-  | (* Simply descent in the subformula on the given side. *)
+  | (* Swap the formulas on the left and right hand side. *)
+    Swap
+  | (* Simply descend in the subformula on the given side. *)
     Side of side
   | (* Traverse a binder on the given side.
        We also store the sitem of the bound variable. *)

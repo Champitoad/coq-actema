@@ -47,6 +47,7 @@ module FFI = struct
   (** [of_choice import_term choice] encodes [choice] to the Ltac2 type [DnD.choice]. *)
   let of_choice (import_term : Lang.Term.t -> EConstr.t) :
       Interact.choice -> Tac2ffi.valexpr = function
+    | Swap -> Tac2ffi.ValInt 0
     | Side side -> Tac2ffi.ValBlk (0, [| of_side side |])
     | Binder (side, SFlex) | Binder (side, SRigid) ->
         let none = Tac2ffi.ValInt 0 in
@@ -299,6 +300,9 @@ let abstract_itrace itrace context : Interact.choice list =
   (* The list [passed] contains the *uninstantiated* free variables bound above,
      the most recently bound first. *)
   let rec loop passed = function
+    (* Swap sides. *)
+    | Swap :: choices, fvars1, fvars2 ->
+        Swap :: loop passed (choices, fvars2, fvars1)
     (* Simply descend on a side or another. *)
     | Side side :: choices, fvars1, fvars2 ->
         Side side :: loop passed (choices, fvars1, fvars2)
@@ -334,6 +338,7 @@ let opp_dnd_kind : Logic.dnd_kind -> Logic.dnd_kind = function
 
 (** Helper function to swap the two sides of the link in a [choice]. *)
 let opp_choice : Interact.choice -> Interact.choice = function
+  | Swap -> Swap
   | Side side -> Side (Interact.opp_side side)
   | Binder (side, witness) -> Binder (Interact.opp_side side, witness)
 
@@ -350,6 +355,7 @@ let execute_adnd coq_goal src dst (unif_data : Logic.unif_data) dnd_kind :
   in
   (* Abstract the instantiations. *)
   let choices = abstract_itrace itrace unif_data.context in
+  Log.printf "CHOICES %s" (List.to_string Interact.show_choice choices);
   (* Export the Coq symbols to translate Actema terms to Coq terms later on. *)
   let symbols = Symbols.all coq_goal in
   (* Call the Ltac2 tactic to do the rest of the work. *)

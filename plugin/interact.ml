@@ -8,7 +8,9 @@ type side = Left | Right [@@deriving show]
 
 let opp_side = function Left -> Right | Right -> Left
 
-type choice = Side of side | Binder of side * Unif.sitem [@@deriving show]
+type choice = Swap | Side of side | Binder of side * Unif.sitem
+[@@deriving show]
+
 type itrace = choice list * FVarId.t list * FVarId.t list [@@deriving show]
 
 (* For a backwards interaction, the first formula is the hypothesis,
@@ -47,7 +49,41 @@ type state =
     choices : choice list
   }
 
-(* Step into the left formula. *)
+(** Swap the side in a choice. *)
+let swap_choice c : choice =
+  match c with
+  | Swap -> Swap
+  | Side side -> Side (opp_side side)
+  | Binder (side, sitem) -> Binder (opp_side side, sitem)
+
+(** Swap the roles of [t1] and [t2] in the state. 
+    This does _not_ swap the list of choices computed so far. *)
+let swap_sides state : state =
+  { t1 = state.t2
+  ; sub1 = state.sub2
+  ; fvars_1 = state.fvars_2
+  ; t2 = state.t1
+  ; sub2 = state.sub1
+  ; fvars_2 = state.fvars_1
+  ; (* We don't swap [choices]. *)
+    choices = state.choices
+  ; env = state.env
+  ; context = state.context
+  ; subst = state.subst
+  ; dnd_kind =
+      begin
+        match state.dnd_kind with
+        | Subform -> Subform
+        | RewriteL -> RewriteR
+        | RewriteR -> RewriteL
+      end
+  }
+
+(** Swap the two sides of the link. *)
+let swap_step state : state =
+  { (swap_sides state) with choices = Swap :: state.choices }
+
+(** Step into the left formula. *)
 let left_step state ?(invert = false) ?(binder = None) t1 sub1 =
   match (binder : Context.entry option) with
   | None ->
@@ -67,6 +103,7 @@ let left_step state ?(invert = false) ?(binder = None) t1 sub1 =
         }
       , invert )
 
+(** Step into the right formula. *)
 let right_step state ?(invert = false) ?(binder = None) t2 sub2 =
   match (binder : Context.entry option) with
   | None ->
@@ -193,11 +230,14 @@ let backward_step (state : state) : state * bool =
   | _ -> failwith "Interact.backward_step : no rule is applicable."
 
 (** Perform a single forward step.
-    This returns the updated state and a flag indicating whether we should invert the polarity. *)
+    This returns the updated state and a flag indicating whether we should invert the polarity.
+    
+    BEWARE : we don't generate any left-side rule here. Instead we use a 
+    swap followed by a right-side rule. This way the tactics in DnD.v 
+    only need to handle the right-side rules.*)
 let forward_step (state : state) : state * bool =
   let fo1 = FirstOrder.view state.env state.context state.t1 in
   let fo2 = FirstOrder.view state.env state.context state.t2 in
-
   (* It is very important that we try the invertible rules before the other rules. *)
   match ((fo1, state.sub1), (fo2, state.sub2)) with
   (***********************************************************************)
@@ -209,7 +249,9 @@ let forward_step (state : state) : state * bool =
       right_step state ~binder:(Some { binder = x; type_ = ty }) f1 sub
   | (FBind (Exist, x, ty, f1), 2 :: 1 :: sub), _ when head_not_bound state Left
     ->
-      left_step state ~binder:(Some { binder = x; type_ = ty }) f1 sub
+      right_step (swap_step state)
+        ~binder:(Some { binder = x; type_ = ty })
+        f1 sub
   (***********************************************************************)
   (* Non invertible rules. *)
   (***********************************************************************)
@@ -219,30 +261,34 @@ let forward_step (state : state) : state * bool =
       right_step state f1 sub
   | (FConn (conn, [ f1; f2 ]), 1 :: sub), _
     when conn = And || conn = Or || conn = Equiv ->
-      left_step state f1 sub
+      right_step (swap_step state) f1 sub
   (* Rules F∧₂ and F∨₂ and F⇔₂ *)
   | _, (FConn (conn, [ f1; f2 ]), 2 :: sub)
     when conn = And || conn = Or || conn = Equiv ->
       right_step state f2 sub
   | (FConn (conn, [ f1; f2 ]), 2 :: sub), _
     when conn = And || conn = Or || conn = Equiv ->
-      left_step state f2 sub
+      right_step (swap_step state) f2 sub
   (* Rule F⇒₁ *)
   | _, (FImpl (f0, f1), 0 :: sub) -> right_step state ~invert:true f0 sub
-  | (FImpl (f0, f1), 0 :: sub), _ -> left_step state ~invert:true f0 sub
+  | (FImpl (f0, f1), 0 :: sub), _ ->
+      right_step (swap_step state) ~invert:true f0 sub
   (* Rule F⇒₂ *)
   | _, (FImpl (f0, f1), 1 :: sub) -> right_step state f1 sub
-  | (FImpl (f0, f1), 1 :: sub), _ -> left_step state f1 sub
+  | (FImpl (f0, f1), 1 :: sub), _ -> right_step (swap_step state) f1 sub
   (* Rule F¬ *)
   | _, (FConn (Not, [ f0 ]), 1 :: sub) -> right_step state ~invert:true f0 sub
-  | (FConn (Not, [ f0 ]), 1 :: sub), _ -> left_step state ~invert:true f0 sub
+  | (FConn (Not, [ f0 ]), 1 :: sub), _ ->
+      right_step (swap_step state) ~invert:true f0 sub
   (* Rules F∀s and F∀i *)
   | _, (FBind (Forall, x, ty, f1), 1 :: sub)
     when head_not_bound state Right || head_instantiable state Right ->
       right_step state ~binder:(Some { binder = x; type_ = ty }) f1 sub
   | (FBind (Forall, x, ty, f1), 1 :: sub), _
     when head_not_bound state Left || head_instantiable state Left ->
-      left_step state ~binder:(Some { binder = x; type_ = ty }) f1 sub
+      right_step (swap_step state)
+        ~binder:(Some { binder = x; type_ = ty })
+        f1 sub
   (* No applicable rule. *)
   | _ -> failwith "Interact.forward_step : no rule is applicable."
 
@@ -286,10 +332,14 @@ let dump_state ?(verbose = false) state mode : unit =
     (pp_term state.t2)
 
 (** Print the most recent choice that was added to the itrace. *)
-let dump_last_choice state : unit =
+let rec dump_last_choice state : unit =
   let choice = List.hd state.choices in
   let pp_side = function Left -> "[left]" | Right -> "[right]" in
   match choice with
+  | Swap ->
+      (* In this case we also dump the second-to-last choice. *)
+      dump_last_choice { state with choices = List.tl state.choices };
+      Log.printf ">>> swap"
   | Side side -> Log.printf ">>> side %s" (pp_side side)
   | Binder (side, SRigid) | Binder (side, SFlex) ->
       Log.printf ">>> binder %s" (pp_side side)
@@ -308,7 +358,8 @@ let rec interact (state : state) mode : choice list =
   | Subform, (_, []), (_, []) -> List.rev state.choices
   (* Rule L=₁ *)
   | RewriteL, (App (_, Cst eq, _), [ 2 ]), _
-  | RewriteL, (App (_, Cst eq, _), [ 3 ]), _
+  | RewriteL, (App (_, Cst eq, _), [ 3 ]), _ ->
+      interact (swap_step state) mode
   (* Rule L=₂ *)
   | RewriteR, _, (App (_, Cst eq, _), [ 2 ])
   | RewriteR, _, (App (_, Cst eq, _), [ 3 ])
@@ -328,33 +379,6 @@ let rec interact (state : state) mode : choice list =
       let mode = if invert then invert_mode mode else mode in
       (* Continue. *)
       interact state mode
-
-(** Swap the side in a choice. *)
-let swap_choice c : choice =
-  match c with
-  | Side side -> Side (opp_side side)
-  | Binder (side, sitem) -> Binder (opp_side side, sitem)
-
-(** Swap the roles of [t1] and [t2] in the state. *)
-let swap_sides state : state =
-  { t1 = state.t2
-  ; sub1 = state.sub2
-  ; fvars_1 = state.fvars_2
-  ; t2 = state.t1
-  ; sub2 = state.sub1
-  ; fvars_2 = state.fvars_1
-  ; choices = List.map swap_choice state.choices
-  ; env = state.env
-  ; context = state.context
-  ; subst = state.subst
-  ; dnd_kind =
-      begin
-        match state.dnd_kind with
-        | Subform -> Subform
-        | RewriteL -> RewriteR
-        | RewriteR -> RewriteL
-      end
-  }
 
 let item_of_path (path : Path.t) (pregoal : Logic.pregoal) : Logic.item =
   match path.kind with

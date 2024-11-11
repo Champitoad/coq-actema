@@ -15,6 +15,12 @@ let indices ?(start = 0) xs = List.mapi (fun i x -> (start + i, x)) xs
 (** [pair_map f (a, b) = (f a, f b)]. *)
 let pair_map f (a, b) = (f a, f b)
 
+(** [map_first f (a, b) = (f a, b)]. *)
+let map_first f (a, b) = (f a, b)
+
+(** [map_second f (a, b) = (a, f b)]. *)
+let map_second f (a, b) = (a, f b)
+
 (** [pair_compare comp1 comp2] implements lexicographic comparison on pairs ['a * 'b] 
     (in the sense of Stdlib.Compare), assuming comparison functions [comp1] on ['a] and [comp2] on ['b]. *)
 let pair_compare comp1 comp2 ((a1, b1) : 'a * 'b) ((a2, b2) : 'a * 'b) : int =
