@@ -145,106 +145,112 @@ Module Forward.
 (* Forward L=1. *)
 Local Lemma eq_left_1 x (h1 : x = x + 1) (h2 : exists a, P a /\ P x /\ forall b, R x (a + b)) : True.
   (* Rewrite all occurences of [x]. *)
-  forward_wrapper @h1 [ 2 ] @h2 [] [] (Rewrite Left).
+  forward_wrapper @h1 [ 2 ] @h2 [] @h3 [] (Rewrite Left).
   assert_hyp '(exists a : nat, P a /\ P (x + 1) /\ forall b, R (x + 1) (a + b)).
 Restart.
   (* This time rewrite only the deeper occurence of [x]. *)
-  forward_wrapper @h1 [ 2 ] @h2 [ 1 ; 2 ; 2 ; 1 ] [] (Rewrite Left).
+  forward_wrapper @h1 [ 2 ] @h2 [ 1 ; 2 ; 2 ; 1 ] @h3 [] (Rewrite Left).
   assert_hyp '(exists a, P a /\ P x /\ forall b, R (x + 1) (a + b)).
 Admitted.
 
 (* Forward L=2. *)
 Local Lemma eq_left_2 x (h1 : x = x + 1) (h2 : exists a, P a /\ P (x + 1) /\ forall b, R (x + 1) (a + b)) : True.
   (* Rewrite all occurences of [x+1]. *)
-  forward_wrapper @h1 [ 3 ] @h2 [] [] (Rewrite Left).
+  forward_wrapper @h1 [ 3 ] @h2 [] @h3 [] (Rewrite Left).
   assert_hyp '(exists a, P a /\ P x /\ forall b, R x (a + b)).
 Restart.
   (* This time rewrite only the deeper occurence of [x+1]. *)
-  forward_wrapper @h1 [ 3 ] @h2 [ 1 ; 2 ; 2 ; 1 ] [] (Rewrite Left).
+  forward_wrapper @h1 [ 3 ] @h2 [ 1 ; 2 ; 2 ; 1 ] @h3 [] (Rewrite Left).
   assert_hyp '(exists a, P a /\ P (x + 1) /\ forall b, R x (a + b)).
 Admitted.
 
 (* Forward R=1. *)
 Local Lemma eq_right_1 x (h1 : exists a, P a /\ P x /\ forall b, R x (a + b)) (h2 : x = x + 1) : True.
   (* Rewrite all occurences of [x]. *)
-  forward_wrapper @h1 [] @h2 [ 2 ] [] (Rewrite Right).
+  forward_wrapper @h1 [] @h2 [ 2 ] @h3 [] (Rewrite Right).
   assert_hyp '(exists a : nat, P a /\ P (x + 1) /\ forall b, R (x + 1) (a + b)).
 Restart.
   (* This time rewrite only the deeper occurence of [x]. *)
-  forward_wrapper @h1 [ 1 ; 2 ; 2 ; 1 ] @h2 [ 2 ] [] (Rewrite Right).
+  forward_wrapper @h1 [ 1 ; 2 ; 2 ; 1 ] @h2 [ 2 ] @h3 [] (Rewrite Right).
   assert_hyp '(exists a, P a /\ P x /\ forall b, R (x + 1) (a + b)).
 Admitted.
 
 (* Forward R=2. *)
 Local Lemma eq_right_2 x (h1 : exists a, P a /\ P (x + 1) /\ forall b, R (x + 1) (a + b)) (h2 : x = x + 1) : True.
   (* Rewrite all occurences of [x+1]. *)
-  forward_wrapper @h1 [] @h2 [ 3 ] [] (Rewrite Right).
+  forward_wrapper @h1 [] @h2 [ 3 ] @h3 [] (Rewrite Right).
   assert_hyp '(exists a, P a /\ P x /\ forall b, R x (a + b)).
 Restart.
   (* This time rewrite only the deeper occurence of [x+1]. *)
-  forward_wrapper @h1 [ 1 ; 2 ; 2 ; 1 ] @h2 [ 3 ] [] (Rewrite Right).
+  forward_wrapper @h1 [ 1 ; 2 ; 2 ; 1 ] @h2 [ 3 ] @h3 [] (Rewrite Right).
   assert_hyp '(exists a, P a /\ P (x + 1) /\ forall b, R x (a + b)).
 Admitted.
 
 (* Forward and. *)
 Local Lemma and_right_1 x (h1 : x = 42) (h2 : P x /\ A) : True.
-  forward_wrapper @h1 [ 2 ] @h2 [ 1 ] [ Side Right ] (Rewrite Left).
+  forward_wrapper @h1 [ 2 ] @h2 [ 1 ] @h3 [ Side Right ] (Rewrite Left).
   assert_hyp '(P 42).
 Admitted.
 Local Lemma and_right_2 x (h1 : x = 42) (h2 : A /\ P x) : True.
-  forward_wrapper @h1 [ 2 ] @h2 [ 2 ] [ Side Right ] (Rewrite Left).
+  forward_wrapper @h1 [ 2 ] @h2 [ 2 ] @h3 [ Side Right ] (Rewrite Left).
   assert_hyp '(P 42).
 Admitted.
 Local Lemma and_left_1 x (h1 : P x /\ A) (h2 : x = 42) : True.
-  forward_wrapper @h1 [ 1 ] @h2 [ 2 ] [ Side Left ] (Rewrite Right).
+  forward_wrapper @h1 [ 1 ] @h2 [ 2 ] @h3 [ Side Left ] (Rewrite Right).
   assert_hyp '(P 42).
 Admitted.
 Local Lemma and_left_2 x (h1 : A /\ P x) (h2 : x = 42) : True.
-  forward_wrapper @h1 [ 2 ] @h2 [ 2 ] [ Side Left ] (Rewrite Right).
+  forward_wrapper @h1 [ 2 ] @h2 [ 2 ] @h3 [ Side Left ] (Rewrite Right).
   assert_hyp '(P 42).
 Admitted.
 
 (* Forward or. *)
 Local Lemma or_right_1 x (h1 : x = 42) (h2 : P x \/ A) : True.
-  forward_wrapper @h1 [ 2 ] @h2 [ 1 ] [ Side Right ] (Rewrite Left).
+  forward_wrapper @h1 [ 2 ] @h2 [ 1 ] @h3 [ Side Right ] (Rewrite Left).
   assert_hyp '(P 42 \/ A).
 Admitted.
 Local Lemma or_right_2 x (h1 : x = 42) (h2 : A \/ P x) : True.
-  forward_wrapper @h1 [ 2 ] @h2 [ 2 ] [ Side Right ] (Rewrite Left).
+  forward_wrapper @h1 [ 2 ] @h2 [ 2 ] @h3 [ Side Right ] (Rewrite Left).
   assert_hyp '(A \/ P 42).
 Admitted.
 Local Lemma or_left_1 x (h1 : P x \/ A) (h2 : x = 42) : True.
-  forward_wrapper @h1 [ 1 ] @h2 [ 2 ] [ Side Left ] (Rewrite Right).
+  forward_wrapper @h1 [ 1 ] @h2 [ 2 ] @h3 [ Side Left ] (Rewrite Right).
   assert_hyp '(P 42 \/ A).
 Admitted.
 Local Lemma or_left_2 x (h1 : A \/ P x) (h2 : x = 42) : True.
-  forward_wrapper @h1 [ 2 ] @h2 [ 2 ] [ Side Left ] (Rewrite Right).
+  forward_wrapper @h1 [ 2 ] @h2 [ 2 ] @h3 [ Side Left ] (Rewrite Right).
   assert_hyp '(A \/ P 42).
+Admitted.
+
+(* Forward negation. *)
+Local Lemma neg_left_1 (h1 : A) (h2 : ~A) : True.
+  forward_wrapper @h1 [] @h2 [ 0 ] @h3 [ Side Right ] Subform.
+  assert_hyp '(True -> False).
 Admitted.
 
 (* Forward implication. *)
 Local Lemma impl_right_1 (h1 : A) (h2 : A -> B) : True.
-  forward_wrapper @h1 [] @h2 [ 0 ] [ Side Right ] Subform.
+  forward_wrapper @h1 [] @h2 [ 0 ] @h3 [ Side Right ] Subform.
   assert_hyp '(True -> B).
 Admitted.
 Local Lemma impl_right_2 x (h1 : x = 42) (h2 : A -> P x) : True.
-  forward_wrapper @h1 [ 2 ] @h2 [ 1 ] [ Side Right ] (Rewrite Left).
+  forward_wrapper @h1 [ 2 ] @h2 [ 1 ] @h3 [ Side Right ] (Rewrite Left).
   assert_hyp '(A -> P 42).
 Admitted.
 
 (* Forward forall. *)
 Local Lemma forall_right_i (h1 : 0 = 0 + 0) (h2 : forall x, P x) : True.
-  forward_wrapper @h1 [ 2 ] @h2 [ 1 ] [ Binder Right (Some '0) ] (Rewrite Left).
+  forward_wrapper @h1 [ 2 ] @h2 [ 1 ] @h3 [ Binder Right (Some '0) ] (Rewrite Left).
   assert_hyp '(P (0 + 0)).
 Admitted.
 Local Lemma forall_right_s (h1 : 0 = 0 + 0) (h2 : forall x, P 0 /\ P x) : True.
-  forward_wrapper @h1 [ 2 ] @h2 [ 1 ; 1 ] [ Binder Right None ; Side Right ] (Rewrite Left).
+  forward_wrapper @h1 [ 2 ] @h2 [ 1 ; 1 ] @h3 [ Binder Right None ; Side Right ] (Rewrite Left).
   assert_hyp '(forall x : nat, P (0 + 0)).
 Admitted.
 
 (* Forward exists. *)
 Local Lemma exists_right_s (h1 : 0 = 0 + 0) (h2 : exists x, P 0 /\ P x) : True.
-  forward_wrapper @h1 [ 2 ] @h2 [ 1 ; 1 ] [ Binder Right None ; Side Right ] (Rewrite Left).
+  forward_wrapper @h1 [ 2 ] @h2 [ 1 ; 1 ] @h3 [ Binder Right None ; Side Right ] (Rewrite Left).
   assert_hyp '(exists x : nat, P (0 + 0)).
 Admitted.
 
