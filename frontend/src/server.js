@@ -18,7 +18,6 @@ export default {
             ipcMain.removeAllListeners('error');
 
             ipcMain.once('action', (_, action) => {
-                console.log("Sending action" + action);
                 let rcode = 200;
                 res.writeHead(rcode, { 'Content-Type': 'text/plain' });
                 res.end(action.subgoalIndex.toString() + "\n" + action.repr);
@@ -64,7 +63,6 @@ export default {
                         win.webContents.send('received_lemmas', data);
                         break;
                     case "/action":
-                        console.log("Received new goals");
                         let goals = data;
                         win.webContents.send('action', goals);
                         break;

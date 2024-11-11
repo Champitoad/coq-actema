@@ -1,6 +1,6 @@
 'use strict';
 
-function Helper() {}
+function Helper() { }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 Helper.degToRad = deg => {
@@ -96,18 +96,18 @@ Helper.calcScale = (sectorSpace, sectorCount, radius) => {
 export default {
     name: 'RadialMenu',
     props: {
-        menuItems   : Array,
-        size        : Number,
+        menuItems: Array,
+        size: Number,
         closeOnClick: Boolean
     },
     data: function () {
         return {
-            isOpened  : false,
+            isOpened: false,
             openedMenu: []
         };
     },
     created: function () {
-        this.radius      = 50;
+        this.radius = 50;
         this.innerRadius = this.radius * 0.4;
         this.sectorSpace = this.radius * 0.06;
     },
@@ -188,23 +188,23 @@ export default {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         $_createMenuLayer: function (items, level) {
             let info = {
-                inner        : true,
-                outer        : false,
-                level        : level,
-                levelItems   : items,
-                sectors      : [],
+                inner: true,
+                outer: false,
+                level: level,
+                levelItems: items,
+                sectors: [],
                 selectedIndex: 0
             };
             let sectorCount = Math.max(items.length, 6);
             let scale = Helper.calcScale(this.sectorSpace, sectorCount, this.radius);
 
-            let angleStep   = 360 / sectorCount;
-            let angleShift  = angleStep / 2 + 270;
+            let angleStep = 360 / sectorCount;
+            let angleShift = angleStep / 2 + 270;
             let indexOffset = Helper.getIndexOffset(items, sectorCount);
 
             for (let i = 0; i < sectorCount; ++i) {
                 let startAngle = angleShift + angleStep * i;
-                let endAngle   = angleShift + angleStep * (i + 1);
+                let endAngle = angleShift + angleStep * (i + 1);
                 let itemIndex = Helper.resolveLoopIndex(sectorCount - i + indexOffset, sectorCount);
                 let item;
                 if (itemIndex >= 0 && itemIndex < items.length) {
@@ -293,7 +293,6 @@ export default {
                 let currentMenu = this.$_getCurrentMenu();
                 if (dataset.itemIndex !== undefined) {
                     let item = currentMenu.levelItems[dataset.itemIndex];
-                    //console.log('sector click:', item);
                     this.$_menuClick(item);
                 }
             }

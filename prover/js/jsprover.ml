@@ -179,13 +179,6 @@ let rec js_proof_engine (proof : Proof.t) =
         List.flatten (List.map !!(Actions.actions _self##.proof) asource)
       in
 
-      (*let click_actions =
-          List.filter
-            (fun a -> match a.kind with Click _ -> true | _ -> false)
-            actions
-        in
-        Js_log.printf "CLICK ACTIONS : %s"
-          (List.to_string Actions.show_aoutput click_actions);*)
       Js.array
         (Array.of_list
            (List.map
@@ -672,9 +665,7 @@ and js_term parent (goal_id : int) (kind : Path.kind) (term : Term.t) =
   end
 
 (** Print a single goal in Actema format (for debug purposes). *)
-let print_goal (Logic.{ g_id; g_pregoal = goal } : Logic.goal) : unit =
-  Js_log.printf "INTRO VARIANTS : %s"
-    (List.to_string (fun (s, sub) -> s) (Actions.intro_variants goal))
+let print_goal (Logic.{ g_id; g_pregoal = goal } : Logic.goal) : unit = ()
 
 (* -------------------------------------------------------------------- *)
 let export (name : string) : unit =

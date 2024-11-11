@@ -533,7 +533,6 @@ export default {
             var self = this;
 
             var applyAction = function () {
-                //console.log(this.getRootId() + " is doing something !");
                 // check what actions are available
                 var id = $(this).attr("id");
                 var actionsClasses = $(this)
@@ -841,7 +840,7 @@ export default {
             if (!this.isInWorkZone()) {
                 throw new Error("Element is not in work zone");
             } else {
-                console.log("Element is in work zone !");
+                //console.log("Element is in work zone !");
 
                 if (this.subgoal) {
                     this.originalPosition = this.getSavedPosition();
