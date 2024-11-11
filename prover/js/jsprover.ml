@@ -349,9 +349,9 @@ and js_subgoal parent (handle : int) =
         returned array is meaningful and can be used as argument to [#intro]
         to select the desired introduction rule. *)
     method ivariants =
-      (*let aout = !!PActions.intro_variants parent##.proof ~goal_id:handle in
-        let aout = Array.of_list (List.map Js.string aout) in
-        Js.array aout*)
+      (*let aout = !!Actions.intro_variants parent##.proof in
+      let aout = Array.of_list (List.map (fun (s, _) -> Js.string s) aout) in
+      Js.array aout*)
       Js.array [||]
 
     (** [this#encodeduplicate (hyp_name : string)] gets the hypothesis in the current goal,
