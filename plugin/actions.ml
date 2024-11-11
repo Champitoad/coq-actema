@@ -89,8 +89,9 @@ let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
     - In Actema existential quantification [exists x : ty, body] is represented 
       as [App (Cst ex, [ty; Lambda (x, ty, body)])], but the tactics work with first-class 
       existentials. For instance when pointing to [ty] or [body] in [exists x : ty, body],
-      in Actema we use [[2; 0]] or [[2; 1]], but the tactics expect [[0]] or [[1]]. *)
-
+      in Actema we use [[2; 0]] or [[2; 1]], but the tactics expect [[0]] or [[1]].
+    - In Actema negation is represented as [App (Cst not, x)] and in Coq it is represented 
+      as [Prod (_, x, False)].  *)
 let rec convert_sub (term : Lang.Term.t) sub =
     match (sub, term) with
     | [], _ -> []
@@ -101,6 +102,9 @@ let rec convert_sub (term : Lang.Term.t) sub =
     | 2 :: 1 :: sub, App (_, Cst ex, [ _; Lambda (_, x, ty, body) ])
       when Name.equal ex Lang.Constants.ex ->
         1 :: convert_sub body sub
+    (* Handle negation. *)
+    | 1 :: sub, App (_, Cst not, [x]) when Name.equal not Lang.Constants.not ->
+        0 :: convert_sub x sub
     (* Lambdas and products. *)
     | 0 :: sub, Lambda (_, x, ty, body) | 0 :: sub, Prod (_, x, ty, body) ->
         0 :: convert_sub ty sub
@@ -112,8 +116,7 @@ let rec convert_sub (term : Lang.Term.t) sub =
     (* This should not happen. *)
     | _ -> failwith "Actions.convert_sub : invalid path"
 
-
-  let convert_path (coq_goal : Goal.t) (path : Logic.Path.t) : int list =
+let convert_path (coq_goal : Goal.t) (path : Logic.Path.t) : int list =
   (* Get the actema term the path points to. *)
   let api_goal = Export.goal coq_goal in
   let term =
