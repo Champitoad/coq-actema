@@ -1,11 +1,8 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
-About iff.
-
-Definition x := 3.
-
-About plus.
+Lemma test (A : Prop) (h : A) (h' : ~ A) : False.
+Proof. actema_force.
 
 Inductive nlist := 
   | nnil : nlist
