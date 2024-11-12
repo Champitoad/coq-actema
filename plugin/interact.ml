@@ -358,8 +358,14 @@ let rec interact (state : state) mode : choice list =
   | Subform, (_, []), (_, []) -> List.rev state.choices
   (* Rule L=₁ *)
   | RewriteL, (App (_, Cst eq, _), [ 2 ]), _
-  | RewriteL, (App (_, Cst eq, _), [ 3 ]), _ ->
-      interact (swap_step state) mode
+  | RewriteL, (App (_, Cst eq, _), [ 3 ]), _
+    when Name.equal eq Constants.eq -> begin
+      (* In forward mode, swap the two sides of the link so that
+         the tactics only have to handle the case of RewriteR. *)
+      match mode with
+      | Forward -> List.rev (Swap :: state.choices)
+      | Backward -> List.rev state.choices
+    end
   (* Rule L=₂ *)
   | RewriteR, _, (App (_, Cst eq, _), [ 2 ])
   | RewriteR, _, (App (_, Cst eq, _), [ 3 ])
