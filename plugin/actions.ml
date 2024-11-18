@@ -463,10 +463,12 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
           let sub = convert_path coq_goal path in
           FFI.calltac ~file:"Misc" "deep_simpl_hyp"
             [ Tac2ffi.of_ident id; Tac2ffi.(of_list of_int) sub ]
+	     >> simplify_hyp id
       | Concl ->
           let sub = convert_path coq_goal path in
           FFI.calltac ~file:"Misc" "deep_simpl_concl"
             [ Tac2ffi.(of_list of_int) sub ]
+	    >> simplify_goal ()
       | VarHead _ | VarBody _ | VarType _ ->
           raise @@ UnsupportedAction (action, "Can't simplify in variable")
     end
