@@ -1,6 +1,19 @@
 From Actema Require Import Loader.
 Require Import ssreflect.
 
+Lemma bug (x y : nat) (h : x = y) : x = y.
+actema_force.  
+Qed.
+
+Parameter test : nat -> nat -> bool.
+Lemma bug2  (refl : forall n, test n n = true): 
+ forall a, test a a = true.
+ actema_force.
+ intro.
+ reflexivity.
+ Unshelve.
+Qed.
+
 Parameter f g : nat -> nat.
 
 Lemma bug (x y : nat) (h : x = y) (e : x = f y) : x = y.

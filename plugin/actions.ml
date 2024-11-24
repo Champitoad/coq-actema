@@ -19,7 +19,7 @@ module FFI = struct
   (** [calltac ~file name args] calls the Ltac2 tactic [name] with arguments [args], 
       and discards the result. 
       [file] is the name of the file (without the .v extension) the tactic is defined in. *)
-  let calltac ~(file : string) (name : string) (args : Tac2ffi.valexpr list) :
+  let calltac ~(file : string) (name : string) (args : Tac2val.valexpr list) :
       unit PVMonad.t =
     let open PVMonad in
     (* Debug *)
@@ -37,31 +37,31 @@ module FFI = struct
              (Names.KerName.to_string kname)
     in
     (* Call the tactic with its arguments. *)
-    Tac2ffi.to_unit <$> Tac2ffi.apply_val tac args
+    Tac2ffi.to_unit <$> Tac2val.apply_val tac args
 
   (** Encode an [Interact.side] to the Ltac2 type [DnD.side]. *)
-  let of_side : Interact.side -> Tac2ffi.valexpr = function
-    | Left -> Tac2ffi.ValInt 0
-    | Right -> Tac2ffi.ValInt 1
+  let of_side : Interact.side -> Tac2val.valexpr = function
+    | Left -> Tac2val.ValInt 0
+    | Right -> Tac2val.ValInt 1
 
   (** [of_choice import_term choice] encodes [choice] to the Ltac2 type [DnD.choice]. *)
   let of_choice (import_term : Lang.Term.t -> EConstr.t) :
-      Interact.choice -> Tac2ffi.valexpr = function
-    | Swap -> Tac2ffi.ValInt 0
-    | Side side -> Tac2ffi.ValBlk (0, [| of_side side |])
+      Interact.choice -> Tac2val.valexpr = function
+    | Swap -> Tac2val.ValInt 0
+    | Side side -> Tac2val.ValBlk (0, [| of_side side |])
     | Binder (side, SFlex) | Binder (side, SRigid) ->
-        let none = Tac2ffi.ValInt 0 in
-        Tac2ffi.ValBlk (1, [| of_side side; none |])
+        let none = Tac2val.ValInt 0 in
+        Tac2val.ValBlk (1, [| of_side side; none |])
     | Binder (side, SBound witness) ->
         let constr = import_term witness in
-        let some_witness = Tac2ffi.ValBlk (0, [| Tac2ffi.of_constr constr |]) in
-        Tac2ffi.ValBlk (1, [| of_side side; some_witness |])
+        let some_witness = Tac2val.ValBlk (0, [| Tac2ffi.of_constr constr |]) in
+        Tac2val.ValBlk (1, [| of_side side; some_witness |])
 
   (** [of_dnd_kind kind] encodes [kind] to the Ltac2 type [DnD.dnd_kind]. *)
-  let of_dnd_kind : Logic.dnd_kind -> Tac2ffi.valexpr = function
-    | Subform -> Tac2ffi.ValInt 0
-    | RewriteL -> Tac2ffi.ValBlk (0, [| of_side Left |])
-    | RewriteR -> Tac2ffi.ValBlk (0, [| of_side Right |])
+  let of_dnd_kind : Logic.dnd_kind -> Tac2val.valexpr = function
+    | Subform -> Tac2val.ValInt 0
+    | RewriteL -> Tac2val.ValBlk (0, [| of_side Left |])
+    | RewriteR -> Tac2val.ValBlk (0, [| of_side Right |])
 end
 
 (** Simplify the conclusion in the current Coq goal. *)

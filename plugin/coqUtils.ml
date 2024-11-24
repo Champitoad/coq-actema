@@ -184,12 +184,18 @@ module Trm = struct
     let (_, inst), _ = UnivGen.fresh_constructor_instance env name in
     EConstr.mkConstructU (name, EConstr.EInstance.make inst)
 
-  let lambda sigma x ty body : EConstr.t =
-    let x = Context.annotR (Names.Id.of_string x) in
+  let lambda sigma (x : string) ty body : EConstr.t =
+    let x =
+      Context.make_annot (Names.Id.of_string_soft x) EConstr.ERelevance.relevant
+    in
     EConstr.mkNamedLambda sigma x ty body
 
-  let dprod x ty body : EConstr.t =
-    let x = Context.nameR (Names.Id.of_string x) in
+  let dprod (x : string) ty body : EConstr.t =
+    let x =
+      Context.make_annot
+        (Names.Name.Name (Names.Id.of_string_soft x))
+        EConstr.ERelevance.relevant
+    in
     EConstr.mkProd (x, ty, body)
 
   module Logic = struct

@@ -8,7 +8,7 @@ From Actema Require Import Utils.
 Ltac2 rew_all_left (hname : ident) : unit := 
   let hyp := Control.hyp hname in 
   lazy_match! Constr.type hyp with 
-  | ?a = ?b =>
+  | ?a = _ =>
     try (rewrite $hyp in *) ;
     if Constr.is_var a then Std.clear [ hname ] else ()
   | _ => ()
@@ -19,7 +19,7 @@ Ltac2 rew_all_left (hname : ident) : unit :=
 Ltac2 rew_all_right (hname : ident) : unit := 
   let hyp := Control.hyp hname in 
   lazy_match! Constr.type hyp with 
-  | ?a = ?b =>
+  | _ = ?b =>
     try (rewrite <- $hyp in *) ;
     if Constr.is_var b then Std.clear [ hname ] else ()
   | _ => ()
