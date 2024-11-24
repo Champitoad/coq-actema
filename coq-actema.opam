@@ -9,7 +9,7 @@ homepage: "https://github.com/Champitoad/coq-actema"
 bug-reports: "https://github.com/Champitoad/coq-actema/issues"
 depends: [
   "dune" {>= "3.13"}
-  "coq" {= "8.19.1"}
+  "coq" {= "8.20.0"}
   "coq-mathcomp-ssreflect" {= "2.2.0"}
   "cohttp-lwt-unix" {>= "5.3.0"}
   "lwt_ppx" {>= "2.1.0"}
