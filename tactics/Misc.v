@@ -51,7 +51,7 @@ Ltac2 myinduction (c : constr) : unit :=
     induction $c at -1 ;
     intro $eqn_id.
 
-(* [deep_simpl c sub] call [simpl] on the subterm of [c] at path [sub]. *)
+(* [deep_simpl c sub] calls [simpl] on the subterm of [c] at path [sub]. *)
 Ltac2 deep_simpl (c : constr) (sub : int list) : constr := 
   (* Take care that [Std.eval_simpl] does not work on terms with loose de Bruijn indices. *)
   let on_subterm n subterm :=

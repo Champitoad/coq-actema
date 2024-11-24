@@ -48,7 +48,7 @@ Ltac2 beta_equiv (t1 : constr) (t2 : constr) : bool :=
   let t2 := Std.eval_cbv RedFlags.all t2 in 
   Constr.equal t1 t2.
 
-(** [freh_evar basename type] creates a fresh evar with the type [type].
+(** [fresh_evar basename type] creates a fresh evar with the type [type].
     Optionally [basename] can be used to indicate a prefered name for the evar
     (wich might be slightly modified to ensure freshness).
    
