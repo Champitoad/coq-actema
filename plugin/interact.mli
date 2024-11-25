@@ -33,7 +33,7 @@ type choice =
     Binder of side * Unif.sitem
 [@@deriving show]
 
-(** An itrace [fvars_left, fvars_right, choices] contains :
+(** An itrace [choices, fvars_left, fvars_right] contains :
     - The list of choices made during the interaction (see prover/interact.ml).
       The witnesses have free variables in [fvars_left @ fvars_right].
     - The list of FVars bound in the left subterm.

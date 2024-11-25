@@ -353,23 +353,26 @@ let rec interact (state : state) mode : choice list =
   (* Print some debug info. *)
   dump_state state mode;
 
+  (* For rules L=₁ and L=₂ we have to make sure not to stop the interaction too early :
+     indeed we might have to instantiate some binders in the subterm which is acted upon.
+     We thus make sure there are no more free variables in the relevant term. *)
   match (state.dnd_kind, (state.t1, state.sub1), (state.t2, state.sub2)) with
   (* Rule id *)
   | Subform, (_, []), (_, []) -> List.rev state.choices
-  (* Rule L=₁ *)
+  (* Rule L=₁ (only applies when there are no more free variables on the right). *)
   | RewriteL, (App (_, Cst eq, _), [ 2 ]), _
   | RewriteL, (App (_, Cst eq, _), [ 3 ]), _
-    when Name.equal eq Constants.eq -> begin
+    when Name.equal eq Constants.eq && List.is_empty state.fvars_2 -> begin
       (* In forward mode, swap the two sides of the link so that
          the tactics only have to handle the case of RewriteR. *)
       match mode with
       | Forward -> List.rev (Swap :: state.choices)
       | Backward -> List.rev state.choices
     end
-  (* Rule L=₂ *)
+  (* Rule L=₂ (only applies when there are no more free variables on the left). *)
   | RewriteR, _, (App (_, Cst eq, _), [ 2 ])
   | RewriteR, _, (App (_, Cst eq, _), [ 3 ])
-    when Name.equal eq Constants.eq ->
+    when Name.equal eq Constants.eq && List.is_empty state.fvars_1 ->
       List.rev state.choices
   (* All other rules. *)
   | _ ->

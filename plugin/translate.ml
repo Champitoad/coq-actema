@@ -535,12 +535,12 @@ module Import = struct
   type state = { coq_goal : Goal.t; table : Symbols.Table.t }
 
   let translate_binder (binder : Lang.Term.binder) :
-      Names.Name.t Context.binder_annot =
+      Names.Name.t EConstr.binder_annot =
     let str =
       match binder with Named name -> Name.show name | Anonymous -> "_"
     in
     let name = Names.Name.mk_name @@ Names.Id.of_string str in
-    { binder_name = name; binder_relevance = Relevant }
+    { binder_name = name; binder_relevance = EConstr.ERelevance.relevant }
 
   (** This assumes the input term contains no FVar and no loose BVar. *)
   let rec translate_term state (term : Lang.Term.t) : EConstr.t =
