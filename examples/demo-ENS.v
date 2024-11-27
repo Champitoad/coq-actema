@@ -2,8 +2,8 @@ From Actema Require Import Loader.
 
 Require Import ssreflect.
 
-Context (Socrates : nat).
-Context (Mortal Human : nat -> Prop).
+Parameter (Socrates : nat).
+Parameter (Mortal Human : nat -> Prop).
 
 
 Lemma Aristoteles (hm : forall x, Human x -> Mortal x) 
