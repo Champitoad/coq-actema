@@ -40,6 +40,9 @@ Ltac2 swap_choice (c : choice) : choice :=
   | Binder s witness => Binder (swap_side s) witness
   end.
 
+Ltac2 swap_choices (ch : choice list) : choice list :=
+   List.map swap_choice ch.
+
 (* A drag and drop kind. This is used to know which end rule to apply :
    without this information there could be ambiguities. *)
 Ltac2 Type dnd_kind :=
@@ -400,6 +403,16 @@ with forward
       (d', p')
     | _ => Control.throw (InteractFailure "[forward] F=1 rule : expected an equality")
     end
+  | [], [2], sub2, Rewrite Left => 
+    lazy_match! h1 with 
+    | @eq ?ty ?a ?b => 
+      (* Rewrite a into b. *)
+      let f := deep_pattern a h2 sub2 in
+      let d' := beta_root '($f $b) in
+      let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind $ty $a $f h2_ $b h1_) in
+      (d', p')
+    | _ => Control.throw (InteractFailure "[forward] F=1 rule : expected an equality")
+    end 
   (* F=2. *)
   | [], sub1, [ 3 ], Rewrite Right =>
     lazy_match! h2 with 
@@ -410,7 +423,18 @@ with forward
       let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind_r $ty $b $f h1_ $a h2_) in
       (d', p')
     | _ => Control.throw (InteractFailure "[forward] F=2 rule : expected an equality")
-    end
+      end
+  | [], [ 3 ], sub2, Rewrite Left =>
+    lazy_match! h1 with 
+    | @eq ?ty ?a ?b => 
+      (* Rewrite b into a. *)
+      let f := deep_pattern b h2 sub2 in
+      let d' := beta_root '($f $a) in
+      let p' := '(fun (h1_ : $h1) (h2_ : $h2) => @eq_ind_r $ty $b $f h2_ $a h1_) in
+      (d', p')
+    | _ => Control.throw (InteractFailure "[forward] F=2 rule : expected an equality")
+      end
+
   (****************************************************************************)
   (* Non-binder rules. *)
   (****************************************************************************)
@@ -531,11 +555,14 @@ with forward
     let (d, p) := forward h2 sub2 h1 sub1 choices (swap_dnd_kind kind) in 
     let swap := '(fun (p : $h2 -> $h1 -> $d) h1 h2 => p h2 h1) in
     (d, '($swap $p))
+  | (Side Left :: _, _, _, _) =>
+     let choices := swap_choices choices in
+     let kind := swap_dnd_kind kind in
+     let (d, p) := forward h2 sub2 h1 sub1 choices kind in
+     let swap := '(fun (p : $h2 -> $h1 -> $d) h1 h2 => p h2 h1) in
+    (d, '($swap $p))
   (* Eventually these rules should be removed. *)
-  | (Side Left :: _, _, _, _)
-  | (Binder Left _ :: _, _, _, _) 
-  | ([], [ 2 ], _, Rewrite Left)
-  | ([], [ 3 ], _, Rewrite Left) => Control.throw (InteractFailure "[forward]: TODO swap")
+  | (Binder Left _ :: _, _, _, _) => Control.throw (InteractFailure "[forward]: TODO swap ! ")
   (****************************************************************************)
   (* No matching rule. *)
   (****************************************************************************)
