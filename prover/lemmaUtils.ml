@@ -31,7 +31,7 @@ let rec subterm_raw (term : Term.t) sub : Term.t =
 
     For efficiency reasons this function operates directly on de Bruijn syntax 
     instead of locally nameless syntax. *)
-let rec not_unifiable depth ((t1, t2) : Term.t * Term.t) : bool =
+let rec not_unifiable depth ((t1, t2) : Term.t * Term.t) : bool = 
   match (t1, t2) with
   | FVar _, _ | _, FVar _ ->
       failwith "Link.not_unifiable_fast : unexpected FVar"
@@ -83,11 +83,13 @@ let rec compute_subs_rec target f sub acc =
         List.fold_lefti
           (fun acc i arg -> compute_subs_rec target arg ((i + 1) :: sub) acc)
           acc args
-    | FImpl (f0, f1) ->
-        let acc = compute_subs_rec target f0 (0 :: sub) acc in
-        compute_subs_rec target f1 (1 :: sub) acc
+    | FImpl (f0, f1) ->  (* bug : this is never executed currently ! *)
+       let acc = compute_subs_rec target f0 (0 :: sub) acc in
+        compute_subs_rec target f1 (1 :: sub) acc 
     (* For Forall/Exist we don't recurse in the type of the binder. *)
-    | FBind (Forall, x, ty, body) -> compute_subs_rec target body (1 :: sub) acc
+    | FBind (Forall, x, ty, body) ->
+      let acc = compute_subs_rec target body (1 :: sub) acc in
+           compute_subs_rec target ty (0 :: sub) acc
     | FBind (Exist, x, ty, body) ->
         compute_subs_rec target body (1 :: 2 :: sub) acc
   in
