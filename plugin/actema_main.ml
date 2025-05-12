@@ -2,6 +2,7 @@ open Utils.Pervasive
 open Proofview
 open CoqUtils
 open Api
+open Logic
 open Translate
 
 (* -------------------------------------------------------------------- *)
@@ -35,11 +36,12 @@ type history = { mutable before : proof; mutable after : proof }
 exception ApplyUndo
 
 (** The control flow here is a mess. *)
-let interactive_proof () : proof tactic =
+let interactive_proof (g : Logic.pregoal) : proof tactic =
+  let ig =  { g_id = 1 ; g_pregoal = g } in
   let open PVMonad in
   (* The proof history used to manage Undo/Redo. *)
   let hist = ref { before = []; after = [] } in
-
+   let tree_hist  =  Prooftree.newProofTree ig in
   (* At the start of the proof translate the lemmas to the Actema format. *)
   let* lemmas, lemmas_env = export_lemmas () in
 
@@ -50,7 +52,8 @@ let interactive_proof () : proof tactic =
     (* Handle Undo/Redo. *)
     let continue idx a =
       let cont =
-        let* _ = Actions.execute (idx, a) in
+        (* ici ajouter a en idx *)
+        let* _ = (Actions.execute (idx, a)) in
         aux ()
       in
       tclOR cont
@@ -91,10 +94,14 @@ let interactive_proof () : proof tactic =
           Log.error
             "Actema_main.interactive_proof: call handle_lemmas on the action."
       | Do (idx, a) ->
-          Log.printf "Received action %d :: %s" idx (Logic.show_action a);
+        Log.printf "Received action %d :: %s" idx (Logic.show_action a);
+          let* l = export_goals () in
+          Prooftree.perform idx a l tree_hist;      
           !hist.before <- (idx, a) :: !hist.before;
           continue idx a
-      | Done -> return @@ List.rev !hist.before
+      | Done ->
+          Log.printf "size: %d" (Prooftree.size tree_hist.tree)  ;
+        return @@ List.rev !hist.before
       | Undo -> begin
           match !hist.before with
           | a :: before ->
@@ -124,7 +131,7 @@ let actema_tac ?(force = false) (action_name : string) : unit tactic =
         let goal = Export.goal coq_goal in
         let id = (action_name, Logic.Hyps.to_list goal.g_hyps, goal.g_concl) in
         let interactive () =
-          let* prf = interactive_proof () in
+          let* prf = interactive_proof goal in
           Storage.save_proof id prf;
           return ()
         in
