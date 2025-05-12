@@ -74,6 +74,7 @@ let simplify_hyp (hyp : Names.Id.t) : unit tactic =
   (* We call Benjamin's tactic in HOL.v. *)
   calltac (tactic_kname "simplify_hyp") [ EConstr.mkVar hyp ]
 
+
 (** Make an introduction pattern to introduce named variables.
     If any of the given names is already bound, this will create a fresh name instead. *)
 let mk_intro_patterns (names : string list) : Tactypes.intro_patterns =
@@ -472,6 +473,16 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
       | VarHead _ | VarBody _ | VarType _ ->
           raise @@ UnsupportedAction (action, "Can't simplify in variable")
     end
+  | Logic.AUnfold path -> begin
+    match path.kind with
+      | Hyp name ->
+          let id = Names.Id.of_string @@ Name.show name in
+          let sub = convert_path coq_goal path in
+          FFI.calltac ~file:"HOL" "unfold_path_hyp"
+            [ Tac2ffi.of_ident id; Tac2ffi.(of_list of_int) sub ]
+      | _ -> raise @@ UnsupportedAction (action, "can only unfold hypotheses for now")
+
+    end
   | Logic.ACase term ->
       let symbol_table = Symbols.all coq_goal in
       let coq_term = Import.term coq_goal symbol_table term in
@@ -500,6 +511,7 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
          instantiated quantifiers.
          Maybe instantiating the deepest quantifiers first fixes this ? *)
       mapM_ (execute_ainstantiate coq_goal witness) quants
+  (* | _ -> raise @@ UnsupportedAction (action, "unsupported action") *)
 
 let execute ((idx, a) : int * Logic.action) : unit tactic =
   tclFOCUS (idx + 1) (idx + 1) @@ Goal.enter @@ execute_helper a

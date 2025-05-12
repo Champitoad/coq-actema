@@ -7,7 +7,6 @@ Context (Mortal Human : nat -> Prop).
 
 Lemma Aristoteles (hm : forall x, Human x -> Mortal x) 
   (hh : Human Socrates) : Mortal Socrates.
-    actema_force.
 Admitted. 
 
 Parameter Rich : nat -> Prop.

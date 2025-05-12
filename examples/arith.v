@@ -6,11 +6,18 @@ Lemma test : True.
   epose (fun x : nat => ?[ev] : Prop) as h.
   Eval compute in h.
   Eval compute in h 42.
+  Admitted.
 
 Lemma add_comm :
   forall n m, n + m = m + n.
 Proof.
 actema.
+Unshelve.
+exact nat.
+exact 0.
+exact 0.
+exact nat.
+exact 0.
 Qed.
      
 Fixpoint eqb n m :=
@@ -28,7 +35,8 @@ Fixpoint eqr n m :=
   end.
     
 Lemma eqr_eq : forall n m, eqr n m -> n = m.
-  actema.
+intros.
+unfold_path (cons nil ).
 Qed.
 
 

@@ -22,6 +22,9 @@ Fixpoint eqr n m :=
  
 
 Lemma eqb_eqr : forall n m, eqb n m = true -> eqr n m.
+intros.
+Set Printing ALl.
+unfold_path (cons 3 nil).
 Admitted.
 
 

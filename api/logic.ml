@@ -361,6 +361,7 @@ type action =
   | ALemmaAdd of Name.t
   | ADnD of Path.t * Path.t * unif_data * dnd_kind
   | AInstantiate of Term.t * Path.t list
+  | AUnfold of Path.t
 [@@deriving show]
 
 type aident = string * hyp list * Term.t [@@deriving show]

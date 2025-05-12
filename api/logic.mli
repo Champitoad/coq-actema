@@ -298,6 +298,7 @@ type action =
      one could instantiate any of a, x, z by e.g. [42 + 5].
      However y is not instantiable because of polarity issues. *)
   | AInstantiate of Term.t * Path.t list
+  | AUnfold of Path.t
 [@@deriving show]
 
 (* An action identifier is a pair of an arbitrary string identifier and an abstract goal. *)

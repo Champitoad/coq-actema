@@ -9,7 +9,6 @@ Proof.
   intros H1 H2. apply H2. exact H1.
 Restart.
   intros.
-  actema_force. Undo.
   actema_force.
 Qed.
 

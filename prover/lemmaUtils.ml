@@ -89,7 +89,7 @@ let rec compute_subs_rec target f sub acc =
     (* For Forall/Exist we don't recurse in the type of the binder. *)
     | FBind (Forall, x, ty, body) ->
       let acc = compute_subs_rec target body (1 :: sub) acc in
-           compute_subs_rec target ty (0 :: sub) acc
+        compute_subs_rec target ty (0 :: sub) acc
     | FBind (Exist, x, ty, body) ->
         compute_subs_rec target body (1 :: 2 :: sub) acc
   in

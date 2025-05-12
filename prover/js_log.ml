@@ -6,10 +6,10 @@
 open Js_of_ocaml
 
 (** Print an (Ocaml) string. A newline is added automatically. *)
-let log (s : string) : unit = Firebug.console##log (Js.string s)
+let log (s : string) : unit = Js_of_ocaml.Console.console##log (Js.string s)
 
 (** Print a formatted string. A newline is added automatically. *)
 let printf fmt = Format.ksprintf log fmt
 
 (** Same as [log], but logs an arbitrary javascript object. *)
-let log_object (obj : 'a Js.t) : unit = Firebug.console##log obj
+let log_object (obj : 'a Js.t) : unit = Js_of_ocaml.Console.console##log obj
