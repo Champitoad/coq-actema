@@ -264,7 +264,7 @@ let rec traverse_products n ctx (term : Term.t) sub :
   | _ -> None
 
 (** [ACaseIntro] and [AIndIntro] action. *)
-let case_ind_intro_actions (selection : Path.t list) proof : aoutput list =
+let case_ind_intro_actions (selection : Path.t list) proof : aoutput list = 
   match selection with
   | [ sel ] when is_concl sel ->
       let goal = Proof.byid proof sel.goal in

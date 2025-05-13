@@ -7,7 +7,8 @@ open ProverLogic
 (** [term_size term] computes the number of nodes in [term] (including leaves). *)
 let rec term_size (term : Term.t) : int =
   match term with
-  | BVar _ | FVar _ | Sort _ | Cst _ -> 1
+  | BVar _ | FVar _ | Sort _  -> 1
+  | Cst _ -> 5
   | App (_, f, args) -> List.sum @@ List.map term_size (f :: args)
   | Lambda (_, x, ty, body) | Prod (_, x, ty, body) ->
       term_size ty + term_size body
@@ -83,7 +84,7 @@ let rec compute_subs_rec target f sub acc =
         List.fold_lefti
           (fun acc i arg -> compute_subs_rec target arg ((i + 1) :: sub) acc)
           acc args
-    | FImpl (f0, f1) ->  (* bug : this is never executed currently ! *)
+    | FImpl (f0, f1) -> (* bug : this is sometimes not executed *)
        let acc = compute_subs_rec target f0 (0 :: sub) acc in
         compute_subs_rec target f1 (1 :: sub) acc 
     (* For Forall/Exist we don't recurse in the type of the binder. *)
@@ -184,12 +185,14 @@ let name_compare n1 n2 : int =
     (String.explode @@ Name.show n1)
     (String.explode @@ Name.show n2)
 
+let subs_size m = List.fold_left (fun x y -> x + y) 0 m.sub
+
 (** Compare lemma matches. *)
 let match_compare m1 m2 : int =
   (* We want a big subterm size but a small size. *)
   triple_compare (Fun.flip Int.compare) Int.compare name_compare
-    (m1.subterm_size, m1.size, m1.lemma.l_user)
-    (m2.subterm_size, m2.size, m2.lemma.l_user)
+    ( 300 * m1.subterm_size * m1.subterm_size / m1.size, m1.size, m1.lemma.l_user)
+    ( 300 * m2.subterm_size * m2.subterm_size / m2.size, m2.size, m2.lemma.l_user)
 
 let nub_matches matches =
   let rec loop found acc = function

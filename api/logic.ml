@@ -38,8 +38,8 @@ module FirstOrder = struct
     | Prod (_, _, t1, t2)
       when (*TermUtils.typeof env context t = Term.mkProp
              &&*)
-           not (Term.contains_loose_bvars t2) ->
-        FImpl (t1, t2)
+           not (Term.contains_loose_bvars t2) -> 
+        FImpl (t1, t2) 
     (* Forall. *)
     | Prod (_, x, ty, body)
     (*when TermUtils.typeof env context t = Term.mkProp*) ->
