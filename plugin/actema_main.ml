@@ -100,7 +100,7 @@ let interactive_proof (g : Logic.pregoal) : proof tactic =
           !hist.before <- (idx, a) :: !hist.before;
           continue idx a
       | Done ->
-          Log.printf "size: %d" (Prooftree.size tree_hist.tree)  ;
+          Log.printf "size: %s" (Prooftree.get_proof_summary tree_hist)  ;
         return @@ List.rev !hist.before
       | Undo -> begin
           match !hist.before with
