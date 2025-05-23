@@ -158,7 +158,7 @@ type text_tree =
 let rec tree_to_text_tree (Tree (goal, state_ref)) =
   let goal_str = goal_to_string goal in
   match !state_ref with
-  | Open -> Text (goal_str, "Goal is still open", [])
+  | Open -> Text (goal_str, "Goal is still unfinished", [])
   | Node (action, subtrees) ->
       let action_str = string_of_action action in
       let child_trees = List.map tree_to_text_tree subtrees in
@@ -168,87 +168,66 @@ let rec tree_to_text_tree (Tree (goal, state_ref)) =
 let prooftree_to_text_tree pt =
   tree_to_text_tree pt.tree
 
-(* Print a text tree with indentation *)
-let rec print_text_tree ?(indent=0) t =
-  match t with
-  | Empty -> ()
-  | Text (goal, action, children) ->
-      print_endline (String.make indent ' ' ^ "Goal: " ^ goal);
-      print_endline (String.make (indent+2) ' ' ^ "Action: " ^ action);
-      List.iter (print_text_tree ~indent:(indent+4)) children
-
-(* Concatenate text tree into a single string *)
-let rec concat_text_tree t =
+let rec print_text_tree_aux level t =
   match t with
   | Empty -> ""
   | Text (goal, action, children) ->
-      "Goal: " ^ goal ^ "\nAction: " ^ action ^ 
-      (if children = [] 
-       then "\nThis branch is DONE!\n" 
-       else "\n" ^ String.concat "\n" (List.map concat_text_tree children))
+      let current_line = String.make (level * 2) ' ' ^ "Action: " ^ action ^ "\n" in
+      if children = [] then
+        current_line ^ "No more subgoals.\n"
+      else
+        let children_text = String.concat "\n" 
+          (List.map (fun x -> print_text_tree_aux (level + 1) x) children) in
+        current_line ^ children_text
 
-(* Adapter to convert between old and new tree formats for backward compatibility *)
-let change_trees (tree : tree) =
-  tree_to_text_tree tree
+let print_text_tree t = print_text_tree_aux 0 t
 
-(* Get a summary of the proof tree *)
+let rec summarize_tree (Tree (goal, state_ref)) =
+  match !state_ref with
+  | Open -> ""  (* Skip open goals entirely *)
+  | Node (action, children) ->
+      let action_str = string_of_action action in
+      let children_str = 
+        String.concat "" 
+          (List.filter (fun s -> s <> "") 
+            (List.map (fun t -> "  " ^ summarize_tree t) children))
+      in
+      if children_str = "" then
+        action_str ^ "\n" ^ "  Proof completed\n"
+      else
+        action_str ^ "\n" ^ children_str
+
+(*unused from here downwards*)
+
 let summarize_prooftree pt =
   let total_nodes = size pt.tree in
   let open_goals = List.length pt.goals in
   let history_steps = List.length pt.history in
-  Printf.sprintf "Proof tree with %d total steps, %d open goals, and %d steps in history"
-    total_nodes open_goals history_steps
+  Printf.sprintf "Proof tree with %d total steps, %d open goals, and %d steps in history\n%s"
+    total_nodes open_goals history_steps (summarize_tree pt.tree)
 
-(* Convert text_tree to string with proper indentation *)
-let string_of_text_tree tt =
-  let buf = Buffer.create 256 in
-  let rec aux ?(indent=0) t =
-    match t with
-    | Empty -> ()
-    | Text (goal, action, children) ->
-        Buffer.add_string buf (String.make indent ' ' ^ "Goal: " ^ goal ^ "\n");
-        Buffer.add_string buf (String.make (indent+2) ' ' ^ "Action: " ^ action ^ "\n");
-        List.iter (aux ~indent:(indent+4)) children
-  in
-  aux tt;
-  Buffer.contents buf
+(*  Serching For an issue with the tree structure
 
-(* Get proof summary as a string instead of printing it *)
-let get_proof_summary pt =
-  let tt = prooftree_to_text_tree pt in
-  let summary = 
-    "Proof Tree Summary:\n" ^
-    (summarize_prooftree pt) ^ "\n\n" ^
-    "Detailed Proof Structure:\n" ^
-    (string_of_text_tree tt) ^ "\n\n" ^
-    "Textual Explanation:\n" ^
-    (concat_text_tree tt)
-  in
-  summary
 
-(* Function that prints the proof summary using Log *)
-(* let print_proof_summary pt =
-  Log.printf "%s" (get_proof_summary pt) 
+let count_direct_children (Tree (_, state_ref)) =
+  match !state_ref with
+  | Open -> 0
+  | Node (_, subtrees) -> List.length subtrees;;
 
-(* Example: Create and print a simple proof tree using the socrates example *)
-let create_sample_socrates () =
-  match Logic.parse_goal "forall x, Human x -> Mortal x" with
-  | None -> print_endline "Failed to parse sample goal"
-  | Some goal ->
-      let pt = newProofTree goal in
-      (* We would add actual proof steps here *)
-      print_proof_summary pt
+let rec print_raw_tree_depth depth (Tree (_, state_ref)) =
+  let indent = String.make (depth * 2) ' ' in
+  match !state_ref with
+  | Open -> 
+      Printf.sprintf "%s0\n" indent
+  | Node (_, subtrees) ->
+      let direct_children = List.length subtrees in
+      Printf.sprintf "%s%d\n%s" 
+        indent 
+        direct_children 
+        (String.concat "" (List.map (print_raw_tree_depth (depth + 1)) subtrees));;
 
-(* For backward compatibility with existing code *)
-let () =
-  (* Create a simple example tree and print it *)
-  match Logic.parse_goal "forall x, x = x" with
-  | None -> print_endline "Failed to parse example goal"
-  | Some goal ->
-      let pt = newProofTree goal in
-      let tt = change_trees pt.tree in
-      print_text_tree tt;
-      let all_text = concat_text_tree tt in
-      print_endline all_text
+let print_raw_prooftree pt =
+  Printf.sprintf "=== Tree Direct Children Count ===\n%s===========================\n"
+    (print_raw_tree_depth 0 pt.tree);;
+*)
 
-  *)

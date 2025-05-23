@@ -54,6 +54,8 @@ let interactive_proof (g : Logic.pregoal) : proof tactic =
       let cont =
         (* ici ajouter a en idx *)
         let* _ = (Actions.execute (idx, a)) in
+        let* l = export_goals () in
+        Prooftree.perform idx a l tree_hist;      
         aux ()
       in
       tclOR cont
@@ -95,12 +97,12 @@ let interactive_proof (g : Logic.pregoal) : proof tactic =
             "Actema_main.interactive_proof: call handle_lemmas on the action."
       | Do (idx, a) ->
         Log.printf "Received action %d :: %s" idx (Logic.show_action a);
-          let* l = export_goals () in
-          Prooftree.perform idx a l tree_hist;      
           !hist.before <- (idx, a) :: !hist.before;
           continue idx a
       | Done ->
-          Log.printf "size: %s" (Prooftree.get_proof_summary tree_hist)  ;
+        let Tree(ig, pt) = tree_hist.tree in
+         Log.printf "%s"  (Prooftree.summarize_tree tree_hist.tree);
+(*          Log.printf "root: %s" (Prooftree.goal_to_string ig); *)
         return @@ List.rev !hist.before
       | Undo -> begin
           match !hist.before with
