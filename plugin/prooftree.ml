@@ -16,7 +16,6 @@ type proofTree =
    mutable goals : (Logic.goal * goal_state ref) list;
    mutable history :  (goal_state ref * ((Logic.goal * (goal_state ref) ) list)) list };;
 
-
 let newtree c =
   let r : goal_state ref = ref Open in
   (Tree (c, r), r);;
@@ -26,7 +25,7 @@ let newProofTree c =
   {tree = t; goals = [c,r]; history = [] };;
 
 let get_subgoal t n =
-  match (List.nth t.goals n) with
+  match (List.nth t.goals (n-1)) with
     (g,_) -> g;;
 
 let term_to_subgoal =
@@ -56,12 +55,34 @@ and get_subgoals_aux = function
   | [] -> []
   | t::l -> (get_subgoals t)@(get_subgoals_aux l)
 
-let perform n a l t = 
-  let l = term_to_subgoal l in
-  let (l1, l2, (g,r)) = split t.goals n in
-  update_goal_t r a l;
-  t.history <- (r, t.goals)::t.history;
-  t.goals <- get_subgoals t.tree
+let rec remove k l =
+  if k = 0 then l
+  else match l with
+    | _::l -> remove (k-1) l
+    | _ -> failwith "remove"
+
+let rec keep_aux k l =
+  if k = 0 then []
+  else match l with
+    | x::l -> x::(keep_aux (k-1) l)
+    | _ -> failwith "keep"
+
+let keep i j l =
+  keep_aux j (remove i l)
+
+let perform n a nl t = 
+  let nl = term_to_subgoal nl in
+  let ol = get_subgoals t.tree in
+  let (_,r) = List.nth ol n in
+  let nn = List.length nl in
+  let on = List.length ol in
+  if nn  < on -1
+  then failwith "number goals"
+   else
+    let ngl = keep n (nn - on + 1) nl in
+    update_goal_t r a ngl;
+    t.history <- (r, t.goals)::t.history;
+    t.goals <- get_subgoals t.tree
 
 let undo_t t =
   match t.history with
@@ -78,18 +99,28 @@ let rec size (Tree (_, r)) =
   | Node (a,l) ->
     1 + (List.fold_left (fun n a -> n + (size a)) 0 l);;
 
+let rec outline = function
+  | Open -> "XX"
+  | Node (a, l) ->
+    let sl = List.map (fun (Tree (_,x)) -> (outline !x)^" ") l in
+    let sl = List.fold_left (fun s1 s2 -> s1 ^ s2) "" sl  
+    in "a(" ^ sl ^ ")"
 
 let  action_to_string = Logic.show_action
-let  term_to_string t = Lang.Term.show t
+let  term_to_string t = Notation.term_to_string t
 
 (*
 type pregoal =
   { g_env : Env.t; g_vars : Vars.t; g_hyps : Hyps.t; g_concl : Term.t }
 *)
 
+(*    Notation.term_to_string *)
 
-let  pregoal_to_string (g : Logic.pregoal) = Lang.Term.show g.g_concl
-let  goal_to_string (g : Logic.goal) = Lang.Term.show g.g_pregoal.g_concl
+
+let  pregoal_to_string (g : Logic.pregoal) =
+         Lang.Term.show  g.g_concl
+
+let  goal_to_string (g : Logic.goal) = pregoal_to_string g.g_pregoal
 
 (* Human-readable descriptions of actions *)
 let string_of_action = function
