@@ -10,6 +10,7 @@
   sha
   coq-actema.api
   coq-actema.utils)
+ (private_modules client)
  (preprocess
   (pps ppx_deriving.show)))
 

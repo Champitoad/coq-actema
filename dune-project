@@ -26,7 +26,7 @@
   (coq-mathcomp-ssreflect
    (= 2.2.0))
   (cohttp-lwt-unix
-   (>= 5.3.0))
+   (and (>= 5.0.0) (< 5.3.0)))
   (lwt_ppx
    (>= 2.1.0))
   (sha
