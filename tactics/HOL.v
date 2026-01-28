@@ -3343,7 +3343,7 @@ Ltac dyn_inst_hyp_xx l h h' o :=
 Ltac dyn_inst_hyp l h h' o :=
   dyn_inst_hyp_xx l h h' o;
   rewrite /instp /length /List.length in h';
-  rewrite /length /Nat.pred /check_nat /eq_nat /nat_rec in h';
+  rewrite /llength /ppred /check_nat /eq_nat /nat_rec in h';
   rewrite /check_nat /eq_nat /nat_rec 
           /nat_rect /check_list /coerce /eq_list /eq_rect_r /eq_rect
           /eq_sym /list_rec /list_rect in h' ;
@@ -3367,9 +3367,9 @@ Ltac inst_hyp_nd ts l h s o :=
   let sy := type of h in
    match sy with
    | coerce _ (@nil nat) ?hc _ => 
-       move: (instp_corr ts (pred (length l))  s o (@nil nat) hc tt h);
+       move: (instp_corr ts (ppred (llength l))  s o (@nil nat) hc tt h);
        clear h; move => h;
-       rewrite (* /= *) /instp  in h;
+       rewrite (* /= *) /instp /llength /ppred in h;
         rewrite  /eqnqtdec  /eq_ind_r /eq_ind  /eq_rect_r /eq_rect /nat_rec /eq_sym  /nat_rect /wsort /sl  in h
    end;
    try discriminate.
@@ -3402,8 +3402,8 @@ Ltac inst_goal ts l o :=
   let s := tst ts ho in 
   match goal with
   | |- coerce _ (@nil nat) ?hc _ => 
-       apply (instn_corr ts (pred (length l))  s o (@nil nat) hc tt);
-       rewrite (* /= *)  /instn /eqnqtdec  /eq_ind_r /eq_ind  /eq_rect_r /eq_rect /nat_rec /eq_sym  /nat_rect /wsort /sl
+       apply (instn_corr ts (ppred (llength l))  s o (@nil nat) hc tt);
+       rewrite   /instn /llength /ppred /eqnqtdec  /eq_ind_r /eq_ind  /eq_rect_r /eq_rect /nat_rec /eq_sym  /nat_rect /wsort /sl
    end;
   try discriminate.
 
