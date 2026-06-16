@@ -6,13 +6,10 @@
 From Ltac2 Require Import Ltac2 Printf.
 From Actema Require Import Utils. 
 
-
-
 (* When two formulas interact [A |- B] or [A * B],
    [A] is on the [Left] side and [B] is on the [Right] side. *)
 Ltac2 Type side := 
   [ Left | Right ].
-
 
 (* [swap_side s] maps Left to Right and vice-versa. *)
 Ltac2 swap_side (s : side) : side := 
@@ -21,105 +18,6 @@ Ltac2 swap_side (s : side) : side :=
   | Right => Left 
   end.
 
-
-Require Import Ltac2.Ltac2.
-
-(* Vérifie si un terme est un beta-redex avec le nom donné *)
-Ltac2 est_beta_redex_avec_nom (t : constr) (nom : ident) : bool :=
-  match Constr.Unsafe.kind t with
-  | Constr.Unsafe.App f args =>
-      if Int.equal (Array.length args) 1 then
-        match Constr.Unsafe.kind f with
-        | Constr.Unsafe.Lambda binder _ =>
-            match Constr.Binder.name binder with
-            | Some id => Ident.equal id nom
-            | None => false
-            end
-        | _ => false
-        end
-      else
-        false
-  | _ => false
-  end.
-
-(* Parcourt récursivement le terme et réduit les beta-redexes sélectifs *)
-Ltac2 rec reduce_beta_selective_aux (nom : ident) (t : constr) : constr :=
-  (* D'abord vérifier si c'est un beta-redex à réduire *)
-  if est_beta_redex_avec_nom t nom then
-    (* Réduire ce redex *)
-    let t_reduit := Std.eval_cbv RedFlags.beta t in
-    (* Continuer à parcourir le résultat *)
-    reduce_beta_selective_aux nom t_reduit
-  else
-    (* Parcourir la structure du terme *)
-    match Constr.Unsafe.kind t with
-    | Constr.Unsafe.App f args =>
-        let f' := reduce_beta_selective_aux nom f in
-        let args' := Array.map (reduce_beta_selective_aux nom) args in
-        Constr.Unsafe.make (Constr.Unsafe.App f' args')
-    
-    | Constr.Unsafe.Lambda binder body =>
-        let body' := reduce_beta_selective_aux nom body in
-        let binder' := Constr.Binder.unsafe_make 
-                        (Constr.Binder.name binder)
-                        (Constr.Binder.relevance binder)
-                        (reduce_beta_selective_aux nom (Constr.Binder.type binder))
-                        in
-        Constr.Unsafe.make (Constr.Unsafe.Lambda binder' body')
-    
-    | Constr.Unsafe.Prod binder body =>
-        let body' := reduce_beta_selective_aux nom body in
-        let binder' := Constr.Binder.unsafe_make 
-                        (Constr.Binder.name binder)
-                        (Constr.Binder.relevance binder)
-                        (reduce_beta_selective_aux nom (Constr.Binder.type binder)) in
-        Constr.Unsafe.make (Constr.Unsafe.Prod binder' body')
-    
-    | Constr.Unsafe.LetIn binder val_def body =>
-        let val_def' := reduce_beta_selective_aux nom val_def in
-        let body' := reduce_beta_selective_aux nom body in
-        let binder' := Constr.Binder.unsafe_make 
-                        (Constr.Binder.name binder)
-                        (Constr.Binder.relevance binder)
-                        (reduce_beta_selective_aux nom (Constr.Binder.type binder)) in
-        Constr.Unsafe.make (Constr.Unsafe.LetIn binder' val_def' body')
-
-  | Constr.Unsafe.Case case_info (case_ret, r) case_invert discriminant branches =>
-        let case_ret' := reduce_beta_selective_aux nom case_ret in
-        let discriminant' := reduce_beta_selective_aux nom discriminant in
-        let branches' := Array.map (reduce_beta_selective_aux nom) branches in
-        Constr.Unsafe.make (Constr.Unsafe.Case case_info (case_ret', r)
-                                               case_invert discriminant' branches')
-   
-                           
-     (* Pour les autres cas, retourner le terme inchangé *)
-    | _ => t
-    end.
-
-(* Tactique principale : réduit les beta-redexes avec le nom donné dans le goal *)
-
-Ltac2 toto () := Ident.of_string "my_dnd_ident".
-Ltac2 my_bind() := Option.get(toto()).
-
-
-
-Ltac2 reduce_beta_selective () : unit :=
-  let goal := Control.goal () in
-  let goal_reduit := reduce_beta_selective_aux (my_bind()) goal in
- change $goal_reduit.
-
-
-     (* Exemple d'utilisation : 
-   Goal forall n, (fun `(toto()) => (toto()) + 1) n + (fun y => y * 2) n = n + 1 + n * 2.
-   Proof.
-     intro.
-     reduce_beta_selective ().
-     (* Réduit seulement (fun x => x + 1) n, pas (fun y => y * 2) n *)
-   Qed.
-*)
-
-
-Ltac2 select_beta t :=  reduce_beta_selective_aux (my_bind()) t.
 
 (* A choice of rule to apply. *)
 Ltac2 Type choice := 
@@ -208,6 +106,7 @@ Ltac2 rec path_simpl
 *)
 
 
+
 	   
 Ltac2 rec back 
   (h : constr) 
@@ -239,10 +138,10 @@ Ltac2 rec back
   | [], [ 2 ], subc, Rewrite Left => 
     lazy_match! h with 
     | @eq ?ty ?a ?b => 
-        (* Rewrite a into b. *)
-         let f := deep_pattern a c subc in
-        let d' := beta_root '($f $b) in
-        let p' := '(fun (h_ : $h) (d_ : $d') => @eq_ind_r $ty $b $f d_ $a h_) in
+      (* Rewrite a into b. *)
+      let f := deep_pattern a c subc in
+      let d' := beta_root '($f $b) in
+      let p' := '(fun (h_ : $h) (d_ : $d') => @eq_ind_r $ty $b $f d_ $a h_) in
       (d', p')
     | _ => Control.throw (InteractFailure "[back] L=1 rule : expected an equality")
     end
@@ -250,11 +149,11 @@ Ltac2 rec back
   | [], [ 3 ], subc, Rewrite Left => 
     lazy_match! h with 
     | @eq ?ty ?a ?b => 
-        (* Rewrite b into a. *)
-        let f := deep_pattern b c subc in
-        let d' := beta_root '($f $a) in
-        let p' := '(fun (h_ : $h) (d_ : $d') => @eq_ind $ty $a $f d_ $b h_) in
-        (d', p')
+      (* Rewrite b into a. *)
+      let f := deep_pattern b c subc in
+      let d' := beta_root '($f $a) in
+      let p' := '(fun (h_ : $h) (d_ : $d') => @eq_ind $ty $a $f d_ $b h_) in
+      (d', p')
     | _ => Control.throw (InteractFailure "[back] L=2 rule : expected an equality")
     end
   (****************************************************************************)
@@ -404,13 +303,11 @@ Ltac2 rec back
   | Binder Left (Some w) :: choices, 1 :: subh, subc, _ => 
     lazy_match! h with 
     (* L∀i. *)
-    | forall x : ?ha, @?hb x =>
-        let w' := beta_root w in
-        let hb' := beta_root '($hb $w') in
-        let (d, p) := back hb' subh c subc choices kind in
-        (* let xd_ := my_bind() in *)
-      let p' := '(fun (h_ : forall x, $hb x) (d_ : $d) => $p (h_ $w) d_) in
-      (d, p')
+    | forall x : ?ha, @?hb x => 
+      let (d, p) := back '($hb $w) subh c subc choices kind in 
+      let p' := '(fun (xb_ : forall x, $hb x) (d_ : $d) => $p (xb_ $w) d_) in
+      let p'' := eval simpl in $p' in
+      (d, p'')
     | _ => Control.throw (InteractFailure 
       "[back] unexpected head constructor for [Binder Left (Some _)]")
     end
@@ -420,9 +317,8 @@ Ltac2 rec back
   | Binder Right (Some w) :: choices, subh, 1 :: subc, _ => 
     lazy_match! c with 
     (* R∃i. *)
-    | exists x : ?ca, @?cb x =>
-        let cb' := beta_root '($cb $w) in
-      let (d, p) := back h subh cb' subc choices kind in 
+    | exists x : ?ca, @?cb x => 
+      let (d, p) := back h subh '($cb $w) subc choices kind in 
       let p' := '(fun (h_ : $h) (d_ : $d) => @ex_intro $ca $cb $w ($p h_ d_)) in
       let p'' := (beta_root p') in
       (d, p'')
@@ -444,9 +340,9 @@ Ltac2 rec back
       let p := abstract_ident ev p in
       let d' := '(ex $d) in
       let p' := 
-        '(fun (my_dnd_ident : forall x, $hb x) (ex_xd : $d') => 
+        '(fun (xb_ : forall x, $hb x) (ex_xd : $d') => 
             match ex_xd with 
-            | ex_intro _ x0 dx0 => ($p x0) (my_dnd_ident x0) dx0
+            | ex_intro _ x0 dx0 => ($p x0) (xb_ x0) dx0
             end) 
       in
       (* Don't forget to clear the evar. *)
@@ -456,15 +352,14 @@ Ltac2 rec back
       let x := Option.default @x (binder_name hb) in 
       let ev := fresh_evar (Some x) (Some ha) in
       let ev_constr := mk_var ev in
-      let hb' := beta_root '($hb $ev_constr) in
-      let (d, p) := back hb' subh c subc (apply_choices choices ev_constr) kind in
+      let (d, p) := back '($hb $ev_constr) subh c subc (apply_choices choices ev_constr) kind in
       let d := abstract_ident ev d in
       let p := abstract_ident ev p in
       let d' := fun_to_forall (Some x) d in
       let p' := 
-        '(fun (xb_ : exists x, $hb x) (my_dnd_ident : $d') => 
+        '(fun (xb_ : exists x, $hb x) (xd_ : $d') => 
             match xb_ with 
-            | ex_intro _ x0 bx0 => ($p x0) bx0 (my_dnd_ident x0)
+            | ex_intro _ x0 bx0 => ($p x0) bx0 (xd_ x0)
             end) 
       in
       (* Don't forget to clear the evar. *)
@@ -486,8 +381,7 @@ Ltac2 rec back
       let d := abstract_ident ev d in
       let p := abstract_ident ev p in
       let d' := fun_to_forall (Some x) d in
- (*     let xd_ := my_bind() in *)
-      let p' := '(fun (h_ : $h) (my_dnd_ident : $d') (x : $ca) => ($p x) h_ (my_dnd_ident x)) in
+      let p' := '(fun (h_ : $h) (xd_ : $d') (x : $ca) => ($p x) h_ (xd_ x)) in
       (* Don't forget to clear the evar. *)
       Std.clear [ ev ] ; (d', p')
     (* R∃s. *)
