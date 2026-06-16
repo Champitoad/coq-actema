@@ -1,5 +1,6 @@
 (* This module contains utility functions for Ltac2. 
    It is used mainly by DnD.v *)
+Definition lock_not := not.
 
 From Ltac2 Require Import Ltac2.
 Import Constr Constr.Unsafe.
@@ -123,6 +124,13 @@ Ltac2 map_subterm (f : int -> constr -> constr) (c : constr) (sub : int list) : 
     | ex ?body => 
       (* Here we reuse the same [sub] but instead go into the [body] function. *)
       let body := loop n body sub in '(ex $body)
+      (* Special case for not *)
+    | not ?body =>
+        match sub with
+          | _ :: sub =>
+              let body := loop n body sub in '(not $body)
+        | _ =>  Control.throw (InvalidSubpath c sub)
+        end
     (* All other cases. *)
     | _ => 
       match kind c, sub with 
@@ -146,7 +154,7 @@ Ltac2 map_subterm (f : int -> constr -> constr) (c : constr) (sub : int list) : 
       | Prod bind body, 1 :: sub => 
         let body := loop (Int.add n 1) body sub in
         mk_prod bind body
-      (* Application. *)
+       (* Application. *)
       | App func args, 0 :: sub => 
         let func := loop n func sub in
         mk_app func args

@@ -305,6 +305,8 @@ module Term = struct
           csts_rec acc body
 
   let constants term = csts_rec [] term
+
+
 end
 
 exception InvalidSubtermPath of Term.t * int list
@@ -646,4 +648,48 @@ module TermUtils = struct
     | _ -> raise @@ TypingError (ExpectedFunction (f, f_ty))
 
   let typeof env ctx term = typeof_rec env ctx term
+
+
+
+  
+let rec subterm_raw (term : Term.t) sub (env : Env.t) =
+  let cst = function
+        | Term.Named n ->  n
+        | _ -> Name.make "_"
+  in
+  let rec close_term depth n (term : Term.t) =
+  match term with
+  | BVar bvar ->
+    if bvar = depth
+    then n
+    else if bvar > depth
+    then n
+    else n
+    | FVar _ | Cst _ | Sort _ -> term
+    | App (cdata, f, args) ->
+      Term.mkApps (close_term depth n f)
+        (lclose_term depth n args)
+    | Lambda (cdata, x, ty, body) ->
+        Term.mkLambda x  (close_term depth n ty)
+          (close_term (depth + 1) n body)
+    | Prod (cdata, x, ty, body) ->
+        Term.mkProd x  (close_term depth n ty)
+          (close_term (depth + 1) n body)
+  and lclose_term depth n l =
+    match l with
+    | [] -> []
+    | t::l ->
+      (close_term depth n t)::(lclose_term depth n l)
+  in
+  match (sub, term) with
+  | [], _ -> (term, env)
+  | i :: sub, App (_, f, args) when 0 <= i && i < List.length (f :: args) ->
+      subterm_raw (List.at (f :: args) i) sub env
+  | 0 :: sub, Lambda (_, x, ty, body) | 0 :: sub, Prod (_, x, ty, body) ->
+      subterm_raw ty sub env
+  | 1 :: sub, Lambda (_, x, ty, body) | 1 :: sub, Prod (_, x, ty, body) ->
+      subterm_raw  (close_term 0 (Term.Cst (cst x)) body) sub (Env.add_constant (cst x) ty env)  
+  |  _ -> failwith "Lang.subterm_raw : invalid subpath"
+
+
 end

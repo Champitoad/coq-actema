@@ -201,6 +201,21 @@ let simplify_actions (selection : Path.t list) proof : aoutput list =
     end
   | _ -> []
 
+let unfold_actions (selection : Path.t list) proof : aoutput list =
+  match selection with
+  | [ sel ] when is_hyp sel || is_concl sel -> begin
+      [ { description = "Unfold"
+        ; icon = Some "wand-magic-sparkles"
+        ; highlights = [ sel ]
+        ; kind = Ctxt
+        ; goal_id = sel.goal
+        ; action = AUnfold sel
+        }
+      ]
+    end
+  | _ -> []
+
+
 (** Some heurisistics to decide if we disallow case analysis/induction 
     on a term. If this returns [true], then case analysis is forbidden. *)
 let forbid_case_analysis env context subterm : bool =
@@ -296,6 +311,7 @@ let case_ind_intro_actions (selection : Path.t list) proof : aoutput list =
 
 let ctxt_actions (selection : Path.t list) (proof : Proof.t) : aoutput list =
   simplify_actions selection proof
+  @ unfold_actions selection proof
   @ case_ind_actions selection proof
   @ case_ind_intro_actions selection proof
 

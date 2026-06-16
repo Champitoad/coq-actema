@@ -101,8 +101,13 @@ let interactive_proof (g : Logic.pregoal) : proof tactic =
           continue idx a
       | Done ->
         let Tree(ig, pt) = tree_hist.tree in
-         Log.printf "%s"  (Prooftree.summarize_tree tree_hist.tree);
-(*          Log.printf "root: %s" (Prooftree.goal_to_string ig); *)
+        Log.printf "Hello \n";
+        Log.printf "root: %s"
+          (Prooftree.flat (Prooftree.goal_to_string ig));
+        Log.printf "%s"  (Prooftree.summarize_tree tree_hist.tree);
+        Log.printf "%s"  (Prooftree.spptr 0
+                            (Prooftree.pptr tree_hist.tree));
+        
         return @@ List.rev !hist.before
       | Undo -> begin
           match !hist.before with

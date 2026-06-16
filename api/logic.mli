@@ -254,6 +254,8 @@ type action =
   | AElim of Name.t * int
   (* Apply Coq's [simpl] tactic to a subterm of an item. *)
   | ASimpl of Path.t
+  (* Apply Coq's [unfold] tactic to a constant of an item *)
+  | AUnfold of Path.t
   (* Apply Coq's [destruct] tactic to a term.
      This term must be closed (in the context of the goal).
      For instance in

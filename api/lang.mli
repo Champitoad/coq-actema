@@ -423,4 +423,7 @@ module TermUtils : sig
         context that [t] lives in : by default it is [Context.empty].
         Raises [InvalidSubtermPath] if [sub] is not a valid path in [t]. *)
   val subterm : ?context:Context.t -> Term.t -> int list -> Context.t * Term.t
+
+  val subterm_raw : Term.t -> int list -> Env.t -> Term.t * Env.t
+
 end

@@ -38,7 +38,7 @@ module FirstOrder = struct
     | Prod (_, _, t1, t2)
       when (*TermUtils.typeof env context t = Term.mkProp
              &&*)
-           not (Term.contains_loose_bvars t2) -> 
+          not (Term.contains_loose_bvars t2) -> 
         FImpl (t1, t2) 
     (* Forall. *)
     | Prod (_, x, ty, body)
@@ -60,6 +60,7 @@ type var = { v_name : Name.t; v_type : Term.t; v_body : Term.t option }
 module Vars = struct
   (** A list of variables, each with a name. *)
   type t = (Name.t * var) list
+[@@deriving show]
 
   let empty : t = []
 
@@ -353,6 +354,7 @@ type action =
   | AIntro of int
   | AElim of Name.t * int
   | ASimpl of Path.t
+  | AUnfold of Path.t
   | ACase of Term.t
   | ACaseIntro of int
   | AInd of Term.t

@@ -6,6 +6,7 @@ open Translate
 open Ltac2_plugin
 
 exception UnsupportedAction of Logic.action * string
+exception UnsupportedAction_prov  of  string
 
 (** Return the kernel name of a tactic defined in [Actema.HOL]. *)
 let tactic_kname = kername [ "Actema"; "HOL" ]
@@ -68,6 +69,7 @@ end
 let simplify_goal () : unit tactic =
   (* We call Benjamin's tactic in HOL.v. *)
   calltac (tactic_kname "simplify_goal") []
+
 
 (** Simplify the given hypothesis in the current Coq goal. *)
 let simplify_hyp (hyp : Names.Id.t) : unit tactic =
@@ -472,6 +474,7 @@ let execute_helper (action : Logic.action) (coq_goal : Goal.t) : unit tactic =
       | VarHead _ | VarBody _ | VarType _ ->
           raise @@ UnsupportedAction (action, "Can't simplify in variable")
     end
+  | Logic.AUnfold path -> raise @@ UnsupportedAction_prov "unfold not implemented"
   | Logic.ACase term ->
       let symbol_table = Symbols.all coq_goal in
       let coq_term = Import.term coq_goal symbol_table term in
