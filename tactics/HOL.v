@@ -2485,6 +2485,16 @@ Ltac unfold_path_r p t :=
        end
   | cons ?n ?p' =>
       match t with
+      | ?A -> ?B =>
+	 match n with
+	 | 0 => 
+	     let A' := unfold_path_r p' A in
+	     constr:(A' -> B)
+	 | 1 =>
+	      let B' := unfold_path_r p' B in
+	     constr:(A -> B')
+	 | _ => constr:(A -> B)
+	 end
       |  forall x: ?T, @?body' x => 
           constr:(forall x : T,
                      ltac:(let body := beta1 body' x in
@@ -3291,6 +3301,19 @@ Ltac reify_hyp_at ts l h :=
    s : number of instantiated sort
    o : instantiating object (of type (sort s) *)
 
+Fixpoint llength A (l : list A) :=
+  match l with
+  | cons _ l => S (llength A l)
+  | _ => 0
+  end.
+
+Definition ppred n :=
+  match n
+  with
+  | S p => p
+  | _ => 0
+  end.
+
 Ltac inst_hyp ts l h h' s o :=
   let x := fresh "x" in
   move: (h) => x;
@@ -3298,19 +3321,36 @@ Ltac inst_hyp ts l h h' s o :=
   let sy := type of x in
    match sy with
    | coerce _ (@nil nat) ?hc _ =>
-       move: (instp_corr ts  (pred (length l))  s o (@nil nat) hc tt h) => h';
-       rewrite /= (* ?trs_corr *) in h';
+       (move: (instp_corr ts  (ppred (llength _ l))  s o (@nil nat) hc tt h) => h';
+       rewrite /length /instp  in h';
+              rewrite /llength /ppred /check_nat /eq_nat /nat_rec in h';
+rewrite /check_nat /eq_nat /nat_rec 
+/nat_rect /check_list /coerce /eq_list /eq_rect_r /eq_rect
+/eq_sym /list_rec /list_rect in h' ;
+
        rewrite  /eqnqtdec /eq_rect_r /eq_rect /eq_ind_r /eq_ind /nat_rec /eq_sym  /nat_rect /wsort in h';
-       clear x
+       clear x)
    end;
    try discriminate.
 
-Ltac dyn_inst_hyp l h h' o :=
-  let ht := type of h in
+Ltac dyn_inst_hyp_xx l h h' o := 
+   let ht := type of h in
   let ts := mkSign l ht in
   let to := type of o in
   let s := tst ts to in
-  inst_hyp ts l h h' s o.
+  inst_hyp ts l h h' s o.  
+
+Ltac dyn_inst_hyp l h h' o :=
+  dyn_inst_hyp_xx l h h' o;
+  rewrite /instp /length /List.length in h';
+  rewrite /llength /ppred /check_nat /eq_nat /nat_rec in h';
+  rewrite /check_nat /eq_nat /nat_rec 
+          /nat_rect /check_list /coerce /eq_list /eq_rect_r /eq_rect
+          /eq_sym /list_rec /list_rect in h' ;
+
+  rewrite  /eqnqtdec /eq_rect_r /eq_rect /eq_ind_r /eq_ind /nat_rec /eq_sym  /nat_rect /wsort in h'.
+
+
 
 (*
 Goal  (forall x y, x = true -> y = 4) -> False.
@@ -3327,9 +3367,9 @@ Ltac inst_hyp_nd ts l h s o :=
   let sy := type of h in
    match sy with
    | coerce _ (@nil nat) ?hc _ => 
-       move: (instp_corr ts (pred (length l))  s o (@nil nat) hc tt h);
+       move: (instp_corr ts (ppred (llength l))  s o (@nil nat) hc tt h);
        clear h; move => h;
-       rewrite /=  in h;
+       rewrite (* /= *) /instp /llength /ppred in h;
         rewrite  /eqnqtdec  /eq_ind_r /eq_ind  /eq_rect_r /eq_rect /nat_rec /eq_sym  /nat_rect /wsort /sl  in h
    end;
    try discriminate.
@@ -3362,8 +3402,8 @@ Ltac inst_goal ts l o :=
   let s := tst ts ho in 
   match goal with
   | |- coerce _ (@nil nat) ?hc _ => 
-       apply (instn_corr ts (pred (length l))  s o (@nil nat) hc tt);
-       rewrite /=  /instn /eqnqtdec  /eq_ind_r /eq_ind  /eq_rect_r /eq_rect /nat_rec /eq_sym  /nat_rect /wsort /sl
+       apply (instn_corr ts (ppred (llength l))  s o (@nil nat) hc tt);
+       rewrite   /instn /llength /ppred /eqnqtdec  /eq_ind_r /eq_ind  /eq_rect_r /eq_rect /nat_rec /eq_sym  /nat_rect /wsort /sl
    end;
   try discriminate.
 
